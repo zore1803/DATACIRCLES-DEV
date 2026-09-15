@@ -256,13 +256,6 @@ function App() {
       (route) => location.pathname === route || location.pathname === `${route}/`,
     ) || location.pathname.startsWith("/view/");
 
-  // Routes that paint their own full-width surface and so must not sit
-  // inside <main>'s standard page gutter.
-  const fullBleedRoutes = ["/subscription"];
-  const isFullBleed = fullBleedRoutes.some(
-    (route) => location.pathname === route || location.pathname === `${route}/`,
-  );
-
   const checklistItems = [
     {
       text: "Update your profile",
@@ -405,9 +398,7 @@ function App() {
           (isSetupComplete || isSuperAdminAuthenticated) &&
           !shouldHideNavigation && <Navbar />}
         <main
-          className={`transition-all duration-300 ease-in-out ${
-            isFullBleed ? "" : "py-6 px-4 sm:px-6 lg:px-8"
-          } ${
+          className={`transition-all duration-300 ease-in-out py-6 px-4 sm:px-6 lg:px-8 ${
             userIsAuthenticated && !shouldHideNavigation
               ? "pt-[70px] lg:pt-20"
               : ""
