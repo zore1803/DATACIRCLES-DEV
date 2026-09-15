@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const Razorpay = require('razorpay');
 const PlanConfig = require('../models/PlanConfig');
+const RazorpayPriceCache = require('../models/RazorpayPriceCache');
 
 dotenv.config();
 
@@ -34,12 +35,6 @@ const plans = [
     monthlyAmount: 65000,   // ₹650/user/month
     yearlyAmount: 720000,   // ₹7200/user/year (₹600/month)
   },
-  {
-    planId: 'test',
-    name: 'Test Plan',
-    monthlyAmount: 100,     // ₹1/month (for testing)
-    yearlyAmount: 100,      // ₹1/year (for testing)
-  },
 ];
 
 async function createRazorpayPlan(name, interval, amount) {
@@ -59,6 +54,13 @@ async function run() {
   try {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('✅ MongoDB connected');
+    console.log(`Razorpay key mode: ${String(process.env.RAZORPAY_KEY_ID).startsWith('rzp_live_') ? 'LIVE' : 'TEST'}`);
+
+    // Cached amount→plan IDs belong to whichever Razorpay account created
+    // them; test and live are separate accounts, so after a key switch every
+    // cached ID is invalid and addon purchases would reuse them.
+    const { deletedCount } = await RazorpayPriceCache.deleteMany({});
+    console.log(`Cleared ${deletedCount} cached Razorpay price plan(s)`);
 
     for (const plan of plans) {
       console.log(`\nCreating Razorpay plans for: ${plan.name}`);
