@@ -9,7 +9,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: SSH and deploy
-        uses: appleboy/ssh-action@v1.0.3
+        # v1.0.3's Go SSH library offered only the legacy SHA-1 "ssh-rsa"
+        # signature, which OpenSSH on the Ubuntu 26.04 host rejects — the
+        # RSA deploy key authenticates fine from a normal ssh client, which
+        # negotiates rsa-sha2-512 instead. v1.2.x supports rsa-sha2.
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
