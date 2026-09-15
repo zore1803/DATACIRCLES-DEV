@@ -25,8 +25,16 @@ module.exports = async (req, res, next) => {
   const sub = auth0User.sub;
   const namespace = process.env.AUTH0_NAMESPACE;
   let email = auth0User[`${namespace}email`] || auth0User.email;
-  const name = auth0User[`${namespace}name`] || auth0User.name || 'Unknown';
+  // Null rather than an "Unknown" placeholder: the overwrite paths below
+  // must be able to tell "provider sent no name" apart from a real one, or
+  // a login with a nameless token clobbers the stored name with the
+  // placeholder.
+  const name = auth0User[`${namespace}name`] || auth0User.name || null;
   const provider = sub.split('|')[0];
+  // User.name is required, so creation still needs something when the
+  // provider sent no name. The email local part is a recognizable stand-in;
+  // "Unknown" rendered as the signed-in user's display name in the nav.
+  const nameForCreate = name || (email ? email.split('@')[0] : 'Unknown');
   let updated = false;
 
   if (provider === 'password') {
@@ -43,7 +51,7 @@ module.exports = async (req, res, next) => {
     const phone = sub.split('|')[1];
     let user = await User.findOne({ phone });
     if (user) {
-      if (user.name !== name) {
+      if (name && user.name !== name) {
         user.name = name;
         updated = true;
       }
@@ -89,7 +97,7 @@ module.exports = async (req, res, next) => {
     if (invited) {
       user = new User({
         auth0Id: sub,
-        name,
+        name: nameForCreate,
         email,
         role: 'staff',
         organization: invited.organization,
@@ -131,7 +139,7 @@ module.exports = async (req, res, next) => {
       user.email = email;
       updated = true;
     }
-    if (user.name !== name) {
+    if (name && user.name !== name) {
       user.name = name;
       updated = true;
     }
@@ -144,7 +152,7 @@ module.exports = async (req, res, next) => {
   if (invited) {
     user = new User({
       auth0Id: sub,
-      name,
+      name: nameForCreate,
       email,
       role: 'staff',
       organization: invited.organization,

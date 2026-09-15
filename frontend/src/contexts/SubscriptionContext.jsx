@@ -19,6 +19,7 @@ export const SubscriptionProvider = ({ children }) => {
   const { isLoading: authLoading, isAuthenticated, getAccessTokenSilently } = useAuth0();
   const [subscription, setSubscription] = useState(null);
   const [plans, setPlans] = useState([]);
+  const [plansLoaded, setPlansLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [adminNotice, setAdminNotice] = useState(null);
@@ -161,10 +162,15 @@ export const SubscriptionProvider = ({ children }) => {
     try {
       setError(null);
       const response = await subscriptionAPI.getPlans();
-      setPlans(response.data.plans);
+      setPlans(response.data.plans || []);
     } catch (error) {
       console.error('Error fetching plans:', error);
       setError(error.response?.data?.message || 'Failed to fetch plans');
+    } finally {
+      // Settles on both paths so consumers can tell "still fetching" apart
+      // from "fetched, and the catalog really is empty" — gating a spinner
+      // on plans.length alone leaves an empty catalog spinning forever.
+      setPlansLoaded(true);
     }
   };
 
@@ -278,6 +284,7 @@ export const SubscriptionProvider = ({ children }) => {
       value={{
         subscription,
         plans,
+        plansLoaded,
         seatStatus,
         fetchSeatStatus,
         scheduledChanges,

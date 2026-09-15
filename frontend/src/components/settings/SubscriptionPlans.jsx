@@ -160,6 +160,7 @@ const SubscriptionPlans = () => {
   const {
     subscription,
     plans,
+    plansLoaded,
     loading,
     error,
     startTrial,
@@ -1951,12 +1952,25 @@ const SubscriptionPlans = () => {
     });
   };
 
-  if (loading || plans.length === 0) {
+  if (loading || !plansLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
           <p className="text-gray-600 text-sm">Loading plans...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!error && plans.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center p-6 bg-white rounded-lg shadow-md">
+          <div className="text-gray-900 mb-2 font-semibold">No plans available</div>
+          <p className="text-gray-600 text-sm">
+            No subscription plans are currently published. Please contact support.
+          </p>
         </div>
       </div>
     );

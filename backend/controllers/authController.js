@@ -934,14 +934,14 @@ exports.completeRegistration = async (req, res) => {
     let provider = sub.split("|")[0];
     const namespace = process.env.AUTH0_NAMESPACE;
     let email = req.auth[`${namespace}email`] || req.auth.email || req.body.email;
-    let name = req.auth[`${namespace}name`] || req.auth.name || req.body.name || "Unknown";
+    let name = req.auth[`${namespace}name`] || req.auth.name || req.body.name || null;
     let phone;
 
     if (provider === "temp-phone") {
       provider = "phone";
       phone = sub.split("|")[1];
       email = req.body.email; // profileEmail
-      name = req.body.name || "Unknown";
+      name = req.body.name || null;
       if (!email) {
         return res.status(400).json({
           error: "EMAIL_REQUIRED",
@@ -1017,7 +1017,7 @@ exports.completeRegistration = async (req, res) => {
         user.profileEmail = email;
         updated = true;
       }
-      if (user.name !== name) {
+      if (name && user.name !== name) {
         user.name = name;
         updated = true;
       }
@@ -1225,9 +1225,11 @@ exports.completeRegistration = async (req, res) => {
       }
     }
 
-    // Create the user
+    // Create the user. User.name is required, so fall back to the email
+    // local part when no provider or form name was supplied — "Unknown"
+    // rendered as the signed-in user's display name in the nav.
     const userData = {
-      name,
+      name: name || (email ? email.split("@")[0] : "Unknown"),
       role,
       organization,
       permissions,

@@ -5956,6 +5956,9 @@ exports.setAppStatus = setAppStatus;
 exports.getSeatStatusEndpoint = async (req, res) => {
   try {
     const { getSeatStatus } = require('../utils/addonManagement');
+    const subscription = await Subscription.findOne({ organization: req.user.organization });
+    if (!subscription) return res.status(404).json({ error: 'No subscription found.' });
+
     const status = await getSeatStatus(req.user.organization);
     res.json({
       includedSeats: status.includedSeats,
