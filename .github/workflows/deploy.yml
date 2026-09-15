@@ -17,9 +17,13 @@ jobs:
           port: ${{ secrets.VPS_PORT || 22 }}
           script: |
             set -e
-            cd /root/datacircles-crm
+            cd /home/ubuntu/datacircles-crm
             git fetch origin main
             git reset --hard origin/main
+            # Echoed so a run proves which commit it actually deployed —
+            # four runs previously reported success against a stale host
+            # without ever landing a commit on the live server.
+            echo "Deployed commit: $(git rev-parse --short HEAD)"
             docker compose build crm-backend crm-frontend
             docker compose up -d crm-backend crm-frontend
             docker image prune -f
