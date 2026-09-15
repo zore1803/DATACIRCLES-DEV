@@ -62,28 +62,6 @@ async function seedPlans() {
   });
 
   await PlanConfig.create({
-    planId: 'test',
-    monthlyPrice: 1,
-    yearlyPrice: 200 * 12,
-    discount: 20,
-    razorpayPlanIds: { monthly: 'plan_Rp6UAjbda5RC2c', yearly: 'plan_RFO0ZnIAg8hloR' },
-    features: {
-      recordsLimit: 10000,
-      emailTemplates: 3,
-      salesPipelines: 1,
-      customFields: 10,
-      recordTags: 10,
-      websiteForms: 1,
-      fileStorage: 1 * 1024 * 1024 * 1024,
-      modules: { contacts: { read: true, write: true, limit: 50 }, companies: { read: true, write: true, limit: 50 }, deals: { read: true, write: true, limit: 50 }, vendors: { read: true, write: true, limit: 25 }, invoices: { read: true, write: true, limit: 25 }, tasks: { read: true, write: true, limit: 100 }, callLogs: { read: true, write: true, limit: 100 }, meetings: { read: true, write: true, limit: 50 }, quotations: { read: true, write: true, limit: 25 }, 'delivery-challans': { read: true, write: true, limit: 25 }, purchases: { read: true, write: true, limit: 25 }, emails: { read: true, write: true, limit: 2000 }, folders: { read: true, write: true }, forms: { read: true, write: true, limit: 1 }, },
-      rottenDeals: false,
-      advancedReports: false,
-      includedSeats: 1,
-      staffSeats: 10,
-    },
-  });
-
-  await PlanConfig.create({
     planId: 'growth',
     monthlyPrice: 450,
     yearlyPrice: 400 * 12,
