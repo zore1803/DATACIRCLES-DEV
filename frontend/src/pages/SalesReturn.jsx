@@ -1,4 +1,5 @@
 import DeleteIcon from "../components/common/DeleteIcon";
+import EmptyState from "../components/common/EmptyState";
 import BulkDeleteModal from "../components/common/BulkDeleteModal";
 import { exportRecordsToCSV } from "../utils/exportRecordsToCSV";
 import VideoIcon from "../components/common/VideoIcon";
@@ -1848,18 +1849,14 @@ const SalesReturn = () => {
                         <TableSkeletonRows numRows={pagination.limit} columns={table.getVisibleLeafColumns().filter((c) => c.id !== "selection")} hasCheckbox />
                       ) : rows.length === 0 ? (
                         <tr>
-                          <td colSpan={table.getAllColumns().length} className="px-6 py-16 text-center text-gray-500">
-                            <div className="flex flex-col items-center gap-3">
-                              <ClipboardList className="w-10 h-10 text-gray-300" />
-                              <p className="font-medium">No sales returns found</p>
-                              <button
-                                onClick={openCreate}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
-                              >
-                                <PlusIcon className="w-4 h-4" />
-                                Create your first return
-                              </button>
-                            </div>
+                          <td colSpan={table.getAllColumns().length}>
+                            <EmptyState
+                              icon={ClipboardList}
+                              noun="Return"
+                              isFiltered={!!(searchTerm || activeFilters?.length)}
+                              onCreate={openCreate}
+                              buttonLabel="Create your first return"
+                            />
                           </td>
                         </tr>
                       ) : (

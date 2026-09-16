@@ -36,7 +36,8 @@ import {
   Pin,
   PinOff,
   EyeOff,
-  Video, ArrowUp, ArrowDown } from "lucide-react";
+  Video, ArrowUp, ArrowDown, Calendar } from "lucide-react";
+import EmptyState from "../components/common/EmptyState";
 import BulkActions from "../components/BulkActions";
 import TaskDetailsModal from "../components/Task/TaskDetailsModal";
 import logo from "/DataCircles.png";
@@ -3426,8 +3427,13 @@ function Tasks() {
                 />
               ) : tasks.length === 0 ? (
                 <tr>
-                  <td colSpan={taskTable.getAllColumns().length} className="px-6 py-12 text-center text-gray-500 font-medium">
-                    No tasks found.
+                  <td colSpan={taskTable.getAllColumns().length}>
+                    <EmptyState
+                      icon={CheckSquare}
+                      noun="Task"
+                      isFiltered={!!searchTerm}
+                      onCreate={toggleTaskForm}
+                    />
                   </td>
                 </tr>
               ) : (
@@ -3590,8 +3596,13 @@ function Tasks() {
                 />
               ) : meetings.length === 0 ? (
                 <tr>
-                  <td colSpan={meetingTable.getAllColumns().length} className="px-6 py-12 text-center text-gray-500 font-medium">
-                    No meetings found.
+                  <td colSpan={meetingTable.getAllColumns().length}>
+                    <EmptyState
+                      icon={Calendar}
+                      noun="Meeting"
+                      isFiltered={!!searchTerm}
+                      onCreate={toggleMeetingForm}
+                    />
                   </td>
                 </tr>
               ) : (

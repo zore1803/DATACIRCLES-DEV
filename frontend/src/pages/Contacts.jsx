@@ -42,6 +42,7 @@ import {
   List,
   ArrowUp, ArrowDown } from "lucide-react";
 import StarIcon from "../components/common/StarIcon";
+import EmptyState from "../components/common/EmptyState";
 import API from "../services/api";
 import ContactFolder from "../components/contact/ContactFolder";
 import ProfilePicture from "../components/contact/ProfilePicture";
@@ -2996,8 +2997,16 @@ function Contacts() {
                           <TableSkeletonRows numRows={pagination.limit} columns={table.getVisibleLeafColumns().filter((c) => c.id !== "selection")} hasCheckbox checkboxWidth={50} />
                         ) : sortedContacts.length === 0 ? (
                           <tr>
-                            <td colSpan={table.getAllColumns().length} className="px-6 py-12 text-center text-gray-500 font-inter">
-                              <p className="font-medium">No contacts found</p>
+                            <td colSpan={table.getAllColumns().length}>
+                              <EmptyState
+                                icon={User}
+                                noun="Contact"
+                                isFiltered={!!(searchTerm || activeFilters?.length)}
+                                onCreate={() => {
+                                  setEditContact(null);
+                                  setShowQuickAdd(true);
+                                }}
+                              />
                             </td>
                           </tr>
                         ) : (

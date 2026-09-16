@@ -1,4 +1,5 @@
 import DeleteIcon from "../components/common/DeleteIcon";
+import EmptyState from "../components/common/EmptyState";
 import PdfIcon from "../components/common/PdfIcon";
 import Checkbox from "../components/common/Checkbox";
 import PlusIcon from "../components/common/PlusIcon";
@@ -1246,16 +1247,14 @@ export default function Journals() {
               />
             ) : filteredJournals.length === 0 ? (
               <tr>
-                <td colSpan={orderedColumns.length + 1} className="px-6 py-20 text-center">
-                  <BookOpen className="w-10 h-10 mx-auto text-gray-300 mb-3" />
-                  <p className="text-sm font-medium text-gray-500">
-                    {searchTerm ? "No journals match your search." : "No journals yet."}
-                  </p>
-                  {!searchTerm && (
-                    <p className="text-xs text-gray-400 mt-1.5 max-w-sm mx-auto">
-                      Click "New Journal" to add one.
-                    </p>
-                  )}
+                <td colSpan={orderedColumns.length + 1}>
+                  <EmptyState
+                    icon={BookOpen}
+                    noun="Journal"
+                    isFiltered={!!searchTerm}
+                    filteredTitle="No journals match your search."
+                    onCreate={() => setShowQuickAdd(true)}
+                  />
                 </td>
               </tr>
             ) : (

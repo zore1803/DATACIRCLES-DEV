@@ -1,4 +1,5 @@
 import DeleteIcon from "../components/common/DeleteIcon";
+import EmptyState from "../components/common/EmptyState";
 import BulkDeleteModal from "../components/common/BulkDeleteModal";
 import { exportRecordsToCSV } from "../utils/exportRecordsToCSV";
 import PdfIcon from "../components/common/PdfIcon";
@@ -2262,8 +2263,16 @@ function Companies() {
                           <TableSkeletonRows numRows={pagination.limit} columns={table.getVisibleLeafColumns().filter((c) => c.id !== "selection")} hasCheckbox />
                         ) : companies.length === 0 ? (
                           <tr>
-                            <td colSpan={table.getAllColumns().length} className="px-6 py-12 text-center text-gray-500 font-inter">
-                              <p className="font-medium">No companies found</p>
+                            <td colSpan={table.getAllColumns().length}>
+                              <EmptyState
+                                icon={Building2}
+                                noun="Company"
+                                isFiltered={!!(searchTerm || filterIndustry || activeFilters?.length)}
+                                onCreate={() => {
+                                  setEditCompany(null);
+                                  setShowQuickAdd(true);
+                                }}
+                              />
                             </td>
                           </tr>
                         ) : (

@@ -1,6 +1,7 @@
 import DeleteIcon from "../common/DeleteIcon";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
+import EmptyState from "../common/EmptyState";
 import MoreIcon from "../common/MoreIcon";
 import DownloadIcon from "../common/DownloadIcon";
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
@@ -829,27 +830,17 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
             <div className="w-6 h-6 border-2 border-[#158FFF] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center text-center py-24 px-4">
-            {Icon && <Icon className="h-12 w-12 text-gray-300 mb-4" />}
-            <h3 className="text-lg font-semibold text-gray-800">
-              {searchTerm ? `No matching ${title.toLowerCase()}` : `No ${title.toLowerCase()} yet`}
-            </h3>
-            <p className="text-gray-500 mt-1.5 max-w-md text-sm">
-              {searchTerm
-                ? "Try a different search."
-                : `Record your first ${noun.toLowerCase()} to see it here.`}
-            </p>
-            {!searchTerm && (
-              <button
-                type="button"
-                onClick={openCreate}
-                className="mt-5 inline-flex items-center gap-2 h-10 px-5 bg-[#0085FF] text-white text-sm font-medium rounded-full hover:bg-blue-600 transition-colors"
-              >
-                <PlusIcon className="w-4 h-4" />
-                Add {noun}
-              </button>
-            )}
-          </div>
+          <EmptyState
+            icon={Icon}
+            noun={noun}
+            title={`No ${title.toLowerCase()} yet`}
+            isFiltered={!!searchTerm}
+            filteredTitle={`No matching ${title.toLowerCase()}`}
+            filteredDescription="Try a different search."
+            description={`Record your first ${noun.toLowerCase()} to see it here.`}
+            onCreate={openCreate}
+            buttonLabel={`Add ${noun}`}
+          />
         ) : (
           /*
            * Same table treatment as PaymentsTimeline.jsx: sticky #F5F7FA
