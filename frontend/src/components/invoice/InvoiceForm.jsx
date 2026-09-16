@@ -2226,6 +2226,12 @@ const CreateInvoicePanel = ({
   defaultNotesFlat = "",
   defaultTermsFlat = "",
   documentTypeSettings = {},
+  // Optional. A deal to select on a NEW document as if the user had picked it — used when the
+  // panel is opened from a context that already implies the deal (Company Profile / Deal page).
+  // Goes through the same applyDealSelection as a manual pick, so the GSTIN, addresses and
+  // transaction type are filled exactly as they would be; changing it later (e.g. after "Add
+  // Deal") selects the new deal. Accounting doesn't pass it, so its behaviour is unchanged.
+  preselectDealId = null,
 }) => {
   const isEditing = !!initialDoc;
   // Same "per-type value, else flat default, else the built-in copy"
@@ -3100,6 +3106,66 @@ const CreateInvoicePanel = ({
       dealOptions.find((o) => o.value === dealId)?.label
     );
   };
+  // Selecting a deal, whether picked by the user or preselected by the caller.
+  const applyDealSelection = (dealId) => {
+    setFieldErrors((prev) => ({ ...prev, deal: false }));
+    // Switching the deal always replaces the Receiver GSTIN
+    // and billing/shipping address with whatever the new
+    // deal's company has — including clearing them to empty
+    // when that company doesn't have them saved. Carrying
+    // over the previous deal's company data would attach it
+    // to a company it was never actually collected for.
+    const selectedDeal = deals.find((d) => d._id === dealId);
+    const company = selectedDeal?.company;
+    const nextBilling =
+      company && !isAddressEmpty(company.billingAddress)
+        ? { ...emptyAddress(), ...company.billingAddress }
+        : emptyAddress();
+    const nextShipping =
+      company && !isAddressEmpty(company.shippingAddresses?.[0])
+        ? { ...emptyAddress(), ...company.shippingAddresses[0] }
+        : emptyAddress();
+    // Same seller-state vs. customer-state comparison the
+    // full-width form uses (InvoiceFormFull.jsx) — kept here
+    // instead of a manual Transaction Type dropdown so both
+    // views classify a given deal identically.
+    const sellerState = (orgDetails?.state || "").trim().toLowerCase();
+    const customerState = (company?.billingAddress?.state || "").trim().toLowerCase();
+    const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
+    setForm((p) => ({
+      ...p,
+      deal: dealId,
+      receiverGSTIN: supportsGSTIN ? company?.gstin || "" : p.receiverGSTIN,
+      billingAddress: nextBilling,
+      shippingAddress: p.sameAsBilling ? nextBilling : nextShipping,
+      transactionType: supportsTax ? autoType : p.transactionType,
+    }));
+  };
+
+  // Applies `preselectDealId` to a new document. Re-runs when the org details arrive, because
+  // the inter/intra-state transaction type is derived from the org's state: a selection made
+  // before that load would otherwise lock in "intra" for an out-of-state customer. It only
+  // re-applies while the form still holds that same deal (or none), so a deal the user has
+  // since picked by hand is never overwritten.
+  const preselectAppliedRef = useRef({ dealId: null, withOrg: false });
+  useEffect(() => {
+    if (isEditing || !preselectDealId) return;
+    if (!deals.some((d) => d._id === preselectDealId)) return;
+    const last = preselectAppliedRef.current;
+    const withOrg = !!orgDetails;
+    if (last.dealId === preselectDealId) {
+      // Same deal as last time: only worth re-applying to pick up the org state, and only if
+      // the user hasn't switched to a different deal in the meantime.
+      if (last.withOrg || !withOrg || form.deal !== preselectDealId) return;
+    }
+    // A NEW preselectDealId (first open, or a deal just created via "Add Deal") is fresh intent
+    // from the caller and is always applied.
+    preselectAppliedRef.current = { dealId: preselectDealId, withOrg };
+    applyDealSelection(preselectDealId);
+    // applyDealSelection is recreated each render; keyed on the inputs that matter instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselectDealId, deals, orgDetails, isEditing]);
+
   const inputClass =
     "w-full h-[38px] px-3.5 rounded-full border border-[#1F2937]/10 bg-white text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all";
 
@@ -3429,40 +3495,7 @@ const CreateInvoicePanel = ({
                   icon={SearchIcon}
                   invalid={fieldErrors.deal}
                   triggerClassName="h-[38px] rounded-full"
-                  onSelect={(o) => {
-                    setFieldErrors((prev) => ({ ...prev, deal: false }));
-                    // Switching the deal always replaces the Receiver GSTIN
-                    // and billing/shipping address with whatever the new
-                    // deal's company has — including clearing them to empty
-                    // when that company doesn't have them saved. Carrying
-                    // over the previous deal's company data would attach it
-                    // to a company it was never actually collected for.
-                    const selectedDeal = deals.find((d) => d._id === o.value);
-                    const company = selectedDeal?.company;
-                    const nextBilling =
-                      company && !isAddressEmpty(company.billingAddress)
-                        ? { ...emptyAddress(), ...company.billingAddress }
-                        : emptyAddress();
-                    const nextShipping =
-                      company && !isAddressEmpty(company.shippingAddresses?.[0])
-                        ? { ...emptyAddress(), ...company.shippingAddresses[0] }
-                        : emptyAddress();
-                    // Same seller-state vs. customer-state comparison the
-                    // full-width form uses (InvoiceFormFull.jsx) — kept here
-                    // instead of a manual Transaction Type dropdown so both
-                    // views classify a given deal identically.
-                    const sellerState = (orgDetails?.state || "").trim().toLowerCase();
-                    const customerState = (company?.billingAddress?.state || "").trim().toLowerCase();
-                    const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
-                    setForm((p) => ({
-                      ...p,
-                      deal: o.value,
-                      receiverGSTIN: supportsGSTIN ? company?.gstin || "" : p.receiverGSTIN,
-                      billingAddress: nextBilling,
-                      shippingAddress: p.sameAsBilling ? nextBilling : nextShipping,
-                      transactionType: supportsTax ? autoType : p.transactionType,
-                    }));
-                  }}
+                  onSelect={(o) => applyDealSelection(o.value)}
                 />
                 <button
                   type="button"

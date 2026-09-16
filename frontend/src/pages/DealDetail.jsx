@@ -627,6 +627,7 @@ function DealDetail() {
               showStats={showStats}
               deals={[deal]}
               refreshInvoices={fetchInvoices}
+              companyId={companyId}
             />
           )}
           {activeTab === "Notes" && (

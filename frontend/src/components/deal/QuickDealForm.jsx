@@ -16,13 +16,14 @@ const QuickDealForm = ({
   onDealUpdated,
   onRequestClose,
   initialCompanyId = "",
+  initialStatus = "Open",
   editDeal = null,
 }) => {
   const isEditing = !!editDeal;
   const [form, setForm] = useState({
     title: "",
     amount: "",
-    status: "Open",
+    status: initialStatus,
     company: initialCompanyId,
     contact: "",
   });

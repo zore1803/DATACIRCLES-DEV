@@ -597,7 +597,7 @@ const ModernKanbanColumn = React.memo(({
           </span>
         </div>
         <button
-          onClick={onAddClick}
+          onClick={() => onAddClick(status)}
           className="flex items-center justify-center cursor-pointer hover:opacity-70 transition-opacity flex-shrink-0"
           title="Add deal"
         >
@@ -801,6 +801,7 @@ function Deals() {
   const [permission, setPermission] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [initialDealStatus, setInitialDealStatus] = useState("Open");
   const [editDeal, setEditDeal] = useState(null);
   const [dealFields, setDealFields] = useState([]);
   const [additionalFieldValues, setAdditionalFieldValues] = useState({});
@@ -2082,11 +2083,9 @@ function Deals() {
     setAdditionalFieldValues({});
   };
 
-  const toggleForm = () => {
-    if (showForm) {
-      resetForm();
-    }
-    setShowForm(!showForm);
+  const toggleForm = (statusStr) => {
+    setInitialDealStatus(typeof statusStr === "string" ? statusStr : "Open");
+    setShowQuickAdd((prev) => !prev);
   };
 
   const formatIndianNumber = (num) => {
@@ -2593,6 +2592,7 @@ function Deals() {
               <button
                 onClick={() => {
                   setEditDeal(null);
+                  setInitialDealStatus("Open");
                   setShowQuickAdd((v) => !v);
                 }}
                 title={showQuickAdd && !editDeal ? "Cancel" : "New Deal"}
@@ -2675,6 +2675,7 @@ function Deals() {
           <QuickDealForm
             companies={companies}
             contacts={contacts}
+            initialStatus={initialDealStatus}
             editDeal={editDeal}
             onDealCreated={() => {
               fetchDeals();

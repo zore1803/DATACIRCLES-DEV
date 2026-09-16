@@ -476,7 +476,7 @@ const KanbanColumn = React.memo(({ status, deals, amountDeals, totalDealsCount, 
           </span>
         </div>
         <button
-          onClick={onAddClick}
+          onClick={() => onAddClick(status)}
           className="flex items-center justify-center cursor-pointer hover:opacity-70 transition-opacity flex-shrink-0"
           title="Add deal"
         >
@@ -594,12 +594,14 @@ export default function CompanyDealsKanban({
   const dragZoomRef = useRef(1);
 
   const [manualDealFormOpen, setManualDealFormOpen] = useState(false);
+  const [initialDealStatus, setInitialDealStatus] = useState("Open");
   // Derived rather than copied into local state on a one-shot effect — a
   // copy raced the initial data load (whichever re-rendered first won) and
   // could get clobbered before ever becoming visible.
   const showDealForm = manualDealFormOpen || autoOpenCreate;
   const closeDealForm = () => {
     setManualDealFormOpen(false);
+    setInitialDealStatus("Open");
     if (autoOpenCreate) onAutoOpenCreateConsumed?.();
   };
   const [statuses, setStatuses] = useState([]);
@@ -916,7 +918,10 @@ export default function CompanyDealsKanban({
     }
     setSelectedDeals((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }, [hasBulkAccess]);
-  const handleAddDealClick = useCallback(() => setManualDealFormOpen(true), []);
+  const handleAddDealClick = useCallback((statusStr) => {
+    setInitialDealStatus(typeof statusStr === "string" ? statusStr : "Open");
+    setManualDealFormOpen(true);
+  }, []);
 
   // Column header select-all: if every card in the column is already selected,
   // clicking clears just those; otherwise it adds them all to the selection.
@@ -1590,7 +1595,7 @@ export default function CompanyDealsKanban({
           </div>
           <button
             type="button"
-            onClick={() => setManualDealFormOpen(true)}
+            onClick={() => { setInitialDealStatus("Open"); setManualDealFormOpen(true); }}
             className="flex items-center justify-center rounded-full border hover:bg-gray-50 flex-shrink-0"
             style={{ width: "44px", height: "44px", borderColor: "#E1E4EA" }}
             title="Add Deal"
@@ -1605,6 +1610,7 @@ export default function CompanyDealsKanban({
           companies={company ? [company] : []}
           contacts={contacts}
           initialCompanyId={companyId}
+          initialStatus={initialDealStatus}
           onDealCreated={handleDealCreated}
           onRequestClose={closeDealForm}
         />
@@ -1704,7 +1710,7 @@ export default function CompanyDealsKanban({
           <Handshake size={28} className="mb-3 text-gray-400" />
           <button
             type="button"
-            onClick={() => setManualDealFormOpen(true)}
+            onClick={() => { setInitialDealStatus("Open"); setManualDealFormOpen(true); }}
             className="flex items-center gap-1.5 px-4 py-2.5 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
           >
             <PlusIcon className="w-4 h-4" />

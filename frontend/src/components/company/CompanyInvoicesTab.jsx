@@ -8,7 +8,16 @@ import { createPortal } from "react-dom";
 import { getAncestorZoom } from "../../utils/domUtils";
 import { getPinnedBoundaryOverlayStyle } from "../../utils/pinnedColumnShadow";
 import toast from "react-hot-toast";
-import InvoiceForm from "../invoice/InvoiceForm";
+// CreateInvoicePanel, not the default InvoiceForm export: it's what Accounting actually uses to
+// create AND edit invoices, and it applies the org's default notes/terms to a new document. The
+// default export's reset effect blanks notes/terms on open, so passing it defaults did nothing.
+import { CreateInvoicePanel } from "../invoice/InvoiceForm";
+import RecordPaymentModal from "../common/RecordPaymentModal";
+import QuickDealForm from "../deal/QuickDealForm";
+import MoreIcon from "../common/MoreIcon";
+import EyeIcon from "../common/EyeIcon";
+import EditIcon from "../common/EditIcon";
+import useDocumentDefaults from "../../hooks/useDocumentDefaults";
 import InvoicePdfPreview from "../invoice/InvoicePdfPreview";
 import useFillToBottom from "../../hooks/useFillToBottom";
 import FilterIcon from "../common/FilterIcon";
@@ -36,6 +45,7 @@ import {
   ChevronDown,
   EyeOff,
   X,
+  IndianRupee,
 } from "lucide-react";
 import { EditablePaginationButtons } from "../common/EditablePaginationButtons";
 
@@ -127,8 +137,62 @@ const INVOICE_FILTER_COLUMNS = [
   { key: "dueDate", label: "Due Date", options: DATE_RANGES.map((r) => r.label) },
 ];
 
-export default function CompanyInvoicesTab({ invoices, summary, loading, showStats = true, deals = [], refreshInvoices, autoOpenCreate = false, onAutoOpenCreateConsumed }) {
+// companyId: the company this list belongs to (Company Profile: the profile; Deal page: the
+//   deal's company). Preselected in "Add Deal", and used to keep new deals scoped to it.
+// onDealCreated: lets the owning page add a deal created from here to its own deals state, so
+//   it appears elsewhere on the page (e.g. the Deals tab) without a reload. Optional.
+export default function CompanyInvoicesTab({ invoices, summary, loading, showStats = true, deals = [], refreshInvoices, autoOpenCreate = false, onAutoOpenCreateConsumed, companyId = null, onDealCreated }) {
   const [manualInvoiceFormOpen, setManualInvoiceFormOpen] = useState(false);
+  // Same org document defaults Accounting passes, so an invoice gets identical notes, terms and
+  // due date whichever screen it was created from.
+  const documentDefaults = useDocumentDefaults();
+  // Invoice being edited in the panel; null = creating a new one.
+  const [editInvoice, setEditInvoice] = useState(null);
+  const [paymentInvoice, setPaymentInvoice] = useState(null);
+  const [rowMenu, setRowMenu] = useState(null); // { id, top, left }
+
+  // Deals created from this tab's "Add Deal". Kept locally as well as reported upward so the
+  // open panel can select the new deal immediately, even when the parent doesn't pass
+  // onDealCreated or re-renders later.
+  const [createdDeals, setCreatedDeals] = useState([]);
+  const availableDeals = useMemo(() => {
+    const known = new Set(deals.map((d) => d._id));
+    return [...deals, ...createdDeals.filter((d) => !known.has(d._id))];
+  }, [deals, createdDeals]);
+  const [justCreatedDealId, setJustCreatedDealId] = useState(null);
+  // One deal -> select it; several -> the user chooses; a deal just made via "Add Deal" wins.
+  const preselectDealId =
+    justCreatedDealId || (availableDeals.length === 1 ? availableDeals[0]._id : null);
+
+  const [showQuickDealForm, setShowQuickDealForm] = useState(false);
+  const [dealFormCompanies, setDealFormCompanies] = useState([]);
+  const [dealFormContacts, setDealFormContacts] = useState([]);
+  // Same lazy load Accounting's onAddDeal does before opening QuickDealForm.
+  const openAddDeal = async () => {
+    if (dealFormCompanies.length === 0 || dealFormContacts.length === 0) {
+      try {
+        const [c, ct] = await Promise.all([API.get("/companies"), API.get("/contacts")]);
+        setDealFormCompanies(c.data || []);
+        setDealFormContacts(ct.data || []);
+      } catch (err) {
+        console.error("Failed to load companies/contacts", err);
+      }
+    }
+    setShowQuickDealForm(true);
+  };
+  const handleDealCreated = (newDeal) => {
+    setShowQuickDealForm(false);
+    const newDealCompanyId = newDeal?.company?._id || newDeal?.company || null;
+    // The invoice has to stay with the company being viewed. QuickDealForm lets the company be
+    // changed; a deal for another company is still created, but isn't offered here.
+    if (companyId && newDealCompanyId && String(newDealCompanyId) !== String(companyId)) {
+      toast("Deal created for a different company, so it isn't available on this invoice.");
+      return;
+    }
+    setCreatedDeals((prev) => [...prev, newDeal]);
+    setJustCreatedDealId(newDeal._id);
+    onDealCreated?.(newDeal);
+  };
   // Opening an invoice from this tab shows it here rather than navigating
   // away — the number used to link to the invoices list page, which meant
   // leaving the company you were looking at to find the row again.
@@ -139,7 +203,13 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
   const showInvoiceForm = manualInvoiceFormOpen || autoOpenCreate;
   const closeInvoiceForm = () => {
     setManualInvoiceFormOpen(false);
+    setEditInvoice(null);
+    setJustCreatedDealId(null);
     if (autoOpenCreate) onAutoOpenCreateConsumed?.();
+  };
+  const openEditInvoice = (invoice) => {
+    setEditInvoice(invoice);
+    setManualInvoiceFormOpen(true);
   };
   const [searchTerm, setSearchTerm] = useState("");
   const [showFilterPanel, setShowFilterPanel] = useState(false);
@@ -1005,16 +1075,46 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
                       const boundaryOverlay = boundarySide && <div style={getPinnedBoundaryOverlayStyle(boundarySide)} />;
                       const isLastCol = col.id === orderedColumns[orderedColumns.length - 1]?.id;
                       const downloadButton = (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDownload(invoice._id);
-                          }}
-                          className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
-                          title="Download"
-                        >
-                          <DownloadIcon className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-0.5 flex-shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownload(invoice._id);
+                            }}
+                            className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+                            title="Download"
+                          >
+                            <DownloadIcon className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (rowMenu?.id === invoice._id) {
+                                setRowMenu(null);
+                                return;
+                              }
+                              // Same zoom-aware, viewport-clamped placement as Accounting's row menu.
+                              const z = getAncestorZoom(document.body);
+                              const MENU_W = 160;
+                              const MENU_H = 150;
+                              const MARGIN = 8;
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const viewportH = window.innerHeight / z;
+                              const viewportW = window.innerWidth / z;
+                              const below = rect.bottom / z + 4;
+                              const openUp = viewportH - below < MENU_H + MARGIN;
+                              let top = openUp ? rect.top / z - 4 - MENU_H : below;
+                              top = Math.max(MARGIN, Math.min(top, viewportH - MENU_H - MARGIN));
+                              let left = rect.right / z - MENU_W;
+                              left = Math.max(MARGIN, Math.min(left, viewportW - MENU_W - MARGIN));
+                              setRowMenu({ id: invoice._id, top, left });
+                            }}
+                            className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+                            title="More actions"
+                          >
+                            <MoreIcon className="w-4 h-4" />
+                          </button>
+                        </div>
                       );
 
                       if (col.id === "invoiceNumber") {
@@ -1193,17 +1293,87 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
         onClose={() => setPreviewInvoice(null)}
       />
 
-      {showInvoiceForm && (
-        <InvoiceForm
-          deals={deals}
-          isOpen={showInvoiceForm}
+      {/* Held until the document settings have loaded: the panel reads default notes/terms
+          into its initial state once, so mounting it earlier (autoOpenCreate) would keep the
+          built-in text instead of the org's. */}
+      {showInvoiceForm && documentDefaults.settled && (
+        <CreateInvoicePanel
+          key={editInvoice?._id || "new"}
+          type="tax"
+          deals={availableDeals}
+          initialDoc={editInvoice}
+          preselectDealId={editInvoice ? null : preselectDealId}
+          defaultDueDateDays={documentDefaults.defaultDueDateDays}
+          defaultNotesByType={documentDefaults.defaultNotesByType}
+          defaultTermsByType={documentDefaults.defaultTermsByType}
+          defaultNotesFlat={documentDefaults.defaultNotesFlat}
+          defaultTermsFlat={documentDefaults.defaultTermsFlat}
           onClose={closeInvoiceForm}
-          fetchData={() => refreshInvoices?.()}
-          editingInvoice={null}
-          onPreview={() => {
-            toast("Preview is available from the main Invoices page.");
-          }}
+          onCreated={() => refreshInvoices?.()}
+          onAddDeal={openAddDeal}
+          onFullView={(doc) => doc?._id && setPreviewInvoice(doc)}
         />
+      )}
+
+      {showQuickDealForm && (
+        <QuickDealForm
+          companies={dealFormCompanies}
+          contacts={dealFormContacts}
+          initialCompanyId={companyId || ""}
+          onDealCreated={handleDealCreated}
+          onRequestClose={() => setShowQuickDealForm(false)}
+        />
+      )}
+
+      <RecordPaymentModal
+        isOpen={!!paymentInvoice}
+        invoice={paymentInvoice}
+        onClose={() => setPaymentInvoice(null)}
+        onSuccess={() => {
+          setPaymentInvoice(null);
+          refreshInvoices?.();
+        }}
+      />
+
+      {/* Row actions: same items, order and eligibility as Accounting's invoice row menu
+          (Record Payment only while unpaid). Portaled with an outside-click backdrop, the
+          same pattern Accounting uses, so the table's overflow can't clip it. */}
+      {rowMenu && createPortal(
+        (() => {
+          const invoice = invoices.find((i) => i._id === rowMenu.id);
+          if (!invoice) return null;
+          const close = () => setRowMenu(null);
+          const itemCls = "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap";
+          return (
+            <>
+              <div className="fixed inset-0 z-[100050]" onClick={close} />
+              <div
+                style={{ position: "fixed", top: rowMenu.top, left: rowMenu.left }}
+                className="w-[160px] z-[100051] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5"
+              >
+                {invoice.status !== "Paid" && (
+                  <button type="button" className={itemCls} onClick={() => { close(); setPaymentInvoice(invoice); }}>
+                    <IndianRupee className="w-3.5 h-3.5 text-emerald-600" />
+                    Record Payment
+                  </button>
+                )}
+                <button type="button" className={itemCls} onClick={() => { close(); setPreviewInvoice(invoice); }}>
+                  <EyeIcon className="w-3.5 h-3.5 text-blue-600" />
+                  View
+                </button>
+                <button type="button" className={itemCls} onClick={() => { close(); openEditInvoice(invoice); }}>
+                  <EditIcon className="w-3.5 h-3.5 text-blue-600" />
+                  Edit
+                </button>
+                <button type="button" className={itemCls} onClick={() => { close(); handleDownload(invoice._id); }}>
+                  <DownloadIcon className="w-3.5 h-3.5 text-green-600" />
+                  Download
+                </button>
+              </div>
+            </>
+          );
+        })(),
+        document.body
       )}
 
       {dragGhost && createPortal(
