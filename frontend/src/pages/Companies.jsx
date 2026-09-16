@@ -2021,12 +2021,12 @@ function Companies() {
                     {/* Hotlist — hidden on mobile, folded into three-dot menu */}
                     <button
                       onClick={() => setShowHotlist(!showHotlist)}
-                      className={`hidden lg:inline-flex items-center gap-2 h-10 px-4 rounded-full text-sm font-semibold transition-colors ${showHotlist
-                        ? "bg-blue-50 ring-4 ring-inset ring-blue-100 text-blue-700"
-                        : "bg-white ring-4 ring-inset ring-gray-100 text-[#525866] hover:bg-gray-50"
+                      className={`hidden lg:inline-flex items-center gap-2 h-10 px-4 rounded-full border text-sm font-semibold transition-colors ${showHotlist
+                        ? "bg-blue-50 border-[#0085FF] text-blue-700"
+                        : "bg-white border-[#E1E4EA] text-[#525866] hover:bg-gray-50"
                         }`}
                     >
-                      <HotlistIcon className="w-4 h-4 text-[#1D4ED8]" />
+                      <HotlistIcon className="w-4 h-4" />
                       <span className="font-medium">Hotlist</span>
                     </button>
 
