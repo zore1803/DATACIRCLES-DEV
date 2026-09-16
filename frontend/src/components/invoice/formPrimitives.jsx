@@ -55,7 +55,40 @@ export const emptyAddress = () => ({
 export const isAddressEmpty = (addr) =>
   !addr || Object.values(addr).every((v) => !v || !String(v).trim());
 
-export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, required = false, invalid = false }) => {
+// Looks up an Indian PIN code via India Post's public API (no key required)
+// to fill State/City automatically — a pincode uniquely determines both, so
+// asking the user to also pick them by hand is redundant once it's typed.
+// Matched against this module's own INDIA_STATES/CITIES_BY_STATE (not the
+// raw API district name) so the result lands on a real option in the
+// State/City dropdowns above rather than a lookalike string that fails to
+// match. Same approach as QuickCompanyForm's lookupIndianPincode.
+const lookupIndianPincode = async (pincode) => {
+  if (!/^\d{6}$/.test(pincode)) return null;
+  try {
+    const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
+    const data = await res.json();
+    const po = data?.[0]?.Status === "Success" ? data[0].PostOffice?.[0] : null;
+    if (!po) return null;
+
+    const matchedState = INDIA_STATES.find((s) => s.toLowerCase() === po.State?.toLowerCase());
+    if (!matchedState) return null;
+
+    const cities = CITIES_BY_STATE[matchedState] || [];
+    const districtOrTaluk = po.District || po.Block || po.Taluk || "";
+    const matchedCity =
+      cities.find((c) => c.toLowerCase() === districtOrTaluk.toLowerCase()) ||
+      cities.find((c) => c.toLowerCase() === po.Name?.toLowerCase()) ||
+      districtOrTaluk ||
+      po.Name ||
+      "";
+
+    return { country: "India", state: matchedState, city: matchedCity };
+  } catch (_) {
+    return null; // Non-fatal — the user can still fill state/city by hand.
+  }
+};
+
+export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, required = false, invalid = false, onUseSaved }) => {
   const safeValue = value || emptyAddress();
   const fieldBorder = invalid
     ? "border-red-400 focus:ring-red-500/20 focus:border-red-500"
@@ -75,13 +108,24 @@ export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, r
 
   return (
     <div className="flex flex-col gap-3 w-full @md:col-span-2">
-      <div className="flex items-center gap-2 mb-1">
-        <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[#0085FF]">
-          <MapPin className="w-3.5 h-3.5" />
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[#0085FF]">
+            <MapPin className="w-3.5 h-3.5" />
+          </div>
+          <span className="text-[14px] font-semibold text-slate-800">
+            {label} {required && <span className="text-red-500">*</span>}
+          </span>
         </div>
-        <span className="text-[14px] font-semibold text-slate-800">
-          {label} {required && <span className="text-red-500">*</span>}
-        </span>
+        {onUseSaved && !disabled && (
+          <button
+            type="button"
+            onClick={onUseSaved}
+            className="text-[12px] font-medium text-[#0085FF] hover:underline flex-shrink-0"
+          >
+            Use saved address
+          </button>
+        )}
       </div>
       <div className="flex flex-col gap-3">
         <div className="relative">
@@ -141,7 +185,16 @@ export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, r
             type="text"
             value={safeValue.pincode || ""}
             disabled={disabled}
-            onChange={(e) => onChange({ ...safeValue, pincode: e.target.value })}
+            onChange={async (e) => {
+              const pincode = e.target.value.replace(/\D/g, "").slice(0, 6);
+              onChange({ ...safeValue, pincode });
+              // Only fire once a full 6-digit code is typed — a request per
+              // keystroke would spam pincodes India Post will 404 on anyway.
+              if (pincode.length === 6) {
+                const match = await lookupIndianPincode(pincode);
+                if (match) onChange({ ...safeValue, pincode, ...match });
+              }
+            }}
             placeholder="Pincode"
             className={`${inputCls} @md:col-span-1 col-span-2`}
           />

@@ -36,6 +36,7 @@ import BankSelect from "./BankSelect";
 import InsufficientStockDialog from "../common/InsufficientStockDialog";
 import TemplateDrawer from "./TemplateDrawer";
 import NotesTermsDrawer from "./NotesTermsDrawer";
+import AddressBookDrawer from "./AddressBookDrawer";
 import { buildDocumentHtml, computeDocument, GST_RATES, DOCUMENT_TEMPLATES } from "../../../../shared/documentTemplates.js";
 import {
   SectionHeader,
@@ -476,6 +477,9 @@ const InvoiceForm = ({
   // in when the invoice was created, with no way to bring in a later
   // change from Settings short of retyping it by hand.
   const [notesDrawer, setNotesDrawer] = useState(null);
+  // "billing" | "shipping" | null — same idea as notesDrawer, for the saved
+  // address book (AddressBookDrawer).
+  const [addressDrawer, setAddressDrawer] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [quickAddItem, setQuickAddItem] = useState(null);
   const [quickAddQty, setQuickAddQty] = useState(1);
@@ -1542,6 +1546,7 @@ const InvoiceForm = ({
                 <AddressFieldsGroup
                   label="Billing address"
                   value={form.billingAddress}
+                  onUseSaved={() => setAddressDrawer("billing")}
                   onChange={(next) => {
                     // Editing the billing state here (not just picking a new
                     // Deal) should re-classify intra/inter the same way deal
@@ -1565,6 +1570,7 @@ const InvoiceForm = ({
                   label="Shipping address"
                   value={form.shippingAddress}
                   disabled={!!form.sameAsBilling}
+                  onUseSaved={() => setAddressDrawer("shipping")}
                   onChange={(next) => {
                     setForm((prev) => ({ ...prev, shippingAddress: next }));
                     setHasUnsavedChanges(true);
@@ -2206,6 +2212,27 @@ const InvoiceForm = ({
           setHasUnsavedChanges(true);
         }}
       />
+
+      <AddressBookDrawer
+        isOpen={addressDrawer !== null}
+        onClose={() => setAddressDrawer(null)}
+        currentAddress={addressDrawer === "billing" ? form.billingAddress : form.shippingAddress}
+        onApply={(next) => {
+          if (addressDrawer === "billing") {
+            const customerState = (next.state || "").trim().toLowerCase();
+            const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
+            setForm((prev) => ({
+              ...prev,
+              billingAddress: next,
+              shippingAddress: prev.sameAsBilling ? next : prev.shippingAddress,
+              transactionType: customerState ? autoType : prev.transactionType,
+            }));
+          } else {
+            setForm((prev) => ({ ...prev, shippingAddress: next }));
+          }
+          setHasUnsavedChanges(true);
+        }}
+      />
     </>,
     document.body
   );
@@ -2317,20 +2344,6 @@ const CreateInvoicePanel = ({
   const configuredSuffix = documentTypeSettings[SETTINGS_KEY_BY_TYPE[type]]?.suffix || "";
   // Section badges are numbered by position so a hidden section doesn't leave
   // a gap in the sequence.
-  const sectionNo = (() => {
-    let n = 1;
-    const pad = (v) => String(v).padStart(2, "0");
-    const out = { details: pad(n++) };
-    out.address = pad(n++);
-    if (supportsGSTIN) out.billing = pad(n++);
-    out.items = pad(n++);
-    out.notes = pad(n++);
-    out.terms = pad(n++);
-    out.bank = pad(n++);
-    out.signature = pad(n++);
-    out.summary = pad(n++);
-    return out;
-  })();
   const [form, setForm] = useState(() => {
     const sourceDoc = initialDoc || conversionData;
     const base = sourceDoc
@@ -2420,6 +2433,20 @@ const CreateInvoicePanel = ({
         };
     return formOverride ? { ...base, ...formOverride } : base;
   });
+  const sectionNo = (() => {
+    let n = 1;
+    const pad = (v) => String(v).padStart(2, "0");
+    const out = { details: pad(n++) };
+    out.address = pad(n++);
+    if (supportsGSTIN && form.isTaxInvoice) out.billing = pad(n++);
+    out.items = pad(n++);
+    out.notes = pad(n++);
+    out.terms = pad(n++);
+    out.bank = pad(n++);
+    out.signature = pad(n++);
+    out.summary = pad(n++);
+    return out;
+  })();
   const [catalogue, setCatalogue] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [stockErrorMessage, setStockErrorMessage] = useState(null);
@@ -2473,6 +2500,9 @@ const CreateInvoicePanel = ({
   const [hidePreview, setHidePreview] = useState(false);
   // null when closed; otherwise the section to focus ("notes" | "terms").
   const [notesDrawer, setNotesDrawer] = useState(null);
+  // "billing" | "shipping" | null — same idea as notesDrawer, for the saved
+  // address book (AddressBookDrawer).
+  const [addressDrawer, setAddressDrawer] = useState(null);
   // Width the two columns actually use; the split only applies while the
   // preview is on screen.
   const formWidth = hidePreview ? "100%" : `${leftPct}%`;
@@ -3298,14 +3328,14 @@ const CreateInvoicePanel = ({
                       phone screen; document numbering is still reachable via
                       Settings. */}
                   {!isEditing && (
-                    <div className="hidden lg:flex items-center border border-[#E1E4EA] rounded-lg overflow-hidden h-9 bg-white flex-shrink-0">
+                    <div className="hidden lg:flex items-center border border-[#E1E4EA] rounded-full overflow-hidden h-9 bg-white flex-shrink-0">
                       <input
                         type="text"
                         value={form.invoicePrefix}
                         onChange={(e) => setForm((prev) => ({ ...prev, invoicePrefix: e.target.value }))}
                         title={`${docName} number prefix`}
                         aria-label={`${docName} number prefix`}
-                        className="w-16 px-2 py-1 text-sm font-semibold text-[#1F2937] bg-[#F8F9FB] border-r border-[#E1E4EA] focus:outline-none focus:bg-white"
+                        className="w-16 h-full pl-3.5 pr-2 text-sm font-semibold text-[#1F2937] bg-[#F8F9FB] border-r border-[#E1E4EA] rounded-l-full focus:outline-none focus:bg-white"
                       />
                       <input
                         type="text"
@@ -3314,7 +3344,7 @@ const CreateInvoicePanel = ({
                         onChange={(e) => setForm((prev) => ({ ...prev, invoiceNumber: e.target.value }))}
                         title={`${docName} number (leave blank to auto-generate)`}
                         aria-label={`${docName} number`}
-                        className="w-20 px-2 py-1 text-sm font-semibold text-[#1F2937] border-r border-[#E1E4EA] focus:outline-none"
+                        className="w-20 h-full px-2 text-sm font-semibold text-[#1F2937] border-r border-[#E1E4EA] focus:outline-none"
                       />
                       <input
                         type="text"
@@ -3323,7 +3353,7 @@ const CreateInvoicePanel = ({
                         onChange={(e) => setForm((prev) => ({ ...prev, invoiceSuffix: e.target.value }))}
                         title={`${docName} number suffix (optional)`}
                         aria-label={`${docName} number suffix`}
-                        className="w-16 px-2 py-1 text-sm font-semibold text-[#1F2937] bg-[#F8F9FB] focus:outline-none focus:bg-white"
+                        className="w-16 h-full pl-2 pr-3.5 text-sm font-semibold text-[#1F2937] bg-[#F8F9FB] rounded-r-full focus:outline-none focus:bg-white"
                       />
                     </div>
                   )}
@@ -3402,7 +3432,7 @@ const CreateInvoicePanel = ({
             <button
               type="button"
               onClick={() => setShowTemplates(true)}
-              className="h-8 px-4 flex items-center gap-1.5 rounded-lg bg-[#0085FF] hover:bg-blue-600 text-white text-sm font-medium transition-colors"
+              className="h-8 px-4 flex items-center gap-1.5 rounded-full bg-[#0085FF] hover:bg-blue-600 text-white text-sm font-medium transition-colors"
             >
               <EditIcon className="w-3.5 h-3.5" />
               Change Template
@@ -3630,6 +3660,7 @@ const CreateInvoicePanel = ({
               required
               invalid={fieldErrors.billingAddress}
               value={form.billingAddress}
+              onUseSaved={() => setAddressDrawer("billing")}
               onChange={(next) => {
                 setFieldErrors((prev) => ({ ...prev, billingAddress: false }));
                 // Same seller-state vs. customer-state re-check the deal
@@ -3684,11 +3715,41 @@ const CreateInvoicePanel = ({
               label="Shipping address"
               value={form.shippingAddress}
               disabled={!!form.sameAsBilling}
+              onUseSaved={() => setAddressDrawer("shipping")}
               onChange={(next) => setField("shippingAddress", next)}
             />
           </div>
 
-          {supportsGSTIN && (
+          {/* Tax Invoice toggle — CreateInvoicePanel (the "Update Invoice"
+              edit flow) never exposed this, unlike the split-view panel
+              above, so GST fields and the "Tax Invoice" title were forced on
+              for every document. OFF renders the doc titled "Invoice"
+              instead of "Tax Invoice" (Professional.js reads this same
+              form.isTaxInvoice via computeDocument's `t.isTax`) and hides
+              Receiver GSTIN / per-item GST%. */}
+          {supportsTax && (
+            <div className="flex items-center gap-2.5 h-10 w-full">
+              <button
+                type="button"
+                onClick={() => setField("isTaxInvoice", !form.isTaxInvoice)}
+                className="flex-shrink-0"
+              >
+                <span
+                  className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${form.isTaxInvoice ? "bg-[#0085FF]" : "bg-[#E1E4EA]"}`}
+                >
+                  <span
+                    className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isTaxInvoice ? "translate-x-4" : "translate-x-0"}`}
+                  />
+                </span>
+              </button>
+              <div className="flex flex-col">
+                <span className="text-[12px] font-medium text-[#1F2937]">Enable Tax Invoice</span>
+                <span className="text-[10px] text-[#99A0AE]">Include GST and tax details</span>
+              </div>
+            </div>
+          )}
+
+          {supportsGSTIN && form.isTaxInvoice && (
           <>
           <SectionHeader number={sectionNo.billing} title="Billing & Tax Information" />
           <div className="grid grid-cols-1 @md:grid-cols-2 gap-x-6 gap-y-2 w-full">
@@ -4281,7 +4342,7 @@ const CreateInvoicePanel = ({
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="h-9 px-4 flex items-center gap-1.5 bg-white border border-[#E1E4EA] rounded-lg text-[13px] font-medium text-[#1F2937] hover:bg-gray-50 transition-colors whitespace-nowrap"
+                  className="h-9 px-4 flex items-center gap-1.5 bg-white border border-[#E1E4EA] rounded-full text-[13px] font-medium text-[#1F2937] hover:bg-gray-50 transition-colors whitespace-nowrap"
                 >
                   <Printer className="w-3.5 h-3.5 text-[#525866]" />
                   Print
@@ -4290,7 +4351,7 @@ const CreateInvoicePanel = ({
                   type="button"
                   onClick={handleSubmit}
                   disabled={submitting}
-                  className="h-9 px-4 flex items-center gap-1.5 rounded-lg bg-[#0085FF] hover:bg-blue-600 text-white text-[13px] font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
+                  className="h-9 px-4 flex items-center gap-1.5 rounded-full bg-[#0085FF] hover:bg-blue-600 text-white text-[13px] font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
                 >
                   {submitting
                     ? isEditing
@@ -4402,6 +4463,28 @@ const CreateInvoicePanel = ({
         docName={docName}
         onApplyNotes={(v) => setField("notes", v)}
         onApplyTerms={(v) => setField("terms", v)}
+      />
+
+      <AddressBookDrawer
+        isOpen={addressDrawer !== null}
+        onClose={() => setAddressDrawer(null)}
+        currentAddress={addressDrawer === "billing" ? form.billingAddress : form.shippingAddress}
+        onApply={(next) => {
+          if (addressDrawer === "billing") {
+            const sellerState = (orgDetails?.state || "").trim().toLowerCase();
+            const customerState = (next.state || "").trim().toLowerCase();
+            const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
+            setForm((p) => ({
+              ...p,
+              billingAddress: next,
+              shippingAddress: p.sameAsBilling ? next : p.shippingAddress,
+              transactionType: supportsTax && customerState ? autoType : p.transactionType,
+            }));
+            setFieldErrors((prev) => ({ ...prev, billingAddress: false }));
+          } else {
+            setField("shippingAddress", next);
+          }
+        }}
       />
 
       {/* Opened by "Change Template" above — edits the organization-wide
