@@ -1,4 +1,6 @@
 import DeleteIcon from "../common/DeleteIcon";
+import VariantImagePicker from "./VariantImagePicker";
+import { stripVariantFileState } from "../../utils/variantResolve";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import React, { useEffect, useState, useRef } from "react";
@@ -27,6 +29,9 @@ const ItemForm = ({
   const [isOpen, setIsOpen] = useState(false);
   const [variants, setVariants] = useState(form.variants || []);
   const [showVariantForm, setShowVariantForm] = useState(false);
+  // Blank variant. The override fields (barcode/description/discount/maxDiscountPercent/
+  // lowStockThreshold) start as "" rather than 0 — empty means "inherit the parent's value",
+  // and 0 is a real, deliberate setting. The backend preserves that distinction.
   const [currentVariant, setCurrentVariant] = useState({
     name: "",
     sku: "",
@@ -36,6 +41,12 @@ const ItemForm = ({
     stock: 0,
     isActive: true,
     gstRate: 0,
+    barcode: "",
+    description: "",
+    images: [],
+    discount: { type: "percentage", value: "" },
+    maxDiscountPercent: "",
+    lowStockThreshold: "",
   });
   const [variantIndex, setVariantIndex] = useState(null);
   // Once an item has variants, the variant is the actual sellable/stockable
@@ -442,7 +453,11 @@ const ItemForm = ({
         })
         .filter((field) => field.value !== "");
 
-      if (newImageFiles.length > 0) {
+      // A variant's freshly picked images have to travel as multipart too, so the request
+      // switches to FormData when EITHER the parent or any variant has new files pending.
+      const variantsWithNewFiles = variantsToSave.filter((v) => (v._newImageFiles || []).length > 0);
+
+      if (newImageFiles.length > 0 || variantsWithNewFiles.length > 0) {
         // Multipart request: scalar fields go in as strings, array/object
         // fields get JSON-stringified, same approach QuickCompanyForm.jsx
         // uses for its single profilePicture upload, extended to multiple
@@ -454,7 +469,12 @@ const ItemForm = ({
             fd.append(key, typeof value === "boolean" ? String(value) : value);
           }
         );
-        fd.append("variants", JSON.stringify(variantsToSave));
+        // `_newImageFiles` is form-only state (File objects); it must not be serialized into
+        // the JSON variants payload — the files go as their own multipart parts below.
+        fd.append(
+          "variants",
+          JSON.stringify(variantsToSave.map(stripVariantFileState))
+        );
         fd.append("additionalFields", JSON.stringify(processedAdditionalFields));
         fd.append("discount", JSON.stringify(form.discount || { type: "percentage", value: 0 }));
         // Nested object, so it must be JSON-stringified like variants/discount above —
@@ -462,6 +482,11 @@ const ItemForm = ({
         fd.append("inventory", JSON.stringify(inventoryToSave));
         fd.append("existingImages", JSON.stringify(existingImages));
         newImageFiles.forEach((file) => fd.append("images", file));
+        // Indexed by position in the variants array, which is exactly how itemController
+        // re-attaches them (partitionUploadedFiles -> variantImages_<index>).
+        variantsToSave.forEach((variant, idx) => {
+          (variant._newImageFiles || []).forEach((file) => fd.append(`variantImages_${idx}`, file));
+        });
 
         if (form._id) {
           await API.put(`/items/${form._id}`, fd, { headers: { "Content-Type": "multipart/form-data" } });
@@ -473,7 +498,7 @@ const ItemForm = ({
       } else {
         const payload = {
           ...form,
-          variants: variantsToSave,
+          variants: variantsToSave.map(stripVariantFileState),
           inventory: inventoryToSave,
           additionalFields: processedAdditionalFields,
           images: existingImages,
@@ -861,6 +886,114 @@ const ItemForm = ({
                     </div>
                   </div>
 
+                  {/* ── Variant-specific overrides ──────────────────────────────────
+                      Each of these belongs to the variant rather than the product: a Small and
+                      a Large are scanned, described, pictured and discounted separately. All
+                      are optional — left blank, the variant inherits the parent item's value
+                      (see utils/variantResolve.js), so existing variants are unaffected. */}
+                  <div className="pt-3 mt-1 border-t border-gray-100">
+                    <p className="text-xs font-semibold text-gray-700 mb-2">Variant Details</p>
+                    <p className="text-[11px] text-gray-400 mb-3">Leave any field blank to use the item's value.</p>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Barcode</label>
+                        <input
+                          type="text"
+                          name="barcode"
+                          autoComplete="off"
+                          value={currentVariant.barcode ?? ""}
+                          onChange={handleVariantChange}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          placeholder="Scan or enter barcode"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Low Stock Alert at</label>
+                        <input
+                          type="number"
+                          min="0"
+                          name="lowStockThreshold"
+                          value={currentVariant.lowStockThreshold ?? ""}
+                          onChange={handleVariantChange}
+                          onWheel={(e) => e.target.blur()}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          placeholder="Item default"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Discount</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            value={currentVariant.discount?.value ?? ""}
+                            onChange={(e) =>
+                              setCurrentVariant((prev) => ({
+                                ...prev,
+                                discount: { ...(prev.discount || {}), type: prev.discount?.type || "percentage", value: e.target.value },
+                              }))
+                            }
+                            onWheel={(e) => e.target.blur()}
+                            className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            placeholder="Item default"
+                          />
+                          <select
+                            value={currentVariant.discount?.type || "percentage"}
+                            onChange={(e) =>
+                              setCurrentVariant((prev) => ({
+                                ...prev,
+                                discount: { ...(prev.discount || {}), value: prev.discount?.value ?? "", type: e.target.value },
+                              }))
+                            }
+                            className="px-2 py-2 bg-white border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                          >
+                            <option value="percentage">%</option>
+                            <option value="amount">₹</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Max Discount %</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.5"
+                          name="maxDiscountPercent"
+                          value={currentVariant.maxDiscountPercent ?? ""}
+                          onChange={handleVariantChange}
+                          onWheel={(e) => e.target.blur()}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          placeholder="Item default"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-3">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                      <textarea
+                        name="description"
+                        rows={2}
+                        value={currentVariant.description ?? ""}
+                        onChange={handleVariantChange}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                        placeholder="Item description"
+                      />
+                    </div>
+
+                    <div className="mt-3">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Images</label>
+                      <VariantImagePicker
+                        variant={currentVariant}
+                        onChange={(next) => setCurrentVariant((prev) => ({ ...prev, ...next }))}
+                      />
+                    </div>
+                  </div>
+
                   <div className="flex items-center gap-2 pt-2">
                     <Checkbox checked={currentVariant.isActive !== false} onChange={(e) => setCurrentVariant(prev => ({ ...prev, isActive: e.target.checked }))} id="variantActive" name="isActive" />
                     <label htmlFor="variantActive" className="text-sm font-medium text-gray-900">
@@ -930,7 +1063,9 @@ const ItemForm = ({
           </div>
           )}
 
-          {/* Description */}
+          {/* Hidden once the item has variants: each variant carries its own, and showing an
+              editable parent copy would leave the user unsure which one actually applies. */}
+          {!hasVariants && (
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1.5">
               Description
@@ -944,6 +1079,7 @@ const ItemForm = ({
               />
             </div>
           </div>
+          )}
 
           {/* Price Row — disabled once the item has variants: each variant
               carries its own price, and every item-picker across the app
@@ -1012,7 +1148,9 @@ const ItemForm = ({
           </div>
           )}
 
-          {/* Default Discount + Max Discount % */}
+          {/* Hidden once the item has variants: each variant carries its own, and showing an
+              editable parent copy would leave the user unsure which one actually applies. */}
+          {!hasVariants && (
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1.5">
@@ -1058,6 +1196,7 @@ const ItemForm = ({
               <p className="mt-1 text-[11px] text-gray-400">Leave blank for no limit.</p>
             </div>
           </div>
+          )}
 
           {/* HSN/SAC */}
           <div>
@@ -1073,7 +1212,9 @@ const ItemForm = ({
             />
           </div>
 
-          {/* Barcode */}
+          {/* Hidden once the item has variants: each variant carries its own, and showing an
+              editable parent copy would leave the user unsure which one actually applies. */}
+          {!hasVariants && (
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1.5">
               Barcode
@@ -1095,6 +1236,7 @@ const ItemForm = ({
               </button>
             </div>
           </div>
+          )}
 
           {/* Category */}
           <div>
@@ -1110,7 +1252,9 @@ const ItemForm = ({
             />
           </div>
 
-          {/* Images — heading follows the Product/Service type, matching QuickItemDrawer */}
+          {/* Hidden once the item has variants: each variant carries its own, and showing an
+              editable parent copy would leave the user unsure which one actually applies. */}
+          {!hasVariants && (
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1.5">
               {form.type === "service" ? "Service Images" : "Product Images"}
@@ -1159,6 +1303,7 @@ const ItemForm = ({
             </div>
             <p className="mt-1.5 text-[11px] text-gray-400">Up to 10 images</p>
           </div>
+          )}
 
           {/* Primary Unit */}
           <div>
@@ -1227,6 +1372,11 @@ const ItemForm = ({
                     step="any"
                     min="0"
                     placeholder="0"
+                    // Disabled (not hidden) once there are variants, matching the Opening Stock
+                    // field beside it — hiding just one half would leave this grid lopsided.
+                    // Each variant sets its own threshold and falls back to this value only
+                    // while it has none of its own.
+                    disabled={hasVariants}
                     value={form.inventory?.lowStockThreshold ?? 0}
                     onChange={(e) =>
                       handleFormChange("inventory", {
@@ -1234,8 +1384,13 @@ const ItemForm = ({
                         lowStockThreshold: e.target.value,
                       })
                     }
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                   />
+                  {hasVariants && (
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      Managed by variants — set each variant's own alert level below.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

@@ -1,4 +1,5 @@
 import DeleteIcon from "../common/DeleteIcon";
+import { resolveField, resolveDiscount, resolveMaxDiscountPercent } from "../../utils/variantResolve";
 import PdfIcon from "../common/PdfIcon";
 import PlusIcon from "../common/PlusIcon";
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -497,17 +498,18 @@ const InvoiceFormFull = ({
               _id: variant._id,
               displayName: `${item.name} - ${variant.name}`,
               name: variant.name,
-              description: variant.description || item.description || "",
+              description: resolveField(variant, item, "description") || "",
+              barcode: resolveField(variant, item, "barcode") || "",
+              maxDiscountPercent: resolveMaxDiscountPercent(variant, item),
               sellingPrice: variant.sellingPrice || item.sellingPrice,
               hsnSac: variant.hsnSac || item.hsnSac || "",
               // Variant's own rate falls back to the parent item's, same as
               // sellingPrice/hsnSac above.
               gstRate: variant.gstRate ?? item.gstRate ?? 0,
               taxInclusive: !!(variant.taxInclusive ?? item.taxInclusive),
-              // Discount only lives on the parent Item (variants have no
-              // discount field of their own) — same catalog default for
-              // every variant of a product.
-              discount: item.discount || { type: "percentage", value: 0 },
+              // Variant-first: the variant's own discount when it sets one, otherwise the
+              // parent item's catalog default (see utils/variantResolve.js).
+              discount: resolveDiscount(variant, item),
               type: item.type,
               category: item.category || "",
               primaryUnit:

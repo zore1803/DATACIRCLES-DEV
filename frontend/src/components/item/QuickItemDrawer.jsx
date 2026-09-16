@@ -1,4 +1,6 @@
 import DeleteIcon from "../common/DeleteIcon";
+import VariantImagePicker from "./VariantImagePicker";
+import { stripVariantFileState } from "../../utils/variantResolve";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import React, { useState, useEffect, useRef } from "react";
@@ -38,21 +40,18 @@ const BLANK_FORM = {
   primaryUnit: "",
   hsnSac: "",
   purchasePrice: "",
-  purchasePriceTax: "with Tax",
   barcode: "",
   category: "",
   description: "",
   openingQuantity: "0",
-  openingPurchasePrice: "0",
-  openingStockValue: "0",
   discountValue: "0",
   discountType: "percentage",
   maxDiscountPercent: "",
   lowStockAlert: "0",
-  showInOnlineStore: true,
-  notForSale: false,
 };
 
+// The override fields start as "" rather than 0: empty means "inherit the parent item's
+// value", while 0 is a real, deliberate setting. The backend preserves that distinction.
 const BLANK_VARIANT = {
   name: "",
   sku: "",
@@ -62,6 +61,12 @@ const BLANK_VARIANT = {
   stock: 0,
   isActive: true,
   gstRate: 0,
+  barcode: "",
+  description: "",
+  images: [],
+  discount: { type: "percentage", value: "" },
+  maxDiscountPercent: "",
+  lowStockThreshold: "",
 };
 
 // Standard Indian GST slabs, matching the per-item select used on document
@@ -241,23 +246,26 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
         maxDiscountPercent: form.maxDiscountPercent === "" || form.maxDiscountPercent === undefined
           ? null
           : parseFloat(form.maxDiscountPercent),
-        // Opening Quantity / Low Stock Alert were being captured into form
-        // state but never sent — itemController.createItem only reads stock
-        // settings from a nested `inventory` object (matching ItemForm.jsx's
-        // shape), so the flat fields silently had no effect and every new
-        // item's Inventory-page stock stayed 0 regardless of what was typed
-        // here. `openingPurchasePrice`/`openingStockValue` have no backing
-        // field on the Item model at all (the ledger's opening-stock unit
-        // price comes from the Purchase Price field above instead), so
-        // there's nothing to wire them to.
+        // Stock settings live under a nested `inventory` object — that's the
+        // only shape itemController.createItem reads (matching ItemForm.jsx).
+        // The ledger's opening-stock unit price comes from the Purchase Price
+        // field above, so there is no separate opening-price input.
         inventory: {
-          openingStock: parseFloat(form.openingQuantity) || 0,
+          // Parent opening stock is inert once the item has variants (each variant tracks
+          // its own), and the Opening Stock block is hidden in that case — but the field's
+          // state keeps whatever was typed before the first variant was added. Force it to
+          // 0 so a stale quantity can't ride along, matching ItemForm.jsx.
+          openingStock: variantsToSave.length > 0 ? 0 : (parseFloat(form.openingQuantity) || 0),
           lowStockThreshold: parseFloat(form.lowStockAlert) || 0,
         },
       };
 
+      // A variant's freshly picked images have to travel as multipart too, so the request
+      // switches to FormData when EITHER the parent or any variant has new files pending.
+      const anyVariantHasNewFiles = variantsToSave.some((v) => (v._newImageFiles || []).length > 0);
+
       let res;
-      if (imageFiles.length > 0) {
+      if (imageFiles.length > 0 || anyVariantHasNewFiles) {
         // Multipart request: scalar fields go in as strings, object/array
         // fields get JSON-stringified, same approach QuickCompanyForm.jsx
         // uses for its single profilePicture upload, extended to multiple
@@ -267,13 +275,24 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
           if (key === "variants" || key === "discount" || key === "inventory") return;
           fd.append(key, value === null || value === undefined ? "" : (typeof value === "boolean" ? String(value) : value));
         });
-        fd.append("variants", JSON.stringify(variantsToSave));
+        // `_newImageFiles` is form-only state (File objects) and must not be serialized into
+        // the JSON variants payload — the files go as their own multipart parts below.
+        fd.append("variants", JSON.stringify(variantsToSave.map(stripVariantFileState)));
         fd.append("discount", JSON.stringify(payload.discount));
         fd.append("inventory", JSON.stringify(payload.inventory));
         imageFiles.forEach((file) => fd.append("images", file));
+        // Indexed by position in the variants array, matching itemController's
+        // partitionUploadedFiles (variantImages_<index>).
+        variantsToSave.forEach((variant, idx) => {
+          (variant._newImageFiles || []).forEach((file) => fd.append(`variantImages_${idx}`, file));
+        });
         res = await API.post("/items", fd, { headers: { "Content-Type": "multipart/form-data" } });
       } else {
-        res = await API.post("/items", { ...payload, images: [] });
+        res = await API.post("/items", {
+          ...payload,
+          variants: variantsToSave.map(stripVariantFileState),
+          images: [],
+        });
       }
       toast.success("Item added successfully!");
       if (onSaved) onSaved(res.data);
@@ -450,14 +469,6 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                       placeholder="0"
                       className="flex-1 px-3 text-sm text-[#1F2937] focus:outline-none bg-white"
                     />
-                    <select
-                      value={form.purchasePriceTax}
-                      onChange={(e) => handleChange("purchasePriceTax", e.target.value)}
-                      className="px-2 bg-gray-50 border-l border-[#1F2937]/10 text-xs text-gray-600 focus:outline-none"
-                    >
-                      <option value="with Tax">with Tax</option>
-                      <option value="without Tax">without Tax</option>
-                    </select>
                   </div>
                 </div>
                 )}
@@ -559,6 +570,58 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                         <label className={lbl}>Stock</label>
                         <input type="number" name="stock" min="0" value={currentVariant.stock} onChange={handleVariantChange} onWheel={(e) => e.target.blur()} className={inp} />
                       </div>
+                      {/* ── Variant-specific overrides ──────────────────────────────────
+                          Each belongs to the variant, not the product: a Small and a Large are
+                          scanned, described, pictured and discounted separately. All optional —
+                          left blank the variant inherits the item's value (variantResolve.js). */}
+                      <div className="pt-2 mt-1 border-t border-gray-100">
+                        <p className="text-[11px] text-gray-400 mb-2">Leave blank to use the item's value.</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className={lbl}>Barcode</label>
+                            <input type="text" name="barcode" autoComplete="off" value={currentVariant.barcode ?? ""} onChange={handleVariantChange} placeholder="Scan or enter" className={inp} />
+                          </div>
+                          <div>
+                            <label className={lbl}>Low Stock Alert at</label>
+                            <input type="number" name="lowStockThreshold" min="0" value={currentVariant.lowStockThreshold ?? ""} onChange={handleVariantChange} onWheel={(e) => e.target.blur()} placeholder="Item default" className={inp} />
+                          </div>
+                          <div>
+                            <label className={lbl}>Discount</label>
+                            <div className="flex h-11 border border-[#1F2937]/10 rounded-full overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 bg-white font-inter">
+                              <input
+                                type="number"
+                                min="0"
+                                value={currentVariant.discount?.value ?? ""}
+                                onChange={(e) => setCurrentVariant((p) => ({ ...p, discount: { type: p.discount?.type || "percentage", value: e.target.value } }))}
+                                onWheel={(e) => e.target.blur()}
+                                placeholder="Item default"
+                                className="flex-1 min-w-0 w-0 px-3 text-sm text-[#1F2937] focus:outline-none"
+                              />
+                              <select
+                                value={currentVariant.discount?.type || "percentage"}
+                                onChange={(e) => setCurrentVariant((p) => ({ ...p, discount: { value: p.discount?.value ?? "", type: e.target.value } }))}
+                                className="px-2 bg-gray-50 border-l border-[#1F2937]/10 text-xs text-gray-600 focus:outline-none flex-shrink-0"
+                              >
+                                <option value="percentage">%</option>
+                                <option value="amount">₹</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div>
+                            <label className={lbl}>Max Discount %</label>
+                            <input type="number" name="maxDiscountPercent" min="0" max="100" step="0.5" value={currentVariant.maxDiscountPercent ?? ""} onChange={handleVariantChange} onWheel={(e) => e.target.blur()} placeholder="Item default" className={inp} />
+                          </div>
+                        </div>
+                        <div className="mt-3">
+                          <label className={lbl}>Description</label>
+                          <textarea name="description" rows={2} value={currentVariant.description ?? ""} onChange={handleVariantChange} placeholder="Item description" className="w-full border border-[#1F2937]/10 rounded-2xl px-4 py-2.5 text-sm text-[#1F2937] bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none font-inter placeholder:text-[#1F2937] placeholder:opacity-50" />
+                        </div>
+                        <div className="mt-3">
+                          <label className={lbl}>Images</label>
+                          <VariantImagePicker variant={currentVariant} onChange={(next) => setCurrentVariant((p) => ({ ...p, ...next }))} />
+                        </div>
+                      </div>
+
                       <div className="flex items-center gap-2 pt-1">
                         <Checkbox checked={currentVariant.isActive !== false} onChange={(e) => setCurrentVariant((p) => ({ ...p, isActive: e.target.checked }))} id="vActive" name="isActive" />
                         <label htmlFor="vActive" className="text-sm font-medium text-[#161618] cursor-pointer font-inter">Active</label>
@@ -639,6 +702,10 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                   Description below — pairing a single-line input against a 140px rich-text
                   editor in a symmetric 2-col grid stretched the row to the editor's height,
                   leaving Barcode's cell with a large dead gap underneath it. */}
+              {/* Hidden once the item has variants: each variant carries its own, and an
+                  editable parent copy would leave the user unsure which one applies. */}
+              {!hasVariants && (
+              <>
               <div className="w-1/2 pr-2">
                 <label className={lbl}>Barcode</label>
                 <div className="flex gap-2">
@@ -694,6 +761,8 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                   <p className="text-[11px] text-gray-400 leading-relaxed">Up to 10 files · 3 MB/image · 50 MB/video<br />Images: 1024×1024 recommended</p>
                 </div>
               </div>
+              </>
+              )}
           </div>
 
           {/* ── Opening Stock — flat section, no card wrapper. A service
@@ -715,25 +784,21 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                 <input type="number" min="0" value={form.openingQuantity} onChange={(e) => handleChange("openingQuantity", e.target.value)} onWheel={(e) => e.target.blur()} className={inp} />
                 <p className="mt-1 text-[11px] text-gray-400">Quantity available in your existing inventory</p>
               </div>
-              <div>
-                <label className={lbl}>Opening Purchase Price (with tax)</label>
-                <input type="number" min="0" value={form.openingPurchasePrice} onChange={(e) => handleChange("openingPurchasePrice", e.target.value)} onWheel={(e) => e.target.blur()} className={inp} />
-              </div>
-            </div>
-            <div className="w-1/2 pr-2">
-              <label className={lbl}>Opening Stock Value (with tax)</label>
-              <input type="number" min="0" value={form.openingStockValue} onChange={(e) => handleChange("openingStockValue", e.target.value)} onWheel={(e) => e.target.blur()} className={inp} />
             </div>
           </div>
           )}
 
-          {/* ── More Details collapsible ── */}
+          {/* ── More Details collapsible ──
+              Every field inside it (Discount, Max Discount %, Low Stock Alert) is set per
+              variant once variants exist, so the whole section is hidden rather than left
+              showing parent copies that the variants would override anyway. */}
+          {!hasVariants && (
           <div className="border border-[#FDE3CC] bg-[#FFF8F1] rounded-2xl overflow-hidden">
             <button type="button" className="w-full p-4 flex items-center gap-3 text-left" onClick={() => setShowMoreDetails(!showMoreDetails)}>
               <ChevronRight className={`w-4 h-4 text-gray-500 transition-transform flex-shrink-0 ${showMoreDetails ? "rotate-90" : ""}`} />
               <div>
                 <p className="text-sm font-bold text-gray-900">More Details?</p>
-                <p className="text-xs text-gray-500 mt-0.5">Cess, Online Store visibility, Low stock alerts, Discount settings…</p>
+                <p className="text-xs text-gray-500 mt-0.5">Low stock alerts, Discount settings…</p>
               </div>
             </button>
             {showMoreDetails && (
@@ -772,30 +837,10 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                   <p className="mt-1 text-[11px] text-gray-400">Get notified when stock falls to this level.</p>
                 </div>
 
-                <div>
-                  <label className={lbl}>Show in Online Store</label>
-                  <button type="button" onClick={() => handleChange("showInOnlineStore", !form.showInOnlineStore)} className="flex items-center gap-2 mt-1">
-                    <span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${form.showInOnlineStore ? "bg-green-500" : "bg-gray-300"}`}>
-                      <span className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${form.showInOnlineStore ? "translate-x-4" : "translate-x-0"}`} />
-                    </span>
-                    <span className="text-sm text-gray-600">{form.showInOnlineStore ? "Visible" : "Hidden"}</span>
-                  </button>
-                  <p className="mt-1.5 text-[11px] text-gray-400">Show/hide in catalogue or online store.</p>
-                </div>
-
-                <div className="col-span-2">
-                  <label className={lbl}>Not For Sale</label>
-                  <button type="button" onClick={() => handleChange("notForSale", !form.notForSale)} className="flex items-center gap-2 mt-1">
-                    <span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${form.notForSale ? "bg-green-500" : "bg-gray-300"}`}>
-                      <span className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${form.notForSale ? "translate-x-4" : "translate-x-0"}`} />
-                    </span>
-                    <span className="text-sm text-gray-600">{form.notForSale ? "Hidden from sale" : "Available for sale"}</span>
-                  </button>
-                  <p className="mt-1.5 text-[11px] text-gray-400">Hides the item from sale (e.g. office equipment).</p>
-                </div>
               </div>
             )}
           </div>
+          )}
 
           <div className="pb-4" />
         </div>

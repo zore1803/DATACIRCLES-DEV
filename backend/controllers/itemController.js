@@ -9,6 +9,10 @@ const StockMovement = require("../models/StockMovement");
 // StockMovement ledger and only ever changes through the inventory stock-in/stock-out endpoints.
 // Letting the product edit form post a stale currentStock back would silently overwrite real
 // stock levels and bypass the audit trail entirely.
+// Treats only null/undefined/"" as "not provided" — never 0, which is a real value for a
+// discount or a low-stock threshold. Mirrors variantResolve.isUnset on the read side.
+const isBlank = (v) => v === null || v === undefined || v === "";
+
 function normalizeInventoryInput(raw) {
   if (!raw || typeof raw !== "object") return null;
   const out = {};
@@ -19,6 +23,73 @@ function normalizeInventoryInput(raw) {
     out.openingStock = parseFloat(raw.openingStock) || 0;
   }
   return out;
+}
+
+// Normalizes one variant's fields in place, shared by create and update so the two paths can't
+// drift. The variant-specific catalog overrides (barcode/description/discount/maxDiscountPercent/
+// lowStockThreshold) are all optional: an unset one must stay null so variantResolve falls back
+// to the parent, which is why they aren't coerced with `|| 0` the way the always-present price
+// fields are.
+function normalizeVariantInput(variant) {
+  // Always-present numerics: a blank here genuinely means zero.
+  variant.purchasePrice = parseFloat(variant.purchasePrice) || 0;
+  variant.sellingPrice = parseFloat(variant.sellingPrice) || 0;
+  variant.stock = parseInt(variant.stock) || 0;
+  variant.gstRate = parseFloat(variant.gstRate) || 0;
+  variant.isActive = variant.isActive !== undefined ? variant.isActive : true;
+  variant.attributes = variant.attributes || {};
+
+  // Optional overrides: preserve "unset" (null) so the parent's value is inherited.
+  variant.barcode = typeof variant.barcode === "string" ? variant.barcode.trim() : "";
+  variant.description = typeof variant.description === "string" ? variant.description : "";
+
+  const rawDiscount = parseJsonField(variant.discount);
+  variant.discount = {
+    type: rawDiscount?.type === "amount" ? "amount" : "percentage",
+    value: isBlank(rawDiscount?.value) ? null : (parseFloat(rawDiscount.value) || 0),
+  };
+
+  variant.maxDiscountPercent = isBlank(variant.maxDiscountPercent)
+    ? null
+    : parseFloat(variant.maxDiscountPercent);
+
+  variant.lowStockThreshold = isBlank(variant.lowStockThreshold)
+    ? null
+    : Math.max(0, parseFloat(variant.lowStockThreshold) || 0);
+
+  if (!Array.isArray(variant.images)) variant.images = [];
+  return variant;
+}
+
+// Distributes an `.any()` multipart upload across the parent item and its variants.
+// Parent images arrive under the "images" field (unchanged); a variant's arrive under
+// "variantImages_<index>", indexed against the posted variants array. Reuses the same
+// uploadMiddlewareS3 / CloudFront URL shape as the parent's own images.
+function partitionUploadedFiles(files) {
+  const parentImages = [];
+  const variantImages = new Map(); // index -> [url]
+  for (const f of files || []) {
+    const url = `https://${process.env.CLOUDFRONT_DOMAIN}/${f.key}`;
+    const match = /^variantImages_(\d+)$/.exec(f.fieldname);
+    if (match) {
+      const idx = parseInt(match[1], 10);
+      if (!variantImages.has(idx)) variantImages.set(idx, []);
+      variantImages.get(idx).push(url);
+    } else if (f.fieldname === "images") {
+      parentImages.push(url);
+    }
+  }
+  return { parentImages, variantImages };
+}
+
+// Every image URL an item currently holds, parent's and variants' alike — used to work out
+// which S3 objects a save orphaned, so variant images get the same best-effort cleanup the
+// parent's already had.
+function collectImageUrls(doc) {
+  if (!doc) return [];
+  const urls = [...(doc.images || [])];
+  for (const v of doc.variants || []) urls.push(...(v.images || []));
+  return urls;
 }
 
 // Helper: delete an S3 object by key, best-effort (mirrors brandingController.js)
@@ -139,26 +210,24 @@ const createItem = async (req, res) => {
         ? null
         : parseFloat(itemData.maxDiscountPercent);
 
-    // Uploaded product images (multipart requests only)
-    if (req.files && req.files.length) {
-      itemData.images = req.files.map((f) => `https://${process.env.CLOUDFRONT_DOMAIN}/${f.key}`);
+    // Uploaded images (multipart requests only): parent's under "images", each variant's under
+    // "variantImages_<index>". Applied to the variants further down, once they're parsed.
+    const { parentImages, variantImages } = partitionUploadedFiles(req.files);
+    if (parentImages.length) {
+      itemData.images = parentImages;
     }
 
     // Validate variants if present
     if (itemData.variants && Array.isArray(itemData.variants)) {
-      for (const variant of itemData.variants) {
+      itemData.variants.forEach((variant, idx) => {
         if (!variant.name || variant.name.trim() === "") {
-          return res.status(400).json({ error: "Variant name is required" });
+          throw Object.assign(new Error("Variant name is required"), { status: 400 });
         }
-        // Ensure numerical fields are properly formatted
-        variant.purchasePrice = parseFloat(variant.purchasePrice) || 0;
-        variant.sellingPrice = parseFloat(variant.sellingPrice) || 0;
-        variant.stock = parseInt(variant.stock) || 0;
-        variant.gstRate = parseFloat(variant.gstRate) || 0;
-        variant.isActive = variant.isActive !== undefined ? variant.isActive : true;
-        // Ensure attributes is a Map-like object
-        variant.attributes = variant.attributes || {};
-      }
+        normalizeVariantInput(variant);
+        // Files uploaded for this variant in the same multipart request.
+        const uploaded = variantImages.get(idx);
+        if (uploaded?.length) variant.images = [...variant.images, ...uploaded];
+      });
 
       // Once an item has variants, the parent's own opening-stock field is
       // disabled/zeroed on the frontend (each variant tracks its own stock
@@ -170,7 +239,14 @@ const createItem = async (req, res) => {
       if (itemData.variants.length > 0) {
         const variantStockSum = itemData.variants.reduce((sum, v) => sum + (v.stock || 0), 0);
         itemData.inventory.currentStock = variantStockSum;
-        if (variantStockSum !== 0) itemData.inventory.lastMovementAt = new Date();
+        // The parent's own opening stock is inert once the item has variants — each variant
+        // seeds its own ledger row below. Zero it here rather than trusting the client to:
+        // a form that hides (but doesn't clear) its opening-quantity field once a variant is
+        // added would otherwise post a stale quantity, and recordOpeningStock would write a
+        // phantom parent-level "opening_stock" row on top of every variant's own — double
+        // counting the item's stock history against a currentStock that only sums variants.
+        itemData.inventory.openingStock = 0;
+        itemData.inventory.lastMovementAt = variantStockSum !== 0 ? new Date() : null;
       }
     }
     const item = new Item(itemData);
@@ -218,6 +294,7 @@ const getAllItems = async (req, res) => {
         { barcode: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
         { "variants.name": { $regex: buildFuzzySearchPattern(search), $options: "i" } }, // Search in variant names
         { "variants.sku": { $regex: buildFuzzySearchPattern(search), $options: "i" } }, // Search in variant SKUs
+        { "variants.barcode": { $regex: buildFuzzySearchPattern(search), $options: "i" } }, // Variants carry their own barcode
       ];
     }
 
@@ -280,6 +357,7 @@ const getAllItemsPaginated = async (req, res) => {
         { barcode: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
         { "variants.name": { $regex: buildFuzzySearchPattern(search), $options: "i" } }, // Search in variant names
         { "variants.sku": { $regex: buildFuzzySearchPattern(search), $options: "i" } }, // Search in variant SKUs
+        { "variants.barcode": { $regex: buildFuzzySearchPattern(search), $options: "i" } }, // Variants carry their own barcode
       ];
     }
 
@@ -442,21 +520,20 @@ const updateItem = async (req, res) => {
     // Merge kept existing images with any newly uploaded ones; best-effort
     // delete from S3 whatever the user removed (matches how branding's
     // logo/signature replacement behaves).
-    if (req.files && req.files.length) {
-      const newImages = req.files.map((f) => `https://${process.env.CLOUDFRONT_DOMAIN}/${f.key}`);
-      itemData.images = [...existingImages, ...newImages];
+    const { parentImages, variantImages } = partitionUploadedFiles(req.files);
+    if (parentImages.length) {
+      itemData.images = [...existingImages, ...parentImages];
     } else if (Array.isArray(existingImages)) {
       itemData.images = existingImages;
     }
 
-    if (Array.isArray(itemData.images)) {
-      const currentItem = await Item.findOne({ _id: req.params.id, organization: req.user.organization }).select("images").lean();
-      const removedImages = (currentItem?.images || []).filter((url) => !itemData.images.includes(url));
-      removedImages.forEach((url) => {
-        const key = extractS3KeyFromUrl(url);
-        if (key) deleteFileFromS3(key);
-      });
-    }
+    // Snapshot every image the item holds today — parent's and variants' — so the orphan sweep
+    // can cover variant images too. Taken before the variants are normalized below; the actual
+    // comparison happens after that, once the kept set is known.
+    const currentItem = await Item.findOne({
+      _id: req.params.id,
+      organization: req.user.organization,
+    }).select("images variants").lean();
 
     // Validate variants if present. A variant already carrying an `_id` is one that already
     // exists (its `stock` field below is ignored by the frontend once the item exists — see
@@ -470,15 +547,31 @@ const updateItem = async (req, res) => {
           throw Object.assign(new Error("Variant name is required"), { status: 400 });
         }
         if (!variant._id) newVariantIndexes.push(idx);
-        // Ensure numerical fields are properly formatted
-        variant.purchasePrice = parseFloat(variant.purchasePrice) || 0;
-        variant.sellingPrice = parseFloat(variant.sellingPrice) || 0;
-        variant.stock = parseInt(variant.stock) || 0;
-        variant.gstRate = parseFloat(variant.gstRate) || 0;
-        variant.isActive = variant.isActive !== undefined ? variant.isActive : true;
-        // Ensure attributes is a Map-like object
-        variant.attributes = variant.attributes || {};
+        normalizeVariantInput(variant);
+        // The client posts the variant images it KEPT in `variant.images` (same contract as the
+        // parent's existingImages); anything uploaded for this variant in the same request is
+        // appended. Whatever the client dropped is swept from S3 below.
+        const uploaded = variantImages.get(idx);
+        if (uploaded?.length) variant.images = [...variant.images, ...uploaded];
       });
+    }
+
+    // Best-effort S3 cleanup for images the save orphaned, parent's and variants' alike.
+    // Compared against the full post-normalization payload so a variant image is only deleted
+    // when it survives nowhere — including when it was moved between variants on this edit.
+    if (Array.isArray(itemData.images) || Array.isArray(itemData.variants)) {
+      const keptUrls = new Set([
+        ...(Array.isArray(itemData.images) ? itemData.images : currentItem?.images || []),
+        ...(Array.isArray(itemData.variants)
+          ? itemData.variants.flatMap((v) => v.images || [])
+          : (currentItem?.variants || []).flatMap((v) => v.images || [])),
+      ]);
+      collectImageUrls(currentItem)
+        .filter((url) => !keptUrls.has(url))
+        .forEach((url) => {
+          const key = extractS3KeyFromUrl(url);
+          if (key) deleteFileFromS3(key);
+        });
     }
 
     if (req.ownOnly) {
@@ -510,6 +603,12 @@ const updateItem = async (req, res) => {
       return res.status(404).json({ error: "Item not found" });
     }
 
+    // A variant added on this edit seeds its own opening-stock ledger row, exactly like one
+    // created with the item. The parent's denormalized `currentStock` aggregate has to move
+    // with it: without this, the new variant's stock exists in the ledger but the Inventory
+    // page (which reads Item.inventory.currentStock) keeps showing the pre-edit total, and
+    // the aggregate silently drifts from the ledger that is meant to back it.
+    let addedVariantStock = 0;
     for (const idx of newVariantIndexes) {
       const variant = item.variants[idx];
       if (!variant) continue;
@@ -521,6 +620,13 @@ const updateItem = async (req, res) => {
         unitPrice: variant.purchasePrice,
         userId: req.user.id,
       });
+      addedVariantStock += variant.stock || 0;
+    }
+
+    if (addedVariantStock !== 0) {
+      item.inventory.currentStock = (item.inventory.currentStock || 0) + addedVariantStock;
+      item.inventory.lastMovementAt = new Date();
+      await item.save();
     }
 
     res.json(item);

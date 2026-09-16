@@ -1,4 +1,5 @@
 import DeleteIcon from "../common/DeleteIcon";
+import { resolveField, resolveDiscount, resolveMaxDiscountPercent } from "../../utils/variantResolve";
 import PdfIcon from "../common/PdfIcon";
 import PlusIcon from "../common/PlusIcon";
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -450,7 +451,9 @@ const PerformaInvoiceFormFull = ({
               _id: variant._id,
               displayName: `${item.name} - ${variant.name}`,
               name: variant.name,
-              description: variant.description || item.description || "",
+              description: resolveField(variant, item, "description") || "",
+              barcode: resolveField(variant, item, "barcode") || "",
+              maxDiscountPercent: resolveMaxDiscountPercent(variant, item),
               sellingPrice: variant.sellingPrice || item.sellingPrice,
               hsnSac: variant.hsnSac || item.hsnSac || "",
               // Variant's own rate falls back to the parent item's, same as
@@ -459,7 +462,7 @@ const PerformaInvoiceFormFull = ({
               taxInclusive: !!(variant.taxInclusive ?? item.taxInclusive),
               // Threaded through so handleItemSelect can copy the product's
               // default discount (variant falls back to the parent item's).
-              discount: variant.discount || item.discount,
+              discount: resolveDiscount(variant, item),
               type: item.type,
               category: item.category || "",
               primaryUnit:

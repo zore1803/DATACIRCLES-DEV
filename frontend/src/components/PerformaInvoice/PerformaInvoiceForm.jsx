@@ -1,4 +1,5 @@
 import CalendarIcon from "../common/CalendarIcon";
+import { resolveField, resolveDiscount, resolveMaxDiscountPercent } from "../../utils/variantResolve";
 import DeleteIcon from "../common/DeleteIcon";
 import PdfIcon from "../common/PdfIcon";
 import PlusIcon from "../common/PlusIcon";
@@ -430,7 +431,10 @@ const PerformaInvoiceForm = ({
               _id: variant._id,
               displayName: `${item.name} - ${variant.name}`,
               name: variant.name,
-              description: variant.description || item.description || "",
+              description: resolveField(variant, item, "description") || "",
+              barcode: resolveField(variant, item, "barcode") || "",
+              maxDiscountPercent: resolveMaxDiscountPercent(variant, item),
+              discount: resolveDiscount(variant, item),
               sellingPrice: variant.sellingPrice || item.sellingPrice,
               hsnSac: variant.hsnSac || item.hsnSac || "",
               type: item.type,

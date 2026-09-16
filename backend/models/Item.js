@@ -14,7 +14,33 @@ const variantSchema = new mongoose.Schema({
   sellingPrice: { type: Number, default: 0 },
   stock: { type: Number, default: 0 }, // optional for product inventory
   isActive: { type: Boolean, default: true },
-  gstRate: { type: Number, default: 0 } // GST rate for this variant
+  gstRate: { type: Number, default: 0 }, // GST rate for this variant
+
+  // --- Variant-specific overrides of the parent's catalog fields ---
+  // Once an item has variants the parent is only a grouping container: the variant is what
+  // actually gets billed, stocked and scanned, so each of these belongs to the variant rather
+  // than being shared across every size/colour of the product.
+  //
+  // Every one of them is OPTIONAL and falls back to the parent's value when unset, so an item
+  // whose variants predate these fields keeps behaving exactly as before. Readers must use the
+  // variant-first helpers in utils/variantResolve.js rather than reading these raw.
+  barcode: { type: String, default: "" },
+  description: { type: String, default: "" },
+  images: [{ type: String }],
+  // Default discount for this variant when added to a document. `value: null` (not 0) means
+  // "not set — inherit the parent's discount"; 0 is a real, deliberate "no discount".
+  discount: {
+    type: {
+      type: String,
+      enum: ['percentage', 'amount'],
+      default: 'percentage',
+    },
+    value: { type: Number, default: null, min: 0 },
+  },
+  // null = inherit the parent's cap (which is itself null for "no limit").
+  maxDiscountPercent: { type: Number, default: null, min: 0, max: 100 },
+  // null = inherit the parent's inventory.lowStockThreshold.
+  lowStockThreshold: { type: Number, default: null, min: 0 },
 }); // each variant gets its own persistent _id — purchases/POs/stock movements key off it
 
 // Values for the org-defined custom fields configured in ItemFields.
