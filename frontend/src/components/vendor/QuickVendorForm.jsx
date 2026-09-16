@@ -6,6 +6,11 @@ import { Paperclip, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { Country, State } from "country-state-city";
 import CustomDropdown from "../common/CustomDropdown";
+import { getStateCode, canonicalStateName } from "../../utils/gstStateCode";
+
+// Pincode lookups already made this session. India Post's API is slow (often a second or more),
+// so re-typing or correcting a pincode, or opening the form again, shouldn't wait on it twice.
+const pincodeCache = new Map();
 
 // India first (GST is India-driven), then every other country alphabetically —
 // full list/state data from country-state-city instead of a hand-maintained one.
@@ -409,7 +414,15 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
       const addressKey = key.split(".")[1];
       setForm((prev) => ({
         ...prev,
-        address: { ...prev.address, [addressKey]: value },
+        address: {
+          ...prev.address,
+          [addressKey]: value,
+          // Picking a state by hand fills its GST code too, same as pincode autofill does. A
+          // state with no known code leaves whatever code was already there.
+          ...(addressKey === "state" && getStateCode(value)
+            ? { stateCode: getStateCode(value) }
+            : {}),
+        },
       }));
       if (addressError) setAddressError(false);
     } else {
@@ -419,22 +432,65 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
     setIsFormDirty(true);
   };
 
+  // Only the latest lookup may fill the form: editing the pincode while a slower request for
+  // the previous value is still out cancels that request instead of letting it land later.
+  const pincodeRequestRef = useRef(null);
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+
+  const applyPincodeDetails = (details) => {
+    const inStates = State.getStatesOfCountry("IN").map((st) => st.name);
+    const state = canonicalStateName(details.State || "", inStates);
+    // One update instead of one per field, so city/state/country/code all appear together.
+    setForm((prev) => ({
+      ...prev,
+      address: {
+        ...prev.address,
+        city: details.District || details.Block || "",
+        state,
+        country: details.Country || "India",
+        // Previously never set: the API has no GST code, so it's derived from the state here.
+        stateCode: getStateCode(state) || prev.address.stateCode || "",
+      },
+    }));
+    if (addressError) setAddressError(false);
+    setIsFormDirty(true);
+  };
+
   const handlePincodeChange = async (e) => {
     const val = e.target.value.replace(/\D/g, "");
     handleFormChange("address.pincode", val);
-    if (val.length === 6) {
-      try {
-        const res = await fetch(`https://api.postalpincode.in/pincode/${val}`);
-        const data = await res.json();
-        if (data && data[0]?.Status === "Success") {
-          const details = data[0].PostOffice[0];
-          handleFormChange("address.city", details.District || details.Block || "");
-          handleFormChange("address.state", details.State || "");
-          handleFormChange("address.country", details.Country || "India");
-          toast.success("Address fetched from pincode");
-        }
-      } catch (error) {
-        console.error("Failed to fetch pincode details", error);
+
+    pincodeRequestRef.current?.abort();
+    pincodeRequestRef.current = null;
+    if (val.length !== 6) {
+      setPincodeLoading(false);
+      return;
+    }
+
+    const cached = pincodeCache.get(val);
+    if (cached) {
+      applyPincodeDetails(cached);
+      return;
+    }
+
+    const controller = new AbortController();
+    pincodeRequestRef.current = controller;
+    setPincodeLoading(true);
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${val}`, { signal: controller.signal });
+      const data = await res.json();
+      if (data && data[0]?.Status === "Success") {
+        const details = data[0].PostOffice[0];
+        pincodeCache.set(val, details);
+        applyPincodeDetails(details);
+        toast.success("Address fetched from pincode");
+      }
+    } catch (error) {
+      if (error.name !== "AbortError") console.error("Failed to fetch pincode details", error);
+    } finally {
+      if (pincodeRequestRef.current === controller) {
+        pincodeRequestRef.current = null;
+        setPincodeLoading(false);
       }
     }
   };
@@ -868,14 +924,22 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
                         className={inputCls(!form.address.city?.trim())}
                         placeholder="City *"
                       />
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={form.address.pincode}
-                        onChange={handlePincodeChange}
-                        className={inputCls(!form.address.pincode?.trim())}
-                        placeholder="Pincode *"
-                      />
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={form.address.pincode}
+                          onChange={handlePincodeChange}
+                          className={inputCls(!form.address.pincode?.trim())}
+                          placeholder="Pincode *"
+                        />
+                        {pincodeLoading && (
+                          <span
+                            className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-[#0085FF] border-t-transparent rounded-full animate-spin"
+                            aria-label="Looking up pincode"
+                          />
+                        )}
+                      </div>
                       <input
                         type="text"
                         value={form.address.stateCode || ""}

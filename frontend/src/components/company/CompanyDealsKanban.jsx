@@ -66,7 +66,7 @@ import confetti from "canvas-confetti";
 import API from "../../services/api";
 import QuickDealForm from "../deal/QuickDealForm";
 import FilterIcon from "../common/FilterIcon";
-import InlineFilterBar from "./InlineFilterBar";
+import ToolbarFilterGroup from "./ToolbarFilterGroup";
 import { applyColumnFilters } from "../../utils/advancedFilters";
 import StatTile from "../common/StatTile";
 import StatTileSkeleton from "../common/StatTileSkeleton";
@@ -1539,8 +1539,14 @@ export default function CompanyDealsKanban({
           onCancel={() => setSelectedDeals([])}
         />
       ) : (
-        <div className="flex items-center gap-4 mb-4" style={{ height: "44px" }}>
-          <div className="relative flex-1 h-full">
+        // Wraps below lg so the filter group can drop onto its own line; one line on desktop.
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
+          {/* Search shrinks to the left while the filter dropdowns are shown on this line. */}
+          <div
+            className={`relative flex-1 min-w-0 h-[44px] transition-[max-width] duration-300 ease-out ${
+              showFilterPanel ? "lg:max-w-[280px]" : "lg:max-w-[2000px]"
+            }`}
+          >
             <SearchIcon
               className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#525866]"
             />
@@ -1561,6 +1567,14 @@ export default function CompanyDealsKanban({
               </button>
             )}
           </div>
+          <ToolbarFilterGroup
+            isOpen={showFilterPanel}
+            columns={dealFilterColumns}
+            data={deals}
+            getFieldValue={getDealFieldValue}
+            selected={selectedFilters}
+            onApply={setSelectedFilters}
+          />
           <button
             onClick={() => setShowFilterPanel((open) => !open)}
             aria-expanded={showFilterPanel}
@@ -1623,16 +1637,6 @@ export default function CompanyDealsKanban({
         />
       )}
 
-      {/* Horizontal filter row under the search bar, instead of the side drawer. Same columns,
-          options and filtering (applyColumnFilters on selectedFilters) as before. */}
-      <InlineFilterBar
-        isOpen={showFilterPanel}
-        columns={dealFilterColumns}
-        data={deals}
-        getFieldValue={getDealFieldValue}
-        selected={selectedFilters}
-        onApply={setSelectedFilters}
-      />
 
       {viewMode === "board" ? (
         isLoading || statuses.length === 0 ? (

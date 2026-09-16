@@ -988,6 +988,7 @@ function Vendors() {
       { key: "address.line2", label: "Address Line 2", type: "text" },
       { key: "address.city", label: "City", type: "text" },
       { key: "address.state", label: "State", type: "text" },
+      { key: "address.stateCode", label: "State Code", type: "text" },
       { key: "address.pincode", label: "Pincode", type: "text" },
       { key: "address.country", label: "Country", type: "text" },
       ...vendorFields.map((field) => ({

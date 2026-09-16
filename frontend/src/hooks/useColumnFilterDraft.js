@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 // The editable state behind a column filter UI: the draft selection the user is
 // building, the option list for each column, and toggle/apply/reset. Shared by
-// the side CompanyFilterPanel and the horizontal InlineFilterBar so both filter
+// the side CompanyFilterPanel and the toolbar ToolbarFilterGroup so both filter
 // exactly the same way.
 //
 // `isOpen`: whenever the UI (re)opens, the draft is reset to the applied
