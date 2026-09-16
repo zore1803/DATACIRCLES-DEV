@@ -627,7 +627,7 @@ export default function CompanyDealsKanban({
       return { key: null, direction: null };
     });
   };
-  const [localViewMode, setLocalViewMode] = useState("board");
+  const [localViewMode, setLocalViewMode] = useState("list");
   const viewMode = controlledViewMode ?? localViewMode;
   const setViewMode = setControlledViewMode ?? setLocalViewMode;
   // Caps the list-view table at the bottom of the viewport so changing rows-per-page
@@ -1571,21 +1571,21 @@ export default function CompanyDealsKanban({
           <div className="relative flex items-center gap-1.5 p-1 bg-[#F1F1F5] rounded-full flex-shrink-0 overflow-hidden" style={{ height: "44px" }}>
             <span
               className="absolute top-1 w-9 h-9 rounded-full bg-white shadow-[0px_4px_4px_rgba(0,0,0,0.1)] transition-all duration-300 ease-out pointer-events-none"
-              style={{ left: viewMode === "list" ? 46 : 4 }}
+              style={{ left: viewMode === "board" ? 46 : 4 }}
             />
-            <button
-              onClick={() => setViewMode("board")}
-              className={`relative z-10 w-9 h-9 flex items-center justify-center rounded-full transition-colors ${viewMode === "board" ? "text-blue-600" : "text-gray-500"
-                }`}
-            >
-              <KanbanViewIcon size={16} className="text-current" />
-            </button>
             <button
               onClick={() => setViewMode("list")}
               className={`relative z-10 w-9 h-9 flex items-center justify-center rounded-full transition-colors ${viewMode === "list" ? "text-blue-600" : "text-gray-500"
                 }`}
             >
               <TableViewIcon size={16} className="text-current" />
+            </button>
+            <button
+              onClick={() => setViewMode("board")}
+              className={`relative z-10 w-9 h-9 flex items-center justify-center rounded-full transition-colors ${viewMode === "board" ? "text-blue-600" : "text-gray-500"
+                }`}
+            >
+              <KanbanViewIcon size={16} className="text-current" />
             </button>
           </div>
           <button

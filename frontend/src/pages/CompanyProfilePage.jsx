@@ -247,7 +247,7 @@ const CompanyProfilePage = () => {
   const [pendingCreate, setPendingCreate] = useState(null);
   const [showStats, setShowStats] = useState(true);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
-  const [dealsViewMode, setDealsViewMode] = useState("board");
+  const [dealsViewMode, setDealsViewMode] = useState("list");
   const [activityFeedFilter, setActivityFeedFilter] = useState("All");
   const newEntryRef = useRef(null);
   const actionsMenuRef = useRef(null);
