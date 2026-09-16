@@ -1,5 +1,7 @@
 import CalendarIcon from "../components/common/CalendarIcon";
 import DeleteIcon from "../components/common/DeleteIcon";
+import BulkDeleteModal from "../components/common/BulkDeleteModal";
+import { exportRecordsToCSV } from "../utils/exportRecordsToCSV";
 import Checkbox from "../components/common/Checkbox";
 import PlusIcon from "../components/common/PlusIcon";
 import MoreIcon from "../components/common/MoreIcon";
@@ -3857,55 +3859,32 @@ function Tasks() {
       />
 
       {/* Bulk Delete Confirmation Modal */}
-      {showBulkDeleteModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-6 text-center">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <DeleteIcon className="w-6 h-6 text-red-600" />
-              </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2 font-sf">
-                Confirm Bulk Delete
-              </h3>
-              <p className="text-sm text-gray-500 font-inter mb-6">
-                Are you sure you want to delete{" "}
-                <strong>
-                  {activeTab === "tasks" ? selectedTasks.length : selectedMeetings.length}
-                </strong>{" "}
-                {activeTab === "tasks" ? "tasks" : "meetings"}? This action
-                cannot be undone.
-              </p>
-              <div className="flex gap-3 justify-center">
-                <button
-                  onClick={() => setShowBulkDeleteModal(false)}
-                  disabled={bulkLoading}
-                  className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() =>
-                    activeTab === "tasks"
-                      ? handleBulkDeleteTasks(selectedTasks)
-                      : handleBulkDeleteMeetings(selectedMeetings)
-                  }
-                  disabled={bulkLoading}
-                  className="px-5 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors shadow-sm flex items-center justify-center min-w-[120px]"
-                >
-                  {bulkLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Deleting...
-                    </>
-                  ) : (
-                    "Delete All"
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        message={
+          <>
+            Are you sure you want to delete{" "}
+            <strong>
+              {activeTab === "tasks" ? selectedTasks.length : selectedMeetings.length}
+            </strong>{" "}
+            {activeTab === "tasks" ? "tasks" : "meetings"}? This action cannot be undone.
+          </>
+        }
+        loading={bulkLoading}
+        onCancel={() => setShowBulkDeleteModal(false)}
+        onConfirm={() =>
+          activeTab === "tasks"
+            ? handleBulkDeleteTasks(selectedTasks)
+            : handleBulkDeleteMeetings(selectedMeetings)
+        }
+        onExportBeforeDelete={() => {
+          const records =
+            activeTab === "tasks"
+              ? tasks.filter((t) => selectedTasks.includes(t._id))
+              : meetings.filter((m) => selectedMeetings.includes(m._id));
+          exportRecordsToCSV(records, activeTab === "tasks" ? "tasks" : "meetings");
+        }}
+      />
 
       {dragGhost && createPortal(
         <div

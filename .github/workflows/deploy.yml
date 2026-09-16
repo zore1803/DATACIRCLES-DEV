@@ -4,6 +4,16 @@ on:
   push:
     branches: [main]
 
+# A run's `docker compose build` executes on the VPS itself, not on the
+# GitHub runner — so two runs overlapping means two builds fighting for the
+# same small instance's CPU/RAM, each running for several times its normal
+# duration until one blows past command_timeout below. cancel-in-progress
+# means a fast run of pushes lands only the last one, matching how deploys
+# get triggered here (several small commits pushed close together).
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -19,6 +29,10 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
+          # An uncontended build+up takes ~4m; the previous 10m default left
+          # no margin once a build ran under any real load (a full rebuild
+          # hit ~6m on the frontend step alone during the contention above).
+          command_timeout: 20m
           script: |
             set -e
             cd /home/ubuntu/datacircles-crm
