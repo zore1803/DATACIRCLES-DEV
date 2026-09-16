@@ -1,4 +1,5 @@
 import DeleteIcon from "../common/DeleteIcon";
+import EmptyState from "../common/EmptyState";
 import VideoIcon from "../common/VideoIcon";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
@@ -883,16 +884,8 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
 
       {/* Meeting list or empty state */}
       {!isLoading && meetings.length === 0 ? (
-        <div className="flex flex-col items-center justify-center w-full min-h-[300px] bg-gray-50 border border-gray-200 rounded-xl text-gray-500">
-          <TeamIcon className="w-7 h-7 mb-3 text-gray-400" />
-          <button
-            type="button"
-            onClick={() => setManualMeetingFormOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            <PlusIcon className="w-4 h-4" />
-            Add new meeting
-          </button>
+        <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
+          <EmptyState icon={TeamIcon} noun="Meeting" onCreate={() => setManualMeetingFormOpen(true)} />
         </div>
       ) : viewMode === "list" ? (
         <div
@@ -1091,9 +1084,9 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
                 />
               ) : paginatedMeetings.length === 0 ? (
                 <tr>
-                  <td colSpan={orderedColumns.length + 1} className="px-6 py-12 text-center text-gray-500 font-medium border-b border-[#E1E4EA]">
-                    No meetings found.
-                  </td>
+                  <td colSpan={orderedColumns.length + 1}>
+  <EmptyState icon={TeamIcon} noun="Meeting" isFiltered />
+</td>
                 </tr>
               ) : (
                 paginatedMeetings.map((meeting) => {

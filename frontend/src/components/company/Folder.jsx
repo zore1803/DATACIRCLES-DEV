@@ -1,4 +1,5 @@
 import DeleteIcon from "../common/DeleteIcon";
+import EmptyState from "../common/EmptyState";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import MoreIcon from "../common/MoreIcon";
@@ -2051,29 +2052,24 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
 
             {/* Folders List / Grid */}
             {!isLoading && folderViewMode === "grid" && folders.length === 0 ? (
-              <div className="flex flex-col items-center justify-center w-full min-h-[300px] bg-gray-50 border border-gray-200 rounded-xl text-gray-500">
-                <FolderIcon className="w-7 h-7 mb-3 text-gray-400" />
-                <button
-                  type="button"
-                  // The inline "NEW" card lives in the populated-grid branch,
-                  // which never renders while there are no folders — so this
-                  // opens the same dialog the list view's empty state uses.
-                  onClick={() =>
+              <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
+                {/* The inline "NEW" card lives in the populated-grid branch, which never renders
+                    while there are no folders, so this opens the same dialog the list view's does. */}
+                <EmptyState
+                  icon={FolderIcon}
+                  noun="Folder"
+                  onCreate={() =>
                     setModalState({
                       isOpen: true,
                       editingId: null,
                       initialName: "",
                     })
                   }
-                  className="flex items-center gap-1.5 px-4 py-2.5 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                  <PlusIcon className="w-4 h-4" />
-                  Add new folder
-                </button>
+                />
               </div>
             ) : !isLoading && folderViewMode === "grid" && filteredFolders.length === 0 ? (
-              <div className="flex items-center justify-center w-full min-h-[300px] bg-gray-50 border border-gray-200 rounded-xl text-gray-500 text-sm font-medium">
-                No folders found.
+              <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
+                <EmptyState icon={FolderIcon} noun="Folder" isFiltered />
               </div>
             ) : folderViewMode === "grid" ? (
               <div
@@ -2221,26 +2217,22 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
                 ))}
               </div>
             ) : !isLoading && folders.length === 0 ? (
-              <div className="flex flex-col items-center justify-center w-full min-h-[300px] bg-gray-50 border border-gray-200 rounded-xl text-gray-500">
-                <FolderIcon className="w-7 h-7 mb-3 text-gray-400" />
-                <button
-                  type="button"
-                  onClick={() =>
+              <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
+                <EmptyState
+                  icon={FolderIcon}
+                  noun="Folder"
+                  onCreate={() =>
                     setModalState({
                       isOpen: true,
                       editingId: null,
                       initialName: "",
                     })
                   }
-                  className="flex items-center gap-1.5 px-4 py-2.5 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                  <PlusIcon className="w-4 h-4" />
-                  Add new folder
-                </button>
+                />
               </div>
             ) : !isLoading && filteredFolders.length === 0 ? (
-              <div className="flex items-center justify-center w-full min-h-[300px] bg-gray-50 border border-gray-200 rounded-xl text-gray-500 text-sm font-medium">
-                No folders found.
+              <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
+                <EmptyState icon={FolderIcon} noun="Folder" isFiltered />
               </div>
             ) : (
               <div

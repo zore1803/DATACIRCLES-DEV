@@ -1,4 +1,5 @@
 import HistoryIcon from "../components/common/HistoryIcon";
+import EmptyState from "../components/common/EmptyState";
 import { resolveLowStockThreshold } from "../utils/variantResolve";
 import Checkbox from "../components/common/Checkbox";
 import PlusIcon from "../components/common/PlusIcon";
@@ -1170,16 +1171,18 @@ export default function Inventory() {
               />
             ) : filteredItems.length === 0 ? (
               <tr>
-                <td colSpan={orderedColumns.length + 1} className="px-6 py-20 text-center">
-                  <Package className="w-10 h-10 mx-auto text-gray-300 mb-3" />
-                  <p className="text-sm font-medium text-gray-500">No inventory items found.</p>
-                  {/* Every product appears here automatically, so an empty page means either no
-                      products exist yet or the current search/filter excludes them all. */}
-                  <p className="text-xs text-gray-400 mt-1.5 max-w-sm mx-auto">
-                    {searchQuery || stockStatusFilter || activeFilters.length > 0
-                      ? "No products match your current search or filters."
-                      : "Products added in Products & Services appear here automatically."}
-                  </p>
+                <td colSpan={orderedColumns.length + 1}>
+                  {/* No create button: every product appears here automatically, so an empty
+                      page means either no products exist yet or a search/filter excludes them. */}
+                  <EmptyState
+                    icon={Package}
+                    noun="Inventory item"
+                    title="No inventory items yet"
+                    description="Products added in Products & Services appear here automatically."
+                    isFiltered={!!(searchQuery || stockStatusFilter || activeFilters.length > 0)}
+                    filteredTitle="No matching inventory items"
+                    filteredDescription="No products match your current search or filters."
+                  />
                 </td>
               </tr>
             ) : (

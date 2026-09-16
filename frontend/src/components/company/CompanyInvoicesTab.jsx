@@ -1,4 +1,5 @@
 import PdfIcon from "../common/PdfIcon";
+import EmptyState from "../common/EmptyState";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import DownloadIcon from "../common/DownloadIcon";
@@ -841,16 +842,8 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
       )}
 
       {!loading && invoices.length === 0 ? (
-        <div className="flex flex-col items-center justify-center w-full min-h-[300px] bg-gray-50 border border-gray-200 rounded-xl text-gray-500">
-          <PdfIcon className="w-7 h-7 mb-3 text-gray-400" />
-          <button
-            type="button"
-            onClick={() => setManualInvoiceFormOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            <PlusIcon className="w-4 h-4" />
-            Add new invoice
-          </button>
+        <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
+          <EmptyState icon={PdfIcon} noun="Invoice" onCreate={() => setManualInvoiceFormOpen(true)} />
         </div>
       ) : (
       <div
@@ -1038,9 +1031,9 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
               />
             ) : paginatedInvoices.length === 0 ? (
               <tr>
-                <td colSpan={orderedColumns.length + 1} className="px-6 py-12 text-center text-gray-500 font-medium border-b border-[#E1E4EA]">
-                  No invoices found.
-                </td>
+                <td colSpan={orderedColumns.length + 1}>
+  <EmptyState icon={PdfIcon} noun="Invoice" isFiltered />
+</td>
               </tr>
             ) : (
               paginatedInvoices.map((invoice) => {

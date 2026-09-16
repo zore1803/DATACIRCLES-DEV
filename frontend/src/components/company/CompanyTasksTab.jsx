@@ -1,4 +1,5 @@
 import DeleteIcon from "../common/DeleteIcon";
+import EmptyState from "../common/EmptyState";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import React, { useEffect, useMemo, useState, useRef } from "react";
@@ -882,16 +883,8 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
 
       {/* Task list or empty state. */}
       {!isLoading && tasks.length === 0 ? (
-        <div className="flex flex-col items-center justify-center w-full min-h-[300px] bg-gray-50 border border-gray-200 rounded-xl text-gray-500">
-          <ListChecks size={28} className="mb-3 text-gray-400" />
-          <button
-            type="button"
-            onClick={() => setShowTaskForm(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            <PlusIcon className="w-4 h-4" />
-            Add new task
-          </button>
+        <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
+          <EmptyState icon={ListChecks} noun="Task" onCreate={() => setShowTaskForm(true)} />
         </div>
       ) : (
       <div
@@ -1102,9 +1095,9 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
               />
             ) : paginatedTasks.length === 0 ? (
               <tr>
-                <td colSpan={orderedColumns.length + 1} className="px-6 py-12 text-center text-gray-500 font-medium border-b border-[#E1E4EA]">
-                  No tasks found.
-                </td>
+                <td colSpan={orderedColumns.length + 1}>
+  <EmptyState icon={ListChecks} noun="Task" isFiltered />
+</td>
               </tr>
             ) : (
               paginatedTasks.map((task) => {

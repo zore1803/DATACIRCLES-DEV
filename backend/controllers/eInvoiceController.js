@@ -1,4 +1,5 @@
 const EInvoice = require("../models/EInvoice");
+const { buildFuzzySearchPattern } = require("../utils/searchRegex");
 const eInvoiceService = require("../services/eInvoiceService");
 const irisProvider = require("../providers/iris/irisProvider");
 
@@ -60,7 +61,10 @@ exports.getAllEInvoicesWithPagination = async (req, res) => {
     const query = { organization: req.user.organization };
     if (status) query.status = status;
     if (search) {
-      const re = new RegExp(search, "i");
+      // Escaped via the shared helper every other list endpoint uses: the raw string used to go
+      // straight into new RegExp(), so a search containing ( [ + ? threw and failed the whole
+      // request, and . or * matched every row.
+      const re = { $regex: buildFuzzySearchPattern(search), $options: "i" };
       query.$or = [{ invoiceNumber: re }, { "customer.name": re }, { irn: re }, { ackNo: re }];
     }
 

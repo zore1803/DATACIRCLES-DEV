@@ -1,4 +1,5 @@
 import CalendarClockIcon from "../common/CalendarClockIcon";
+import EmptyState from "../common/EmptyState";
 import DeleteIcon from "../common/DeleteIcon";
 import AvgDealSizeIcon from "../common/AvgDealSizeIcon";
 import WonDealIcon from "../common/WonDealIcon";
@@ -1706,16 +1707,8 @@ export default function CompanyDealsKanban({
           </DndContext>
         )
       ) : !isLoading && deals.length === 0 ? (
-        <div className="flex flex-col items-center justify-center w-full min-h-[300px] bg-gray-50 border border-gray-200 rounded-xl text-gray-500">
-          <Handshake size={28} className="mb-3 text-gray-400" />
-          <button
-            type="button"
-            onClick={() => { setInitialDealStatus("Open"); setManualDealFormOpen(true); }}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            <PlusIcon className="w-4 h-4" />
-            Add new deal
-          </button>
+        <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
+          <EmptyState icon={Handshake} noun="Deal" onCreate={() => { setInitialDealStatus("Open"); setManualDealFormOpen(true); }} />
         </div>
       ) : (
         <>
@@ -1905,9 +1898,9 @@ export default function CompanyDealsKanban({
                 <tbody className="bg-white">
                   {paginatedDeals.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-gray-500 font-medium">
-                        No deals found.
-                      </td>
+                      <td colSpan={7}>
+  <EmptyState icon={Handshake} noun="Deal" isFiltered />
+</td>
                     </tr>
                   ) : (
                     paginatedDeals.map((deal) => {

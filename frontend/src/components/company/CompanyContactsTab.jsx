@@ -1,4 +1,5 @@
 import CalendarClockIcon from "../common/CalendarClockIcon";
+import EmptyState from "../common/EmptyState";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import React, { useMemo, useState, useRef, useEffect } from "react";
@@ -661,16 +662,8 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
       />
 
       {!isLoading && contacts.length === 0 ? (
-        <div className="flex flex-col items-center justify-center w-full min-h-[300px] bg-gray-50 border border-gray-200 rounded-xl text-gray-500">
-          <TeamIcon className="w-7 h-7 mb-3 text-gray-400" />
-          <button
-            type="button"
-            onClick={() => setManualContactFormOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            <PlusIcon className="w-4 h-4" />
-            Add new contact
-          </button>
+        <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
+          <EmptyState icon={TeamIcon} noun="Contact" onCreate={() => setManualContactFormOpen(true)} />
         </div>
       ) : (
         <div
@@ -861,9 +854,9 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
               />
             ) : paginatedContacts.length === 0 ? (
               <tr>
-                <td colSpan={orderedColumns.length} className="px-6 py-12 text-center text-gray-500 font-medium border-b border-[#E1E4EA]">
-                  No contacts found.
-                </td>
+                <td colSpan={orderedColumns.length}>
+  <EmptyState icon={TeamIcon} noun="Contact" isFiltered />
+</td>
               </tr>
             ) : (
               paginatedContacts.map((contact) => {

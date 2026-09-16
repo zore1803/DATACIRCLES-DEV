@@ -1,4 +1,5 @@
 import DeleteIcon from "../common/DeleteIcon";
+import EmptyState from "../common/EmptyState";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import AddCallIcon from "../common/AddCallIcon";
@@ -741,23 +742,14 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
 
       {/* Call log table or empty state */}
       {!isLoading && callLogs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center w-full min-h-[300px] bg-gray-50 border border-gray-200 rounded-xl text-gray-500">
-          <CellphoneIcon className="w-7 h-7 mb-3 text-gray-400" />
-          <button
-            type="button"
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            <AddCallIcon className="w-4 h-4" />
-            Add new call log
-          </button>
+        <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
+          <EmptyState icon={CellphoneIcon} noun="Call log" onCreate={() => setShowForm(true)} />
         </div>
       ) : viewMode === "card" ? (
         <div className="space-y-3">
           {paginatedLogs.length === 0 ? (
-            <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
-              <CellphoneIcon className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-              <p className="text-sm text-gray-600">No matching calls</p>
+            <div className="bg-white rounded-lg border border-[#E1E4EA]">
+              <EmptyState icon={CellphoneIcon} noun="Call log" isFiltered />
             </div>
           ) : (
             paginatedLogs.map((log) => {
@@ -1009,9 +1001,9 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
                 <TableSkeletonRows columns={orderedColumns.map((c) => colWidths[c.id])} hasCheckbox numRows={listLimit} rowHeight={54} />
               ) : paginatedLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={orderedColumns.length + 1} className="px-6 py-12 text-center text-gray-500 font-medium border-b border-[#E1E4EA]">
-                    No call logs found.
-                  </td>
+                  <td colSpan={orderedColumns.length + 1}>
+  <EmptyState icon={CellphoneIcon} noun="Call log" isFiltered />
+</td>
                 </tr>
               ) : (
                 paginatedLogs.map((log) => {

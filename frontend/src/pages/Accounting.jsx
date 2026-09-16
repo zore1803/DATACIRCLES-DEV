@@ -1,4 +1,5 @@
 import CalendarIcon from "../components/common/CalendarIcon";
+import EmptyState from "../components/common/EmptyState";
 import DeleteIcon from "../components/common/DeleteIcon";
 import PdfIcon from "../components/common/PdfIcon";
 import VideoIcon from "../components/common/VideoIcon";
@@ -1794,6 +1795,20 @@ const Accounting = () => {
     }
   };
 
+  // Opens the create panel for the active tab. Shared by the toolbar's Add button and the empty
+  // table's "+ New" button so both go through the same branding gate.
+  const handleAddDocument = async () => {
+    // Branding must be complete before creating a tax invoice;
+    // the other document types skip that gate.
+    if (activeTab === "tax") {
+      const canProceed = await checkBrandingBeforeInvoice();
+      if (!canProceed) return;
+    }
+    // All document types now use the same two-pane create screen.
+    setEditPanelDoc(null);
+    setShowCreatePanel(true);
+  };
+
   const checkBrandingBeforeInvoice = async () => {
     try {
       const response = await API.get("/branding/invoice-check");
@@ -2748,17 +2763,7 @@ const Accounting = () => {
 
               {/* Add Button */}
               <button
-                onClick={async () => {
-                  // Branding must be complete before creating a tax invoice;
-                  // the other document types skip that gate.
-                  if (activeTab === "tax") {
-                    const canProceed = await checkBrandingBeforeInvoice();
-                    if (!canProceed) return;
-                  }
-                  // All document types now use the same two-pane create screen.
-                  setEditPanelDoc(null);
-                  setShowCreatePanel(true);
-                }}
+                onClick={handleAddDocument}
                 /* Figma "Frame 1351649616": 146x44, padding 12, gap 6,
                    #0085FF, radius 96. The fixed 146px width is the spec for the
                    "Add Invoice" label; the longer labels on the other three tabs
@@ -2887,11 +2892,13 @@ const Accounting = () => {
               )}
               {!showLoadingSkeleton && !currentLoading && currentDocuments.length === 0 && (
                 <tr>
-                  <td colSpan={orderedColumns.length + 1} className="px-6 py-20 text-center">
-                    <PdfIcon className="w-10 h-10 mx-auto text-gray-300 mb-3" />
-                    <p className="text-sm font-medium text-gray-500">
-                      Create New {docNameFor(activeTab)}
-                    </p>
+                  <td colSpan={orderedColumns.length + 1}>
+                    <EmptyState
+                      icon={PdfIcon}
+                      noun={docNameFor(activeTab)}
+                      isFiltered={!!(searchTerms[activeTab] || filterStatuses[activeTab])}
+                      onCreate={handleAddDocument}
+                    />
                   </td>
                 </tr>
               )}

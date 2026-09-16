@@ -844,6 +844,7 @@ function Vendors() {
   // list "reloading again and again". Only the newest response is applied.
   const vendorRequestIdRef = useRef(0);
 
+  const hasLoadedOnceRef = useRef(false);
   const fetchVendors = async () => {
     const requestId = ++vendorRequestIdRef.current;
     try {
@@ -873,6 +874,7 @@ function Vendors() {
       // A newer request has been issued since this one started — discard.
       if (requestId !== vendorRequestIdRef.current) return;
 
+      hasLoadedOnceRef.current = true;
       if (res.data.vendors && res.data.pagination) {
         setVendors(res.data.vendors);
         setPagination((prev) => ({
@@ -1202,7 +1204,10 @@ function Vendors() {
   // pagination all appear and resolve together, same as Companies.jsx.
   // Tracks the fetch exactly - no minimum hold, so the skeleton clears the
   // moment data lands.
-  const showLoadingSkeleton = loading && vendors.length === 0;
+  // Skeleton on the FIRST load only, same rule as the Purchase/Sales pages. Without the
+  // hasLoadedOnceRef check, an empty table swapped to skeleton rows on every refetch (each settled
+  // search keystroke) and back, a visible flicker that never shows when rows are on screen.
+  const showLoadingSkeleton = loading && vendors.length === 0 && !hasLoadedOnceRef.current;
   // `loading` toggles around every fetchVendors() call, including page/limit
   // changes — same source Companies.jsx feeds its top-edge bar from, so
   // paging here now gets the identical progress flash Companies.jsx shows.
@@ -1631,7 +1636,7 @@ function Vendors() {
                     <EmptyState
                       icon={Truck}
                       noun="Vendor"
-                      isFiltered={!!(searchTerm || activeFilters?.length)}
+                      isFiltered={!!(debouncedSearchTerm || activeFilters?.length)}
                       onCreate={() => {
                         setEditVendor(null);
                         setShowQuickAdd(true);
