@@ -6,6 +6,7 @@ import { Paperclip, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { Country, State } from "country-state-city";
 import CustomDropdown from "../common/CustomDropdown";
+import { loadCityModule, useLazyCity } from "../../utils/lazyCityData";
 
 // India first (GST is India-driven), then every other country alphabetically —
 // full list/state data from country-state-city instead of a hand-maintained one.
@@ -23,8 +24,51 @@ const getStatesForCountry = (countryName) => {
   if (!iso) return [];
   return State.getStatesOfCountry(iso).map((s) => s.name);
 };
+// `City` is null until utils/lazyCityData's chunk resolves (see there).
+const getCitiesForState = (City, countryName, stateName) => {
+  if (!City) return [];
+  const countryIso = countryIsoByName[countryName];
+  if (!countryIso) return [];
+  const stateIso = State.getStatesOfCountry(countryIso).find((s) => s.name === stateName)?.isoCode;
+  if (!stateIso) return [];
+  return City.getCitiesOfState(countryIso, stateIso).map((c) => c.name);
+};
+
+// Mirrors QuickCompanyForm.jsx's pincode lookup — see the comment there.
+const lookupIndianPincode = async (pincode) => {
+  if (!/^\d{6}$/.test(pincode)) return null;
+  try {
+    const [res, City] = await Promise.all([
+      fetch(`https://api.postalpincode.in/pincode/${pincode}`),
+      loadCityModule(),
+    ]);
+    const data = await res.json();
+    const po = data?.[0]?.Status === "Success" ? data[0].PostOffice?.[0] : null;
+    if (!po) return null;
+
+    const countryIso = countryIsoByName["India"];
+    const matchedState = State.getStatesOfCountry(countryIso).find(
+      (s) => s.name.toLowerCase() === po.State?.toLowerCase(),
+    );
+    if (!matchedState) return null;
+
+    const cities = City.getCitiesOfState(countryIso, matchedState.isoCode).map((c) => c.name);
+    const districtOrTaluk = po.District || po.Block || po.Taluk || "";
+    const matchedCity =
+      cities.find((c) => c.toLowerCase() === districtOrTaluk.toLowerCase()) ||
+      cities.find((c) => c.toLowerCase() === po.Name?.toLowerCase()) ||
+      districtOrTaluk ||
+      po.Name ||
+      "";
+
+    return { country: "India", state: matchedState.name, city: matchedCity };
+  } catch (_) {
+    return null;
+  }
+};
 
 const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, editVendor = null }) => {
+  const City = useLazyCity();
   const isEditing = !!editVendor;
   const [form, setForm] = useState({
     name: "",
@@ -839,20 +883,43 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
                           placeholder="State / Province *"
                         />
                       )}
-                      <input
-                        type="text"
-                        value={form.address.city}
-                        onChange={(e) => handleFormChange("address.city", e.target.value)}
-                        className={inputCls(!form.address.city?.trim())}
-                        placeholder="City *"
-                      />
+                      {(() => {
+                        const citiesForState = getCitiesForState(City, form.address.country, form.address.state);
+                        return citiesForState.length > 0 ? (
+                          <CustomDropdown
+                            options={citiesForState}
+                            value={form.address.city}
+                            onChange={(value) => handleFormChange("address.city", value)}
+                            placeholder="City *"
+                            searchable
+                            buttonClassName={ddCls(form.address.city, !form.address.city?.trim())}
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            value={form.address.city}
+                            onChange={(e) => handleFormChange("address.city", e.target.value)}
+                            className={inputCls(!form.address.city?.trim())}
+                            placeholder="City *"
+                          />
+                        );
+                      })()}
                       <input
                         type="text"
                         inputMode="numeric"
                         value={form.address.pincode}
-                        onChange={(e) =>
-                          handleFormChange("address.pincode", e.target.value.replace(/\D/g, ""))
-                        }
+                        onChange={async (e) => {
+                          const pincode = e.target.value.replace(/\D/g, "").slice(0, 6);
+                          handleFormChange("address.pincode", pincode);
+                          if (pincode.length === 6) {
+                            const match = await lookupIndianPincode(pincode);
+                            if (match) {
+                              handleFormChange("address.country", match.country);
+                              handleFormChange("address.state", match.state);
+                              handleFormChange("address.city", match.city);
+                            }
+                          }
+                        }}
                         className={inputCls(!form.address.pincode?.trim())}
                         placeholder="Pincode *"
                       />

@@ -36,7 +36,7 @@ import {
   EyeOff,
   Pin,
   PinOff,
-  User, ArrowUp, ArrowDown } from "lucide-react";
+  User, ArrowUp, ArrowDown, Database } from "lucide-react";
 import StarIcon from "../components/common/StarIcon";
 import ImportClients from "../components/company/ImportClients";
 import Hotlist from "../components/company/Hotlist";
@@ -2097,7 +2097,14 @@ function Companies() {
                               <UploadIcon className="w-4 h-4 text-gray-400" />
                               Import
                             </button>
-                            
+                            <Link
+                              to="/settings/company-fields"
+                              onClick={() => setIsMoreMenuOpen(false)}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            >
+                              <Database className="w-4 h-4 text-gray-400" />
+                              Add/View Custom Fields
+                            </Link>
                           </div>
                         </div>
                       )}

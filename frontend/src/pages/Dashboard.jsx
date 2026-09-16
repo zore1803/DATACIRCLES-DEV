@@ -2252,7 +2252,7 @@ function Dashboard() {
                         title={isCurrent ? "Double-click to type a page number" : undefined}
                         className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-colors ${
                           isCurrent
-                            ? "bg-blue-600 text-white"
+                            ? "bg-[#0085FF] text-white"
                             : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
                         }`}
                       >
