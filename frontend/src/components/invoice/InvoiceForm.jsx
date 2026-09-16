@@ -1605,9 +1605,6 @@ const InvoiceForm = ({
                     04
                   </div>
                   <h3 className="text-[15px] font-semibold text-slate-900">Products & Services</h3>
-                  <div className="group relative">
-                    <div className="w-4 h-4 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-[10px] cursor-help">?</div>
-                  </div>
                   <button
                     type="button"
                     onClick={handleOpenItemForm}
@@ -1621,9 +1618,6 @@ const InvoiceForm = ({
                     <input type="checkbox" className="rounded text-blue-600 focus:ring-blue-500" defaultChecked />
                     Show description
                   </label>
-                  <button type="button" className="text-gray-400 hover:text-gray-600" aria-label="Settings">
-                    <SettingsIcon className="w-4 h-4" />
-                  </button>
                 </div>
               </div>
               <div className="h-px bg-slate-100 -mx-6 lg:-mx-7 mb-5" />
@@ -1667,7 +1661,7 @@ const InvoiceForm = ({
                 <div className="flex flex-col items-center justify-center py-14 text-center">
                   <Inbox className="w-12 h-12 text-gray-300 mb-4" strokeWidth={1.5} />
                   <p className="text-gray-500 text-sm mb-4">
-                    Search existing products to add to this list or add new product to get started! 🚀
+                    Search existing products to add to this list or add new product to get started.
                   </p>
                   <button
                     type="button"
@@ -1885,7 +1879,6 @@ const InvoiceForm = ({
                   <div className="space-y-2">
                     <div className="flex items-center gap-1">
                       <span className="text-sm font-semibold text-gray-700">Attach files</span>
-                      <div className="w-3.5 h-3.5 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-[10px]">?</div>
                     </div>
                     <button type="button" className="flex items-center justify-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 border-dashed rounded-lg hover:border-gray-400 transition-colors">
                       <span className="text-lg">↑</span> Attach Files (Max: 5)
@@ -2011,7 +2004,6 @@ const InvoiceForm = ({
                 <div className="space-y-2">
                   <div className="flex items-center gap-1">
                     <label className="text-sm font-semibold text-gray-700">Select Bank</label>
-                    <div className="w-3.5 h-3.5 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-[10px]">?</div>
                   </div>
                   <BankSelect
                     banks={banks}
@@ -3688,7 +3680,6 @@ const CreateInvoicePanel = ({
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <span className="text-[14px] font-semibold text-[#1F2937]">Products &amp; Services</span>
-                <div className="w-4 h-4 rounded-full bg-[#E1E4EA] text-[#525866] flex items-center justify-center text-[10px] cursor-help select-none">?</div>
                 <button
                   type="button"
                   onClick={() => setShowQuickItemDrawer(true)}
