@@ -191,7 +191,8 @@ export default function BankModal({ isOpen, onClose, onSave, initialData, hasExi
                 Account No <span className="text-red-500">*</span>
               </label>
               <input
-                type="text"
+                type="password"
+                autoComplete="new-password"
                 value={form.accountNumber}
                 onChange={(e) => handleChange("accountNumber", e.target.value)}
                 placeholder="Enter account number"

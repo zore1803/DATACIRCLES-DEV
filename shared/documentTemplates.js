@@ -114,6 +114,62 @@ function esc(str) {
   );
 }
 
+// Notes/Terms support a small markdown-lite subset — **bold**, *italic*,
+// "- " bullet lines and "1. " numbered lines — entered via the toolbar in
+// NotesTermsDrawer.jsx. Every template used to call esc(notes)/esc(terms)
+// directly and rely on `white-space:pre-line` for line breaks, which is
+// why this lives centrally here instead of being reimplemented per
+// template: every line is escaped FIRST (so literal "<b>" a user types
+// renders as text, not a tag) and only afterwards do the markdown-lite
+// patterns introduce real <b>/<i>/<ul>/<ol> tags — templates now receive
+// already-safe HTML in `notes`/`terms` and no longer call esc() on them.
+function formatRichText(raw) {
+  const text = String(raw ?? "").trim();
+  if (!text) return "";
+
+  const inline = (line) =>
+    esc(line)
+      .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+      .replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, "$1<i>$2</i>");
+
+  const lines = text.split(/\r\n|\r|\n/);
+  const out = [];
+  let listType = null;
+
+  const closeList = () => {
+    if (listType) {
+      out.push(`</${listType}>`);
+      listType = null;
+    }
+  };
+
+  lines.forEach((line, i) => {
+    const bullet = line.match(/^\s*-\s+(.+)$/);
+    const numbered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+
+    if (bullet) {
+      if (listType !== "ul") {
+        closeList();
+        out.push("<ul>");
+        listType = "ul";
+      }
+      out.push(`<li>${inline(bullet[1])}</li>`);
+    } else if (numbered) {
+      if (listType !== "ol") {
+        closeList();
+        out.push("<ol>");
+        listType = "ol";
+      }
+      out.push(`<li>${inline(numbered[1])}</li>`);
+    } else {
+      closeList();
+      out.push(i === 0 ? inline(line) : `<br>${inline(line)}`);
+    }
+  });
+  closeList();
+  return out.join("");
+}
+
 const fmt = (n) =>
   (Number(n) || 0).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
@@ -518,8 +574,8 @@ export function buildDocumentHtml(doc, options = {}) {
     "Customer Name";
 
   const docNumber = documentNumber ?? doc[numberKey];
-  const notes     = (doc.notes ?? "").trim();
-  const terms     = (doc.terms ?? "").trim();
+  const notes     = formatRichText(doc.notes);
+  const terms     = formatRichText(doc.terms);
 
   // â”€â”€ Pre-built snippets passed into ctx â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

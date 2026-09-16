@@ -52,6 +52,8 @@ const toFriendly = (str) =>
 const toStored = (str) =>
   (str || "").replace(FRIENDLY_LABEL_REGEX, (_, l) => `{${KEY_BY_FRIENDLY_LABEL[l]}}`);
 
+const DUE_DATE_DAY_PRESETS = [7, 15, 25, 30, 45];
+
 // Applies toFriendly/toStored to whichever fields on a template row hold
 // placeholder-bearing text — differs per channel (email: subject+body,
 // sms: body, whatsapp: line1+line2). Non-string fields (isDefault, id, etc.)
@@ -639,14 +641,44 @@ function DocumentSettings() {
                   </label>
                   <label className="flex flex-col gap-1.5">
                     <span className="font-medium text-gray-700">Default Due Date (Days)</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={form.defaultDueDateDays}
-                      onChange={(e) => setForm((prev) => ({ ...prev, defaultDueDateDays: e.target.value }))}
-                      placeholder="e.g., 15"
-                      className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500"
-                    />
+                    {(() => {
+                      const daysNum = form.defaultDueDateDays === "" ? null : Number(form.defaultDueDateDays);
+                      const isPreset = daysNum !== null && DUE_DATE_DAY_PRESETS.includes(daysNum);
+                      const selectValue = isPreset ? String(daysNum) : "custom";
+                      return (
+                        <>
+                          <select
+                            value={selectValue}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setForm((prev) => ({
+                                ...prev,
+                                // Switching to Custom clears a preset value
+                                // rather than keeping it under a different
+                                // label — leaves an already-custom value alone.
+                                defaultDueDateDays: v === "custom" ? (isPreset ? "" : prev.defaultDueDateDays) : v,
+                              }));
+                            }}
+                            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500"
+                          >
+                            {DUE_DATE_DAY_PRESETS.map((d) => (
+                              <option key={d} value={d}>{d} days</option>
+                            ))}
+                            <option value="custom">Custom</option>
+                          </select>
+                          {!isPreset && (
+                            <input
+                              type="number"
+                              min="0"
+                              value={form.defaultDueDateDays}
+                              onChange={(e) => setForm((prev) => ({ ...prev, defaultDueDateDays: e.target.value }))}
+                              placeholder="Enter number of days, e.g., 20"
+                              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500"
+                            />
+                          )}
+                        </>
+                      );
+                    })()}
                   </label>
 
                   <label className="flex flex-col gap-1.5">

@@ -157,49 +157,10 @@ function BrandSettings() {
     }
   };
 
-  const handleSignatureChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        setErrors({
-          ...errors,
-          signature: "Signature file size must be less than 2MB",
-        });
-        return;
-      }
-
-      if (!file.type.startsWith("image/")) {
-        setErrors({
-          ...errors,
-          signature: "Please select a valid image file (PNG, JPG)",
-        });
-        return;
-      }
-
-      setSignatureFile(file);
-      setErrors({ ...errors, signature: "" });
-
-      // Read as base64 data URL for preview and storage
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const dataUrl = ev.target.result;
-        setSignaturePreview(dataUrl);
-        setForm((prev) => ({ ...prev, signatureUrl: dataUrl }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const removeLogo = () => {
     setLogoFile(null);
     setLogoPreview(null);
     setForm({ ...form, logoUrl: "" });
-  };
-
-  const removeSignature = () => {
-    setSignatureFile(null);
-    setSignaturePreview(null);
-    setForm({ ...form, signatureUrl: "" });
   };
 
   useEffect(() => {
@@ -511,7 +472,7 @@ function BrandSettings() {
               </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid gap-6">
               {/* Logo Upload */}
               <div className="bg-white rounded-xl p-6 border-2 border-gray-200">
                 <label className="block text-sm font-semibold text-gray-700 mb-4">
@@ -562,61 +523,6 @@ function BrandSettings() {
                     <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
                       <AlertCircle className="w-4 h-4" />
                       {errors.logo}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Signature Upload */}
-              <div className="bg-white rounded-xl p-6 border-2 border-gray-200">
-                <label className="block text-sm font-semibold text-gray-700 mb-4">
-                  Authorized Signature
-                </label>
-                <div className="flex flex-col items-center">
-                  <div className="relative w-32 h-32 bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl overflow-hidden flex items-center justify-center mb-4 group">
-                    {signaturePreview ? (
-                      <>
-                        <img
-  src={signaturePreview}
-  alt="Signature Preview"
-  className="w-full h-full object-contain"
-/>
-
-                        <button
-                          type="button"
-                          onClick={removeSignature}
-                          className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </>
-                    ) : (
-                      <UploadIcon className="w-8 h-8 text-gray-400" />
-                    )}
-                  </div>
-                  <input
-                    id="signature-upload"
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    onChange={handleSignatureChange}
-                    className="hidden"
-                  />
-                  <label
-                    htmlFor="signature-upload"
-                    className="inline-flex items-center gap-2 px-4 py-2 border-2 border-gray-300 rounded-xl text-sm bg-white hover:bg-gray-50 cursor-pointer transition-colors font-semibold"
-                  >
-                    <UploadIcon className="w-4 h-4" />
-                    Upload Signature
-                  </label>
-                  <p className="text-xs text-gray-500 mt-3 text-center">
-                    Max 2MB • PNG, JPG
-                    <br />
-                    Recommended: 300x100px
-                  </p>
-                  {errors.signature && (
-                    <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
-                      <AlertCircle className="w-4 h-4" />
-                      {errors.signature}
                     </p>
                   )}
                 </div>

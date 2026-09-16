@@ -2277,7 +2277,6 @@ const Accounting = () => {
       case "number":
         return (
           <div className="flex items-center gap-2">
-            <PdfIcon className="w-4 h-4 text-blue-600 flex-shrink-0" />
             <span
               onClick={() => {
                 // All document types open the same full two-pane edit screen;

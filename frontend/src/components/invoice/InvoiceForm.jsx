@@ -9,6 +9,7 @@ import { formatNumberToIndian, formatNumberFixed } from "../../utils/numberForma
 import {
   IndianRupeeIcon,
   X,
+  Check,
   ChevronDown,
   PenLine,
   CheckCircle2,
@@ -469,6 +470,12 @@ const InvoiceForm = ({
   };
   const [items, setItems] = useState([]);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  // "notes" | "terms" | null — opens NotesTermsDrawer so an existing
+  // invoice can pull in a saved/updated Notes or Terms template. Without
+  // this the form's own notes/terms fields showed only whatever was baked
+  // in when the invoice was created, with no way to bring in a later
+  // change from Settings short of retyping it by hand.
+  const [notesDrawer, setNotesDrawer] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [quickAddItem, setQuickAddItem] = useState(null);
   const [quickAddQty, setQuickAddQty] = useState(1);
@@ -1567,6 +1574,36 @@ const InvoiceForm = ({
               </div>
             </div>
 
+            {/* Tax Invoice toggle — lives outside the conditional GST card
+                below so it stays visible with the card hidden, letting the
+                user turn it back on. OFF renders the document titled
+                "Invoice" instead of "Tax Invoice" (shared/templates/
+                Professional.js reads this same form.isTaxInvoice via
+                computeDocument's `t.isTax`), and hides GST-specific fields
+                like Receiver GSTIN and per-item tax rate/HSN. */}
+            <div className="flex items-center gap-2.5 h-10 w-full">
+              <button
+                type="button"
+                onClick={() => {
+                  setForm((prev) => ({ ...prev, isTaxInvoice: !prev.isTaxInvoice }));
+                  setHasUnsavedChanges(true);
+                }}
+                className="flex-shrink-0"
+              >
+                <span
+                  className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${form.isTaxInvoice ? "bg-[#0085FF]" : "bg-[#E1E4EA]"}`}
+                >
+                  <span
+                    className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isTaxInvoice ? "translate-x-4" : "translate-x-0"}`}
+                  />
+                </span>
+              </button>
+              <div className="flex flex-col">
+                <span className="text-[12px] font-medium text-[#1F2937]">Enable Tax Invoice</span>
+                <span className="text-[10px] text-[#99A0AE]">Include GST and tax details</span>
+              </div>
+            </div>
+
             {/* Section 3: GST & Tax Details (conditional) — GST rate is set
                 per item below (Products & Services → More Details), matching
                 the full-width form; there's no document-level rate here
@@ -1839,7 +1876,10 @@ const InvoiceForm = ({
               {/* Left Column: Notes, Terms, Attachments */}
               <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(15,23,42,0.06),0_8px_20px_-12px_rgba(15,23,42,0.12)] border border-slate-200 p-6 space-y-5">
                 <div>
-                  <SectionHeader number="05" title="Notes" />
+                  <div className="flex items-center justify-between gap-2">
+                    <SectionHeader number="05" title="Notes" />
+                    <OpenNotesTermsButton label="Add Notes" onClick={() => setNotesDrawer("notes")} />
+                  </div>
                   <textarea
                     placeholder="Enter your notes, say thanks, or anything else"
                     rows={3}
@@ -1853,7 +1893,10 @@ const InvoiceForm = ({
                 </div>
 
                 <div>
-                  <SectionHeader number="06" title="Terms & Conditions" />
+                  <div className="flex items-center justify-between gap-2">
+                    <SectionHeader number="06" title="Terms & Conditions" />
+                    <OpenNotesTermsButton label="Add Terms" onClick={() => setNotesDrawer("terms")} />
+                  </div>
                   <textarea
                     placeholder="Enter terms & conditions"
                     rows={3}
@@ -2147,6 +2190,22 @@ const InvoiceForm = ({
           />
         )}
       </div>
+
+      <NotesTermsDrawer
+        isOpen={notesDrawer !== null}
+        focus={notesDrawer || "notes"}
+        onClose={() => setNotesDrawer(null)}
+        type="tax"
+        docName="Invoice"
+        onApplyNotes={(v) => {
+          setForm((prev) => ({ ...prev, notes: v }));
+          setHasUnsavedChanges(true);
+        }}
+        onApplyTerms={(v) => {
+          setForm((prev) => ({ ...prev, terms: v }));
+          setHasUnsavedChanges(true);
+        }}
+      />
     </>,
     document.body
   );
@@ -2984,8 +3043,6 @@ const CreateInvoicePanel = ({
     }
   };
 
-  const handleSaveDraft = () => submitInvoice("Draft");
-
   // The template this document renders with. The organization's choice wins
   // outright: htmlDocumentPdf.resolveTemplate ignores the document's stored
   // `style` entirely, and every document saved before that change still
@@ -3185,7 +3242,7 @@ const CreateInvoicePanel = ({
                     // The prefix sits outside the input so it reads as part of
                     // the number but can't be edited or deleted.
                     <div className="flex items-center gap-1 min-w-0">
-                      <div className="flex items-center h-9 pl-2.5 pr-1 border border-[#E1E4EA] rounded-lg focus-within:border-[#0085FF] min-w-0">
+                      <div className="flex items-center h-9 pl-2.5 pr-1 border border-[#E1E4EA] rounded-full focus-within:border-[#0085FF] min-w-0">
                         <span className="text-xl font-bold text-[#99A0AE] flex-shrink-0">
                           {numberPrefix}
                         </span>
@@ -3205,17 +3262,23 @@ const CreateInvoicePanel = ({
                         type="button"
                         onClick={saveDocNumber}
                         disabled={savingNumber}
-                        className="h-7 px-2 rounded-lg bg-[#0085FF] hover:bg-blue-600 text-white text-[11px] font-medium transition-colors disabled:opacity-60 flex-shrink-0"
+                        title={savingNumber ? "Saving..." : "Save"}
+                        className="h-7 w-7 flex items-center justify-center rounded-full bg-[#0085FF] hover:bg-blue-600 text-white transition-colors disabled:opacity-60 flex-shrink-0"
                       >
-                        {savingNumber ? "Saving..." : "Save"}
+                        {savingNumber ? (
+                          <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <Check className="w-4 h-4" />
+                        )}
                       </button>
                       <button
                         type="button"
                         onClick={() => setNumberDraft(null)}
                         disabled={savingNumber}
-                        className="h-7 px-2 rounded-lg border border-[#E1E4EA] text-[11px] font-medium text-[#525866] hover:bg-gray-50 transition-colors flex-shrink-0"
+                        title="Cancel"
+                        className="h-7 w-7 flex items-center justify-center rounded-full border border-[#E1E4EA] text-[#525866] hover:bg-gray-50 transition-colors flex-shrink-0"
                       >
-                        Cancel
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
                   )}
@@ -3305,22 +3368,10 @@ const CreateInvoicePanel = ({
                 type="button"
                 onClick={() => setShowTemplates(true)}
                 title={`${docName} settings`}
-                className="h-8 w-8 lg:w-auto lg:px-4 flex items-center justify-center lg:justify-start gap-1.5 bg-white border border-[#E1E4EA] rounded-full lg:rounded-lg text-[13px] font-medium text-[#1F2937] hover:bg-gray-50 transition-colors shadow-sm flex-shrink-0"
+                className="h-8 w-8 lg:w-auto lg:px-4 flex items-center justify-center lg:justify-start gap-1.5 bg-white border border-[#E1E4EA] rounded-full text-[13px] font-medium text-[#1F2937] hover:bg-gray-50 transition-colors shadow-sm flex-shrink-0"
               >
                 <SettingsIcon className="w-4 h-4 text-[#525866]" />
                 <span className="hidden lg:inline">Settings</span>
-              </button>
-              {/* Saving/creating lives in the sticky bar at the foot of the
-                  form; this slot offers the draft escape hatch instead. */}
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                disabled={submitting}
-                className="h-8 px-4 flex items-center gap-1.5 rounded-lg bg-[#0085FF] hover:bg-blue-600 text-white text-[13px] font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex-shrink-0"
-              >
-                <PdfIcon className="w-4 h-4" />
-                <span className="lg:hidden">Draft</span>
-                <span className="hidden lg:inline">Save as Draft</span>
               </button>
             </div>
           </div>

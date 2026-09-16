@@ -288,8 +288,8 @@ export function html(ctx) {
     </div>
   </div>
   ${notes || terms ? `<div class="vt-notes-row">
-    <div class="vt-notes-col">${notes ? `<div style="font-weight:bold;margin-bottom:3px;">Notes:</div><div style="white-space:pre-line;">${esc(notes)}</div>` : ""}</div>
-    <div class="vt-notes-col">${terms ? `<div style="font-weight:bold;margin-bottom:3px;">Terms &amp; Conditions:</div><div class="vt-terms-body">${esc(terms)}</div>` : ""}</div>
+    <div class="vt-notes-col">${notes ? `<div style="font-weight:bold;margin-bottom:3px;">Notes:</div><div style="white-space:pre-line;">${notes}</div>` : ""}</div>
+    <div class="vt-notes-col">${terms ? `<div style="font-weight:bold;margin-bottom:3px;">Terms &amp; Conditions:</div><div class="vt-terms-body">${terms}</div>` : ""}</div>
   </div>` : ""}
   </div>
   </div>

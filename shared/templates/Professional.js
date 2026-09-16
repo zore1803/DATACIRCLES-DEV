@@ -170,7 +170,7 @@ export function html(ctx) {
       <div class="dc-gstin">GSTIN: ${esc(org.gstin || "—")}</div>
     </div>
     <div>
-      <div class="dc-title">Tax Invoice</div>
+      <div class="dc-title">${t.isTax ? "Tax " : ""}${esc(docLabel)}</div>
       <div class="dc-subtitle">${copySubtitle}</div>
       <div class="dc-org-contact">
         ${(org.mobile || org.phone) ? `<div>Phone</div><div>${esc(org.mobile || org.phone)}</div>` : ""}
@@ -258,8 +258,8 @@ export function html(ctx) {
         </div>
       </div>
     </div>
-    ${notes ? `<div class="dc-notes-block"><div class="dc-label">Notes</div><div class="dc-notes-body">${esc(notes)}</div></div>` : ""}
-    ${terms ? `<div class="dc-notes-block"><div class="dc-label">Terms and Conditions</div><div class="dc-notes-body">${esc(terms)}</div></div>` : ""}
+    ${notes ? `<div class="dc-notes-block"><div class="dc-label">Notes</div><div class="dc-notes-body">${notes}</div></div>` : ""}
+    ${terms ? `<div class="dc-notes-block"><div class="dc-label">Terms and Conditions</div><div class="dc-notes-body">${terms}</div></div>` : ""}
   </div>
 
 
