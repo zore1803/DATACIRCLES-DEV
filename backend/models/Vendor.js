@@ -35,6 +35,7 @@ const vendorSchema = new mongoose.Schema({
     line2: String,
     city: String,
     state: String,
+    stateCode: String,
     pincode: String,
     country: { type: String, default: "India" }
   },

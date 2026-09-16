@@ -37,6 +37,7 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
       line2: "",
       city: "",
       state: "",
+      stateCode: "",
       pincode: "",
       country: "India",
     },
@@ -98,6 +99,7 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
         line2: editVendor.address?.line2 || "",
         city: editVendor.address?.city || "",
         state: editVendor.address?.state || "",
+        stateCode: editVendor.address?.stateCode || "",
         pincode: editVendor.address?.pincode || "",
         country: editVendor.address?.country || "India",
       },
@@ -417,6 +419,26 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
     setIsFormDirty(true);
   };
 
+  const handlePincodeChange = async (e) => {
+    const val = e.target.value.replace(/\D/g, "");
+    handleFormChange("address.pincode", val);
+    if (val.length === 6) {
+      try {
+        const res = await fetch(`https://api.postalpincode.in/pincode/${val}`);
+        const data = await res.json();
+        if (data && data[0]?.Status === "Success") {
+          const details = data[0].PostOffice[0];
+          handleFormChange("address.city", details.District || details.Block || "");
+          handleFormChange("address.state", details.State || "");
+          handleFormChange("address.country", details.Country || "India");
+          toast.success("Address fetched from pincode");
+        }
+      } catch (error) {
+        console.error("Failed to fetch pincode details", error);
+      }
+    }
+  };
+
   // Address is compulsory: line1, city, state, pincode, country (line2 optional).
   const isAddressComplete = (a) =>
     !!(a.line1?.trim() && a.city?.trim() && a.state?.trim() && a.pincode?.trim() && a.country?.trim());
@@ -593,7 +615,7 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
       />
 
       <div
- className={`fixed dc-panel-card dc-panel-w z-[10002] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-in-out font-inter ${isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
+        className={`fixed dc-panel-card dc-panel-w z-[10002] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-in-out font-inter ${isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
           }`}
       >
         <form onSubmit={handleSubmit} noValidate className="flex flex-col h-full min-h-0">
@@ -850,11 +872,16 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
                         type="text"
                         inputMode="numeric"
                         value={form.address.pincode}
-                        onChange={(e) =>
-                          handleFormChange("address.pincode", e.target.value.replace(/\D/g, ""))
-                        }
+                        onChange={handlePincodeChange}
                         className={inputCls(!form.address.pincode?.trim())}
                         placeholder="Pincode *"
+                      />
+                      <input
+                        type="text"
+                        value={form.address.stateCode || ""}
+                        onChange={(e) => handleFormChange("address.stateCode", e.target.value)}
+                        className={inputCls(false)}
+                        placeholder="State Code"
                       />
                     </div>
                     {addressError && (

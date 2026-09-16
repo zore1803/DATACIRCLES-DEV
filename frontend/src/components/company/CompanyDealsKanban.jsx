@@ -66,7 +66,7 @@ import confetti from "canvas-confetti";
 import API from "../../services/api";
 import QuickDealForm from "../deal/QuickDealForm";
 import FilterIcon from "../common/FilterIcon";
-import CompanyFilterPanel from "./CompanyFilterPanel";
+import InlineFilterBar from "./InlineFilterBar";
 import { applyColumnFilters } from "../../utils/advancedFilters";
 import StatTile from "../common/StatTile";
 import StatTileSkeleton from "../common/StatTileSkeleton";
@@ -96,7 +96,7 @@ const getAmountRangeLabel = (amount) => {
 const DEAL_FILTER_COLUMNS = (statuses) => [
   { key: "stage", label: "Stage", options: statuses },
   { key: "amount", label: "Amount", options: AMOUNT_RANGES.map((r) => r.label) },
-  { key: "lastUpdated", label: "Last Updated", options: DATE_RANGES.map((r) => r.label) },
+  { key: "lastUpdated", label: "Last Updated", placeholder: "All Last Updated", options: DATE_RANGES.map((r) => r.label) },
 ];
 
 const getDealFieldValue = (deal, key) => {
@@ -609,6 +609,9 @@ export default function CompanyDealsKanban({
   const [searchTerm, setSearchTerm] = useState("");
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [selectedFilters, setSelectedFilters] = useState({});
+  // Stable across renders so the filter bar's option lists (memoized on `columns`) aren't
+  // rebuilt on every keystroke or drag.
+  const dealFilterColumns = useMemo(() => DEAL_FILTER_COLUMNS(statuses), [statuses]);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
 
   // An explicit `direction` (from the column menu's Sort Ascending / Sort
@@ -1559,11 +1562,14 @@ export default function CompanyDealsKanban({
             )}
           </div>
           <button
-            onClick={() => setShowFilterPanel(true)}
-            className="relative flex items-center justify-center gap-2 px-3 text-sm font-medium text-gray-800 bg-white border rounded-full hover:bg-gray-50 flex-shrink-0"
+            onClick={() => setShowFilterPanel((open) => !open)}
+            aria-expanded={showFilterPanel}
+            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${
+              showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+            }`}
             style={{
               height: "44px",
-              borderColor: Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
+              borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
             }}
           >
             <FilterIcon size={16} />
@@ -1617,16 +1623,15 @@ export default function CompanyDealsKanban({
         />
       )}
 
-      <CompanyFilterPanel
+      {/* Horizontal filter row under the search bar, instead of the side drawer. Same columns,
+          options and filtering (applyColumnFilters on selectedFilters) as before. */}
+      <InlineFilterBar
         isOpen={showFilterPanel}
-        onClose={() => setShowFilterPanel(false)}
-        columns={DEAL_FILTER_COLUMNS(statuses)}
+        columns={dealFilterColumns}
         data={deals}
         getFieldValue={getDealFieldValue}
         selected={selectedFilters}
         onApply={setSelectedFilters}
-        title="Filter Deals"
-        subtitle="Filter this list by column"
       />
 
       {viewMode === "board" ? (
