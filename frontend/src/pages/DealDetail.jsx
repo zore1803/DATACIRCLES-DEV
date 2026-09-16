@@ -44,7 +44,7 @@ import EditIcon from "../components/common/EditIcon";
 // deals all behave the same way. The tab set is the deal's own — Tasks,
 // Meetings and Calendar were "coming soon" placeholders before this and now
 // run the same components the company page uses, scoped to the deal.
-const tabs = ["Details", "Invoices", "Notes", "Tasks", "Meetings", "Calendar"];
+const tabs = ["Overview", "Invoices", "Notes", "Tasks", "Meetings", "Calendar"];
 
 const newEntryOptions = [
   { label: "New Invoice", icon: Receipt, tab: "Invoices" },
@@ -108,7 +108,7 @@ function DealDetail() {
   // back on the same tab.
   const tabFromUrl = searchParams.get("tab");
   const [activeTab, setActiveTabState] = useState(
-    tabs.includes(tabFromUrl) ? tabFromUrl : "Details",
+    tabs.includes(tabFromUrl) ? tabFromUrl : "Overview",
   );
   const setActiveTab = (tab) => {
     setActiveTabState(tab);
@@ -600,9 +600,9 @@ function DealDetail() {
 
         <div className="border-b border-gray-200 mb-4 -mx-6"></div>
 
-        {/* Summary Stats Row — on Details, mirroring the company page's
+        {/* Summary Stats Row — on Overview, mirroring the company page's
             Overview-only KPI strip. */}
-        {showStats && activeTab === "Details" && (
+        {showStats && activeTab === "Overview" && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
             {statsLoading || invoicesLoading
               ? Array.from({ length: 6 }).map((_, i) => <StatTileSkeleton key={i} />)
@@ -612,7 +612,7 @@ function DealDetail() {
 
         {/* Tab Content */}
         <div className="min-h-[400px]">
-          {activeTab === "Details" && (
+          {activeTab === "Overview" && (
             <BasicDetails
               deal={deal}
               dealFieldList={dealFieldList}

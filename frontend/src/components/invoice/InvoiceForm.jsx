@@ -3147,8 +3147,21 @@ const CreateInvoicePanel = ({
   // before that load would otherwise lock in "intra" for an out-of-state customer. It only
   // re-applies while the form still holds that same deal (or none), so a deal the user has
   // since picked by hand is never overwritten.
-  const preselectAppliedRef = useRef({ dealId: null, withOrg: false });
+  const preselectAppliedRef = useRef({ started: false, dealId: null, withOrg: false });
   useEffect(() => {
+    // First run: a form handed back from the full-width screen (or already holding a deal) keeps
+    // the deal it has — it was applied there and its addresses may have been edited since. The
+    // current preselect is recorded as handled, so only a LATER, different id (a deal just
+    // created via "Add Deal") is applied.
+    if (!preselectAppliedRef.current.started) {
+      const handedOff = !!(formOverride || form.deal);
+      preselectAppliedRef.current = {
+        started: true,
+        dealId: handedOff ? preselectDealId : null,
+        withOrg: handedOff,
+      };
+      if (handedOff) return;
+    }
     if (isEditing || !preselectDealId) return;
     if (!deals.some((d) => d._id === preselectDealId)) return;
     const last = preselectAppliedRef.current;
@@ -3158,13 +3171,11 @@ const CreateInvoicePanel = ({
       // the user hasn't switched to a different deal in the meantime.
       if (last.withOrg || !withOrg || form.deal !== preselectDealId) return;
     }
-    // A NEW preselectDealId (first open, or a deal just created via "Add Deal") is fresh intent
-    // from the caller and is always applied.
-    preselectAppliedRef.current = { dealId: preselectDealId, withOrg };
+    preselectAppliedRef.current = { started: true, dealId: preselectDealId, withOrg };
     applyDealSelection(preselectDealId);
     // applyDealSelection is recreated each render; keyed on the inputs that matter instead.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preselectDealId, deals, orgDetails, isEditing]);
+  }, [preselectDealId, deals, orgDetails, isEditing, formOverride]);
 
   const inputClass =
     "w-full h-[38px] px-3.5 rounded-full border border-[#1F2937]/10 bg-white text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all";

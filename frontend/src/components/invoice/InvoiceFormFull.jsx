@@ -391,6 +391,15 @@ const InvoiceFormFull = ({
   defaultNotesFlat = "",
   defaultTermsFlat = "",
   documentTypeSettings = {},
+  // --- Optional, for callers that already imply the customer (Company Profile / Deal page).
+  // Accounting passes none of these, so its behaviour is unchanged. ---
+  // A deal to select on a NEW invoice, applied through the same handler as a manual pick.
+  preselectDealId = null,
+  // Company preselected in "+ Create Deal", and the company this flow is scoped to: a deal
+  // created for any other company is not added to or selected on this invoice.
+  initialCompanyId = null,
+  // Reports a deal created here back to the caller so its own deal list stays current.
+  onDealCreated,
 }) => {
   const defaultNotesForNew = defaultNotesByType.tax !== undefined
     ? defaultNotesByType.tax
@@ -1047,11 +1056,87 @@ const InvoiceFormFull = ({
   };
 
   const handleDealCreated = (newDeal) => {
-    setLocalDeals((prev) => [...prev, newDeal]);
+    setShowQuickDealForm(false);
+    // Scoped callers (initialCompanyId set) keep the invoice with that company: QuickDealForm
+    // lets the company be changed, and a deal for another company is still created but is not
+    // offered or selected here.
+    const newDealCompanyId = newDeal?.company?._id || newDeal?.company || null;
+    if (initialCompanyId && newDealCompanyId && String(newDealCompanyId) !== String(initialCompanyId)) {
+      toast("Deal created for a different company, so it isn't available on this invoice.");
+      return;
+    }
+    setLocalDeals((prev) => (prev.some((d) => d._id === newDeal._id) ? prev : [...prev, newDeal]));
     setForm((prev) => ({ ...prev, deal: newDeal._id }));
     setHasUnsavedChanges(true);
-    setShowQuickDealForm(false);
+    onDealCreated?.(newDeal);
   };
+
+  // Selecting a deal, whether picked by the user or preselected by the caller.
+  // Switching the deal replaces the Receiver GSTIN and
+  // billing/shipping address with whatever the new
+  // deal's company has — same prefetch behavior as the
+  // split-view Invoice panel (InvoiceForm.jsx). Clears
+  // them to empty when that company has none, rather
+  // than carrying over the previous deal's data.
+  const applyDealSelection = (value, { markDirty = true } = {}) => {
+    if (dealError) setDealError(false);
+    const selectedDeal = localDeals.find((d) => d._id === value);
+    const company = selectedDeal?.company;
+    const nextBilling =
+      company && !isAddressEmpty(company.billingAddress)
+        ? { ...emptyAddress(), ...company.billingAddress }
+        : emptyAddress();
+    const nextShipping =
+      company && !isAddressEmpty(company.shippingAddresses?.[0])
+        ? { ...emptyAddress(), ...company.shippingAddresses[0] }
+        : emptyAddress();
+    const customerState = (company?.billingAddress?.state || '').trim().toLowerCase();
+    const autoType = (sellerState && customerState && sellerState !== customerState) ? 'inter' : 'intra';
+    setForm((prev) => ({
+      ...prev,
+      deal: value,
+      receiverGSTIN: company?.gstin || "",
+      billingAddress: nextBilling,
+      shippingAddress: prev.sameAsBilling ? nextBilling : nextShipping,
+      transactionType: autoType,
+    }));
+    if (markDirty) setHasUnsavedChanges(true);
+  };
+
+  // Applies `preselectDealId` to a new invoice. Never overrides a deal already on the form — in
+  // particular one carried over from the split view via formOverride — except when the caller
+  // hands a DIFFERENT id (a deal just created), which is fresh intent. Re-applies once the
+  // seller's state has loaded, since the inter/intra-state type depends on it, but only while
+  // the form still holds that same deal.
+  const preselectAppliedRef = useRef({ started: false, dealId: null, withSeller: false });
+  useEffect(() => {
+    // First run: a form arriving from the split view keeps the deal it has — the split view
+    // already applied it and the addresses may have been edited since. The formOverride merge
+    // is queued by an earlier effect in this same commit, so `form.deal` can still read "" here;
+    // hence formOverride itself is checked. A deal created afterwards is selected by
+    // handleDealCreated, and a later, different preselect id is still applied below.
+    if (!preselectAppliedRef.current.started) {
+      const handedOff = !!(formOverride || form.deal);
+      preselectAppliedRef.current = {
+        started: true,
+        dealId: handedOff ? preselectDealId : null,
+        withSeller: handedOff,
+      };
+      if (handedOff) return;
+    }
+    if (editingInvoice || !preselectDealId) return;
+    if (!localDeals.some((d) => d._id === preselectDealId)) return;
+    const last = preselectAppliedRef.current;
+    const withSeller = !!sellerState;
+    if (last.dealId === preselectDealId) {
+      if (last.withSeller || !withSeller || form.deal !== preselectDealId) return;
+    }
+    preselectAppliedRef.current = { started: true, dealId: preselectDealId, withSeller };
+    // A preselect isn't a user edit, so it doesn't trigger the unsaved-changes prompt.
+    applyDealSelection(preselectDealId, { markDirty: false });
+    // applyDealSelection is recreated each render; keyed on the inputs that matter instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselectDealId, localDeals, sellerState, editingInvoice, form.deal, formOverride]);
 
   // Hands the current form state to the parent's preview/print modal —
   // same onPreview contract Accounting.jsx wires up for the split-view panel.
@@ -1311,6 +1396,7 @@ const InvoiceFormFull = ({
         <QuickDealForm
           companies={companies}
           contacts={contacts}
+          initialCompanyId={initialCompanyId || ""}
           onDealCreated={handleDealCreated}
           onRequestClose={() => setShowQuickDealForm(false)}
         />
@@ -1478,36 +1564,7 @@ const InvoiceFormFull = ({
                       options={localDeals}
                       value={form.deal}
                       error={dealError ? "Deal is required" : null}
-                      onChange={(value) => {
-                        if (dealError) setDealError(false);
-                        // Switching the deal replaces the Receiver GSTIN and
-                        // billing/shipping address with whatever the new
-                        // deal's company has — same prefetch behavior as the
-                        // split-view Invoice panel (InvoiceForm.jsx). Clears
-                        // them to empty when that company has none, rather
-                        // than carrying over the previous deal's data.
-                        const selectedDeal = localDeals.find((d) => d._id === value);
-                        const company = selectedDeal?.company;
-                        const nextBilling =
-                          company && !isAddressEmpty(company.billingAddress)
-                            ? { ...emptyAddress(), ...company.billingAddress }
-                            : emptyAddress();
-                        const nextShipping =
-                          company && !isAddressEmpty(company.shippingAddresses?.[0])
-                            ? { ...emptyAddress(), ...company.shippingAddresses[0] }
-                            : emptyAddress();
-                        const customerState = (company?.billingAddress?.state || '').trim().toLowerCase();
-                        const autoType = (sellerState && customerState && sellerState !== customerState) ? 'inter' : 'intra';
-                        setForm((prev) => ({
-                          ...prev,
-                          deal: value,
-                          receiverGSTIN: company?.gstin || "",
-                          billingAddress: nextBilling,
-                          shippingAddress: prev.sameAsBilling ? nextBilling : nextShipping,
-                          transactionType: autoType,
-                        }));
-                        setHasUnsavedChanges(true);
-                      }}
+                      onChange={(value) => applyDealSelection(value)}
                       placeholder="Search customers by name, company, GSTIN..."
                       displayKey="title"
                       valueKey="_id"

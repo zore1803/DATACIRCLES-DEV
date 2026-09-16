@@ -12,6 +12,7 @@ import { getDocumentSettings } from "../services/documentSettingsCache";
 // never invalidated when the settings are saved, so a cached read would keep handing out the
 // old defaults until a full reload. The fresh read also refreshes that shared cache.
 export const EMPTY_DOCUMENT_DEFAULTS = {
+  documentTypeSettings: {},
   defaultDueDateDays: null,
   defaultNotesByType: {},
   defaultTermsByType: {},
@@ -19,8 +20,12 @@ export const EMPTY_DOCUMENT_DEFAULTS = {
   defaultTermsFlat: "",
 };
 
-// Mirrors Accounting.jsx fetchDocSettings field-for-field.
+// Mirrors Accounting.jsx fetchDocSettings field-for-field (the document-form fields of it).
 export const mapDocumentDefaults = (data) => ({
+  // Per-type prefix/suffix. Without it the form opens on the built-in "INV-" and only corrects
+  // itself once its own settings request returns, a visible flicker Accounting avoids by
+  // passing this.
+  documentTypeSettings: data?.documentTypeSettings || {},
   defaultDueDateDays: data?.defaultDueDateDays != null ? data.defaultDueDateDays : null,
   defaultNotesByType: data?.defaultNotesByType || {},
   defaultTermsByType: data?.defaultTermsByType || {},

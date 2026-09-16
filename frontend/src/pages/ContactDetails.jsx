@@ -48,7 +48,7 @@ import EditIcon from "../components/common/EditIcon";
 // of its contacts doesn't change how the page works. The tab set is the
 // contact's own — a contact has no sub-contacts, invoices or folders of its
 // own, so those company tabs have no counterpart here.
-const tabs = ["Details", "Call Logs", "Notes", "Tasks", "Meetings", "Calendar"];
+const tabs = ["Overview", "Call Logs", "Notes", "Tasks", "Meetings", "Calendar"];
 
 const newEntryOptions = [
   { label: "New Deal", icon: BriefcaseBusiness, create: "deal" },
@@ -77,7 +77,7 @@ const ContactDetailsPage = () => {
   // refresh or a shared link lands back on the same tab.
   const tabFromUrl = searchParams.get("tab");
   const [activeTab, setActiveTabState] = useState(
-    tabs.includes(tabFromUrl) ? tabFromUrl : "Details",
+    tabs.includes(tabFromUrl) ? tabFromUrl : "Overview",
   );
   const setActiveTab = (tab) => {
     setActiveTabState(tab);
@@ -743,9 +743,9 @@ const ContactDetailsPage = () => {
 
         <div className="border-b border-gray-200 mb-4 -mx-6"></div>
 
-        {/* Summary Stats Row — on Details, mirroring the company page's
+        {/* Summary Stats Row — on Overview, mirroring the company page's
             Overview-only KPI strip. */}
-        {showStats && activeTab === "Details" && (
+        {showStats && activeTab === "Overview" && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
             {statsLoading
               ? Array.from({ length: 6 }).map((_, i) => <StatTileSkeleton key={i} />)
@@ -755,7 +755,7 @@ const ContactDetailsPage = () => {
 
         {/* Tab Content */}
         <div className="min-h-[400px]">
-          {activeTab === "Details" && (
+          {activeTab === "Overview" && (
             <BasicDetails
               contact={contact}
               company={company}

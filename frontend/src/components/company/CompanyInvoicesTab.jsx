@@ -12,6 +12,8 @@ import toast from "react-hot-toast";
 // create AND edit invoices, and it applies the org's default notes/terms to a new document. The
 // default export's reset effect blanks notes/terms on open, so passing it defaults did nothing.
 import { CreateInvoicePanel } from "../invoice/InvoiceForm";
+import InvoiceFormFull from "../invoice/InvoiceFormFull";
+import InvoiceStylePreview from "../invoice/InvoiceStylePreview";
 import RecordPaymentModal from "../common/RecordPaymentModal";
 import QuickDealForm from "../deal/QuickDealForm";
 import MoreIcon from "../common/MoreIcon";
@@ -148,6 +150,15 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
   const documentDefaults = useDocumentDefaults();
   // Invoice being edited in the panel; null = creating a new one.
   const [editInvoice, setEditInvoice] = useState(null);
+  // Split view (CreateInvoicePanel) <-> full width (InvoiceFormFull), exactly as Accounting.jsx
+  // does it: the expand/minimize control hands the in-progress form across in `formHandoff`,
+  // so switching views never drops what's been typed. The full-width preference is page state
+  // that deliberately survives closing the form, as Accounting's invoiceFullWidth does.
+  const [invoiceFullWidth, setInvoiceFullWidth] = useState(false);
+  const [formHandoff, setFormHandoff] = useState(null);
+  // The full-width form's Preview button, wired to the same InvoiceStylePreview as Accounting.
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewStyle, setPreviewStyle] = useState(null);
   const [paymentInvoice, setPaymentInvoice] = useState(null);
   const [rowMenu, setRowMenu] = useState(null); // { id, top, left }
 
@@ -204,6 +215,8 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
   const closeInvoiceForm = () => {
     setManualInvoiceFormOpen(false);
     setEditInvoice(null);
+    // Handoff is per-session of the form; the full-width preference is intentionally kept.
+    setFormHandoff(null);
     setJustCreatedDealId(null);
     if (autoOpenCreate) onAutoOpenCreateConsumed?.();
   };
@@ -1079,16 +1092,6 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDownload(invoice._id);
-                            }}
-                            className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
-                            title="Download"
-                          >
-                            <DownloadIcon className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
                               if (rowMenu?.id === invoice._id) {
                                 setRowMenu(null);
                                 return;
@@ -1297,21 +1300,64 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
           into its initial state once, so mounting it earlier (autoOpenCreate) would keep the
           built-in text instead of the org's. */}
       {showInvoiceForm && documentDefaults.settled && (
-        <CreateInvoicePanel
-          key={editInvoice?._id || "new"}
-          type="tax"
-          deals={availableDeals}
-          initialDoc={editInvoice}
-          preselectDealId={editInvoice ? null : preselectDealId}
-          defaultDueDateDays={documentDefaults.defaultDueDateDays}
-          defaultNotesByType={documentDefaults.defaultNotesByType}
-          defaultTermsByType={documentDefaults.defaultTermsByType}
-          defaultNotesFlat={documentDefaults.defaultNotesFlat}
-          defaultTermsFlat={documentDefaults.defaultTermsFlat}
-          onClose={closeInvoiceForm}
-          onCreated={() => refreshInvoices?.()}
-          onAddDeal={openAddDeal}
-          onFullView={(doc) => doc?._id && setPreviewInvoice(doc)}
+        invoiceFullWidth ? (
+          <InvoiceFormFull
+            deals={availableDeals}
+            isOpen={true}
+            onClose={closeInvoiceForm}
+            onExitFullWidth={(currentForm) => { setFormHandoff(currentForm); setInvoiceFullWidth(false); }}
+            formOverride={formHandoff}
+            fetchData={() => refreshInvoices?.()}
+            editingInvoice={editInvoice}
+            documentTypeSettings={documentDefaults.documentTypeSettings}
+            defaultDueDateDays={documentDefaults.defaultDueDateDays}
+            defaultNotesByType={documentDefaults.defaultNotesByType}
+            defaultTermsByType={documentDefaults.defaultTermsByType}
+            defaultNotesFlat={documentDefaults.defaultNotesFlat}
+            defaultTermsFlat={documentDefaults.defaultTermsFlat}
+            preselectDealId={editInvoice ? null : preselectDealId}
+            initialCompanyId={companyId}
+            onDealCreated={handleDealCreated}
+            onPreview={(formData) => {
+              if (!formData.style) {
+                toast.error("Please select an invoice style to preview.");
+                return;
+              }
+              setPreviewStyle(formData.style);
+              setShowPreview(true);
+            }}
+          />
+        ) : (
+          <CreateInvoicePanel
+            key={editInvoice?._id || "new"}
+            type="tax"
+            deals={availableDeals}
+            initialDoc={editInvoice}
+            formOverride={formHandoff}
+            onRequestFullWidth={(currentForm) => { setFormHandoff(currentForm); setInvoiceFullWidth(true); }}
+            preselectDealId={editInvoice ? null : preselectDealId}
+            documentTypeSettings={documentDefaults.documentTypeSettings}
+            defaultDueDateDays={documentDefaults.defaultDueDateDays}
+            defaultNotesByType={documentDefaults.defaultNotesByType}
+            defaultTermsByType={documentDefaults.defaultTermsByType}
+            defaultNotesFlat={documentDefaults.defaultNotesFlat}
+            defaultTermsFlat={documentDefaults.defaultTermsFlat}
+            onClose={closeInvoiceForm}
+            onCreated={() => refreshInvoices?.()}
+            onAddDeal={openAddDeal}
+            onFullView={(doc) => doc?._id && setPreviewInvoice(doc)}
+          />
+        )
+      )}
+
+      {showPreview && (
+        <InvoiceStylePreview
+          style={previewStyle}
+          isOpen={showPreview}
+          onClose={() => {
+            setShowPreview(false);
+            setPreviewStyle(null);
+          }}
         />
       )}
 
