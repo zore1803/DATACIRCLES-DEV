@@ -1,7 +1,7 @@
 import CalendarIcon from "../components/common/CalendarIcon";
 import PlusIcon from "../components/common/PlusIcon";
 import MoreIcon from "../components/common/MoreIcon";
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import API from "../services/api";
 import AdminMeetingForm from "../components/admin/AdminMeetingForm";
 import toast from "react-hot-toast";
@@ -325,6 +325,29 @@ const AdminCalendar = () => {
     tasks: true,
     highPriority: false
   });
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [headerAddPos, setHeaderAddPos] = useState(null);
+  const headerMenusRef = useRef(null);
+
+  // Read by every count and cell below instead of `meetings`/`tasks`
+  // directly, so the filter toggles apply to the grid and the header totals
+  // together. highPriority narrows tasks only — meetings have no priority.
+  const visibleMeetings = useMemo(
+    () => (filters.meetings ? meetings : {}),
+    [filters.meetings, meetings],
+  );
+  const visibleTasks = useMemo(() => {
+    if (!filters.tasks) return {};
+    if (!filters.highPriority) return tasks;
+    return Object.fromEntries(
+      Object.entries(tasks)
+        .map(([key, list]) => [key, list.filter((t) => t.priority?.toLowerCase() === "high")])
+        .filter(([, list]) => list.length > 0),
+    );
+  }, [filters.tasks, filters.highPriority, tasks]);
+  const activeFilterCount =
+    (filters.meetings ? 0 : 1) + (filters.tasks ? 0 : 1) + (filters.highPriority ? 1 : 0);
 
   // --- Fetch Data ---
   const fetchData = useCallback(async () => {
@@ -437,11 +460,11 @@ const AdminCalendar = () => {
   };
   const periodDateKeys = getPeriodDateKeys();
   const periodMeetingsCount = periodDateKeys.reduce(
-    (sum, key) => sum + (meetings[key]?.length || 0),
+    (sum, key) => sum + (visibleMeetings[key]?.length || 0),
     0,
   );
   const periodTasksCount = periodDateKeys.reduce(
-    (sum, key) => sum + (tasks[key]?.length || 0),
+    (sum, key) => sum + (visibleTasks[key]?.length || 0),
     0,
   );
 
@@ -449,6 +472,19 @@ const AdminCalendar = () => {
   // "+N more" opens the full list for that day, rather than the two items
   // the cell has room for.
   const [dayDetail, setDayDetail] = useState(null); // { date, meetings, tasks }
+
+  useEffect(() => {
+    if (!filterOpen && !moreOpen && !headerAddPos) return;
+    const onDocClick = (e) => {
+      if (!headerMenusRef.current?.contains(e.target)) {
+        setFilterOpen(false);
+        setMoreOpen(false);
+        setHeaderAddPos(null);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [filterOpen, moreOpen, headerAddPos]);
 
   const handleDayClick = (e, date) => {
     // Open quick add menu at click position
@@ -663,69 +699,158 @@ const AdminCalendar = () => {
             />
           </div>
 
-          <button
-            disabled={loading}
-            className="box-border flex flex-row justify-center items-center flex-shrink-0"
-            style={{
-              padding: 10,
-              gap: 8,
-              width: 40,
-              height: 40,
-              background: "#FFFFFF",
-              border: "1px solid #E1E4EA",
-              borderRadius: 95,
-            }}
+          <div
+            ref={headerMenusRef}
+            className="relative flex flex-row items-center flex-shrink-0"
+            style={{ gap: 12, height: 40 }}
           >
-            {loading ? <Skeleton width={16} height={16} shape="circle" /> : <FilterIcon size={16} />}
-          </button>
-
-          <button
-            disabled={loading}
-            className="box-border flex flex-row justify-center items-center flex-shrink-0"
-            style={{
-              padding: 10,
-              gap: 8,
-              width: 40,
-              height: 40,
-              background: "#FFFFFF",
-              border: "1px solid #E1E4EA",
-              borderRadius: 96,
-            }}
-          >
-            {loading ? <Skeleton width={16} height={16} shape="circle" /> : <MoreIcon className="w-4 h-4 text-[#1F2937]" />}
-          </button>
-
-          <button
-            disabled={loading}
-            className="flex flex-row justify-center items-center flex-shrink-0"
-            style={{
-              padding: 10,
-              gap: 6,
-              width: 146,
-              height: 40,
-              background: loading ? "#F5F6F6" : "#0085FF",
-              borderRadius: 96,
-            }}
-          >
-            {loading ? (
-              <Skeleton width={90} height={14} />
-            ) : (
-              <>
-                <PlusIcon className="w-4 h-4 text-white" />
-                <span
-                  style={{
-                    fontFamily: "Inter",
-                    fontWeight: 500,
-                    fontSize: 14,
-                    lineHeight: "20px",
-                    color: "#FFFFFF",
-                  }}
-                >
-                  Add Activity
+            <button
+              disabled={loading}
+              onClick={() => { setFilterOpen((v) => !v); setMoreOpen(false); setHeaderAddPos(null); }}
+              title="Filter"
+              className="box-border relative flex flex-row justify-center items-center flex-shrink-0"
+              style={{
+                padding: 10,
+                gap: 8,
+                width: 40,
+                height: 40,
+                background: filterOpen || activeFilterCount ? "#F5F8FF" : "#FFFFFF",
+                border: `1px solid ${filterOpen || activeFilterCount ? "#0085FF" : "#E1E4EA"}`,
+                borderRadius: 95,
+              }}
+            >
+              {loading ? <Skeleton width={16} height={16} shape="circle" /> : <FilterIcon size={16} />}
+              {!loading && activeFilterCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-[#0085FF] text-white text-[10px] font-semibold flex items-center justify-center">
+                  {activeFilterCount}
                 </span>
-              </>
+              )}
+            </button>
+
+            <button
+              disabled={loading}
+              onClick={() => { setMoreOpen((v) => !v); setFilterOpen(false); setHeaderAddPos(null); }}
+              title="More options"
+              className="box-border flex flex-row justify-center items-center flex-shrink-0"
+              style={{
+                padding: 10,
+                gap: 8,
+                width: 40,
+                height: 40,
+                background: moreOpen ? "#F5F8FF" : "#FFFFFF",
+                border: `1px solid ${moreOpen ? "#0085FF" : "#E1E4EA"}`,
+                borderRadius: 96,
+              }}
+            >
+              {loading ? <Skeleton width={16} height={16} shape="circle" /> : <MoreIcon className="w-4 h-4 text-[#1F2937]" />}
+            </button>
+
+            <button
+              disabled={loading}
+              onClick={() => { setHeaderAddPos((v) => (v ? null : true)); setFilterOpen(false); setMoreOpen(false); }}
+              className="flex flex-row justify-center items-center flex-shrink-0"
+              style={{
+                padding: 10,
+                gap: 6,
+                width: 146,
+                height: 40,
+                background: loading ? "#F5F6F6" : "#0085FF",
+                borderRadius: 96,
+              }}
+            >
+              {loading ? (
+                <Skeleton width={90} height={14} />
+              ) : (
+                <>
+                  <PlusIcon className="w-4 h-4 text-white" />
+                  <span
+                    style={{
+                      fontFamily: "Inter",
+                      fontWeight: 500,
+                      fontSize: 14,
+                      lineHeight: "20px",
+                      color: "#FFFFFF",
+                    }}
+                  >
+                    Add Activity
+                  </span>
+                </>
+              )}
+            </button>
+
+            {filterOpen && (
+              <div className="absolute right-0 top-[48px] z-50 w-56 bg-white rounded-lg shadow-xl border border-gray-100 p-2">
+                <div className="text-xs font-semibold text-gray-500 px-2 py-1.5 uppercase tracking-wider">Show</div>
+                {[
+                  { key: "meetings", label: "Meetings" },
+                  { key: "tasks", label: "Tasks" },
+                  { key: "highPriority", label: "High priority tasks only" },
+                ].map(({ key, label }) => (
+                  <label
+                    key={key}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={filters[key]}
+                      onChange={(e) => setFilters((f) => ({ ...f, [key]: e.target.checked }))}
+                      className="accent-[#0085FF]"
+                    />
+                    {label}
+                  </label>
+                ))}
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={() => setFilters({ meetings: true, tasks: true, highPriority: false })}
+                    className="w-full text-left px-3 py-2 mt-1 text-sm text-[#0085FF] hover:bg-blue-50 rounded-md border-t border-gray-100"
+                  >
+                    Reset filters
+                  </button>
+                )}
+              </div>
             )}
-          </button>
+
+            {moreOpen && (
+              <div className="absolute right-0 top-[48px] z-50 w-48 bg-white rounded-lg shadow-xl border border-gray-100 p-2">
+                <button
+                  onClick={() => { setMoreOpen(false); fetchData(); }}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md"
+                >
+                  Refresh
+                </button>
+                <button
+                  onClick={() => { setMoreOpen(false); setCurrentDate(new Date()); }}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md"
+                >
+                  Jump to today
+                </button>
+              </div>
+            )}
+
+            {headerAddPos && (
+              <div className="absolute right-0 top-[48px] z-50 w-48 bg-white rounded-lg shadow-xl border border-gray-100 p-2">
+                <div className="text-xs font-semibold text-gray-500 px-2 py-1.5 uppercase tracking-wider">Create New</div>
+                <button
+                  onClick={() => { setHeaderAddPos(null); handleCreate("meeting"); }}
+                  className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors"
+                >
+                  <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center">
+                    <TeamIcon className="w-3.5 h-3.5 text-blue-600" />
+                  </div>
+                  Meeting
+                </button>
+                <button
+                  onClick={() => { setHeaderAddPos(null); handleCreate("task"); }}
+                  className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-md transition-colors"
+                >
+                  <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  </div>
+                  Task
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       </div>
@@ -1042,8 +1167,8 @@ const AdminCalendar = () => {
             >
               {weekDays.map((dayObj, i) => {
                 const dateKey = dayObj.date.toDateString();
-                const dayMeetings = meetings[dateKey] || [];
-                const dayTasks = tasks[dateKey] || [];
+                const dayMeetings = visibleMeetings[dateKey] || [];
+                const dayTasks = visibleTasks[dateKey] || [];
                 const priorityRank = { high: 3, medium: 2, low: 1 };
                 const allPriorities = dayTasks
                   .map((item) => item.priority?.toLowerCase())
