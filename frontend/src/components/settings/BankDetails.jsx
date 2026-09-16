@@ -223,12 +223,12 @@ const BankDetails = () => {
               key={bank._id}
               className={`relative flex flex-col justify-between rounded-2xl border-2 p-5 transition-all ${
                 bank.isDefault
-                  ? "border-purple-500 bg-purple-50/20 shadow-md"
+                  ? "border-[#0085FF] bg-blue-50/20 shadow-md"
                   : "border-gray-200 bg-white hover:border-gray-300"
               }`}
             >
               {bank.isDefault && (
-                <span className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-purple-600 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
+                <span className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-[#0085FF] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
                   <CheckCircle className="h-3 w-3" />
                   Default
                 </span>

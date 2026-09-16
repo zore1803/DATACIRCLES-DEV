@@ -175,6 +175,18 @@ const toChromeTint = (hex) => {
   return `rgb(${mix((int >> 16) & 255)}, ${mix((int >> 8) & 255)}, ${mix(int & 255)})`;
 };
 
+// Darkens a hex colour toward black by `amount` (0-1) for the hover shade —
+// same "mix toward a target" approach as toChromeTint above, just mixing
+// the other direction.
+const darken = (hex, amount) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec((hex || "").trim());
+  if (!m) return hex;
+  const int = parseInt(m[1], 16);
+  const mix = (channel) => Math.round(channel * (1 - amount));
+  const toHex = (n) => n.toString(16).padStart(2, "0");
+  return `#${toHex(mix((int >> 16) & 255))}${toHex(mix((int >> 8) & 255))}${toHex(mix(int & 255))}`;
+};
+
 // Cuts the quarter-disc out of the corner patch: opaque (chrome) outside the
 // 16px radius, fully transparent inside it, so whatever the page paints under
 // the corner shows through instead of a hardcoded page colour.
@@ -293,6 +305,26 @@ const Navbar = () => {
     // says, and a new org would see untinted chrome until it set a colour.
     const tint = toChromeTint(branding?.colors?.primary) || toChromeTint(DEFAULT_BRAND_COLOR);
     document.documentElement.style.setProperty("--chrome-bg", tint);
+  }, [branding?.colors?.primary]);
+
+  // --btn-primary is the one variable every "primary action" button's fill
+  // resolves to (index.css's blanket re-theme rule) — Brand Settings' own
+  // "Button Colour" picker saved to branding.colors.primary all along, but
+  // nothing ever read it back into this variable, so the setting had no
+  // visible effect anywhere outside its own settings-page preview. Only
+  // overridden when the org has actually picked a colour; otherwise the
+  // stylesheet's own default (#0085FF) is left alone.
+  useEffect(() => {
+    const primaryColor = /^#[0-9a-f]{6}$/i.test((branding?.colors?.primary || "").trim())
+      ? branding.colors.primary.trim()
+      : null;
+    if (primaryColor) {
+      document.documentElement.style.setProperty("--btn-primary", primaryColor);
+      document.documentElement.style.setProperty("--btn-primary-hover", darken(primaryColor, 0.15));
+    } else {
+      document.documentElement.style.removeProperty("--btn-primary");
+      document.documentElement.style.removeProperty("--btn-primary-hover");
+    }
   }, [branding?.colors?.primary]);
 
   const getInitials = (name) => {
