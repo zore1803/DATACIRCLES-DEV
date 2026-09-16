@@ -1,4 +1,5 @@
 import DeleteIcon from "../components/common/DeleteIcon";
+import EmptyState from "../components/common/EmptyState";
 import Checkbox from "../components/common/Checkbox";
 import PlusIcon from "../components/common/PlusIcon";
 import MoreIcon from "../components/common/MoreIcon";
@@ -1930,9 +1931,16 @@ const PurchasePage = () => {
                         />
                       ) : purchases.length === 0 ? (
                         <tr>
-                          <td colSpan={table.getAllColumns().length} className="px-6 py-12 text-center text-gray-500 font-inter">
-                            <ShoppingCart className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                            <p className="font-medium">No purchases found</p>
+                          <td colSpan={table.getAllColumns().length}>
+                            <EmptyState
+                              icon={ShoppingCart}
+                              noun="Purchase"
+                              isFiltered={!!(searchTerm || activeFilters?.length)}
+                              onCreate={() => {
+                                setEditingPurchase(null);
+                                setShowForm(true);
+                              }}
+                            />
                           </td>
                         </tr>
                       ) : (

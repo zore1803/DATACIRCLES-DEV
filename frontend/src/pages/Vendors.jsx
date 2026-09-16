@@ -1,5 +1,6 @@
 import HistoryIcon from "../components/common/HistoryIcon";
 import DeleteIcon from "../components/common/DeleteIcon";
+import EmptyState from "../components/common/EmptyState";
 import BulkDeleteModal from "../components/common/BulkDeleteModal";
 import { exportRecordsToCSV } from "../utils/exportRecordsToCSV";
 import PdfIcon from "../components/common/PdfIcon";
@@ -1626,13 +1627,16 @@ function Vendors() {
               )}
               {!showLoadingSkeleton && vendors.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={orderedColumns.length + 1}
-                    className="px-6 py-12 text-center text-gray-500"
-                  >
-                    <Truck className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                    <p className="font-medium">No vendors found</p>
-                    <p className="text-sm">Try adjusting your search or filters</p>
+                  <td colSpan={orderedColumns.length + 1}>
+                    <EmptyState
+                      icon={Truck}
+                      noun="Vendor"
+                      isFiltered={!!(searchTerm || activeFilters?.length)}
+                      onCreate={() => {
+                        setEditVendor(null);
+                        setShowQuickAdd(true);
+                      }}
+                    />
                   </td>
                 </tr>
               )}

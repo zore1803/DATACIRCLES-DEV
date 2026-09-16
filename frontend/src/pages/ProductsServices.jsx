@@ -1,4 +1,5 @@
 import DeleteIcon from "../components/common/DeleteIcon";
+import EmptyState from "../components/common/EmptyState";
 import VideoIcon from "../components/common/VideoIcon";
 import Checkbox from "../components/common/Checkbox";
 import PlusIcon from "../components/common/PlusIcon";
@@ -2100,9 +2101,14 @@ function ProductsServices() {
                         />
                       ) : items.length === 0 ? (
                         <tr>
-                          <td colSpan={table.getAllColumns().length} className="px-6 py-12 text-center text-gray-500 font-inter">
-                            <Package className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                            <p className="font-medium">No items found</p>
+                          <td colSpan={table.getAllColumns().length}>
+                            <EmptyState
+                              icon={Package}
+                              noun="Item"
+                              isFiltered={!!(searchTerm || activeFilters?.length)}
+                              onCreate={() => setShowQuickCreate(true)}
+                              buttonLabel="Add Item"
+                            />
                           </td>
                         </tr>
                       ) : (

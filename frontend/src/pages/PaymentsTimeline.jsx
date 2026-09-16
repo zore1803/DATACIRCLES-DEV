@@ -1,4 +1,5 @@
 import DeleteIcon from "../components/common/DeleteIcon";
+import EmptyState from "../components/common/EmptyState";
 import PdfIcon from "../components/common/PdfIcon";
 import VideoIcon from "../components/common/VideoIcon";
 import Checkbox from "../components/common/Checkbox";
@@ -1833,9 +1834,18 @@ export default function PaymentsTimeline() {
               />
             ) : filteredDocs.length === 0 ? (
               <tr>
-                <td colSpan={orderedColumns.length + 1} className="px-6 py-20 text-center">
-                  <PdfIcon className="w-10 h-10 mx-auto text-gray-300 mb-3" />
-                  <p className="text-sm font-medium text-gray-500">No transactions found.</p>
+                <td colSpan={orderedColumns.length + 1}>
+                  <EmptyState
+                    icon={PdfIcon}
+                    noun="Payment"
+                    isFiltered={!!(searchQuery || activeFilters?.length)}
+                    filteredTitle="No transactions found."
+                    onCreate={() => {
+                      setEditingPaymentItem(null);
+                      setIsPaymentModalOpen(true);
+                    }}
+                    buttonLabel="Add Payment"
+                  />
                 </td>
               </tr>
             ) : (

@@ -1,4 +1,5 @@
 import DeleteIcon from "../components/common/DeleteIcon";
+import EmptyState from "../components/common/EmptyState";
 import BulkDeleteModal from "../components/common/BulkDeleteModal";
 import { exportRecordsToCSV } from "../utils/exportRecordsToCSV";
 import VideoIcon from "../components/common/VideoIcon";
@@ -1237,21 +1238,15 @@ const SalesSubscription = () => {
                         <TableSkeletonRows numRows={pagination.limit} columns={table.getVisibleLeafColumns().filter((c) => c.id !== "selection")} hasCheckbox />
                       ) : rows.length === 0 ? (
                         <tr>
-                          <td colSpan={table.getAllColumns().length} className="px-6 py-16 text-center text-gray-500">
-                            <div className="flex flex-col items-center gap-3">
-                              <Repeat className="w-10 h-10 text-gray-300" />
-                              <p className="font-medium">Create Subscription Now</p>
-                              <p className="text-xs text-gray-400 max-w-sm">
-                                Bill a customer automatically on a schedule — e.g. ₹5,000 every month — instead of creating an invoice by hand each time.
-                              </p>
-                              <button
-                                onClick={openCreate}
-                                className="mt-1 inline-flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700"
-                              >
-                                <PlusIcon className="w-4 h-4" />
-                                Create Subscription
-                              </button>
-                            </div>
+                          <td colSpan={table.getAllColumns().length}>
+                            <EmptyState
+                              icon={Repeat}
+                              noun="Subscription"
+                              isFiltered={!!(searchTerm || activeFilters?.length)}
+                              title="Create Subscription Now"
+                              description="Bill a customer automatically on a schedule — e.g. ₹5,000 every month — instead of creating an invoice by hand each time."
+                              onCreate={openCreate}
+                            />
                           </td>
                         </tr>
                       ) : (
