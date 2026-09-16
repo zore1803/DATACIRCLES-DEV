@@ -75,7 +75,12 @@ function PrivateRoute({ children }) {
         }
 
         const res = await API.get("/auth/me");
-        localStorage.setItem("user", JSON.stringify(res.data.user));
+        // Only cache a user that actually came back: JSON.stringify(undefined)
+        // is undefined, which setItem would store as the string "undefined"
+        // and every JSON.parse of it then throws.
+        if (res.data?.user) {
+          localStorage.setItem("user", JSON.stringify(res.data.user));
+        }
 
         // /auth/me proves the Auth0/phone IDENTITY is valid. GET /session/me
         // would additionally prove this browser holds a live DataCircles

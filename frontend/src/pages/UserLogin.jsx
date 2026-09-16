@@ -195,7 +195,7 @@ export default function UserLogin() {
       if (res.data.success) {
         localStorage.removeItem("superAdminToken");
         localStorage.setItem("token", res.data.token);
-        localStorage.setItem("user", JSON.stringify(res.data.user));
+        if (res.data.user) localStorage.setItem("user", JSON.stringify(res.data.user));
         configureAxios(() => Promise.resolve(localStorage.getItem("token")));
         if (res.data.csrfToken) {
           setCsrfToken(res.data.csrfToken);
@@ -306,7 +306,7 @@ export default function UserLogin() {
       if (res.data.success) {
         localStorage.removeItem("superAdminToken");
         localStorage.setItem("token", res.data.token);
-        localStorage.setItem("user", JSON.stringify(res.data.user));
+        if (res.data.user) localStorage.setItem("user", JSON.stringify(res.data.user));
         configureAxios(() => Promise.resolve(localStorage.getItem("token")));
         window.location.href = "/";
       }

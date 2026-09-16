@@ -58,7 +58,7 @@ const BillingProfileModal = ({ show, missingEmail, missingPhone, onSaved, onClos
     try {
       const res = await API.post('/auth/profile', payload);
       const updatedUser = res.data.user;
-      localStorage.setItem('user', JSON.stringify(updatedUser));
+      if (updatedUser) localStorage.setItem('user', JSON.stringify(updatedUser));
       onSaved(updatedUser);
     } catch (err) {
       setError(err.response?.data?.error || 'Could not save. Please try again.');
