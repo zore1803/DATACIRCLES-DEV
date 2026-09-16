@@ -32,7 +32,7 @@ const DealsTable = ({ deals = [], contact, company, onDealCreated }) => {
         <div className="flex justify-end mb-4">
           <button
             onClick={() => setShowQuickDealForm(true)}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
+            className="inline-flex items-center gap-2 px-3 py-2 bg-[#0085FF] text-white text-sm font-medium rounded-full hover:bg-blue-600 transition-colors"
           >
             <PlusIcon className="w-4 h-4" />
             Add Deal

@@ -2945,7 +2945,12 @@ const CreateInvoicePanel = ({
     if (!form.deal) nextErrors.deal = true;
     if (!form.date) nextErrors.date = true;
     if (isAddressEmpty(form.billingAddress)) nextErrors.billingAddress = true;
-    if (!isDraft && supportsGSTIN) {
+    // Only required when the GSTIN field is actually shown — with the Tax
+    // Invoice toggle off, that field is unrendered (and its ref is null), so
+    // requiring it here left submit silently doing nothing: fieldErrors got
+    // set on a field with no DOM node to show the red border on, and
+    // scrollIntoView on a null ref was a no-op.
+    if (!isDraft && supportsGSTIN && form.isTaxInvoice) {
       if (!form.receiverGSTIN.trim()) nextErrors.receiverGSTIN = true;
       else if (!GSTIN_REGEX.test(form.receiverGSTIN.trim().toUpperCase()))
         nextErrors.receiverGSTIN = true;
@@ -3099,10 +3104,31 @@ const CreateInvoicePanel = ({
     return `${pfx}${sep}${num}${sfx ? `-${sfx}` : ""}`;
   })();
 
-  // Prints exactly what the preview shows — the same shared fragment the PDF
-  // is rendered from — including edits that haven't been saved yet, rather
-  // than fetching the server's copy of the document.
-  const handlePrint = () => {
+  // For an already-saved document, print the real server-generated PDF
+  // (opened in a new tab) instead of an HTML print window: the browser's own
+  // print header/footer — title, page URL, page number, timestamp — is a
+  // print-dialog setting no page can turn off, and it only ever shows up
+  // when printing an HTML page. Printing a PDF (from its native viewer) has
+  // none of that. Falls back to the HTML print below only while the
+  // document hasn't been saved yet (no id to fetch a PDF for).
+  const handlePrint = async () => {
+    if (isEditing && initialDoc?._id) {
+      try {
+        const res = await API.get(`/${apiPathFor(type)}/download/${initialDoc._id}`, {
+          responseType: "blob",
+        });
+        const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+        const win = window.open(url, "_blank");
+        if (!win) toast.error("Allow pop-ups for this site to print.");
+        // Revoked once the tab's had time to load the blob — revoking
+        // immediately can race the new tab's fetch of the same URL.
+        setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+        return;
+      } catch (err) {
+        // Falls through to the HTML print below rather than dead-ending —
+        // a network hiccup here shouldn't block printing entirely.
+      }
+    }
     const html = buildDocumentHtml(
       {
         ...form,

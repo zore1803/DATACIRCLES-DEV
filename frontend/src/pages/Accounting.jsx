@@ -838,6 +838,20 @@ const Accounting = () => {
   const [emailTemplateOpen, setEmailTemplateOpen] = useState(false);
   const [emailPreviewMode, setEmailPreviewMode] = useState(false);
   const emailBodyEditorRef = useRef(null);
+  const emailTemplateMenuRef = useRef(null);
+
+  // Close the "Add template" dropdown on an outside click — it stayed open
+  // over the rest of the Send Email panel until a template was picked.
+  useEffect(() => {
+    if (!emailTemplateOpen) return;
+    const onClick = (e) => {
+      if (emailTemplateMenuRef.current && !emailTemplateMenuRef.current.contains(e.target)) {
+        setEmailTemplateOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [emailTemplateOpen]);
   const EMAIL_FROM_ADDRESS = import.meta.env.VITE_SENDGRID_FROM_EMAIL || "";
   const EMAIL_FROM_NAME = import.meta.env.VITE_SENDGRID_FROM_NAME || "";
   const [smsCompose, setSmsCompose] = useState(null); // { doc, type }
@@ -4243,39 +4257,41 @@ const Accounting = () => {
                     />
                   </div>
                   <div className="relative">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-medium text-gray-500">Body</label>
-                      <button
-                        type="button"
-                        onClick={() => setEmailTemplateOpen((p) => !p)}
-                        className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                      >
-                        + Add template <ChevronDown className="w-3 h-3" />
-                      </button>
-                    </div>
-                    {emailTemplateOpen && (
-                      <div className="absolute right-0 top-6 bg-white border border-gray-200 rounded-lg shadow-lg w-64 z-10 py-1">
-                        {[
-                          ...emailTemplatesList.map((tpl) => ({
-                            key: tpl.id,
-                            label: tpl.name,
-                            desc: tpl.isDefault ? "Default · From Document Settings" : "From Document Settings",
-                          })),
-                          { key: "standard", label: "Standard", desc: "Thank you for your business" },
-                          { key: "reminder", label: "Reminder", desc: "Document pending review" },
-                          { key: "followup", label: "Follow-up", desc: "Check in on document" },
-                        ].map(({ key, label, desc }) => (
-                          <button
-                            key={key}
-                            onClick={() => applyTemplate(key)}
-                            className="w-full text-left px-4 py-2.5 hover:bg-gray-50 transition-colors"
-                          >
-                            <p className="text-sm font-medium text-gray-800">{label}</p>
-                            <p className="text-xs text-gray-400">{desc}</p>
-                          </button>
-                        ))}
+                    <div ref={emailTemplateMenuRef} className="relative">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-medium text-gray-500">Body</label>
+                        <button
+                          type="button"
+                          onClick={() => setEmailTemplateOpen((p) => !p)}
+                          className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                        >
+                          + Add template <ChevronDown className="w-3 h-3" />
+                        </button>
                       </div>
-                    )}
+                      {emailTemplateOpen && (
+                        <div className="absolute right-0 top-6 bg-white border border-gray-200 rounded-lg shadow-lg w-64 z-10 py-1">
+                          {[
+                            ...emailTemplatesList.map((tpl) => ({
+                              key: tpl.id,
+                              label: tpl.name,
+                              desc: tpl.isDefault ? "Default · From Document Settings" : "From Document Settings",
+                            })),
+                            { key: "standard", label: "Standard", desc: "Thank you for your business" },
+                            { key: "reminder", label: "Reminder", desc: "Document pending review" },
+                            { key: "followup", label: "Follow-up", desc: "Check in on document" },
+                          ].map(({ key, label, desc }) => (
+                            <button
+                              key={key}
+                              onClick={() => applyTemplate(key)}
+                              className="w-full text-left px-4 py-2.5 hover:bg-gray-50 transition-colors"
+                            >
+                              <p className="text-sm font-medium text-gray-800">{label}</p>
+                              <p className="text-xs text-gray-400">{desc}</p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     {emailPreviewMode ? (
                       <div
                         className="w-full min-h-[220px] px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 [&_a]:text-blue-600 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"

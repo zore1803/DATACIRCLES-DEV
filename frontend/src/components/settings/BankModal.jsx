@@ -65,13 +65,23 @@ export default function BankModal({ isOpen, onClose, onSave, initialData, hasExi
   };
 
   const handleFetchBankDetails = async () => {
-    if (!form.ifscCode.trim()) {
+    const ifsc = form.ifscCode.trim();
+    if (!ifsc) {
       toast.error("Enter IFSC code first");
+      return;
+    }
+    // Every real IFSC is exactly 11 characters (4-letter bank code + a
+    // literal "0" + 6-character branch code) — checking this before hitting
+    // the API turns a generic "Invalid IFSC" into an error that actually
+    // tells the user what's wrong (usually a missing digit, like the
+    // 10-character codes people type from memory).
+    if (ifsc.length !== 11) {
+      toast.error(`IFSC code must be 11 characters (got ${ifsc.length})`);
       return;
     }
     setIfscLoading(true);
     try {
-      const res = await fetch(`https://ifsc.razorpay.com/${form.ifscCode.trim()}`);
+      const res = await fetch(`https://ifsc.razorpay.com/${ifsc}`);
       if (!res.ok) throw new Error('Invalid IFSC');
       const data = await res.json();
       handleChange('bank', data.BANK || '');
