@@ -9,8 +9,10 @@ import Papa from "papaparse";
 import API from "../../services/api";
 import ItemFieldMappingModal from "./ItemFieldMappingModal";
 import UploadIcon from "../common/UploadIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 function ImportItems({ isOpen: propIsOpen, onClose, onImportSuccess }) {
+  useBodyScrollLock(propIsOpen);
   const [file, setFile] = useState(null);
   const [csvData, setCsvData] = useState([]);
   const [csvHeaders, setCsvHeaders] = useState([]);

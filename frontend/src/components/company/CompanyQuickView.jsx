@@ -20,6 +20,7 @@ import ProfilePicture from "../contact/ProfilePicture";
 import QuickCompanyForm from "./QuickCompanyForm";
 import useCompanyStore from "../../store/useCompanyStore";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const tabs = ["Notes", "Tasks", "Meetings", "Folder", "Calendar"];
 
@@ -32,6 +33,7 @@ const CompanyQuickView = ({ companyId, onClose, onEdit }) => {
   // because the parent's onClose removes this component from the tree right
   // away, giving the CSS transition no time to run.
   const [isOpen, setIsOpen] = useState(false);
+  useBodyScrollLock(isOpen);
   const [activeTab, setActiveTab] = useState("Notes");
   const [isExpanded, setIsExpanded] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);

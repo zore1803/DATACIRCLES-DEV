@@ -24,6 +24,7 @@ import "react-quill-new/dist/quill.snow.css";
 import AppToaster from "../AppToaster";
 import EyeIcon from "../common/EyeIcon";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // ✅ Fixed Quill configuration
 const quillModules = {
@@ -215,6 +216,8 @@ const EmailTemplateForm = ({
   });
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(true);
+
+  useBodyScrollLock(isOpen);
 
   useEffect(() => {
     if (template) {

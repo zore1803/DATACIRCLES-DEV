@@ -24,6 +24,7 @@ import QuickContactForm from "./QuickContactForm";
 import useContactStore from "../../store/useContactStore";
 import { Link } from "react-router-dom";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const tabsLeft = ["Details", "Call Logs"];
 const tabsRight = ["Notes", "Tasks", "Meetings", "Calendar"];
@@ -41,6 +42,8 @@ const ContactQuickView = ({ contactId, onClose, onEdit }) => {
   // stays populated across prev/next navigation) so a real close can
   // animate the panel out before the parent unmounts it.
   const [isOpen, setIsOpen] = useState(false);
+
+  useBodyScrollLock(!!contact || loading);
 
   const { currentContactIds } = useContactStore();
 

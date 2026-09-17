@@ -192,8 +192,14 @@ exports.getCurrentUser = async (req, res) => {
     const authProvider = req.auth?.sub ? req.auth.sub.split("|")[0] : null;
     const loginMethod = authProvider === "phone" || authProvider === "temp-phone" ? "phone" : "email";
 
+    // Not populated on req.user (userSyncMiddleware leaves organization as a
+    // bare ObjectId) — fetched here purely for display, e.g. the Danger
+    // Zone "type your organization name to confirm" reset-data prompt.
+    const org = await Organization.findById(user.organization).select("name");
+
     res.status(200).json({
       user,
+      organizationName: org?.name || "",
       isTrialActive,
       trialEnd,
       trialUsed,
@@ -1182,6 +1188,93 @@ exports.confirmCredentialChangeVerification = async (req, res) => {
   } catch (error) {
     console.error("Error confirming credential change verification:", error);
     res.status(500).json({ error: "Error verifying OTP. Please try again." });
+  }
+};
+
+// ============ DANGER ZONE — ACCOUNT DATA REQUESTS ============
+// "Reset account data" and "Delete account permanently" are NOT performed
+// automatically here — both are irreversible, org-wide actions ("reset"
+// wipes every company/deal/contact/etc. for the organization, "delete"
+// removes the org and every user in it), so a click on the Profile page
+// only ever files the request: it notifies the org's admins in-app and by
+// email (mirrors notifyAdminsOfNewStaff above), and, if SUPPORT_EMAIL is
+// configured, DataCircles support too. An actual admin has to act on it —
+// matching the "processed within 5-7 business days" copy in the UI.
+exports.submitAccountRequest = async (req, res) => {
+  try {
+    const user = req.user;
+    const { type } = req.body;
+    if (type !== "reset-data" && type !== "delete-account") {
+      return res.status(400).json({ error: "Invalid request type" });
+    }
+
+    const [org, admins] = await Promise.all([
+      Organization.findById(user.organization).select("name"),
+      User.find({ organization: user.organization, role: "admin" }).select("email name"),
+    ]);
+    if (!org) {
+      return res.status(404).json({ error: "Organization not found" });
+    }
+
+    const requesterName = user.name || user.email || user.phone || "A user";
+    const requesterContact = user.email || user.profileEmail || user.phone || "";
+    const label =
+      type === "reset-data"
+        ? "reset all account data"
+        : "permanently delete their account";
+    const isDelete = type === "delete-account";
+
+    await Notification.create({
+      organization: user.organization,
+      actorName: requesterName,
+      // Notification.action only accepts created/updated/deleted (it's
+      // meant for the change-notifier plugin's model diffs) — "created"
+      // is the closest fit for a one-off request like this, same choice
+      // notifyAdminsOfNewStaff makes above for a "joined" event.
+      action: "created",
+      entityType: "AccountRequest",
+      entityId: user._id,
+      entityLabel: requesterName,
+      message: `${requesterName} requested to ${label} for ${org.name}`,
+    });
+
+    const adminEmails = admins.map((a) => a.email).filter(Boolean);
+    const recipients = [...adminEmails];
+    if (process.env.SUPPORT_EMAIL) recipients.push(process.env.SUPPORT_EMAIL);
+
+    if (recipients.length > 0) {
+      const html = renderEmail({
+        intro: `<strong>${requesterName}</strong>${requesterContact ? ` (${requesterContact})` : ""} has requested to <strong>${label}</strong> for <strong>${org.name}</strong> on DataCircles.`,
+        blocks: [
+          {
+            rows: [
+              { label: "Requested by", value: requesterName },
+              requesterContact ? { label: "Contact", value: requesterContact } : null,
+              { label: "Organisation", value: org.name },
+              { label: "Request type", value: isDelete ? "Delete account permanently" : "Reset account data" },
+            ],
+          },
+        ],
+        closingHtml: isDelete
+          ? '<p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:#333333;">This is irreversible — please verify the request with the organisation before acting on it. Requests are processed within 5-7 business days.</p>'
+          : '<p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:#333333;">This wipes all companies, deals, contacts and other records for the organisation — please verify the request before acting on it. Requests are processed within 5-7 business days.</p>',
+        preheader: `${requesterName} requested to ${label} for ${org.name}.`,
+      });
+
+      await sendGridMail({
+        to: recipients,
+        subject: `${isDelete ? "Account deletion" : "Data reset"} request — ${org.name}`,
+        html,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Your request has been submitted. Our team will process it within 5-7 business days.",
+    });
+  } catch (error) {
+    console.error("Error submitting account request:", error);
+    res.status(500).json({ error: "Failed to submit request. Please try again." });
   }
 };
 

@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import PaymentAllocationPanel from "./PaymentAllocationPanel";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const formatMoney = (n) =>
   `₹${(Number(n) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -16,6 +17,7 @@ const formatMoney = (n) =>
 // from (a new payment vs. an existing balance), which is why the ceiling here
 // is the credit balance rather than a typed amount.
 export default function ApplyCreditModal({ party, onClose, onSuccess }) {
+  useBodyScrollLock(!!party);
   const [isSliding, setIsSliding] = useState(false);
   const [openDocs, setOpenDocs] = useState([]);
   const [docsLoading, setDocsLoading] = useState(false);

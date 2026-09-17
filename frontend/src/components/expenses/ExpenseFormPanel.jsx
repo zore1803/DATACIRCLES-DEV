@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { X, Check, ChevronDown, Paperclip } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 /*
  * Create/edit panel for an Expense or an Indirect Income entry.
@@ -58,6 +59,7 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
   const noun = isIncome ? "Income" : "Expense";
 
   const [isSliding, setIsSliding] = useState(false);
+  useBodyScrollLock(true);
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState([]);
   const [banks, setBanks] = useState([]);

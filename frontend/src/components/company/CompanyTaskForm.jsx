@@ -22,6 +22,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // Compact searchable picker for Contact/Deal — a plain <select> with 15+
 // options has no search and pops open as a tall, unstyled native list (see
@@ -298,6 +299,7 @@ const CompanyTaskForm = ({
   startInEditMode,
 }) => {
   const [form, setForm] = useState(initialState);
+  useBodyScrollLock(open);
   const [loading, setLoading] = useState(false);
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);

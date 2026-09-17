@@ -9,6 +9,7 @@ import CustomDropdown from "../common/CustomDropdown";
 import QuickCompanyForm from "../company/QuickCompanyForm";
 import { X, Paperclip } from "lucide-react";
 import toast from "react-hot-toast";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, onRequestClose, initialCompanyId = "", editContact = null }) => {
   const isEditing = !!editContact;
@@ -54,6 +55,8 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
 
   // Add validation state
   const [validationErrors, setValidationErrors] = useState({});
+
+  useBodyScrollLock(isOpen);
 
   useEffect(() => {
     setShouldRender(true);

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import TeamIcon from "../common/TeamIcon";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const initialState = {
   title: "",
@@ -110,6 +111,7 @@ const VendorTaskForm = ({
   const [isSliding, setIsSliding] = useState(false);
   const { taskStatuses } = useSystemSettings();
   const [shouldRender, setShouldRender] = useState(false);
+  useBodyScrollLock(open);
   const [errors, setErrors] = useState({});
   const [showUserSelector, setShowUserSelector] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);

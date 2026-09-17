@@ -6,6 +6,7 @@ import Papa from "papaparse";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import UploadIcon from "../common/UploadIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // Maps common header spellings onto the row shape bulkImportSalesReturns
 // expects — same auto-match-by-header-name idea as ImportPurchaseReturns.jsx.
@@ -61,6 +62,8 @@ const ImportSalesReturns = ({ isOpen, onClose, onImportSuccess }) => {
   const [importing, setImporting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
+
+  useBodyScrollLock(isOpen);
 
   React.useEffect(() => {
     if (isOpen) {

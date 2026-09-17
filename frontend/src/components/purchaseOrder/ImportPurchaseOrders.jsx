@@ -9,6 +9,7 @@ import Papa from "papaparse";
 import API from "../../services/api";
 import PurchaseOrderFieldMappingModal from "./PurchaseOrderFieldMappingModal";
 import UploadIcon from "../common/UploadIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // Same shape/flow as ImportItems.jsx (Products & Services) and
 // ImportClients.jsx (Companies): drag/drop or pick a CSV, download a basic
@@ -26,6 +27,8 @@ function ImportPurchaseOrders({ isOpen: propIsOpen, onClose, onImportSuccess }) 
   const [dragActive, setDragActive] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
+
+  useBodyScrollLock(propIsOpen);
 
   useEffect(() => {
     if (propIsOpen) {

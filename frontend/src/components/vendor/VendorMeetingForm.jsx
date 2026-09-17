@@ -13,6 +13,7 @@ import {
   Flag, Truck
 } from "lucide-react";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const initialState = {
   title: "",
@@ -118,6 +119,7 @@ const VendorMeetingForm = ({
   const [loading, setLoading] = useState(false);
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
+  useBodyScrollLock(open);
   const [existingMeetings, setExistingMeetings] = useState([]);
   const [timeConflict, setTimeConflict] = useState(null);
   const [errors, setErrors] = useState({});

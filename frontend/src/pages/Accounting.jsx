@@ -92,6 +92,7 @@ import { useTopLoadingSignal } from "../components/common/TopLoadingBar";
 import Skeleton from "../components/common/Skeleton";
 import TableSkeletonRows from "../components/common/TableSkeletonRows";
 import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
+import useBodyScrollLock from "../hooks/useBodyScrollLock";
 
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
 import FilterIcon from "../components/common/FilterIcon";
@@ -827,6 +828,7 @@ const Accounting = () => {
     setShareMenuChannel(null);
   };
   const [emailCompose, setEmailCompose] = useState(null); // { doc, type }
+  useBodyScrollLock(!!emailCompose);
   const [emailComposeTo, setEmailComposeTo] = useState("");
   const [emailComposeCc, setEmailComposeCc] = useState("");
   const [emailComposeBcc, setEmailComposeBcc] = useState("");

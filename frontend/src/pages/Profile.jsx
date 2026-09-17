@@ -10,6 +10,7 @@ import toast from "react-hot-toast";
 import AppToaster from "../components/AppToaster";
 import PhoneNumberInput, { splitPhone, joinPhone } from "../components/common/PhoneNumberInput";
 import { DEFAULT_DIAL_CODE } from "../utils/countryDialCodes";
+import useBodyScrollLock from "../hooks/useBodyScrollLock";
 
 const Profile = () => {
   const { user: auth0User, getAccessTokenSilently, logout } = useAuth0();
@@ -84,6 +85,29 @@ const Profile = () => {
   const [sessionsError, setSessionsError] = useState("");
   const [revokingId, setRevokingId] = useState(null);
   const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
+  // Danger Zone — "reset-data" | "delete-account" | null. Both just file a
+  // request for the org's admins to act on (see submitAccountRequest);
+  // neither is performed automatically from this modal.
+  const [accountRequestType, setAccountRequestType] = useState(null);
+  const [accountRequestSubmitting, setAccountRequestSubmitting] = useState(false);
+  // Required before "Submit Request" is enabled on the reset-data disclosure —
+  // resets are irreversible, so this can't be a one-click confirm.
+  const [accountRequestAcknowledged, setAccountRequestAcknowledged] = useState(false);
+  // Once acknowledged, typing the org's exact name is a second, harder-to-
+  // fat-finger confirmation before the button unlocks.
+  const [accountRequestOrgInput, setAccountRequestOrgInput] = useState("");
+  const [organizationName, setOrganizationName] = useState("");
+
+  // Locks the page behind whichever modal/panel is open so only that
+  // card scrolls, not the page underneath it (see useBodyScrollLock).
+  useBodyScrollLock(
+    isLogoutModalOpen ||
+      isRemovePhotoModalOpen ||
+      sessionsModalOpen ||
+      !!accountRequestType ||
+      credentialModalOpen
+  );
+
   // null during this component's very first render (before anything is
   // committed to the real DOM), then re-checked once after mount — a direct
   // load of /settings/profile mounts the Settings header strip and this
@@ -107,6 +131,7 @@ const Profile = () => {
         setPhoneDraft(res.data?.user?.phone || "");
         setEmailDraft(res.data?.user?.email || res.data?.user?.profileEmail || "");
         setLoginMethod(res.data?.loginMethod || "email");
+        setOrganizationName(res.data?.organizationName || "");
       } catch (err) {
         console.error("Failed to fetch user", err);
       }
@@ -138,6 +163,22 @@ const Profile = () => {
       setSessionsError("Failed to sign out that session. Please try again.");
     } finally {
       setRevokingId(null);
+    }
+  };
+
+  const handleSubmitAccountRequest = async () => {
+    setAccountRequestSubmitting(true);
+    try {
+      const res = await API.post("/auth/account-request", { type: accountRequestType });
+      toast.success(res.data.message || "Request submitted.");
+      setAccountRequestType(null);
+      setAccountRequestAcknowledged(false);
+      setAccountRequestOrgInput("");
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || "Failed to submit request. Please try again.");
+    } finally {
+      setAccountRequestSubmitting(false);
     }
   };
 
@@ -534,7 +575,7 @@ const Profile = () => {
           since the target may not exist yet during this component's very
           first render (e.g. a hard refresh straight into /settings/profile,
           where the strip and this component mount in the same commit). */}
-      {headerTarget ? (
+      {headerTarget &&
         createPortal(
           <button
             onClick={() => setIsLogoutModalOpen(true)}
@@ -544,23 +585,25 @@ const Profile = () => {
             Logout
           </button>,
           headerTarget
-        )
-      ) : (
-        <div className="flex justify-end mb-6">
-          <button
-            onClick={() => setIsLogoutModalOpen(true)}
-            className="flex items-center gap-2 px-4 h-[38px] text-sm font-medium text-red-600 hover:bg-red-50 rounded-full transition-colors whitespace-nowrap"
-          >
-            <LogOut className="w-4 h-4" />
-            Logout
-          </button>
-        </div>
-      )}
+        )}
 
       {/* Profile fields — sit directly on the page, no card wrapper */}
       <div>
         {/* Profile Header with Avatar */}
         <div className="bg-gradient-to-r from-blue-500 to-purple-600 h-32 relative rounded-t-2xl">
+          {/* Fallback Logout — only when there's no shared Settings header
+              strip to portal into (e.g. the bare /profile route). Sits
+              inside the gradient banner itself instead of floating in its
+              own row above it. */}
+          {!headerTarget && (
+            <button
+              onClick={() => setIsLogoutModalOpen(true)}
+              className="absolute top-4 right-4 flex items-center gap-2 px-4 h-[38px] text-sm font-medium text-white bg-white/15 hover:bg-white/25 rounded-full transition-colors whitespace-nowrap backdrop-blur-sm"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </button>
+          )}
           <div className="absolute -bottom-16 left-8">
             <div className="relative group">
               <div className="w-32 h-32 rounded-full border-4 border-white bg-white shadow-lg overflow-hidden relative">
@@ -972,6 +1015,39 @@ const Profile = () => {
                 Click here
               </button>
             </p>
+
+            <p className="block mt-6 text-sm font-semibold text-red-600">
+              Danger Zone
+            </p>
+            <p className="block mt-2 text-xs font-semibold text-gray-700">
+              Want to reset your account data?{" "}
+              <button
+                onClick={() => {
+                  setAccountRequestAcknowledged(false);
+                  setAccountRequestOrgInput("");
+                  setAccountRequestType("reset-data");
+                }}
+                className="text-[#0085FF] hover:underline"
+              >
+                Click here
+              </button>
+            </p>
+            <p className="block mt-2 text-xs font-semibold text-gray-700">
+              Want to delete your account permanently?{" "}
+              <button
+                onClick={() => {
+                  setAccountRequestAcknowledged(false);
+                  setAccountRequestOrgInput("");
+                  setAccountRequestType("delete-account");
+                }}
+                className="text-red-600 hover:underline"
+              >
+                Click here
+              </button>
+            </p>
+            <p className="block mt-2 text-xs text-gray-500">
+              Your request will be processed within 5-7 business days.
+            </p>
           </div>
 
           {/* Image Upload Section */}
@@ -1177,6 +1253,122 @@ const Profile = () => {
                   className="flex-1 px-4 py-2.5 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Yes, Remove
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Danger Zone Confirmation Modal — reset-data / delete-account both
+          just file a request for the org's admins (and support, if
+          configured) to act on; nothing is performed automatically. The
+          reset-data case gets the fuller disclosure (what's lost vs. kept)
+          since it's easy to underestimate how much a "reset" wipes. */}
+      {accountRequestType && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10000] flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white max-w-2xl w-full rounded-2xl shadow-2xl overflow-hidden animate-slideUp max-h-[90vh] flex flex-col">
+            <div className="p-6 overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900">Confirm Action</h3>
+                <button
+                  onClick={() => setAccountRequestType(null)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {accountRequestType === "reset-data" ? (
+                <>
+                  <p className="text-xs text-red-600 mb-3">
+                    You are performing an action to reset your account. That leads to loss of data in your account. Please make sure and confirm that you want to reset your account.
+                  </p>
+                  <p className="text-xs font-semibold text-red-600 mb-4">
+                    We acknowledge your request and want to inform you that, this action is irreversible and all existing data is erased from your account.
+                  </p>
+
+                  <p className="text-xs font-semibold text-gray-900 mb-1">The following data will be lost:-</p>
+                  <ul className="text-xs text-red-600 mb-4 space-y-0.5">
+                    <li>All your Companies, Deals, Contacts and Vendors</li>
+                    <li>All your Invoices, Quotations, Proforma Invoices and Delivery Challans</li>
+                    <li>All your Purchases, Purchase Orders and Purchase Returns</li>
+                    <li>All your Items, Tasks, Meetings, Notes and Call Logs</li>
+                    <li>All other data associated with your account</li>
+                  </ul>
+
+                  <p className="text-xs font-semibold text-gray-900 mb-1">The following data will be intact:-</p>
+                  <ul className="text-xs text-gray-700 mb-4 space-y-0.5">
+                    <li>Your account details, that includes your name, email, mobile number, etc.</li>
+                    <li>Your organization details, that includes your organization name, address, etc.</li>
+                    <li>Your companies details, that includes settings, preferences and subscription details.</li>
+                    <li>Your users and Roles.</li>
+                  </ul>
+
+                  <p className="text-xs text-gray-500 mb-4">
+                    <span className="font-semibold text-gray-700">Note:-</span> This is a necessary security measure to ensure that the request is authorized by the account owner. We will send you an email notification once the reset has been completed. Thank you for choosing our services, and please do not hesitate to contact us if you have any further questions or concerns.
+                  </p>
+
+                  <label className="flex items-start gap-2 mb-6 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={accountRequestAcknowledged}
+                      onChange={(e) => {
+                        setAccountRequestAcknowledged(e.target.checked);
+                        if (!e.target.checked) setAccountRequestOrgInput("");
+                      }}
+                      className="mt-0.5"
+                    />
+                    <span className="text-xs text-gray-900">
+                      Yes, I read and understood the above information and I am sure that I want to reset my data.
+                    </span>
+                  </label>
+
+                  {accountRequestAcknowledged && (
+                    <div className="mb-6">
+                      <p className="text-xs font-semibold text-gray-900 mb-1">
+                        Enter your Organization Name to confirm:-
+                      </p>
+                      <p className="text-xs text-gray-500 mb-2">
+                        Please enter <span className="font-bold text-red-600">{organizationName}</span> in the input to reset your account.
+                      </p>
+                      <input
+                        type="text"
+                        value={accountRequestOrgInput}
+                        onChange={(e) => setAccountRequestOrgInput(e.target.value)}
+                        placeholder="Enter your Organization Name"
+                        className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-gray-700 mb-6">
+                  This submits a request to permanently delete your account and organisation. Our team will verify and process it within 5-7 business days.
+                </p>
+              )}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setAccountRequestType(null);
+                    setAccountRequestAcknowledged(false);
+                    setAccountRequestOrgInput("");
+                  }}
+                  className="px-4 py-2.5 bg-gray-100 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmitAccountRequest}
+                  disabled={
+                    accountRequestSubmitting ||
+                    (accountRequestType === "reset-data" &&
+                      (!accountRequestAcknowledged || accountRequestOrgInput.trim() !== organizationName))
+                  }
+                  className="px-4 py-2.5 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {accountRequestSubmitting ? "Submitting..." : "Submit Request"}
                 </button>
               </div>
             </div>

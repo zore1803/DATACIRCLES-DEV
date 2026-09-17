@@ -4,6 +4,7 @@ import { X, CheckCircle2, Clock, ChevronDown } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import { formatNumberToIndian } from "../../utils/numberFormatter";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const PAYMENT_TYPES = ["UPI", "Cash", "Card", "Net Banking", "Cheque", "NEFT", "RTGS", "IMPS"];
 
@@ -14,6 +15,7 @@ const fmt = (n) => `₹${formatNumberToIndian(n ?? 0)}`;
 // spec, adapted for paying a vendor instead of collecting from a customer
 // (so no "Notify Customer"/signature sections, which don't apply here).
 const RecordPurchasePaymentModal = ({ isOpen, onClose, purchase, onSuccess }) => {
+  useBodyScrollLock(isOpen);
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [activeTab, setActiveTab] = useState("record");

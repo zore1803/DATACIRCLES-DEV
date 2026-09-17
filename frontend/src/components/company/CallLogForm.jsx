@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // Matches the quick-drawer style shared by CompanyTaskForm / CompanyForm:
 // a right-anchored slide-in panel (dc-panel-card + dc-panel-w) with a
@@ -17,6 +18,7 @@ const CallLogForm = ({ companyId, contactId, editLog, isOpen, onClose, onSuccess
   const [saving, setSaving] = useState(false);
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
+  useBodyScrollLock(isOpen);
 
   useEffect(() => {
     if (isOpen) {

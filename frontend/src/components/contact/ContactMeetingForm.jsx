@@ -13,6 +13,7 @@ import {
   AlertTriangle, CheckCircle2, Search, User,
   Building, Lightbulb, Timer, Flag } from "lucide-react";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const initialState = {
   title: "",
@@ -113,6 +114,8 @@ const ContactMeetingForm = ({ open, mode, meetingData, calendarDate, contactId, 
   const [isEditMode, setIsEditMode] = useState(false); // Separate state for edit mode toggle
   const titleInputRef = useRef(null);
   const dateInputRef = useRef(null);
+
+  useBodyScrollLock(open);
 
   const fetchMeetingsForDate = useCallback(async (date) => {
     try {

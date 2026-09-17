@@ -13,6 +13,7 @@ import toast from "react-hot-toast";
 import API from "../../services/api";
 import CustomDropdown from "../common/CustomDropdown";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const UNIT_OPTIONS = [
   "OTH — OTHERS",
@@ -69,6 +70,7 @@ const BLANK_VARIANT = {
 const GST_RATES = [0, 5, 12, 18, 28];
 
 export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
+  useBodyScrollLock(isOpen);
   const [type, setType] = useState("Product");
   const [showMoreDetails, setShowMoreDetails] = useState(false);
   const [saving, setSaving] = useState(false);

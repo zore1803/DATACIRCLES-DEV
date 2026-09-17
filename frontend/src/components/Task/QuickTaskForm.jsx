@@ -26,6 +26,7 @@ import QuickContactForm from "../contact/QuickContactForm";
 import QuickDealForm from "../deal/QuickDealForm";
 import QuickVendorForm from "../vendor/QuickVendorForm";
 import { useSystemSettings } from "../../hooks/useSystemSettings";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 import CustomFieldsSection, { getMissingRequiredFields } from "../common/CustomFieldsSection";
 
 // isOpen/onOpenChange are controlled by the parent form (a single shared
@@ -176,6 +177,7 @@ const QuickTaskForm = ({
   const dueDateRef = useRef(null);
 
   const { taskStatuses } = useSystemSettings();
+  useBodyScrollLock(isOpen);
 
   const statusOptions = taskStatuses.map(status => {
     if (status === "Pending") return { value: "Pending", label: "Pending", icon: Clock, className: "bg-[#FDF3E6] text-[#EA9927]" };

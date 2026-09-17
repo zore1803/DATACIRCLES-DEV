@@ -49,6 +49,7 @@ import ColumnSettingsPanel from "../components/ColumnSettingsPanel";
 import { useColumnSettings } from "../hooks/useColumnSettings";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
 import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
+import useBodyScrollLock from "../hooks/useBodyScrollLock";
 import BulkActions from "../components/BulkActions";
 import AppToaster from "../components/AppToaster";
 import { exportClientSide, formatINR } from "../utils/clientExport";
@@ -153,6 +154,7 @@ const SalesReturn = () => {
   const [shareCompanyName, setShareCompanyName] = useState("");
 
   const [emailCompose, setEmailCompose] = useState(null);
+  useBodyScrollLock(!!emailCompose);
   const [emailComposeTo, setEmailComposeTo] = useState("");
   const [emailComposeCc, setEmailComposeCc] = useState("");
   const [emailComposeBcc, setEmailComposeBcc] = useState("");

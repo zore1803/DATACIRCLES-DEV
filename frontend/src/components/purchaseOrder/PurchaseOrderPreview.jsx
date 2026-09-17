@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { Printer, X } from "lucide-react";
 import API from "../../services/api";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // Same server-rendered-PDF approach as Accounting.jsx's InvoiceViewer: fetch
 // the actual PDF (backend/utils/purchaseDocumentPdf.js) and show it in an
@@ -17,6 +18,8 @@ const PurchaseOrderPreview = ({ purchaseOrder, isOpen, onClose, onEdit, onDelete
   // by one tick on the way in, and `handleClose` delays telling the parent
   // to unmount until the slide-out animation has actually played.
   const [open, setOpen] = useState(false);
+
+  useBodyScrollLock(isOpen);
 
   useEffect(() => {
     if (isOpen) setTimeout(() => setOpen(true), 10);

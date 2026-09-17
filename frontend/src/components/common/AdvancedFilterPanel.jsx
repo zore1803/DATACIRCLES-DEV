@@ -5,6 +5,7 @@ import { X, ChevronDown } from "lucide-react";
 import FilterIcon from "./FilterIcon";
 
 import SearchIcon from "./SearchIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const OPERATOR_LABELS = {
   contains: "Contains",
@@ -198,6 +199,7 @@ export default function AdvancedFilterPanel({
   getFieldValue = null,
 }) {
   const [localFilters, setLocalFilters] = useState([]);
+  useBodyScrollLock(isOpen);
 
   // Compute available dropdown options for each column
   const getColumnOptions = (colKey) => {

@@ -205,6 +205,15 @@ router.post(
   authController.confirmCredentialChangeVerification,
 );
 
+// Danger Zone — files a reset/delete request for the org's admins (and
+// support, if configured) to actually act on; never performed automatically.
+router.post(
+  "/account-request",
+  requireAuth,
+  globalOtpLimiter,
+  authController.submitAccountRequest,
+);
+
 // Complete registration
 router.post("/complete-registration", authMiddleware, authController.completeRegistration);
 

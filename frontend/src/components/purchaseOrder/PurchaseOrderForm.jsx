@@ -18,6 +18,7 @@ import ReactQuill from "react-quill-new";
 
 import SearchIcon from "../common/SearchIcon";
 import FilterIcon from "../common/FilterIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 const API_BASE = `${import.meta.env.VITE_APP_API_URL}/api`;
 // The product's description is rich text ("<p>...</p>" etc, same as
 // PurchaseForm.jsx/InvoiceForm.jsx's own stripHtml) — strip the markup
@@ -264,6 +265,8 @@ const PurchaseOrderForm = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useBodyScrollLock(isOpen);
 
   const statusOptions = [
     { value: "Pending", label: "Pending", icon: Clock, className: "bg-yellow-50 text-yellow-700" },

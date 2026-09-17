@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const PAYMENT_TYPES = ["UPI", "Cash", "Card", "Net Banking", "Cheque", "EMI"];
 
@@ -126,6 +127,7 @@ const PartySearchInput = ({ value, onChange, partyType, placeholder, fieldClass 
  */
 const PayInOutModal = ({ isOpen, onClose, journal, type, onSuccess }) => {
   const isIn = type === "payin";
+  useBodyScrollLock(isOpen);
 
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);

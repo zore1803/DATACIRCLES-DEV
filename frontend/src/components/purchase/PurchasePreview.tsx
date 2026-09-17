@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { IndianRupee, Pencil, Printer, Trash2, X } from "lucide-react";
 import API from "../../services/api";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // Same server-rendered-PDF approach as Accounting.jsx's InvoiceViewer: fetch
 // the actual PDF (backend/utils/purchaseDocumentPdf.js) and show it in an
 // iframe, instead of re-rendering the document as plain JSX in the panel —
 // what you see here is exactly what downloads/prints.
 const PurchasePreview = ({ purchase, isOpen, onClose, onEdit, onDelete, onRecordPayment }) => {
+  useBodyScrollLock(isOpen);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [loadError, setLoadError] = useState(false);
   // Local mount-in/out state, same pattern as PurchaseForm: the parent

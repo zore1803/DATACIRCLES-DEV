@@ -7,6 +7,7 @@ import { X, ChevronDown, Check, ArrowLeft, Bold, Italic, List, ListOrdered } fro
 import toast from "react-hot-toast";
 import API from "../../services/api";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 /*
  * Right-hand drawer for the saved Notes / Terms blocks that print in a
@@ -60,6 +61,7 @@ const NotesTermsDrawer = ({
   onApplyNotes,
   onApplyTerms,
 }) => {
+  useBodyScrollLock(isOpen);
   const [active, setActive] = useState(focus);
   const [docType, setDocType] = useState(type);
   const [typeOpen, setTypeOpen] = useState(false);

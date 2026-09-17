@@ -49,6 +49,7 @@ import { useColumnSettings } from "../hooks/useColumnSettings";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
 import HighlightText from "../components/common/HighlightText";
 import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
+import useBodyScrollLock from "../hooks/useBodyScrollLock";
 import {
   useReactTable,
   getCoreRowModel,
@@ -195,6 +196,7 @@ const PurchaseReturn = () => {
   const [shareCompanyName, setShareCompanyName] = useState("");
 
   const [emailCompose, setEmailCompose] = useState(null);
+  useBodyScrollLock(!!emailCompose);
   const [emailComposeTo, setEmailComposeTo] = useState("");
   const [emailComposeCc, setEmailComposeCc] = useState("");
   const [emailComposeBcc, setEmailComposeBcc] = useState("");

@@ -8,6 +8,7 @@ import CustomDropdown from "../common/CustomDropdown";
 import toast from "react-hot-toast";
 import { Country, State } from "country-state-city";
 import { loadCityModule, useLazyCity } from "../../utils/lazyCityData";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // India first (GST is India-driven), then every other country alphabetically —
 // full list/state data from country-state-city instead of a hand-maintained one.
@@ -129,6 +130,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
   // show the actual image instead of just its filename. Revoked whenever the
   // selection changes or the form unmounts, since object URLs otherwise leak.
   const [profilePicturePreview, setProfilePicturePreview] = useState(null);
+  useBodyScrollLock(isOpen);
   useEffect(() => {
     if (!form.profilePicture) {
       setProfilePicturePreview(null);

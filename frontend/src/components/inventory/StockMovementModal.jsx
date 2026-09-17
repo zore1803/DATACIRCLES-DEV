@@ -5,6 +5,7 @@ import { X, AlertTriangle, MinusCircle, ChevronDown } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import { getAncestorZoom } from "../../utils/domUtils";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 /*
  * Records a single stock-in or stock-out against one item. The direction is fixed by the caller
@@ -178,6 +179,7 @@ function CategoryCombobox({ value, onChange, options, placeholder, className }) 
 
 export default function StockMovementModal({ isOpen, onClose, item, direction, onSuccess }) {
   const isIn = direction === "in";
+  useBodyScrollLock(isOpen);
 
   const [form, setForm] = useState({
     quantity: "",

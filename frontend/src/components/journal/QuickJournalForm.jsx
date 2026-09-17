@@ -3,6 +3,7 @@ import { X, Paperclip } from "lucide-react";
 import toast from "react-hot-toast";
 import CustomDropdown from "../common/CustomDropdown";
 import API from "../../services/api";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const MAX_FILES = 3;
 
@@ -15,6 +16,7 @@ const JOURNAL_CATEGORIES = ["Bank", "Cash", "Loan", "Credit Card", "Petty Cash",
 // Pass `editJournal` to open this in edit mode instead of create.
 const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, editJournal }) => {
   const [isOpen, setIsOpen] = useState(false);
+  useBodyScrollLock(isOpen);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: "",

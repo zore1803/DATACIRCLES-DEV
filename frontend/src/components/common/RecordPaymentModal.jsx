@@ -8,6 +8,7 @@ import {
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import { formatNumberToIndian } from "../../utils/numberFormatter";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const PAYMENT_TYPES = ["UPI", "Cash", "Card", "Net Banking", "Cheque", "EMI", "TDS"];
 
@@ -32,6 +33,7 @@ const RecordPaymentModal = ({ isOpen, onClose, invoice, onSuccess }) => {
   const [signatures, setSignatures] = useState([]); // [{label, value, url}]
   const [selectedSignature, setSelectedSignature] = useState("");
   const drawerRef = useRef(null);
+  useBodyScrollLock(isOpen);
 
   useEffect(() => { setLocalInvoice(invoice); }, [invoice]);
 

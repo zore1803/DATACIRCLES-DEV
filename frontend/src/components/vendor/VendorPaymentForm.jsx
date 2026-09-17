@@ -4,6 +4,7 @@ import API from "../../services/api";
 import SearchableDropdown from "../contact/SearchableDropdown";
 import QuickVendorForm from "./QuickVendorForm";
 import toast from "react-hot-toast";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // Module-level so the fallback keeps the SAME reference across renders. As an
 // inline `vendors = []` default it was re-created on every render, and the
@@ -43,6 +44,8 @@ const VendorPaymentForm = ({
   const [loading, setLoading] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [localVendors, setLocalVendors] = useState(vendors);
+
+  useBodyScrollLock(open);
 
   const isEditMode = !!paymentToEdit;
 

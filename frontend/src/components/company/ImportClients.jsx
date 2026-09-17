@@ -11,6 +11,7 @@ import Papa from "papaparse";
 import API from "../../services/api";
 import FieldMappingModal from "./FieldMappingModal";
 import UploadIcon from "../common/UploadIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 function ImportClients({
   isOpen: propIsOpen,
@@ -29,6 +30,7 @@ function ImportClients({
   const [dragActive, setDragActive] = useState(false);
   const [duplicateCheck, setDuplicateCheck] = useState(null); // { duplicates, pendingImport }
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  useBodyScrollLock(propIsOpen);
 
   // Reset form state each time the panel is opened.
   useEffect(() => {
