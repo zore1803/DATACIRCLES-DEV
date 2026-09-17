@@ -169,6 +169,42 @@ router.post(
   authController.verifyPhoneChangeOtp,
 );
 
+// Changing to a new (not-yet-saved) email address — verified before it's written
+router.post(
+  "/send-email-change-otp",
+  requireAuth,
+  globalOtpLimiter,
+  sendOtpLimiter,
+  authController.sendEmailChangeOtp,
+);
+router.post(
+  "/verify-email-change-otp",
+  requireAuth,
+  globalOtpLimiter,
+  verifyOtpLimiter,
+  authController.verifyEmailChangeOtp,
+);
+
+// Step-up verification for changing the LOGIN credential field itself
+// (email for an email/Google/password account, phone for a phone-OTP one):
+// verified via the account's other, already-linked contact method instead
+// of an OTP to the new value.
+router.post(
+  "/send-credential-change-verification",
+  requireAuth,
+  globalOtpLimiter,
+  sendOtpLimiter,
+  phoneOtpLimiter,
+  authController.sendCredentialChangeVerification,
+);
+router.post(
+  "/confirm-credential-change-verification",
+  requireAuth,
+  globalOtpLimiter,
+  verifyOtpLimiter,
+  authController.confirmCredentialChangeVerification,
+);
+
 // Complete registration
 router.post("/complete-registration", authMiddleware, authController.completeRegistration);
 

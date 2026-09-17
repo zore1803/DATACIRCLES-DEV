@@ -308,6 +308,22 @@ export default function UserLogin() {
         localStorage.setItem("token", res.data.token);
         if (res.data.user) localStorage.setItem("user", JSON.stringify(res.data.user));
         configureAxios(() => Promise.resolve(localStorage.getItem("token")));
+        // Unlike the Auth0/phone-OTP paths (see checkAuthStatus above), this
+        // local email+password login never went through establishSession —
+        // no dc_session cookie ever got set for it, so GET /session always
+        // 401ed and Profile's Active Sessions list stayed empty for every
+        // password-login account.
+        try {
+          await establishSession();
+        } catch (sessionErr) {
+          if (sessionErr.code === "SESSION_LIMIT_REACHED") {
+            setIsError(true);
+            setEmailError(sessionErr.message);
+            setIsSubmitting(false);
+            return;
+          }
+          console.error("Failed to establish DataCircles session:", sessionErr);
+        }
         window.location.href = "/";
       }
     } catch (err) {

@@ -39,6 +39,7 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Super admin login error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
