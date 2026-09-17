@@ -1,5 +1,4 @@
 import { State } from "country-state-city";
-import { countryIsoByName } from "./contactConstants";
 
 let cityModuleCache = null;
 
@@ -21,7 +20,7 @@ export const lookupIndianPincode = async (pincode) => {
     const po = data?.[0]?.Status === "Success" ? data[0].PostOffice?.[0] : null;
     if (!po) return null;
 
-    const countryIso = countryIsoByName["India"];
+    const countryIso = "IN"; // India — this utility is India-only
     const matchedState = State.getStatesOfCountry(countryIso).find(
       (s) => s.name.toLowerCase() === po.State?.toLowerCase(),
     );

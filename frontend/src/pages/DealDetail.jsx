@@ -47,7 +47,7 @@ import EditIcon from "../components/common/EditIcon";
 const tabs = ["Overview", "Invoices", "Notes", "Tasks", "Meetings", "Calendar"];
 
 const newEntryOptions = [
-  { label: "New Invoice", icon: Receipt, tab: "Invoices" },
+  { label: "New Invoice", icon: Receipt, tab: "Invoices", create: "invoice" },
   { label: "New Notes", icon: StickyNote, tab: "Notes" },
   { label: "New Task", icon: CheckSquare, tab: "Tasks" },
   { label: "New Meetings", icon: CalendarIcon, tab: "Meetings" },
@@ -95,6 +95,9 @@ function DealDetail() {
 
   const [deal, setDeal] = useState(null);
   const [invoices, setInvoices] = useState([]);
+  // "New Invoice" in the New menu: switches to the Invoices tab AND opens the
+  // create form there, the same as the Company page does.
+  const [pendingCreate, setPendingCreate] = useState(null);
   const [invoicesLoading, setInvoicesLoading] = useState(true);
   const [dealFieldList, setDealFieldList] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -178,11 +181,10 @@ function DealDetail() {
 
   const fetchInvoices = async () => {
     try {
-      const res = await API.get("/invoices");
-      // `deal` populates as null on an invoice whose deal was deleted, hence
-      // the optional chaining rather than a bare i.deal._id.
-      const list = Array.isArray(res.data) ? res.data : [];
-      setInvoices(list.filter((i) => (i?.deal?._id || i?.deal) === dealId));
+      // Filtered by the database, so only this deal's invoices come back —
+      // the list used to be the organization's whole set, narrowed here.
+      const res = await API.get("/invoices", { params: { deal: dealId } });
+      setInvoices(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error("Failed to load invoices:", err);
     } finally {
@@ -545,6 +547,7 @@ function DealDetail() {
                       type="button"
                       onClick={() => {
                         setActiveTab(option.tab);
+                        setPendingCreate(option.create || null);
                         setShowNewEntryMenu(false);
                       }}
                       className="flex items-center gap-1.5 lg:gap-2 w-full px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm font-normal text-gray-700 hover:bg-gray-50 text-left"
@@ -627,6 +630,8 @@ function DealDetail() {
               showStats={showStats}
               deals={[deal]}
               refreshInvoices={fetchInvoices}
+              autoOpenCreate={pendingCreate === "invoice"}
+              onAutoOpenCreateConsumed={() => setPendingCreate(null)}
               companyId={companyId}
             />
           )}

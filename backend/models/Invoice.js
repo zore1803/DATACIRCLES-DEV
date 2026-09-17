@@ -130,4 +130,8 @@ invoiceSchema.index(
   { unique: true, partialFilterExpression: { financialYear: { $type: 'number' } } }
 );
 
+// The Deal page asks for one deal's invoices (GET /invoices?deal=<id>), so that
+// lookup is served from an index instead of scanning the organization's invoices.
+invoiceSchema.index({ organization: 1, deal: 1 });
+
 module.exports = mongoose.model('Invoice', invoiceSchema);

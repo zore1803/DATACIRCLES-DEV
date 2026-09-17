@@ -12,7 +12,7 @@ import toast from "react-hot-toast";
 // CreateInvoicePanel, not the default InvoiceForm export: it's what Accounting actually uses to
 // create AND edit invoices, and it applies the org's default notes/terms to a new document. The
 // default export's reset effect blanks notes/terms on open, so passing it defaults did nothing.
-import { CreateInvoicePanel } from "../invoice/InvoiceForm";
+import { CreateInvoicePanel } from "../invoice/CreateInvoicePanel";
 import InvoiceFormFull from "../invoice/InvoiceFormFull";
 import InvoiceStylePreview from "../invoice/InvoiceStylePreview";
 import RecordPaymentModal from "../common/RecordPaymentModal";
@@ -21,7 +21,9 @@ import MoreIcon from "../common/MoreIcon";
 import EyeIcon from "../common/EyeIcon";
 import EditIcon from "../common/EditIcon";
 import useDocumentDefaults from "../../hooks/useDocumentDefaults";
-import InvoicePdfPreview from "../invoice/InvoicePdfPreview";
+// The same viewer Accounting opens, so View here has the identical toolbar
+// (copy types, edit, download, share) and the same edge-to-edge PDF.
+import InvoiceViewer from "../invoice/InvoiceViewer";
 import useFillToBottom from "../../hooks/useFillToBottom";
 import FilterIcon from "../common/FilterIcon";
 import HighlightText from "../common/HighlightText";
@@ -49,6 +51,10 @@ import {
   EyeOff,
   X,
   IndianRupee,
+  Share2,
+  MessageCircle,
+  Mail,
+  Copy as CopyIcon,
 } from "lucide-react";
 import { EditablePaginationButtons } from "../common/EditablePaginationButtons";
 
@@ -162,6 +168,9 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
   const [previewStyle, setPreviewStyle] = useState(null);
   const [paymentInvoice, setPaymentInvoice] = useState(null);
   const [rowMenu, setRowMenu] = useState(null); // { id, top, left }
+  // Share flyout for a row: { invoice, top, left }. WhatsApp/Email/Copy link,
+  // all pointing at the same public /view/invoices/:id link Accounting shares.
+  const [shareInvoice, setShareInvoice] = useState(null);
 
   // Deals created from this tab's "Add Deal". Kept locally as well as reported upward so the
   // open panel can select the new deal immediately, even when the parent doesn't pass
@@ -1282,11 +1291,17 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
 
 
 
-      <InvoicePdfPreview
-        open={!!previewInvoice}
+      <InvoiceViewer
+        isOpen={!!previewInvoice}
         id={previewInvoice?._id}
-        title={previewInvoice?.invoiceNumber}
+        type="tax"
+        doc={previewInvoice}
         onClose={() => setPreviewInvoice(null)}
+        onEdit={() => {
+          const invoice = previewInvoice;
+          setPreviewInvoice(null);
+          openEditInvoice(invoice);
+        }}
       />
 
       {/* Held until the document settings have loaded: the panel reads default notes/terms
@@ -1407,6 +1422,61 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
                 <button type="button" className={itemCls} onClick={() => { close(); handleDownload(invoice._id); }}>
                   <DownloadIcon className="w-3.5 h-3.5 text-green-600" />
                   Download
+                </button>
+                <button type="button" className={itemCls} onClick={() => { const { top, left } = rowMenu; close(); setShareInvoice({ invoice, top, left }); }}>
+                  <Share2 className="w-3.5 h-3.5 text-indigo-600" />
+                  Share
+                </button>
+              </div>
+            </>
+          );
+        })(),
+        document.body
+      )}
+
+      {shareInvoice && createPortal(
+        (() => {
+          const { invoice } = shareInvoice;
+          const link = `${window.location.origin}/view/invoices/${invoice._id}`;
+          const num = invoice.invoiceNumber || "";
+          const customerName = invoice.deal?.contactPerson || invoice.deal?.title || "Customer";
+          const amt = invoice.amount != null ? `₹${Number(invoice.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "";
+          const message = `Dear ${customerName},
+
+Please find your Invoice ${num}${amt ? ` for ${amt}` : ""}.
+View or download it here: ${link}`;
+          const close = () => setShareInvoice(null);
+          const itemCls = "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap";
+          return (
+            <>
+              <div className="fixed inset-0 z-[100060]" onClick={close} />
+              <div
+                style={{ position: "fixed", top: shareInvoice.top, left: shareInvoice.left }}
+                className="w-[160px] z-[100061] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5"
+              >
+                <button type="button" className={itemCls} onClick={() => { close(); window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank"); }}>
+                  <MessageCircle className="w-3.5 h-3.5 text-green-600" />
+                  WhatsApp
+                </button>
+                <button type="button" className={itemCls} onClick={() => {
+                  close();
+                  const to = invoice.deal?.contact?.email || invoice.deal?.company?.email || "";
+                  window.location.href = `mailto:${to}?subject=${encodeURIComponent(`Invoice ${num}`)}&body=${encodeURIComponent(message)}`;
+                }}>
+                  <Mail className="w-3.5 h-3.5 text-indigo-600" />
+                  Email
+                </button>
+                <button type="button" className={itemCls} onClick={async () => {
+                  close();
+                  try {
+                    await navigator.clipboard.writeText(link);
+                    toast.success("Link copied to clipboard");
+                  } catch {
+                    toast.error("Could not copy the link");
+                  }
+                }}>
+                  <CopyIcon className="w-3.5 h-3.5 text-gray-600" />
+                  Copy Link
                 </button>
               </div>
             </>

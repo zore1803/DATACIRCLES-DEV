@@ -1152,6 +1152,12 @@ exports.getInvoices = async (req, res) => {
       filter.user = req.user._id;
     }
 
+    // ?deal=<id> — the Deal page's Invoices tab. Filtering here means it gets only
+    // that deal's invoices instead of downloading the organization's whole list.
+    if (req.query.deal && mongoose.Types.ObjectId.isValid(req.query.deal)) {
+      filter.deal = req.query.deal;
+    }
+
     const invoices = await Invoice.find(filter).populate({ path: "deal", populate: [{ path: "company", select: "name email" }, { path: "contact", select: "name email" }] }).populate("user");
 
     res.json(invoices);
