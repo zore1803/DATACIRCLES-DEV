@@ -423,6 +423,11 @@ const FullWidthDocumentPanel = ({
                               // whatever the blank row started with (0).
                               discountType: picked.discount?.type || "amount",
                               discount: picked.discount?.value || 0,
+                              // Same tax info the normal split view's add-item copies, so both
+                              // layouts calculate identically (this used to keep the blank
+                              // row's 0% GST and Without Tax).
+                              gstRate: picked.gstRate ?? form.gstRate ?? 18,
+                              taxInclusive: !!picked.taxInclusive,
                             });
                           }}
                         />

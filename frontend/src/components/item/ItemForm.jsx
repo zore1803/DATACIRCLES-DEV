@@ -1,5 +1,6 @@
 import DeleteIcon from "../common/DeleteIcon";
 import VariantImagePicker from "./VariantImagePicker";
+import { UNIT_OPTIONS, unitLabelToValue } from "./unitOptions";
 import { stripVariantFileState } from "../../utils/variantResolve";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
@@ -1091,46 +1092,60 @@ const ItemForm = ({
               <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                 Purchase Price <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                min="0"
-                value={form.purchasePrice}
-                onChange={(e) =>
-                  handleFormChange("purchasePrice", e.target.value)
-                }
-                className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter Purchase Price"
-              />
+              {/* Each price carries its own With/Without Tax, same as the Add form. */}
+              <div className="flex border border-gray-200 rounded-lg overflow-hidden bg-white focus-within:ring-2 focus-within:ring-blue-500">
+                <input
+                  type="number"
+                  min="0"
+                  value={form.purchasePrice}
+                  onChange={(e) =>
+                    handleFormChange("purchasePrice", e.target.value)
+                  }
+                  className="flex-1 min-w-0 px-3.5 py-2.5 text-sm focus:outline-none"
+                  placeholder="Enter Purchase Price"
+                />
+                <select
+                  value={form.purchaseTaxInclusive ? "with" : "without"}
+                  onChange={(e) => handleFormChange("purchaseTaxInclusive", e.target.value === "with")}
+                  className="px-2 bg-gray-50 border-l border-gray-200 text-xs text-gray-600 focus:outline-none flex-shrink-0"
+                >
+                  <option value="without">Without Tax</option>
+                  <option value="with">With Tax</option>
+                </select>
+              </div>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                 Selling Price <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                min="0"
-                value={form.sellingPrice}
-                onChange={(e) =>
-                  handleFormChange("sellingPrice", e.target.value)
-                }
-                className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter Selling Price"
-              />
+              <div className="flex border border-gray-200 rounded-lg overflow-hidden bg-white focus-within:ring-2 focus-within:ring-blue-500">
+                <input
+                  type="number"
+                  min="0"
+                  value={form.sellingPrice}
+                  onChange={(e) =>
+                    handleFormChange("sellingPrice", e.target.value)
+                  }
+                  className="flex-1 min-w-0 px-3.5 py-2.5 text-sm focus:outline-none"
+                  placeholder="Enter Selling Price"
+                />
+                <select
+                  value={form.taxInclusive ? "with" : "without"}
+                  onChange={(e) => handleFormChange("taxInclusive", e.target.value === "with")}
+                  className="px-2 bg-gray-50 border-l border-gray-200 text-xs text-gray-600 focus:outline-none flex-shrink-0"
+                >
+                  <option value="without">Without Tax</option>
+                  <option value="with">With Tax</option>
+                </select>
+              </div>
             </div>
           </div>
           )}
 
-          {/* Tax Inclusive + GST Rate */}
+          {/* GST Rate. With/Without Tax now sits on each price above, replacing the single
+              "Tax Inclusive" checkbox, which couldn't express the purchase price's own basis. */}
           {!hasVariants && (
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <Checkbox checked={form.taxInclusive} onChange={(e) =>
-                  handleFormChange("taxInclusive", e.target.checked)
-                } />
-              <label className="text-sm text-gray-700 font-medium">
-                Tax Inclusive
-              </label>
-            </div>
+          <div className="flex items-center justify-end gap-4">
             <div className="flex items-center gap-2">
               <label className="text-xs font-semibold text-gray-700">
                 GST Rate
@@ -1315,11 +1330,17 @@ const ItemForm = ({
               onChange={(e) => handleFormChange("primaryUnit", e.target.value)}
               className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
             >
-              <option value="OTH-OTHERS">OTH-OTHERS</option>
-              <option value="PCS-PIECES">PCS-PIECES</option>
-              <option value="NOS-NUMBERS">NOS-NUMBERS</option>
-              <option value="KGS-KILOGRAMS">KGS-KILOGRAMS</option>
-              {/* Add more as needed */}
+              {/* Same units and saved format as the Add form (unitOptions.js). Previously only 4
+                  hyphenated values ("PCS-PIECES"), so an item created via Add ("PCS PIECES", or
+                  any of the other units) matched no option: the dropdown showed the wrong unit
+                  and a save could overwrite it. A saved value outside the list (e.g. an older
+                  hyphenated one) is still listed first so it's never silently replaced. */}
+              {form.primaryUnit && !UNIT_OPTIONS.map(unitLabelToValue).includes(form.primaryUnit) && (
+                <option value={form.primaryUnit}>{form.primaryUnit}</option>
+              )}
+              {UNIT_OPTIONS.map((label) => (
+                <option key={label} value={unitLabelToValue(label)}>{label}</option>
+              ))}
             </select>
           </div>
 

@@ -73,6 +73,11 @@ const itemSchema = new mongoose.Schema({
   purchasePrice: { type: Number, required: true, default: 0 },
   sellingPrice: { type: Number, required: true, default: 0 },
   taxInclusive: { type: Boolean, default: true },
+  // Whether purchasePrice already includes GST: the purchase price's own tax basis, separate
+  // from taxInclusive (the selling price's). No default on purpose: items saved before this
+  // field existed stay unset, and readers fall back to taxInclusive for them, so nothing about
+  // an existing item changes.
+  purchaseTaxInclusive: { type: Boolean },
 
   // GST/Tax
   gstRate: { type: Number, default: 0 }, // GST rate for the item (used for CGST/SGST/IGST calculation)

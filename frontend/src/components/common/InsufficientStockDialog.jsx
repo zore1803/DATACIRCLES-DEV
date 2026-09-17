@@ -10,57 +10,55 @@ const parseItemName = (message) => {
   return match ? match[1].trim() : null;
 };
 
-// Centered confirmation-style dialog (same shell as the "Unsaved Changes"
-// dialogs in CompanyForm/QuickDealForm etc.) shown instead of a toast when a
+// Centered confirmation-style dialog shown instead of a toast when a
 // document save fails specifically because an item's quantity exceeds
-// available stock — a toast disappears before the user can act on it, and
-// this failure needs a deliberate "go fix the quantity" response, not a
-// passive notice.
+// available stock.
 const InsufficientStockDialog = ({ isOpen, message, onClose }) => {
   if (!isOpen) return null;
 
   const itemName = parseItemName(message);
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100030] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div className="relative px-6 pt-6 pb-5 text-center">
-          <button
-            type="button"
-            onClick={onClose}
-            title="Close"
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label="Close"
-          >
-            <X className="w-4 h-4" />
-          </button>
-
-          <div className="mx-auto w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mb-4">
-            <PackageX className="w-7 h-7 text-red-500" strokeWidth={1.75} />
+    <div className="fixed inset-0 bg-[#0e121b]/60 backdrop-blur-sm z-[100030] flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
+              <PackageX className="w-4 h-4 text-red-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 font-sf">
+              Insufficient Stock
+            </h3>
           </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
 
-          <h3 className="text-[16px] font-bold text-[#111216] mb-1.5">
-            Insufficient Stock
-          </h3>
-
-          <p className="text-sm text-gray-500 leading-relaxed">
+        {/* Content */}
+        <div className="p-6">
+          <p className="text-sm text-gray-600 font-inter leading-relaxed">
             {itemName ? (
               <>
-                <span className="font-semibold text-gray-700">{itemName}</span> doesn't have
+                <span className="font-semibold text-gray-900">{itemName}</span> doesn't have
                 enough stock to cover the quantity on this document.
               </>
             ) : (
               message || "One or more items don't have enough stock to cover the quantity on this document."
             )}
-            {" "}Reduce the quantity or restock the item, then try again.
+            <br className="hidden sm:block" /> Reduce the quantity or restock the item, then try again.
           </p>
         </div>
 
-        <div className="px-6 pb-6">
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-100 flex justify-end items-center bg-gray-50/50">
           <button
-            type="button"
             onClick={onClose}
-            className="w-full py-2.5 bg-[#158FFF] hover:opacity-90 text-white text-sm font-bold rounded-[25px] transition-colors"
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
           >
             Got it
           </button>

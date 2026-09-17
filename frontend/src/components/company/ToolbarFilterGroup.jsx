@@ -12,7 +12,7 @@ import useColumnFilterDraft from "../../hooks/useColumnFilterDraft";
  * Selections apply immediately: a single toolbar line has no room for a
  * separate Apply step. A Reset link shows once anything is selected.
  *
- * Animation: max-width + opacity over ~300ms. `overflow: hidden` is needed
+ * Animation: max-width + opacity over ~500ms (ease-in-out, kept in sync with the search bar). `overflow: hidden` is needed
  * while it slides (or the group would show at full width instantly), but it
  * would clip the dropdown menus, so it's lifted once the open transition ends
  * and restored the moment a close begins.
@@ -45,7 +45,7 @@ export default function ToolbarFilterGroup({
     }
     // Fallback for when no transitionend arrives (reduced motion, or no size change to
     // animate), so the dropdown menus are never left clipped.
-    const t = setTimeout(() => setSettledOpen(true), 350);
+    const t = setTimeout(() => setSettledOpen(true), 550);
     return () => clearTimeout(t);
   }, [isOpen]);
 
@@ -61,7 +61,7 @@ export default function ToolbarFilterGroup({
 
   return (
     <div
-      className={`order-last lg:order-none basis-full lg:basis-auto flex-shrink-0 transition-[max-width,max-height,opacity,margin] duration-300 ease-out ${
+      className={`order-last lg:order-none basis-full lg:basis-auto flex-shrink-0 transition-[max-width,max-height,opacity,margin] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${
         settledOpen ? "overflow-visible" : "overflow-hidden"
       } ${isOpen ? "max-h-[400px] lg:max-h-none lg:max-w-[760px]" : "max-h-0 -mt-4 lg:mt-0 lg:max-h-none lg:max-w-0 lg:-ml-4"}`}
       style={{ opacity: isOpen ? 1 : 0 }}
@@ -88,7 +88,9 @@ export default function ToolbarFilterGroup({
           <button
             type="button"
             onClick={() => onApply({})}
-            className="h-[44px] px-2 text-sm font-medium text-[#0085FF] hover:text-blue-700 whitespace-nowrap"
+            // Same pill as the header's "New Entry" button (white, full radius, hairline border),
+            // at the strip's 44px height so it lines up with the dropdowns beside it.
+            className="flex-shrink-0 h-[44px] px-5 bg-white border border-[#E1E4EA] rounded-full text-sm font-medium text-[#1F2937] hover:bg-gray-50 transition-colors whitespace-nowrap"
           >
             Reset
           </button>

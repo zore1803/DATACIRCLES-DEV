@@ -368,11 +368,12 @@ function ProductsServices() {
     purchasePrice: 0,
     sellingPrice: 0,
     taxInclusive: true,
+    purchaseTaxInclusive: true,
     gstRate: 0,
     hsnSac: "",
     barcode: "",
     category: "",
-    primaryUnit: "OTH-OTHERS",
+    primaryUnit: "OTH OTHERS",
     images: [],
     isActive: true,
     variants: [],
@@ -783,12 +784,21 @@ function ProductsServices() {
       purchasePrice: item.purchasePrice || 0,
       sellingPrice: item.sellingPrice || 0,
       taxInclusive: item.taxInclusive !== undefined ? item.taxInclusive : true,
+      // Items saved before purchaseTaxInclusive existed have none: show the selling price's
+      // basis, which is what purchase documents have used for them all along.
+      purchaseTaxInclusive:
+        item.purchaseTaxInclusive !== undefined && item.purchaseTaxInclusive !== null
+          ? item.purchaseTaxInclusive
+          : item.taxInclusive !== undefined ? item.taxInclusive : true,
       gstRate: item.gstRate || 0,
       hsnSac: item.hsnSac || "",
       barcode: item.barcode || "",
       category: item.category || "",
-      primaryUnit: item.primaryUnit || "OTH-OTHERS",
+      primaryUnit: item.primaryUnit || "OTH OTHERS",
       images: item.images || [],
+      // Custom item-field values. Without this the Edit form opened with every custom field
+      // empty, and saving sent that empty list back — erasing the stored values.
+      additionalFields: item.additionalFields || [],
       isActive: item.isActive !== undefined ? item.isActive : true,
       variants: item.variants || [],
       discount: item.discount || { type: "percentage", value: 0 },

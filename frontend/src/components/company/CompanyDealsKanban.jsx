@@ -1541,12 +1541,10 @@ export default function CompanyDealsKanban({
       ) : (
         // Wraps below lg so the filter group can drop onto its own line; one line on desktop.
         <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
-          {/* Search shrinks to the left while the filter dropdowns are shown on this line. */}
-          <div
-            className={`relative flex-1 min-w-0 h-[44px] transition-[max-width] duration-300 ease-out ${
-              showFilterPanel ? "lg:max-w-[280px]" : "lg:max-w-[2000px]"
-            }`}
-          >
+          {/* Search just fills the space left over: only the filter group animates its width, so
+              the search shrinks by exactly as much as the group grows and the Filter / view / +
+              buttons on the right stay perfectly still. */}
+          <div className="relative flex-1 min-w-[180px] h-[44px]">
             <SearchIcon
               className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#525866]"
             />

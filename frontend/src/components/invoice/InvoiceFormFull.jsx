@@ -24,6 +24,7 @@ import AddressBookDrawer from "./AddressBookDrawer";
 import QuickDealForm from "../deal/QuickDealForm";
 import SearchableDropdown from "../contact/SearchableDropdown";
 import InsufficientStockDialog from "../common/InsufficientStockDialog";
+import SuccessModal from "../common/SuccessModal";
 import toast from "react-hot-toast";
 import { computeDocument, GST_RATES } from "../../../../shared/documentTemplates";
 import { PREDEFINED_NOTES, PREDEFINED_TERMS } from "../../utils/documentDefaultText";
@@ -448,6 +449,8 @@ const InvoiceFormFull = ({
   const [shouldRender, setShouldRender] = useState(true);
   const [showItemForm, setShowItemForm] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
   const [nextNumberPreview, setNextNumberPreview] = useState(null);
   const [quickAddItem, setQuickAddItem] = useState(null);
   const [quickAddQty, setQuickAddQty] = useState(1);
@@ -463,7 +466,6 @@ const InvoiceFormFull = ({
   const [contacts, setContacts] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [stockErrorMessage, setStockErrorMessage] = useState(null);
-  const [toastMessage, setToastMessage] = useState("");
   const [items, setItems] = useState([]);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -1292,10 +1294,10 @@ const InvoiceFormFull = ({
 
       if (editingInvoice) {
         await API.put(`/invoices/${editingInvoice._id}`, payload);
-        toast.success(isDraft ? "Saved as draft!" : "Invoice updated successfully!");
+        setSuccessMessage(isDraft ? "Saved as draft!" : "Invoice updated successfully!");
       } else {
         await API.post("/invoices", payload);
-        toast.success(isDraft ? "Saved as draft!" : "Invoice created successfully!");
+        setSuccessMessage(isDraft ? "Saved as draft!" : "Invoice created successfully!");
       }
 
       setHasUnsavedChanges(false);
@@ -1317,7 +1319,7 @@ const InvoiceFormFull = ({
         transactionType: "intra",
       });
       await fetchData();
-      onClose();
+      setShowSuccessModal(true);
     } catch (err) {
       const serverMessage = err.response?.data?.error || "";
       if (/insufficient stock/i.test(serverMessage)) {
@@ -1344,10 +1346,7 @@ const InvoiceFormFull = ({
 
   const handleSaveAndExit = async () => {
     await submitInvoice("Pending");
-    if (!toastMessage.includes("Failed")) {
-      setShowConfirmDialog(false);
-      onClose();
-    }
+    setShowConfirmDialog(false);
   };
 
   const handleSaveDraft = () => submitInvoice("Draft");
@@ -1390,12 +1389,6 @@ const InvoiceFormFull = ({
 
   return (
     <>
-      {toastMessage && (
-        <div className="fixed top-4 right-4 z-[10002] bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg animate-fade-in-out">
-          {toastMessage}
-        </div>
-      )}
-
       {showQuickDealForm && (
         <QuickDealForm
           companies={companies}
@@ -2305,12 +2298,23 @@ const InvoiceFormFull = ({
           message={stockErrorMessage}
           onClose={() => setStockErrorMessage(null)}
         />
+
+        <SuccessModal
+          isOpen={showSuccessModal}
+          title="Success"
+          message={successMessage}
+          onClose={() => {
+            setShowSuccessModal(false);
+            onClose();
+          }}
+        />
       </div>
     </>
   );
 };
 
-export default InvoiceFormFull;
 
 // Thin wrapper around the shared CreateInvoicePanel for invoice type.
 // Used by Accounting.jsx when opening the two-pane create/edit form.
+
+export default InvoiceFormFull;

@@ -1,4 +1,5 @@
 import DeleteIcon from "../common/DeleteIcon";
+import { UNIT_OPTIONS } from "./unitOptions";
 import VariantImagePicker from "./VariantImagePicker";
 import { stripVariantFileState } from "../../utils/variantResolve";
 import Checkbox from "../common/Checkbox";
@@ -16,18 +17,6 @@ import API from "../../services/api";
 import CustomDropdown from "../common/CustomDropdown";
 import EditIcon from "../common/EditIcon";
 
-const UNIT_OPTIONS = [
-  "OTH — OTHERS",
-  "PCS — PIECES",
-  "NOS — NUMBERS",
-  "KGS — KILOGRAMS",
-  "GMS — GRAMS",
-  "LTR — LITRES",
-  "MTR — METRES",
-  "BOX — BOX",
-  "PKT — PACKET",
-  "SET — SET",
-];
 
 // onSaved(item) fires after the item is actually created in the backend —
 // callers use it to refresh their item list / picker, same as ItemForm's
@@ -36,6 +25,7 @@ const BLANK_FORM = {
   name: "",
   sellingPrice: "",
   sellingPriceTax: "without Tax",
+  purchasePriceTax: "without Tax",
   taxPercent: "0",
   primaryUnit: "",
   hsnSac: "",
@@ -232,6 +222,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
         purchasePrice: parseFloat(form.purchasePrice) || 0,
         sellingPrice: parseFloat(form.sellingPrice) || 0,
         taxInclusive: form.sellingPriceTax === "with Tax",
+        purchaseTaxInclusive: form.purchasePriceTax === "with Tax",
         gstRate: parseFloat(form.taxPercent) || 0,
         hsnSac: form.hsnSac,
         barcode: form.barcode,
@@ -467,8 +458,18 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                       onChange={(e) => handleChange("purchasePrice", e.target.value)}
                       onWheel={(e) => e.target.blur()}
                       placeholder="0"
-                      className="flex-1 px-3 text-sm text-[#1F2937] focus:outline-none bg-white"
+                      className="flex-1 px-3 text-sm text-[#1F2937] focus:outline-none bg-white min-w-0 w-0"
                     />
+                    {/* Purchase price's own tax basis, same control as Selling Price's. Saved as
+                        purchaseTaxInclusive (it used to be a dropdown that was never saved). */}
+                    <select
+                      value={form.purchasePriceTax}
+                      onChange={(e) => handleChange("purchasePriceTax", e.target.value)}
+                      className="px-1.5 bg-gray-50 border-l border-[#1F2937]/10 text-[10px] text-gray-600 focus:outline-none flex-shrink-0 w-[62px]"
+                    >
+                      <option value="without Tax">w/o Tax</option>
+                      <option value="with Tax">w/ Tax</option>
+                    </select>
                   </div>
                 </div>
                 )}

@@ -35,6 +35,7 @@ import SettingsIcon from "../common/SettingsIcon";
 import InvoiceLivePreview from "./InvoiceLivePreview";
 import BankSelect from "./BankSelect";
 import InsufficientStockDialog from "../common/InsufficientStockDialog";
+import SuccessModal from "../common/SuccessModal";
 import TemplateDrawer from "./TemplateDrawer";
 import NotesTermsDrawer from "./NotesTermsDrawer";
 import AddressBookDrawer from "./AddressBookDrawer";
@@ -2458,6 +2459,8 @@ const CreateInvoicePanel = ({
   const [catalogue, setCatalogue] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [stockErrorMessage, setStockErrorMessage] = useState(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
   // Required/invalid fields are marked red in place instead of popping a
   // toast — clears itself the moment the field is actually filled in/fixed.
   const [fieldErrors, setFieldErrors] = useState({});
@@ -2703,6 +2706,12 @@ const CreateInvoicePanel = ({
                 // discount field of their own) — same catalog default for
                 // every variant of a product.
                 discount: v.discount || item.discount,
+                // The product's own GST rate and With/Without Tax setting. These were never
+                // copied into the catalogue, so picking a product fell back to a flat 18% added
+                // on top. Same variant-then-parent resolution as the full-width forms
+                // (InvoiceFormFull/QuotationForm/PerformaInvoiceFormFull).
+                gstRate: v.gstRate ?? item.gstRate ?? 0,
+                taxInclusive: !!(v.taxInclusive ?? item.taxInclusive),
               }));
             }
             return [
@@ -2718,6 +2727,8 @@ const CreateInvoicePanel = ({
                 type: item.type,
                 stock: item.inventory?.currentStock ?? 0,
                 discount: item.discount,
+                gstRate: item.gstRate ?? 0,
+                taxInclusive: !!item.taxInclusive,
               },
             ];
           });
@@ -2865,7 +2876,8 @@ const CreateInvoicePanel = ({
         discountType: picked.discount?.type || "amount",
         discount: picked.discount?.value || 0,
         showDescription: false,
-        gstRate: picked.gstRate || form.gstRate || 18,
+        // `??`, not `||`: a product at 0% GST is a real rate, not a missing one.
+        gstRate: picked.gstRate ?? form.gstRate ?? 18,
         taxInclusive: !!picked.taxInclusive,
       };
     } else {
@@ -3060,13 +3072,13 @@ const CreateInvoicePanel = ({
       const path = apiPathFor(type);
       if (isEditing) {
         await API.put(`/${path}/${initialDoc._id}`, payload);
-        toast.success(isDraft ? "Saved as draft!" : `${docName} updated successfully!`);
+        setSuccessMessage(isDraft ? "Saved as draft!" : `${docName} updated successfully!`);
       } else {
         await API.post(`/${path}`, payload);
-        toast.success(isDraft ? "Saved as draft!" : `${docName} created successfully!`);
+        setSuccessMessage(isDraft ? "Saved as draft!" : `${docName} created successfully!`);
       }
       onCreated();
-      onClose();
+      setShowSuccessModal(true);
     } catch (err) {
       const serverMessage = err.response?.data?.error || "";
       if (/insufficient stock/i.test(serverMessage)) {
@@ -4614,6 +4626,16 @@ const CreateInvoicePanel = ({
         isOpen={!!stockErrorMessage}
         message={stockErrorMessage}
         onClose={() => setStockErrorMessage(null)}
+      />
+
+      <SuccessModal
+        isOpen={showSuccessModal}
+        title="Success"
+        message={successMessage}
+        onClose={() => {
+          setShowSuccessModal(false);
+          onClose();
+        }}
       />
     </div>
   );
