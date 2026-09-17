@@ -12,7 +12,7 @@ import {
   isAddressEmpty,
 } from "./formPrimitives.jsx";
 import AddressBookDrawer from "./AddressBookDrawer";
-import { computeDocument, GST_RATES, splitGst } from "../../../../shared/documentTemplates.js";
+import { computeDocument, splitGst } from "../../../../shared/documentTemplates.js";
 
 const money = (n) =>
   `₹${(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -273,20 +273,10 @@ const FullWidthDocumentPanel = ({
                 className={inputClass}
               />
             </div>
-            {taxOn && (
-              <div className="flex flex-col gap-1">
-                <FieldLabel required>GST Rate</FieldLabel>
-                <select
-                  value={form.gstRate}
-                  onChange={(e) => setField("gstRate", Number(e.target.value))}
-                  className={inputClass}
-                >
-                  {GST_RATES.map((r) => (
-                    <option key={r} value={r}>{r}%</option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {/* No document-level GST Rate control here: GST is strictly
+                item/variant-level. computeDocument() reads each line's own
+                gstRate and nothing else, so a document-wide selector would
+                change no total. */}
           </div>
 
           {taxOn && (
@@ -398,7 +388,9 @@ const FullWidthDocumentPanel = ({
                               // Same tax info the normal split view's add-item copies, so both
                               // layouts calculate identically (this used to keep the blank
                               // row's 0% GST and Without Tax).
-                              gstRate: picked.gstRate ?? form.gstRate ?? 18,
+                              // Per-line rate only: 0% stays 0%, and an unset
+                              // product rate means untaxed, not 18%.
+                              gstRate: picked.gstRate ?? 0,
                               taxInclusive: !!picked.taxInclusive,
                             });
                           }}

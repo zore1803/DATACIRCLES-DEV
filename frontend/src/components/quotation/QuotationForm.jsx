@@ -199,10 +199,8 @@ const ItemSearchSelect = ({
       // whatever default the product was configured with.
       discountType: item.discount?.type || "amount",
       discount: item.discount?.value || 0,
-        type: item.type,
-        stock: item.stock,
-        gstRate: item.gstRate,
-        taxInclusive: item.taxInclusive,
+      type: item.type,
+      stock: item.stock,
     });
     setIsOpen(false);
     setSearchTerm(item.displayName);
@@ -465,7 +463,10 @@ const QuotationForm = ({
               hsnSac: variant.hsnSac || item.hsnSac || "",
               // Variant's own rate falls back to the parent item's, same as
               // sellingPrice/hsnSac above.
-              gstRate: variant.gstRate ?? item.gstRate ?? 0,
+              // The variant's own GST rate, with no fall back to the parent product: an
+              // unset variant rate means 0%, and a variant set to 0% stays 0%. Inheriting
+              // the parent silently taxed variants that were meant to be GST-free.
+              gstRate: variant.gstRate ?? 0,
               taxInclusive: !!(variant.taxInclusive ?? item.taxInclusive),
               // Variant-first: the variant's own discount when it sets one, otherwise the
               // parent item's catalog default (see utils/variantResolve.js).
@@ -898,12 +899,11 @@ const QuotationForm = ({
       gstRate: item.gstRate ?? 0,
       taxInclusive: !!item.taxInclusive,
       isVariant: false,
-              parentItemId: null,
-              stock: item.inventory?.currentStock ?? 0,
+      parentItemId: null,
+      stock: item.inventory?.currentStock ?? 0,
       discountType: item.discount?.type || "amount",
       discount: item.discount?.value || 0,
-        type: item.type,
-        stock: item.inventory?.currentStock ?? 0,
+      type: item.type,
     };
     setForm((prev) => {
       const isBlankStarterRow =

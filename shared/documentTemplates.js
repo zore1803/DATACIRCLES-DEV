@@ -265,9 +265,9 @@ export function computeDocument(doc, type = "tax") {
   const baseRows = (doc.items || []).map((it) => {
     const rate     = parseFloat(it.rate) || 0;
     const qty      = parseFloat(it.quantity) || 0;
-    const gstRate  = GST_RATES.includes(Number(it.gstRate))
-      ? Number(it.gstRate)
-      : (GST_RATES.includes(Number(doc.gstRate)) ? Number(doc.gstRate) : 18);
+    // The line's own rate, and nothing else: 0% stays 0%, and a line with no
+    // usable rate is untaxed rather than silently charged a default 18%.
+    const gstRate  = GST_RATES.includes(Number(it.gstRate)) ? Number(it.gstRate) : 0;
     const unitTaxable = it.taxInclusive ? rate / (1 + gstRate / 100) : rate;
     const sub  = unitTaxable * qty;
     const disc = it.discountType === "percentage"
