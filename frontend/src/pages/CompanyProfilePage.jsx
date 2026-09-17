@@ -17,6 +17,7 @@ import CompanyMeetingsTab from "../components/company/CompanyMeetingsTab";
 import CompanyFolderTab from "../components/company/CompanyFolderTab";
 import CompanyCallLogsTab from "../components/company/CompanyCallLogsTab";
 import CompanyCalendar from "../components/company/CompanyCalendar";
+import CompanySummaryCard from "../components/company/CompanySummaryCard";
 import ProfilePicture from "../components/contact/ProfilePicture";
 import toast from "react-hot-toast";
 import AppToaster from "../components/AppToaster";
@@ -1213,15 +1214,18 @@ const CompanyProfilePage = () => {
 
         <div className="border-b border-gray-200 mb-4 -mx-6"></div>
 
-        {/* Summary Stats Row */}
+        {/* Company Summary (collapsible) + KPI Row */}
         {showStats && activeTab === "Overview" && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-            {showOverviewSkeleton
-              ? Array.from({ length: 6 }).map((_, i) => <StatTileSkeleton key={i} />)
-              : statTiles.map((tile) => (
-                <StatTile key={tile.label} tile={tile} />
-              ))}
-          </div>
+          <>
+            {!showOverviewSkeleton && <CompanySummaryCard company={company} />}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+              {showOverviewSkeleton
+                ? Array.from({ length: 6 }).map((_, i) => <StatTileSkeleton key={i} />)
+                : statTiles.map((tile) => (
+                  <StatTile key={tile.label} tile={tile} />
+                ))}
+            </div>
+          </>
         )}
 
         {/* Tab Content */}

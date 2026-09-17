@@ -164,8 +164,8 @@ export function html(ctx) {
   ${hsn}
 
   ${notes || terms ? `<div class="eg-single"></div><div style="font-size:9px;color:#6b6355;">
-    ${notes ? `<div class="eg-k">Notes</div><div>${esc(notes)}</div>` : ""}
-    ${terms ? `<div class="eg-k" style="margin-top:8px;">Terms &amp; Conditions</div><div style="white-space:pre-line;">${esc(terms)}</div>` : ""}
+    ${notes ? `<div class="eg-k">Notes</div><div>${notes}</div>` : ""}
+    ${terms ? `<div class="eg-k" style="margin-top:8px;">Terms &amp; Conditions</div><div style="white-space:pre-line;">${terms}</div>` : ""}
   </div>` : ""}
 
   <div class="eg-sign">

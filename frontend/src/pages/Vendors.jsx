@@ -1537,7 +1537,13 @@ function Vendors() {
           </div>
         )}
 
-        <div className="bg-white border border-[#E1E4EA]" style={{ paddingLeft: "var(--content-inset, 16px)" }}>
+        {/* No border-t: the toolbar strip right above already has its own
+            border-b, so a top border here would double up against it. No
+            border-b either when there's no data — the table shrinks to just
+            the header + the "No vendors yet" row, so that border would sit
+            right under it as a second stray line with an odd gap instead of
+            closing off a real table body. Same fix as Companies.jsx. */}
+        <div className={`bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || vendors.length > 0 ? "border-b" : ""}`} style={{ paddingLeft: "var(--content-inset, 16px)" }}>
           <table
             className="border-separate border-spacing-0 text-left"
             style={{ minWidth: "100%", width: tableWidth, tableLayout: "fixed" }}

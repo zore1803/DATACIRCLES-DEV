@@ -159,8 +159,8 @@ export function html(ctx) {
       <div class="mo-kv"><span class="k">A/c No.</span><span>${esc(bank.accountNumber || "-")}</span></div>
       <div class="mo-kv"><span class="k">IFSC</span><span>${esc(bank.ifscCode || "-")}</span></div>
       ${bank.branch ? `<div class="mo-kv"><span class="k">Branch</span><span>${esc(bank.branch)}</span></div>` : ""}
-      ${notes ? `<div class="mo-lbl" style="margin-top:8px;">Notes</div><div>${esc(notes)}</div>` : ""}
-      ${terms ? `<div class="mo-lbl" style="margin-top:8px;">Terms &amp; Conditions</div><div style="white-space:pre-line;">${esc(terms)}</div>` : ""}
+      ${notes ? `<div class="mo-lbl" style="margin-top:8px;">Notes</div><div>${notes}</div>` : ""}
+      ${terms ? `<div class="mo-lbl" style="margin-top:8px;">Terms &amp; Conditions</div><div style="white-space:pre-line;">${terms}</div>` : ""}
     </div>
     <div class="mo-sign">
       <div>For ${esc(org.companyName || "Your Company")}</div>

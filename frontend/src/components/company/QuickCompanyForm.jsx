@@ -7,6 +7,7 @@ import API from "../../services/api";
 import CustomDropdown from "../common/CustomDropdown";
 import toast from "react-hot-toast";
 import { Country, State } from "country-state-city";
+import { loadCityModule, useLazyCity } from "../../utils/lazyCityData";
 
 // India first (GST is India-driven), then every other country alphabetically —
 // full list/state data from country-state-city instead of a hand-maintained one.
@@ -23,8 +24,58 @@ const getStatesForCountry = (countryName) => {
   if (!iso) return [];
   return State.getStatesOfCountry(iso).map((s) => s.name);
 };
+// `City` is null until utils/lazyCityData's chunk resolves — city options
+// are simply empty until then, same as the "no data for this state" case
+// the field already falls back to a plain input for.
+const getCitiesForState = (City, countryName, stateName) => {
+  if (!City) return [];
+  const countryIso = countryIsoByName[countryName];
+  if (!countryIso) return [];
+  const stateIso = State.getStatesOfCountry(countryIso).find((s) => s.name === stateName)?.isoCode;
+  if (!stateIso) return [];
+  return City.getCitiesOfState(countryIso, stateIso).map((c) => c.name);
+};
+
+// Looks up an Indian PIN code via India Post's public API (no key required)
+// to fill state/city automatically — pincode uniquely determines both, so
+// asking the user to also pick them by hand is redundant once it's typed.
+// Country-state-city's own state names are used for the result (not the raw
+// API district name) so the value lands on a real option in the State/City
+// dropdowns above rather than a lookalike string that fails to match.
+const lookupIndianPincode = async (pincode) => {
+  if (!/^\d{6}$/.test(pincode)) return null;
+  try {
+    const [res, City] = await Promise.all([
+      fetch(`https://api.postalpincode.in/pincode/${pincode}`),
+      loadCityModule(),
+    ]);
+    const data = await res.json();
+    const po = data?.[0]?.Status === "Success" ? data[0].PostOffice?.[0] : null;
+    if (!po) return null;
+
+    const countryIso = countryIsoByName["India"];
+    const matchedState = State.getStatesOfCountry(countryIso).find(
+      (s) => s.name.toLowerCase() === po.State?.toLowerCase(),
+    );
+    if (!matchedState) return null;
+
+    const cities = City.getCitiesOfState(countryIso, matchedState.isoCode).map((c) => c.name);
+    const districtOrTaluk = po.District || po.Block || po.Taluk || "";
+    const matchedCity =
+      cities.find((c) => c.toLowerCase() === districtOrTaluk.toLowerCase()) ||
+      cities.find((c) => c.toLowerCase() === po.Name?.toLowerCase()) ||
+      districtOrTaluk ||
+      po.Name ||
+      "";
+
+    return { country: "India", state: matchedState.name, city: matchedCity };
+  } catch (_) {
+    return null; // Non-fatal — the user can still fill state/city by hand.
+  }
+};
 
 const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, editCompany = null }) => {
+  const City = useLazyCity();
   const isEditing = !!editCompany;
   const emptyAddress = {
     addressLine1: "",
@@ -634,18 +685,49 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
               />
             );
           })()}
-          <input
-            type="text"
-            value={address.city}
-            onChange={(e) => onFieldChange("city", e.target.value)}
-            className={inputCls(!address.city?.trim())}
-            placeholder="City *"
-          />
+          {(() => {
+            const citiesForState = getCitiesForState(City, address.country, address.state);
+            // Same fallback as State above: some state/country combinations
+            // have no city data, so a free-text field keeps it usable rather
+            // than showing an empty dropdown with nothing to pick.
+            return citiesForState.length > 0 ? (
+              <CustomDropdown
+                options={citiesForState}
+                value={address.city}
+                onChange={(value) => onFieldChange("city", value)}
+                placeholder="City *"
+                searchable
+                buttonClassName={ddCls(address.city, !address.city?.trim())}
+              />
+            ) : (
+              <input
+                type="text"
+                value={address.city}
+                onChange={(e) => onFieldChange("city", e.target.value)}
+                className={inputCls(!address.city?.trim())}
+                placeholder="City *"
+              />
+            );
+          })()}
           <input
             type="text"
             inputMode="numeric"
             value={address.pincode}
-            onChange={(e) => onFieldChange("pincode", e.target.value.replace(/\D/g, ""))}
+            onChange={async (e) => {
+              const pincode = e.target.value.replace(/\D/g, "").slice(0, 6);
+              onFieldChange("pincode", pincode);
+              // Only once all 6 digits are in — a lookup on every keystroke
+              // would fire five requests for pincodes India Post will 404 on
+              // anyway, and briefly show a wrong match while still typing.
+              if (pincode.length === 6) {
+                const match = await lookupIndianPincode(pincode);
+                if (match) {
+                  onFieldChange("country", match.country);
+                  onFieldChange("state", match.state);
+                  onFieldChange("city", match.city);
+                }
+              }
+            }}
             className={inputCls(!address.pincode?.trim())}
             placeholder="Pincode *"
           />

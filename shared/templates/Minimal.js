@@ -172,8 +172,8 @@ export function html(ctx) {
         </div>
         <div class="mn-pay-qr">${payQrSvg}<div class="dc-pay-qr-cap">Scan to pay</div></div>
       </div>
-      ${notes ? `<div class="mn-k" style="margin-top:14px;">Notes</div><div style="color:#555;">${esc(notes)}</div>` : ""}
-      ${terms ? `<div class="mn-k" style="margin-top:14px;">Terms</div><div style="color:#555;white-space:pre-line;">${esc(terms)}</div>` : ""}
+      ${notes ? `<div class="mn-k" style="margin-top:14px;">Notes</div><div style="color:#555;">${notes}</div>` : ""}
+      ${terms ? `<div class="mn-k" style="margin-top:14px;">Terms</div><div style="color:#555;white-space:pre-line;">${terms}</div>` : ""}
     </div>
     <div class="mn-r">
       <div style="margin-bottom:10px;">For ${esc(org.companyName || "Your Company")}</div>

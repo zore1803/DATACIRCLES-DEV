@@ -20,6 +20,7 @@ import QuickItemDrawer from "../item/QuickItemDrawer";
 import TemplateDrawer from "./TemplateDrawer";
 import BankSelect from "./BankSelect";
 import { AddressFieldsGroup, emptyAddress, isAddressEmpty, SectionHeader } from "../invoice/formPrimitives";
+import AddressBookDrawer from "./AddressBookDrawer";
 import QuickDealForm from "../deal/QuickDealForm";
 import SearchableDropdown from "../contact/SearchableDropdown";
 import InsufficientStockDialog from "../common/InsufficientStockDialog";
@@ -455,6 +456,9 @@ const InvoiceFormFull = ({
   const [showQuickDealForm, setShowQuickDealForm] = useState(false);
   const [localDeals, setLocalDeals] = useState(deals);
   const [sellerState, setSellerState] = useState("");
+  // "billing" | "shipping" | null — which field group opened the saved
+  // address book (AddressBookDrawer).
+  const [addressDrawer, setAddressDrawer] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1704,6 +1708,7 @@ const InvoiceFormFull = ({
                 <AddressFieldsGroup
                   label="Billing address"
                   value={form.billingAddress}
+                  onUseSaved={() => setAddressDrawer("billing")}
                   onChange={(next) => {
                     // Same seller-state vs. customer-state re-check the deal
                     // picker runs, so editing the billing state directly on
@@ -1724,6 +1729,7 @@ const InvoiceFormFull = ({
                   label="Shipping address"
                   value={form.shippingAddress}
                   disabled={!!form.sameAsBilling}
+                  onUseSaved={() => setAddressDrawer("shipping")}
                   onChange={(next) => {
                     setForm((prev) => ({ ...prev, shippingAddress: next }));
                     setHasUnsavedChanges(true);
@@ -1731,6 +1737,27 @@ const InvoiceFormFull = ({
                 />
               </div>
             </div>
+
+            <AddressBookDrawer
+              isOpen={addressDrawer !== null}
+              onClose={() => setAddressDrawer(null)}
+              currentAddress={addressDrawer === "billing" ? form.billingAddress : form.shippingAddress}
+              onApply={(next) => {
+                if (addressDrawer === "billing") {
+                  const customerState = (next.state || "").trim().toLowerCase();
+                  const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
+                  setForm((prev) => ({
+                    ...prev,
+                    billingAddress: next,
+                    shippingAddress: prev.sameAsBilling ? next : prev.shippingAddress,
+                    transactionType: customerState ? autoType : prev.transactionType,
+                  }));
+                } else {
+                  setForm((prev) => ({ ...prev, shippingAddress: next }));
+                }
+                setHasUnsavedChanges(true);
+              }}
+            />
 
             {/* ── Section 3: Products & Services ── */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

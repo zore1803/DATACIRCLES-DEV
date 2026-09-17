@@ -142,8 +142,8 @@ export function html(ctx) {
 
   <div class="cx-foot">
     <div>
-      ${notes ? `<div class="cx-lab">Notes</div><div>${esc(notes)}</div>` : ""}
-      ${terms ? `<div class="cx-lab" style="margin-top:4px;">Terms &amp; Conditions</div><div style="white-space:pre-line;">${esc(terms)}</div>` : ""}
+      ${notes ? `<div class="cx-lab">Notes</div><div>${notes}</div>` : ""}
+      ${terms ? `<div class="cx-lab" style="margin-top:4px;">Terms &amp; Conditions</div><div style="white-space:pre-line;">${terms}</div>` : ""}
     </div>
     <div class="cx-sign">
       <div style="font-weight:bold;">For ${esc(org.companyName || "Your Company")}</div>

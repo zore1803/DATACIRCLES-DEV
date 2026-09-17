@@ -290,11 +290,11 @@ export function html(ctx) {
     <div class="dt-footer">
       <div>
         <div class="dc-label">Notes:</div>
-        <div class="dt-notes-body">${notes ? esc(notes) : "&mdash;"}</div>
+        <div class="dt-notes-body">${notes ? notes : "&mdash;"}</div>
       </div>
       <div>
         <div class="dc-label">Terms and Conditions:</div>
-        <div class="dt-terms-body">${terms ? esc(terms) : "&mdash;"}</div>
+        <div class="dt-terms-body">${terms ? terms : "&mdash;"}</div>
       </div>
       <div class="dt-sign">
         <div style="font-weight:bold;margin-bottom:4px;">For ${esc(org.companyName || "Your Company")}</div>

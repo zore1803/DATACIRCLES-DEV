@@ -157,8 +157,8 @@ export function sharedHtml(ctx) {
 
   <div class="dc-footer">
     <div class="dc-notes">
-      ${notes ? `<div class="dc-label">Notes:</div><div class="dc-note-body">${esc(notes)}</div>` : ""}
-      ${terms ? `<div class="dc-label${notes ? " dc-mt" : ""}">Terms and Conditions:</div><div class="dc-terms">${esc(terms)}</div>` : ""}
+      ${notes ? `<div class="dc-label">Notes:</div><div class="dc-note-body">${notes}</div>` : ""}
+      ${terms ? `<div class="dc-label${notes ? " dc-mt" : ""}">Terms and Conditions:</div><div class="dc-terms">${terms}</div>` : ""}
     </div>
     <div class="dc-sign">
       <div>For ${esc(org.companyName || "Your Company")}</div>

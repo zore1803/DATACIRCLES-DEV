@@ -3031,6 +3031,16 @@ function Deals() {
           </div>
         )}
       </div>
+
+      {/* handleSelectDeal/handleSelectAll set showUpgradeModal for a
+          below-Growth plan, but nothing ever rendered it — clicking a row
+          checkbox on Trial silently did nothing, with no explanation. */}
+      <UpgradeRequiredModal
+        open={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        minPlan="growth"
+        feature="Selecting multiple rows"
+      />
     </div>
   );
 }

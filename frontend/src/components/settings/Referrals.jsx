@@ -225,7 +225,7 @@ const Referrals = () => {
         {/* Invite a friend + email */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-purple-50 text-purple-600">
+            <div className="p-2 rounded-lg bg-blue-50 text-[#0085FF]">
               <TeamIcon className="w-4 h-4" />
             </div>
             <div>
@@ -247,7 +247,7 @@ const Referrals = () => {
             </button>
             <button
               onClick={() => handleCopy(shareLink)}
-              className="inline-flex items-center justify-center gap-1.5 h-[38px] bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold px-4 rounded-full transition-colors whitespace-nowrap"
+              className="inline-flex items-center justify-center gap-1.5 h-[38px] bg-[#0085FF] hover:bg-blue-600 text-white text-sm font-semibold px-4 rounded-full transition-colors whitespace-nowrap"
             >
               <Share2 className="w-3.5 h-3.5" />
               Copy share link
@@ -309,7 +309,7 @@ const Referrals = () => {
               <button
                 onClick={handleSendInvite}
                 disabled={sendingInvite}
-                className="inline-flex items-center justify-center gap-1.5 h-[38px] bg-purple-600 hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 rounded-full transition-colors w-full sm:w-auto"
+                className="inline-flex items-center justify-center gap-1.5 h-[38px] bg-[#0085FF] hover:bg-blue-600 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 rounded-full transition-colors w-full sm:w-auto"
               >
                 <SendIcon className="w-3.5 h-3.5" />
                 {sendingInvite ? "Sending…" : "Send invite"}
@@ -321,7 +321,7 @@ const Referrals = () => {
         {/* People you've referred */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-6 pt-5 pb-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-50 text-purple-600">
+            <div className="p-2 rounded-lg bg-blue-50 text-[#0085FF]">
               <TeamIcon className="w-4 h-4" />
             </div>
             <h2 className="text-base font-bold text-gray-900">People you've referred</h2>

@@ -883,7 +883,13 @@ export default function DealsTable({
       target.closest(".custom-dropdown") ||
       target.closest(".action-menu-container") ||
       target.closest("button") ||
-      target.closest("a")
+      target.closest("a") ||
+      // The shared Checkbox component's visible click target is an SVG icon
+      // inside a <label> (the real <input> is sr-only/hidden), so it never
+      // matched the checks above — every row-checkbox click was wrongly
+      // treated as a plain row click, letting the long-press timer below
+      // fire and race with the checkbox's own toggle.
+      target.closest("label")
     );
   };
 

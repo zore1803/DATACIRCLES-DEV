@@ -7,10 +7,7 @@ import toast from "react-hot-toast";
 import { Country, State } from "country-state-city";
 import CustomDropdown from "../common/CustomDropdown";
 import { getStateCode, canonicalStateName } from "../../utils/gstStateCode";
-
-// Pincode lookups already made this session. India Post's API is slow (often a second or more),
-// so re-typing or correcting a pincode, or opening the form again, shouldn't wait on it twice.
-const pincodeCache = new Map();
+import { loadCityModule, useLazyCity } from "../../utils/lazyCityData";
 
 // India first (GST is India-driven), then every other country alphabetically —
 // full list/state data from country-state-city instead of a hand-maintained one.
@@ -28,8 +25,71 @@ const getStatesForCountry = (countryName) => {
   if (!iso) return [];
   return State.getStatesOfCountry(iso).map((s) => s.name);
 };
+// `City` is null until utils/lazyCityData's chunk resolves (see there).
+const getCitiesForState = (City, countryName, stateName) => {
+  if (!City) return [];
+  const countryIso = countryIsoByName[countryName];
+  if (!countryIso) return [];
+  const stateIso = State.getStatesOfCountry(countryIso).find((s) => s.name === stateName)?.isoCode;
+  if (!stateIso) return [];
+  return City.getCitiesOfState(countryIso, stateIso).map((c) => c.name);
+};
+
+
+// Pincode lookups already made this session. India Post's API is slow (often a second or more),
+// so re-typing or correcting a pincode, or opening the form again, shouldn't wait on it twice.
+const pincodeCache = new Map();
+
+// Mirrors QuickCompanyForm.jsx's pincode lookup — see the comment there — plus, for this form:
+//  - India Post spells some states differently from the state list ("Chattisgarh",
+//    "Pondicherry", "Daman & Diu", "Andaman & Nicobar"); an exact name match found nothing for
+//    those, so they're matched through their GST state code instead.
+//  - returns the GST `stateCode` for the State Code field.
+//  - accepts an AbortSignal, so a lookup for a pincode the user has since changed is cancelled.
+//  - results are cached per pincode (only successful ones).
+const lookupIndianPincode = async (pincode, signal) => {
+  if (!/^\d{6}$/.test(pincode)) return null;
+  if (pincodeCache.has(pincode)) return pincodeCache.get(pincode);
+  try {
+    const [res, City] = await Promise.all([
+      fetch(`https://api.postalpincode.in/pincode/${pincode}`, { signal }),
+      loadCityModule(),
+    ]);
+    const data = await res.json();
+    const po = data?.[0]?.Status === "Success" ? data[0].PostOffice?.[0] : null;
+    if (!po) return null;
+
+    const countryIso = countryIsoByName["India"];
+    const states = State.getStatesOfCountry(countryIso);
+    const stateName = canonicalStateName(po.State || "", states.map((s) => s.name));
+    const matchedState = states.find((s) => s.name.toLowerCase() === stateName.toLowerCase());
+    if (!matchedState) return null;
+
+    const cities = City.getCitiesOfState(countryIso, matchedState.isoCode).map((c) => c.name);
+    const districtOrTaluk = po.District || po.Block || po.Taluk || "";
+    const matchedCity =
+      cities.find((c) => c.toLowerCase() === districtOrTaluk.toLowerCase()) ||
+      cities.find((c) => c.toLowerCase() === po.Name?.toLowerCase()) ||
+      districtOrTaluk ||
+      po.Name ||
+      "";
+
+    const result = {
+      country: "India",
+      state: matchedState.name,
+      city: matchedCity,
+      stateCode: getStateCode(matchedState.name) || "",
+    };
+    pincodeCache.set(pincode, result);
+    return result;
+  } catch (err) {
+    if (err?.name === "AbortError") throw err; // caller distinguishes a cancelled lookup
+    return null; // Non-fatal — the user can still fill state/city by hand.
+  }
+};
 
 const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, editVendor = null }) => {
+  const City = useLazyCity();
   const isEditing = !!editVendor;
   const [form, setForm] = useState({
     name: "",
@@ -437,19 +497,16 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
   const pincodeRequestRef = useRef(null);
   const [pincodeLoading, setPincodeLoading] = useState(false);
 
-  const applyPincodeDetails = (details) => {
-    const inStates = State.getStatesOfCountry("IN").map((st) => st.name);
-    const state = canonicalStateName(details.State || "", inStates);
-    // One update instead of one per field, so city/state/country/code all appear together.
+  // One update instead of one per field, so city/state/country/code all appear together.
+  const applyPincodeMatch = (match) => {
     setForm((prev) => ({
       ...prev,
       address: {
         ...prev.address,
-        city: details.District || details.Block || "",
-        state,
-        country: details.Country || "India",
-        // Previously never set: the API has no GST code, so it's derived from the state here.
-        stateCode: getStateCode(state) || prev.address.stateCode || "",
+        country: match.country,
+        state: match.state,
+        city: match.city,
+        stateCode: match.stateCode || prev.address.stateCode || "",
       },
     }));
     if (addressError) setAddressError(false);
@@ -457,7 +514,7 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
   };
 
   const handlePincodeChange = async (e) => {
-    const val = e.target.value.replace(/\D/g, "");
+    const val = e.target.value.replace(/\D/g, "").slice(0, 6);
     handleFormChange("address.pincode", val);
 
     pincodeRequestRef.current?.abort();
@@ -467,9 +524,8 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
       return;
     }
 
-    const cached = pincodeCache.get(val);
-    if (cached) {
-      applyPincodeDetails(cached);
+    if (pincodeCache.has(val)) {
+      applyPincodeMatch(pincodeCache.get(val));
       return;
     }
 
@@ -477,12 +533,10 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
     pincodeRequestRef.current = controller;
     setPincodeLoading(true);
     try {
-      const res = await fetch(`https://api.postalpincode.in/pincode/${val}`, { signal: controller.signal });
-      const data = await res.json();
-      if (data && data[0]?.Status === "Success") {
-        const details = data[0].PostOffice[0];
-        pincodeCache.set(val, details);
-        applyPincodeDetails(details);
+      const match = await lookupIndianPincode(val, controller.signal);
+      if (pincodeRequestRef.current !== controller) return;
+      if (match) {
+        applyPincodeMatch(match);
         toast.success("Address fetched from pincode");
       }
     } catch (error) {
@@ -917,13 +971,27 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
                           placeholder="State / Province *"
                         />
                       )}
-                      <input
-                        type="text"
-                        value={form.address.city}
-                        onChange={(e) => handleFormChange("address.city", e.target.value)}
-                        className={inputCls(!form.address.city?.trim())}
-                        placeholder="City *"
-                      />
+                      {(() => {
+                        const citiesForState = getCitiesForState(City, form.address.country, form.address.state);
+                        return citiesForState.length > 0 ? (
+                          <CustomDropdown
+                            options={citiesForState}
+                            value={form.address.city}
+                            onChange={(value) => handleFormChange("address.city", value)}
+                            placeholder="City *"
+                            searchable
+                            buttonClassName={ddCls(form.address.city, !form.address.city?.trim())}
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            value={form.address.city}
+                            onChange={(e) => handleFormChange("address.city", e.target.value)}
+                            className={inputCls(!form.address.city?.trim())}
+                            placeholder="City *"
+                          />
+                        );
+                      })()}
                       <div className="relative">
                         <input
                           type="text"

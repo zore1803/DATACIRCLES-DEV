@@ -182,8 +182,8 @@ export function html(ctx) {
 
     <div class="cl-foot">
       <div class="cl-notes">
-        ${notes ? `<div class="cl-plabel">Notes</div><div>${esc(notes)}</div>` : ""}
-        ${terms ? `<div class="cl-plabel">Terms &amp; Conditions</div><div style="white-space:pre-line;">${esc(terms)}</div>` : ""}
+        ${notes ? `<div class="cl-plabel">Notes</div><div>${notes}</div>` : ""}
+        ${terms ? `<div class="cl-plabel">Terms &amp; Conditions</div><div style="white-space:pre-line;">${terms}</div>` : ""}
         ${!notes && !terms ? "&nbsp;" : ""}
       </div>
       <div class="cl-sign">

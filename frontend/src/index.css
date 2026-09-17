@@ -50,8 +50,8 @@
      at once instead of editing files one by one. Never applied to icons —
      only backgrounds/borders via .btn-primary-* below or the var() itself
      where a component needs it inline (e.g. gradient buttons). */
-  --btn-primary: #2776EA;
-  --btn-primary-hover: #1F63C8;
+  --btn-primary: #0085FF;
+  --btn-primary-hover: #006FD6;
   /* Sidebar + header background. Navbar.jsx overwrites this at runtime with a
      pale wash of the org's Brand Settings button colour; this default is the
      wash of the brand blue #031CFC, so a brand-new org (or any org that

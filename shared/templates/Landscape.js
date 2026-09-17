@@ -215,11 +215,11 @@ export function html(ctx) {
     </table>`}
     <div class="ls-footer-row">
       <div>
-        ${notes ? `<div class="ls-notes-label">Notes:</div><div>${esc(notes)}</div>` : ""}
+        ${notes ? `<div class="ls-notes-label">Notes:</div><div>${notes}</div>` : ""}
         <div class="ls-receiver-line">Receiver's Signature</div>
       </div>
       <div>
-        ${terms ? `<div class="ls-terms-label">Terms and Conditions:</div><div class="ls-terms-body">${esc(terms)}</div>` : ""}
+        ${terms ? `<div class="ls-terms-label">Terms and Conditions:</div><div class="ls-terms-body">${terms}</div>` : ""}
       </div>
       <div class="ls-sign-block">
         <div style="font-weight:bold;margin-bottom:4px;">For ${esc(org.companyName || "Your Company")}</div>

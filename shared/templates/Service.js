@@ -124,8 +124,8 @@ export function html(ctx) {
     </div>
   </div>
   ${notes || terms ? `<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px;font-size:10px;">
-    ${notes ? `<div style="margin-bottom:6px;"><b>Notes:</b> ${esc(notes)}</div>` : ""}
-    ${terms ? `<div><b>Terms &amp; Conditions:</b> ${esc(terms)}</div>` : ""}
+    ${notes ? `<div style="margin-bottom:6px;"><b>Notes:</b> ${notes}</div>` : ""}
+    ${terms ? `<div><b>Terms &amp; Conditions:</b> ${terms}</div>` : ""}
   </div>` : ""}
 
   `;

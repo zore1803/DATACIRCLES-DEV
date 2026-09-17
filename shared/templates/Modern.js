@@ -236,8 +236,8 @@ export function html(ctx) {
   </div>
 
   <div class="dc-notes-row">
-    ${notes ? `<div class="dc-label">Notes:</div><div>${esc(notes)}</div>` : ""}
-    ${terms ? `<div class="dc-label" style="margin-top:10px;">Terms and Conditions:</div><div class="dc-terms">${esc(terms)}</div>` : ""}
+    ${notes ? `<div class="dc-label">Notes:</div><div>${notes}</div>` : ""}
+    ${terms ? `<div class="dc-label" style="margin-top:10px;">Terms and Conditions:</div><div class="dc-terms">${terms}</div>` : ""}
   </div>
 
   `;

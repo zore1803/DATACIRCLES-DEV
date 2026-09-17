@@ -37,6 +37,7 @@ import AppToaster from "../components/AppToaster";
 import useContactStore from "../store/useContactStore";
 import MergeContactModal from "../components/contact/MergeContactModal";
 import StatTile from "../components/common/StatTile";
+import ContactSummaryCard from "../components/contact/ContactSummaryCard";
 import StatTileSkeleton from "../components/common/StatTileSkeleton";
 import Skeleton from "../components/common/Skeleton";
 import PageSkeleton from "../components/common/PageSkeleton";
@@ -743,14 +744,17 @@ const ContactDetailsPage = () => {
 
         <div className="border-b border-gray-200 mb-4 -mx-6"></div>
 
-        {/* Summary Stats Row — on Overview, mirroring the company page's
-            Overview-only KPI strip. */}
+        {/* Contact Summary (collapsible) + KPI Row — mirrors the company
+            page's Overview strip. */}
         {showStats && activeTab === "Overview" && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-            {statsLoading
-              ? Array.from({ length: 6 }).map((_, i) => <StatTileSkeleton key={i} />)
-              : statTiles.map((tile) => <StatTile key={tile.label} tile={tile} />)}
-          </div>
+          <>
+            {!statsLoading && <ContactSummaryCard contact={contact} />}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+              {statsLoading
+                ? Array.from({ length: 6 }).map((_, i) => <StatTileSkeleton key={i} />)
+                : statTiles.map((tile) => <StatTile key={tile.label} tile={tile} />)}
+            </div>
+          </>
         )}
 
         {/* Tab Content */}

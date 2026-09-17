@@ -1,6 +1,6 @@
 import DeleteIcon from "../common/DeleteIcon";
 import PlusIcon from "../common/PlusIcon";
-import React from "react";
+import React, { useState } from "react";
 import { Search, Info } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -11,6 +11,7 @@ import {
   emptyAddress,
   isAddressEmpty,
 } from "./formPrimitives.jsx";
+import AddressBookDrawer from "./AddressBookDrawer";
 import { computeDocument, GST_RATES, splitGst } from "../../../../shared/documentTemplates.js";
 
 const money = (n) =>
@@ -51,6 +52,9 @@ const FullWidthDocumentPanel = ({
   updateItem,
   stripHtml,
 }) => {
+  // "billing" | "shipping" | null — which field group opened the saved
+  // address book (AddressBookDrawer).
+  const [addressDrawer, setAddressDrawer] = useState(null);
   const taxOn = supportsTax && !!form.isTaxInvoice;
   const doc = { ...form, isTaxInvoice: taxOn, isTaxQuotation: taxOn };
   const t = computeDocument(doc, type);
@@ -244,6 +248,7 @@ const FullWidthDocumentPanel = ({
           <AddressFieldsGroup
             label="Billing Address"
             value={form.billingAddress}
+            onUseSaved={() => setAddressDrawer("billing")}
             onChange={(next) =>
               setForm((p) => ({
                 ...p,
@@ -258,10 +263,28 @@ const FullWidthDocumentPanel = ({
             label="Shipping Address"
             value={form.shippingAddress}
             disabled={!!form.sameAsBilling}
+            onUseSaved={() => setAddressDrawer("shipping")}
             onChange={(next) => setField("shippingAddress", next)}
           />
         </div>
       </div>
+
+      <AddressBookDrawer
+        isOpen={addressDrawer !== null}
+        onClose={() => setAddressDrawer(null)}
+        currentAddress={addressDrawer === "billing" ? form.billingAddress : form.shippingAddress}
+        onApply={(next) => {
+          if (addressDrawer === "billing") {
+            setForm((p) => ({
+              ...p,
+              billingAddress: next,
+              shippingAddress: p.sameAsBilling ? next : p.shippingAddress,
+            }));
+          } else {
+            setField("shippingAddress", next);
+          }
+        }}
+      />
 
       {/* 03 — GST & Tax Details */}
       {supportsGSTIN && (

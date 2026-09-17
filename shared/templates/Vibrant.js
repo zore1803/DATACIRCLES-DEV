@@ -170,8 +170,8 @@ export function html(ctx) {
   <div class="vb-card">
     <div class="vb-foot">
       <div style="color:#5f7a6f;font-size:9px;">
-        ${notes ? `<div class="vb-k">Notes</div><div>${esc(notes)}</div>` : ""}
-        ${terms ? `<div class="vb-k" style="margin-top:8px;">Terms &amp; Conditions</div><div style="white-space:pre-line;">${esc(terms)}</div>` : ""}
+        ${notes ? `<div class="vb-k">Notes</div><div>${notes}</div>` : ""}
+        ${terms ? `<div class="vb-k" style="margin-top:8px;">Terms &amp; Conditions</div><div style="white-space:pre-line;">${terms}</div>` : ""}
         ${!notes && !terms ? "Thank you for your business." : ""}
       </div>
       <div class="vb-sign">

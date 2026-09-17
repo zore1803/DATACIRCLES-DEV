@@ -3,21 +3,48 @@ import DeleteIcon from "../common/DeleteIcon";
 import React, { useEffect, useState, useRef } from "react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
-import { X, Building2, ChevronDown } from "lucide-react";
+import { X, ChevronDown, ChevronRight } from "lucide-react";
+import { Link } from "react-router-dom";
+import ConfirmDialog from "../common/ConfirmDialog";
+import Skeleton from "../common/Skeleton";
 
 import SearchIcon from "../common/SearchIcon";
+
+// Same right-slide-in panel chrome as QuickCompanyForm/QuickVendorForm/etc.
+// (dc-panel-card + dc-panel-w, translate-x transition, the uppercase grey
+// header, pill inputs, "25px" pill footer buttons) — this used to be a
+// centered black-overlay dialog with its own one-off styling, which read as
+// a different, unfinished product next to every other panel in the app.
 const SubsidiaryModal = ({ companyId, isOpen, onClose, onSuccess }) => {
   const [subsidiaries, setSubsidiaries] = useState([]);
   const [availableCompanies, setAvailableCompanies] = useState([]);
   const [selectedSubsidiaryId, setSelectedSubsidiaryId] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [query, setQuery] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const searchRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState(null); // { id, name } | null
+
+  const [shouldRender, setShouldRender] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const dropdownRef = useRef(null);
 
-  // Fetch data when modal opens
+  // Mount immediately but animate the slide-in on the next tick, same
+  // pattern every other panel in this app uses (see QuickCompanyForm).
+  useEffect(() => {
+    if (isOpen) {
+      setShouldRender(true);
+      const id = setTimeout(() => setPanelOpen(true), 10);
+      return () => clearTimeout(id);
+    }
+    setPanelOpen(false);
+    const id = setTimeout(() => setShouldRender(false), 300); // matches the 300ms transition below
+    return () => clearTimeout(id);
+  }, [isOpen]);
+
+  // Fetch data when opened
   useEffect(() => {
     if (!isOpen || !companyId) return;
 
@@ -58,22 +85,29 @@ const SubsidiaryModal = ({ companyId, isOpen, onClose, onSuccess }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Filtered companies
+  // Same behaviour as CustomDropdown's own searchable menu: reset the query
+  // on close, focus the search box on open.
+  useEffect(() => {
+    if (!isDropdownOpen) {
+      setQuery("");
+    } else {
+      const id = setTimeout(() => searchRef.current?.focus(), 0);
+      return () => clearTimeout(id);
+    }
+  }, [isDropdownOpen]);
+
   const filteredCompanies = availableCompanies.filter(
     (c) =>
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (c.industry &&
-        c.industry.toLowerCase().includes(searchTerm.toLowerCase())),
+      c.name.toLowerCase().includes(query.toLowerCase()) ||
+      (c.industry && c.industry.toLowerCase().includes(query.toLowerCase())),
   );
 
-  // Get selected company name for display
   const selectedCompany = availableCompanies.find(
     (c) => c._id === selectedSubsidiaryId,
   );
 
-  const handleSelectCompany = (compId, compName) => {
+  const handleSelectCompany = (compId) => {
     setSelectedSubsidiaryId(compId);
-    setSearchTerm(compName); // ← Yeh line important thi!
     setIsDropdownOpen(false);
   };
 
@@ -82,7 +116,7 @@ const SubsidiaryModal = ({ companyId, isOpen, onClose, onSuccess }) => {
 
     setActionLoading(true);
     try {
-      const res = await API.post(`/companies/${companyId}/add-subsidiary`, {
+      await API.post(`/companies/${companyId}/add-subsidiary`, {
         subsidiaryId: selectedSubsidiaryId,
       });
 
@@ -95,7 +129,6 @@ const SubsidiaryModal = ({ companyId, isOpen, onClose, onSuccess }) => {
         prev.filter((c) => c._id !== selectedSubsidiaryId),
       );
 
-      // Reset after adding
       setSelectedSubsidiaryId("");
       setSearchTerm("");
       toast.success("Subsidiary added successfully");
@@ -108,8 +141,10 @@ const SubsidiaryModal = ({ companyId, isOpen, onClose, onSuccess }) => {
     }
   };
 
-  const handleRemoveSubsidiary = async (subId, subName) => {
-    if (!window.confirm(`Remove "${subName}" as subsidiary?`)) return;
+  const handleRemoveSubsidiary = async () => {
+    if (!pendingRemoval) return;
+    const { id: subId } = pendingRemoval;
+    setPendingRemoval(null);
 
     setActionLoading(true);
     try {
@@ -128,152 +163,202 @@ const SubsidiaryModal = ({ companyId, isOpen, onClose, onSuccess }) => {
     }
   };
 
-  if (!isOpen) return null;
+  if (!shouldRender) return null;
+
+  const inputCls =
+    "w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50";
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
-          <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-blue-600" />
+    <>
+      <div
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
+        style={{ opacity: panelOpen ? 1 : 0 }}
+        onClick={onClose}
+      />
+
+      <div
+        className={`
+          fixed dc-panel-card dc-panel-w z-[10003]
+          bg-white shadow-2xl flex flex-col overflow-hidden
+          transform transition-transform duration-300 ease-in-out font-inter
+          ${panelOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}
+        `}
+      >
+        {/* Sticky header — matches every other panel's header spec */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
+          <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
             Manage Subsidiaries
-          </h3>
+          </h2>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-gray-200"
+            title="Close"
+            className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity"
+            aria-label="Close"
           >
-            <X size={20} />
+            <X className="w-[18px] h-[18px]" strokeWidth={2} />
           </button>
         </div>
 
-        <div className="p-6 flex-1 overflow-y-scroll">
-          {/* Add Subsidiary Section */}
-          <div className="mb-10">
-            <h4 className="text-sm font-semibold text-gray-700 mb-4">
+        {/* Scrollable body */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6 space-y-6">
+          <div>
+            <label className="block text-[13px] font-medium text-[#161618] mb-2 tracking-[-0.05em]">
               Link Existing Company as Subsidiary
-            </h4>
+            </label>
 
-            {/* Searchable Dropdown */}
+            {/* Trigger + dropdown mirror CustomDropdown.jsx's own searchable
+                menu exactly — a plain trigger button, and the search input
+                lives INSIDE the opened panel, not doubling as the trigger
+                itself. Kept as a local copy rather than importing
+                CustomDropdown here since that component only renders plain
+                string options, not the avatar+industry row this needs. */}
             <div className="relative" ref={dropdownRef}>
-              <div
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl flex items-center gap-3 cursor-pointer focus-within:ring-2 focus-within:ring-blue-500/30"
+              <button
+                type="button"
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className={`${inputCls} flex items-center gap-2.5 text-left ${isDropdownOpen ? "ring-1 ring-blue-500 border-blue-500" : ""}`}
               >
-                <SearchIcon className="w-4 h-4 text-[#525866]" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setIsDropdownOpen(true);
-                  }}
-                  placeholder="Search company name or industry..."
-                  className="flex-1 outline-none bg-transparent text-sm"
-                />
-                <ChevronDown className="w-4 h-4 text-gray-400" />
-              </div>
+                <SearchIcon className="w-4 h-4 text-[#1F2937] opacity-50 flex-shrink-0" />
+                <span className={`flex-1 truncate ${selectedCompany ? "text-[#1F2937]" : "text-[#1F2937] opacity-50"}`}>
+                  {selectedCompany ? selectedCompany.name : "Search company name or industry..."}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-[#1F2937] opacity-50 flex-shrink-0 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
+              </button>
 
-              {/* Dropdown */}
               {isDropdownOpen && (
-                <div className="absolute mt-2 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto z-50">
-                  {filteredCompanies.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-gray-500 text-sm">
-                      No company found
-                    </div>
-                  ) : (
-                    filteredCompanies.map((comp) => (
-                      <div
-                        key={comp._id}
-                        onClick={() => handleSelectCompany(comp._id, comp.name)}
-                        className="px-4 py-3 hover:bg-blue-50 cursor-pointer flex items-center gap-3"
-                      >
-                        <div className="w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center text-xs font-medium">
-                          {comp.name.charAt(0)}
-                        </div>
-                        <div>
-                          <p className="font-medium">{comp.name}</p>
-                          {comp.industry && (
-                            <p className="text-xs text-gray-500">
-                              {comp.industry}
-                            </p>
-                          )}
-                        </div>
+                <div className="absolute mt-2 w-full bg-white border border-[#E0E0E1] rounded-xl shadow-lg z-50 flex flex-col overflow-hidden">
+                  <div className="p-2 border-b border-[#F0F0F0] flex-shrink-0">
+                    <input
+                      ref={searchRef}
+                      type="text"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search..."
+                      className="w-full border border-[#E0E0E1] rounded-lg px-3 h-8 text-[13px] text-[#161618] focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-[#A0A0A0]"
+                    />
+                  </div>
+                  <div className="max-h-60 overflow-y-auto py-1">
+                    {filteredCompanies.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-[13px] text-[#A0A0A0]">
+                        No company found
                       </div>
-                    ))
-                  )}
+                    ) : (
+                      filteredCompanies.map((comp) => (
+                        <div
+                          key={comp._id}
+                          onClick={() => handleSelectCompany(comp._id)}
+                          className="px-3 py-2 mx-1 rounded-lg hover:bg-[#F2F2F7] cursor-pointer flex items-center gap-3"
+                        >
+                          <div className="w-7 h-7 bg-[#158FFF]/10 text-[#158FFF] rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                            {comp.name.charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[13px] font-medium text-[#161618] truncate">{comp.name}</p>
+                            {comp.industry && (
+                              <p className="text-xs text-[#A0A0A0] truncate">{comp.industry}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Show selected company name clearly */}
-            {selectedCompany && (
-              <div className="mt-3 text-sm text-green-600 flex items-center gap-2">
-                <span className="font-medium">Selected:</span>
-                {selectedCompany.name}
-              </div>
-            )}
 
             <button
+              type="button"
               onClick={handleAddSubsidiary}
               disabled={actionLoading || !selectedSubsidiaryId}
-              className="mt-5 w-full py-3.5 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50"
+              className="mt-4 w-full px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {actionLoading ? "Adding..." : "Add Subsidiary"}
             </button>
           </div>
 
-          {/* Current Subsidiaries */}
           <div>
-            <h4 className="text-sm font-semibold text-gray-700 mb-3">
+            <label className="block text-[13px] font-medium text-[#161618] mb-2 tracking-[-0.05em]">
               Current Subsidiaries ({subsidiaries.length})
-            </h4>
+            </label>
 
-            {subsidiaries.length === 0 ? (
-              <div className="text-center py-8 bg-gray-50 rounded-2xl border border-dashed border-gray-300">
-                <p className="text-gray-500">No subsidiaries linked yet.</p>
+            {loading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 p-3 border border-[#1F2937]/10 rounded-xl">
+                    <Skeleton shape="circle" width={32} height={32} className="flex-shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      <Skeleton width="50%" height={12} />
+                      <Skeleton width="30%" height={10} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : subsidiaries.length === 0 ? (
+              <div className="text-center py-8 bg-[#FAFAFA] rounded-xl border border-dashed border-[#E0E0E1]">
+                <p className="text-[13px] text-[#A0A0A0]">No subsidiaries linked yet.</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {subsidiaries.map((sub) => (
-                  <div
+                  <Link
                     key={sub._id}
-                    className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-2xl"
+                    to={`/companies/${sub._id}`}
+                    className="group flex items-center justify-between p-3 border border-[#1F2937]/10 rounded-xl hover:border-[#158FFF]/30 hover:bg-[#158FFF]/[0.03] transition-colors"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center font-medium">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 bg-[#158FFF]/10 text-[#158FFF] rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0">
                         {sub.name.charAt(0)}
                       </div>
-                      <div>
-                        <p className="font-medium">{sub.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {sub.industry || "—"}
-                        </p>
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-medium text-[#161618] truncate">{sub.name}</p>
+                        <p className="text-xs text-[#A0A0A0] truncate">{sub.industry || "—"}</p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleRemoveSubsidiary(sub._id, sub.name)}
-                      className="text-red-600 hover:bg-red-50 p-2 rounded-xl"
-                    >
-                      <DeleteIcon className="w-4 h-4" />
-                    </button>
-                  </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <ChevronRight className="w-4 h-4 text-[#A0A0A0] opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setPendingRemoval({ id: sub._id, name: sub.name });
+                        }}
+                        title="Remove subsidiary"
+                        className="w-8 h-8 flex items-center justify-center rounded-full text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        <DeleteIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </Link>
                 ))}
               </div>
             )}
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+        {/* Sticky footer — matches every other panel's footer spec */}
+        <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
           <button
+            type="button"
             onClick={onClose}
-            className="px-6 py-2.5 bg-gray-200 hover:bg-gray-300 rounded-xl font-medium"
+            className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors"
           >
             Close
           </button>
         </div>
       </div>
-    </div>
+
+      <ConfirmDialog
+        isOpen={!!pendingRemoval}
+        title="Remove subsidiary?"
+        message={pendingRemoval ? `Remove "${pendingRemoval.name}" as a subsidiary of this company?` : ""}
+        confirmLabel="Remove"
+        onConfirm={handleRemoveSubsidiary}
+        onCancel={() => setPendingRemoval(null)}
+      />
+    </>
   );
 };
 

@@ -118,8 +118,12 @@ module.exports = async function htmlDocumentPdf(
   html, body { margin: 0; padding: 0; }
   /* Cap the sheet to the printable area (A4 minus the 16px top/bottom PDF
      margins) so the bottom-pinned "Page 1 / 1 …" line stays on page 1 instead
-     of tipping onto a second page. */
-  .dcsheet { padding: 0 !important; min-height: calc(297mm - 34px) !important; }
+     of tipping onto a second page. Only the vertical padding is zeroed —
+     page.pdf()'s own margin below covers top/bottom; left/right stay at
+     "0" there, so the sheet's horizontal padding is the ONLY thing giving
+     the content a left/right margin. Zeroing it too (as this used to)
+     pinned the content flush to both page edges. */
+  .dcsheet { padding: 0 20px !important; min-height: calc(297mm - 34px) !important; }
   .dcsheet.t-Landscape { min-height: calc(210mm - 34px) !important; }
 </style>
 </head>
