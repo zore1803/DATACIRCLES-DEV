@@ -164,6 +164,10 @@ const ItemSearchSelect = ({
       // The product's own default discount — previously always started at 0.
       discountType: item.discount?.type || "amount",
       discount: item.discount?.value || 0,
+        type: item.type,
+        stock: item.stock,
+        gstRate: item.gstRate,
+        taxInclusive: item.taxInclusive,
     });
     setIsOpen(false);
     setSearchTerm("");

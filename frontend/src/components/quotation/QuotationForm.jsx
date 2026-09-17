@@ -199,6 +199,10 @@ const ItemSearchSelect = ({
       // whatever default the product was configured with.
       discountType: item.discount?.type || "amount",
       discount: item.discount?.value || 0,
+        type: item.type,
+        stock: item.stock,
+        gstRate: item.gstRate,
+        taxInclusive: item.taxInclusive,
     });
     setIsOpen(false);
     setSearchTerm(item.displayName);
@@ -902,6 +906,8 @@ const QuotationForm = ({
               stock: item.inventory?.currentStock ?? 0,
       discountType: item.discount?.type || "amount",
       discount: item.discount?.value || 0,
+        type: item.type,
+        stock: item.inventory?.currentStock ?? 0,
     };
     setForm((prev) => {
       const isBlankStarterRow =

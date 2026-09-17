@@ -1,4 +1,4 @@
-import DeleteIcon from "../common/DeleteIcon";
+﻿import DeleteIcon from "../common/DeleteIcon";
 import VariantImagePicker from "./VariantImagePicker";
 import { UNIT_OPTIONS, unitLabelToValue } from "./unitOptions";
 import { stripVariantFileState } from "../../utils/variantResolve";
@@ -31,7 +31,7 @@ const ItemForm = ({
   const [variants, setVariants] = useState(form.variants || []);
   const [showVariantForm, setShowVariantForm] = useState(false);
   // Blank variant. The override fields (barcode/description/discount/maxDiscountPercent/
-  // lowStockThreshold) start as "" rather than 0 â€” empty means "inherit the parent's value",
+  // lowStockThreshold) start as "" rather than 0 Ã¢â‚¬â€ empty means "inherit the parent's value",
   // and 0 is a real, deliberate setting. The backend preserves that distinction.
   const [currentVariant, setCurrentVariant] = useState({
     name: "",
@@ -53,7 +53,7 @@ const ItemForm = ({
   // Once an item has variants, the variant is the actual sellable/stockable
   // unit everywhere in the app (every item-picker in Purchase/PO/Quotation/
   // Invoice/Delivery Challan already ignores parent pricing once
-  // item.variants.length > 0, resolving to the variant instead) â€” so the
+  // item.variants.length > 0, resolving to the variant instead) Ã¢â‚¬â€ so the
   // parent-level price/GST/stock fields below become inert and are disabled
   // to stop the user from ever wondering "which price actually applies".
   // Includes an in-progress uncommitted variant panel too, since that
@@ -118,7 +118,7 @@ const ItemForm = ({
         setItemFields(res.data?.fields || []);
       } catch {
         // A missing/forbidden field config just means no custom fields to
-        // show â€” the rest of the form still works, so fail quietly.
+        // show Ã¢â‚¬â€ the rest of the form still works, so fail quietly.
         setItemFields([]);
       }
     };
@@ -417,7 +417,7 @@ const ItemForm = ({
 
       // A variant typed into the open "Add Variant" panel only lives in
       // currentVariant until its own "Add Variant" button commits it into
-      // `variants` â€” submitting the outer form directly (without clicking
+      // `variants` Ã¢â‚¬â€ submitting the outer form directly (without clicking
       // that button first) used to silently drop it. Auto-commit it here so
       // whatever's on screen actually gets saved.
       const variantsToSave =
@@ -428,7 +428,7 @@ const ItemForm = ({
           : variants;
 
       // Parent opening stock is inert once the item has variants (each
-      // variant tracks its own) â€” force it to 0 regardless of whatever
+      // variant tracks its own) Ã¢â‚¬â€ force it to 0 regardless of whatever
       // stale value the now-disabled field's state still holds, so the
       // backend never records a spurious opening-stock ledger entry for
       // the parent on top of each variant's own.
@@ -469,14 +469,14 @@ const ItemForm = ({
           }
         );
         // `_newImageFiles` is form-only state (File objects); it must not be serialized into
-        // the JSON variants payload â€” the files go as their own multipart parts below.
+        // the JSON variants payload Ã¢â‚¬â€ the files go as their own multipart parts below.
         fd.append(
           "variants",
           JSON.stringify(variantsToSave.map(stripVariantFileState))
         );
         fd.append("additionalFields", JSON.stringify(processedAdditionalFields));
         fd.append("discount", JSON.stringify(form.discount || { type: "percentage", value: 0 }));
-        // Nested object, so it must be JSON-stringified like variants/discount above â€”
+        // Nested object, so it must be JSON-stringified like variants/discount above Ã¢â‚¬â€
         // appending it raw would send the literal string "[object Object]".
         fd.append("inventory", JSON.stringify(inventoryToSave));
         fd.append("existingImages", JSON.stringify(existingImages));
@@ -591,7 +591,7 @@ const ItemForm = ({
         className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header â€” matches the CompanyForm/CompanyTaskForm quick-drawer header spec */}
+        {/* Header Ã¢â‚¬â€ matches the CompanyForm/CompanyTaskForm quick-drawer header spec */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
           <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
             {form._id ? "Edit Item" : "Create New Item"}
@@ -609,7 +609,7 @@ const ItemForm = ({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-8 space-y-6 font-inter custom-scrollbar">
-          {/* Item/Service Name â€” label and placeholder follow the Type field below */}
+          {/* Item/Service Name Ã¢â‚¬â€ label and placeholder follow the Type field below */}
           <div>
             <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
               {form.type === "service" ? "Service Name" : "Item Name"} <span className="text-red-500">*</span>
@@ -636,7 +636,7 @@ const ItemForm = ({
               onChange={(e) => {
                 const nextType = e.target.value;
                 handleFormChange("type", nextType);
-                // A service can't have variants â€” clear any in-progress or
+                // A service can't have variants Ã¢â‚¬â€ clear any in-progress or
                 // saved ones so switching away from Product doesn't leave
                 // stale variant state around (which would also keep
                 // hasVariants true and wrongly disable the parent price/GST/
@@ -665,7 +665,7 @@ const ItemForm = ({
             </select>
           </div>
 
-          {/* Variants â€” a service has nothing to stock or vary in price by
+          {/* Variants Ã¢â‚¬â€ a service has nothing to stock or vary in price by
               SKU, so this whole section (and everything it drives: variant
               pricing, variant stock, variant-aware pickers elsewhere) simply
               doesn't apply once Type is Service. */}
@@ -850,7 +850,7 @@ const ItemForm = ({
                         // Same reasoning as the parent's Current Stock field above: once a
                         // variant already exists, its stock is owned by the StockMovement
                         // ledger and must only change through Inventory's Stock In / Stock Out
-                        // â€” editing it here would silently overwrite real stock and bypass the
+                        // Ã¢â‚¬â€ editing it here would silently overwrite real stock and bypass the
                         // audit trail. A brand-new variant has no ledger yet, so its opening
                         // stock is still set here, same as a brand-new item.
                         disabled={!!(form._id && variantIndex !== null)}
@@ -885,10 +885,10 @@ const ItemForm = ({
                     </div>
                   </div>
 
-                  {/* â”€â”€ Variant-specific overrides â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                  {/* Ã¢â€â‚¬Ã¢â€â‚¬ Variant-specific overrides Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
                       Each of these belongs to the variant rather than the product: a Small and
                       a Large are scanned, described, pictured and discounted separately. All
-                      are optional â€” left blank, the variant inherits the parent item's value
+                      are optional Ã¢â‚¬â€ left blank, the variant inherits the parent item's value
                       (see utils/variantResolve.js), so existing variants are unaffected. */}
                   <div className="pt-3 mt-1 border-t border-gray-100">
                     <p className="text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Variant Details</p>
@@ -950,7 +950,7 @@ const ItemForm = ({
                             className="px-2 py-2 bg-white border border-[#1F2937]/10 rounded-full text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                           >
                             <option value="percentage">%</option>
-                            <option value="amount">â‚¹</option>
+                            <option value="amount">₹</option>
                           </select>
                         </div>
                       </div>
@@ -1036,7 +1036,7 @@ const ItemForm = ({
                         {v.name}
                       </div>
                       <div className="text-xs text-gray-500 truncate mt-0.5">
-                        SKU: {v.sku || "N/A"} | â‚¹{v.sellingPrice}
+                        SKU: {v.sku || "N/A"} | ₹{v.sellingPrice}
                       </div>
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
@@ -1080,10 +1080,10 @@ const ItemForm = ({
           </div>
           )}
 
-          {/* Price Row â€” disabled once the item has variants: each variant
+          {/* Price Row Ã¢â‚¬â€ disabled once the item has variants: each variant
               carries its own price, and every item-picker across the app
               (Purchase/PO/Quotation/Invoice/Delivery Challan) already offers
-              only the variants â€” not this parent price â€” once they exist. */}
+              only the variants Ã¢â‚¬â€ not this parent price Ã¢â‚¬â€ once they exist. */}
           {!hasVariants && (
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1187,7 +1187,7 @@ const ItemForm = ({
                   className="px-2 h-[38px] bg-gray-50 border-l border-[#1F2937]/10 text-[13px] text-[#1F2937] font-inter focus:outline-none"
                 >
                   <option value="percentage">% Percentage</option>
-                  <option value="amount">â‚¹ Amount</option>
+                  <option value="amount">₹ Amount</option>
                 </select>
               </div>
               <p className="mt-1 text-[11px] text-gray-400">Default discount applied when added to a document.</p>
@@ -1342,14 +1342,14 @@ const ItemForm = ({
             </select>
           </div>
 
-          {/* Inventory â€” every product appears on the Inventory page automatically, so there's no
+          {/* Inventory Ã¢â‚¬â€ every product appears on the Inventory page automatically, so there's no
               opt-in toggle here. Leaving the quantity blank simply starts the item at 0.
               After creation the stock level changes exclusively through Inventory's
               Stock In / Stock Out, so it stays backed by the movement ledger instead of being
               silently overwritten by a product save. Services carry no stock. */}
           {form.type === "product" && (
-            <div className="rounded-2xl border border-[#1F2937]/10 bg-[#F9FAFB] p-4">
-              <p className="text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-3">Inventory</p>
+            <div className="pt-4 space-y-6">
+              <h3 className="text-[16px] font-bold text-[#111216]">Inventory</h3>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
@@ -1360,7 +1360,7 @@ const ItemForm = ({
                     step="any"
                     // Opening quantity is the starting balance and is recorded as the first
                     // ledger entry, so it can only be set while creating the item. Also
-                    // disabled once the item has variants â€” each variant carries its own
+                    // disabled once the item has variants Ã¢â‚¬â€ each variant carries its own
                     // opening stock (see the variant panel below); the parent's own opening
                     // quantity would otherwise double-count against the variant total.
                     disabled={!!form._id || hasVariants}
@@ -1376,7 +1376,7 @@ const ItemForm = ({
                   />
                   <p className="mt-1 text-[11px] text-gray-400">
                     {hasVariants
-                      ? "Managed by variants â€” set each variant's own stock below."
+                      ? "Managed by variants Ã¢â‚¬â€ set each variant's own stock below."
                       : form._id
                         ? "Use Stock In / Stock Out on the Inventory page to change stock."
                         : "Leave blank to start at 0."}
@@ -1392,7 +1392,7 @@ const ItemForm = ({
                     min="0"
                     placeholder="0"
                     // Disabled (not hidden) once there are variants, matching the Opening Stock
-                    // field beside it â€” hiding just one half would leave this grid lopsided.
+                    // field beside it Ã¢â‚¬â€ hiding just one half would leave this grid lopsided.
                     // Each variant sets its own threshold and falls back to this value only
                     // while it has none of its own.
                     disabled={hasVariants}
@@ -1407,7 +1407,7 @@ const ItemForm = ({
                   />
                   {hasVariants && (
                     <p className="mt-1 text-[11px] text-gray-400">
-                      Managed by variants â€” set each variant's own alert level below.
+                      Managed by variants Ã¢â‚¬â€ set each variant's own alert level below.
                     </p>
                   )}
                 </div>
@@ -1423,7 +1423,7 @@ const ItemForm = ({
             </label>
           </div>
 
-          {/* Custom Fields (Categorized & Collapsible) â€” sits after the
+          {/* Custom Fields (Categorized & Collapsible) Ã¢â‚¬â€ sits after the
               basic info above and before the stock/variants block below,
               matching the section order used across the other modules. */}
           {sortedCategories.length > 0 && (
@@ -1431,7 +1431,7 @@ const ItemForm = ({
               <h3 className="text-sm font-semibold text-gray-900">Custom Fields</h3>
 
               {sortedCategories.map((category) => (
-                <div key={category} className="border border-[#1F2937]/10 rounded-2xl overflow-hidden shadow-sm">
+                <div key={category} className="pt-4 space-y-6">
                   <button
                     type="button"
                     onClick={() => toggleSection(category)}
@@ -1450,7 +1450,7 @@ const ItemForm = ({
                   </button>
 
                   {expandedSections[category] && (
-                    <div className="p-5 bg-white border-t border-[#1F2937]/10 space-y-5">
+                    <div className="space-y-6 font-inter">
                       {groupedFields[category].map((fieldDef) => (
                         <div key={fieldDef.name}>
                           <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
@@ -1467,7 +1467,7 @@ const ItemForm = ({
             </div>
           )}
 
-          {/* Stock â€” Variants List (Minified) */}
+          {/* Stock Ã¢â‚¬â€ Variants List (Minified) */}
           {variants.length > 0 && (
             <div className="mt-6 border-t border-gray-100 pt-6">
               <h3 className="text-sm font-semibold text-gray-900 mb-3">
@@ -1484,7 +1484,7 @@ const ItemForm = ({
                         {v.name}
                       </div>
                       <div className="text-xs text-gray-500">
-                        SKU: {v.sku} | â‚¹{v.sellingPrice}
+                        SKU: {v.sku} | ₹{v.sellingPrice}
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -1508,7 +1508,7 @@ const ItemForm = ({
           )}
         </div>
 
-        {/* Footer â€” matches the CompanyTaskForm quick-drawer footer spec */}
+        {/* Footer Ã¢â‚¬â€ matches the CompanyTaskForm quick-drawer footer spec */}
         <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
           <button
             type="button"
@@ -1530,7 +1530,7 @@ const ItemForm = ({
 
       {/* Nested Variant Form removed as it's now inline */}
 
-      {/* Unsaved-changes confirmation â€” closing (X/backdrop/Cancel) while the
+      {/* Unsaved-changes confirmation Ã¢â‚¬â€ closing (X/backdrop/Cancel) while the
           form is dirty asks instead of silently discarding edits. */}
       {showConfirmDialog && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-[1px] z-[10002] flex items-center justify-center p-4">

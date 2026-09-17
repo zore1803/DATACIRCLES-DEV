@@ -167,6 +167,8 @@ const ItemSearchSelect = ({
       // Details" -> Discount) — previously always started at 0.
       discountType: item.discount?.type || "amount",
       discount: item.discount?.value || 0,
+        type: item.type,
+        stock: item.stock,
       gstRate: item.gstRate || 0,
       taxInclusive: !!item.taxInclusive,
     });

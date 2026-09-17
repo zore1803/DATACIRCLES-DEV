@@ -204,7 +204,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
     }
     try {
       setSaving(true);
-      // A variant typed into the open "Add Variant" panel only lives in
+      // • variant typed into the open "Add Variant" panel only lives in
       // currentVariant until its own "Add Variant" button commits it into
       // `variants` â€” saving the drawer directly (without clicking that
       // button first) used to silently drop it. Auto-commit it here so
@@ -251,7 +251,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
         },
       };
 
-      // A variant's freshly picked images have to travel as multipart too, so the request
+      // • variant's freshly picked images have to travel as multipart too, so the request
       // switches to FormData when EITHER the parent or any variant has new files pending.
       const anyVariantHasNewFiles = variantsToSave.some((v) => (v._newImageFiles || []).length > 0);
 
@@ -364,7 +364,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                     type="button"
                     onClick={() => {
                       setType(t);
-                      // A service can't have variants â€” clear any in-progress
+                      // • service can't have variants â€” clear any in-progress
                       // or saved ones so switching away from Product doesn't
                       // leave stale variant state around (which would also
                       // keep hasVariants true and wrongly hide the Selling/
@@ -505,8 +505,9 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                 </div>
 
                 {showVariantForm && (
-                  <div className="border border-gray-200 rounded-xl bg-white mb-3 shadow-sm">
-                    <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+
+<div className="border border-[#1F2937]/10 rounded-2xl bg-white mb-4 shadow-sm">
+                    <div className="px-4 py-3 border-b border-[#1F2937]/10 flex justify-between items-center">
                       <span className="text-[14px] font-medium text-[#1F2937] font-inter">
                         {variantIndex !== null ? "Edit Variant" : "Add Variant"}
                       </span>
@@ -731,7 +732,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                 <div className="flex items-start gap-4">
                   <div className="flex flex-wrap gap-3">
                     {imagePreviews.map((url, i) => (
-                      <div key={url} className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200 group">
+                      <div key={url} className="relative w-20 h-20 rounded-2xl overflow-hidden border border-[#1F2937]/10 group">
                         <img src={url} alt="" className="w-full h-full object-cover cursor-pointer" onClick={() => setSelectedImageIndex(i)} />
                         <button
                           type="button"
@@ -745,7 +746,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                     <button
                       type="button"
                       onClick={() => imageInputRef.current?.click()}
-                      className="w-20 h-20 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 flex flex-col items-center justify-center text-gray-400 hover:bg-gray-100 hover:border-gray-300 cursor-pointer transition-colors"
+                      className="w-20 h-20 border-2 border-dashed border-[#1F2937]/10 rounded-2xl bg-[#F9FAFB] flex flex-col items-center justify-center text-gray-400 hover:bg-gray-100 hover:border-gray-300 cursor-pointer transition-colors"
                     >
                       <PlusIcon className="w-4 h-4 mb-1" />
                       <span className="text-[11px] font-medium">Upload</span>
@@ -766,7 +767,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
               )}
           </div>
 
-          {/* â”€â”€ Opening Stock â€” flat section, no card wrapper. A service
+          {/* â”€â”€ Opening Stock â€” flat section, no card wrapper. • service
               carries no stock at all, not just "no variant-level" stock. â”€â”€ */}
           {type === "Product" && !hasVariants && (
           <div className="space-y-3">
@@ -794,16 +795,16 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
               variant once variants exist, so the whole section is hidden rather than left
               showing parent copies that the variants would override anyway. */}
           {!hasVariants && (
-          <div className="border border-[#1F2937]/10 bg-white rounded-2xl overflow-hidden">
-            <button type="button" className="w-full p-4 flex items-center gap-3 text-left" onClick={() => setShowMoreDetails(!showMoreDetails)}>
+          <div className="pt-4 space-y-6">
+            <button type="button" className="w-full flex items-center gap-3 text-left pb-2" onClick={() => setShowMoreDetails(!showMoreDetails)}>
               <ChevronRight className={`w-4 h-4 text-gray-500 transition-transform flex-shrink-0 ${showMoreDetails ? "rotate-90" : ""}`} />
               <div>
-                <p className="text-sm font-bold text-gray-900">More Details?</p>
-                <p className="text-xs text-gray-500 mt-0.5">Low stock alerts, Discount settingsâ€¦</p>
+                <p className="text-sm font-bold text-gray-900">More Details</p>
+                <p className="text-xs text-gray-500 mt-0.5">Low stock alerts, Discount settings...
               </div>
             </button>
             {showMoreDetails && (
-              <div className="border-t border-[#1F2937]/10 bg-white px-5 py-4 grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-6 pt-2">
                 <div>
                   <label className={lbl}>Discount</label>
                   <div className="flex h-11 border border-[#1F2937]/10 rounded-full overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 bg-white font-inter">
