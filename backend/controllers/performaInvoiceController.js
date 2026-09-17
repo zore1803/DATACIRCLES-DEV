@@ -1,6 +1,7 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const PerformaInvoice = require("../models/ProformaInvoice");
 const getDefaultBankDetails = require("../utils/getDefaultBankDetails");
+const resolveBankDetails = require("../utils/resolveBankDetails");
 const htmlDocumentPdf = require("../utils/htmlDocumentPdf");
 const mongoose = require("mongoose");
 const Branding = require("../models/Branding");
@@ -39,6 +40,8 @@ const createPerformaInvoice = async (req, res) => {
       signature,
       signatureType,
       discount,
+      bankDetails,
+      isRoundOff,
       receiverGSTIN,
       billingAddress,
       shippingAddress,
@@ -133,6 +136,9 @@ const createPerformaInvoice = async (req, res) => {
       signature,
       signatureType: signatureType || "text",
       discount: discount || { type: "fixed", value: 0 },
+      // Bank account chosen on the form; the PDF prints it (utils/resolveBankDetails.js).
+      bankDetails: bankDetails || null,
+      ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
       receiverGSTIN: finalReceiverGSTIN,
       billingAddress: finalBillingAddress,
       shippingAddress: finalShippingAddress,
@@ -220,6 +226,8 @@ const duplicatePerformaInvoice = async (req, res) => {
       signature: source.signature,
       signatureType: normalizedSignatureType,
       discount: source.discount,
+      bankDetails: source.bankDetails || null,
+      isRoundOff: source.isRoundOff,
       receiverGSTIN: source.receiverGSTIN,
       billingAddress: source.billingAddress,
       shippingAddress: source.shippingAddress,
@@ -412,7 +420,7 @@ const downloadPerformaInvoice = async (req, res) => {
     if (!performaInvoice) {
       return res.status(404).json({ error: "proformaInvoice not found" });
     }
-    const bankDetails = await getDefaultBankDetails(req.user.organization);
+    const bankDetails = await resolveBankDetails(performaInvoice, req.user.organization);
     const OrgDetails = await Branding.findOne({
       organization: req.user.organization,
     }).sort({ updatedAt: -1 });
@@ -502,6 +510,8 @@ const updatePerformaInvoice = async (req, res) => {
       signature,
       signatureType,
       discount,
+      bankDetails,
+      isRoundOff,
       receiverGSTIN,
       billingAddress,
       shippingAddress,
@@ -580,6 +590,9 @@ const updatePerformaInvoice = async (req, res) => {
         signature,
         signatureType,
         discount,
+        // Only written when sent, so an update without them leaves the saved values alone.
+        ...(bankDetails !== undefined && { bankDetails: bankDetails || null }),
+        ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
         receiverGSTIN: finalReceiverGSTIN,
         billingAddress: finalBillingAddress,
         shippingAddress: finalShippingAddress,
@@ -700,7 +713,7 @@ const sendPerformaInvoiceEmail = async (req, res) => {
       return res.status(404).json({ error: "Proforma invoice not found" });
     }
 
-    const bankDetails = await getDefaultBankDetails(req.user.organization);
+    const bankDetails = await resolveBankDetails(pi, req.user.organization);
     const orgDetails = await Branding.findOne({ organization: req.user.organization }).sort({ updatedAt: -1 });
     const pdfBuffer = await htmlDocumentPdf(pi, bankDetails, orgDetails, "performa");
 

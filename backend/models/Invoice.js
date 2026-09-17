@@ -13,6 +13,9 @@ const invoiceSchema = new mongoose.Schema({
   deal: { type: mongoose.Schema.Types.ObjectId, ref: 'Deal', required: true },
   invoiceNumber: { type: String, required: true },
   date: { type: Date, required: true },
+  // Financial year (starting calendar year, e.g. 2026 for FY 2026-27), derived from `date`.
+  // Invoice numbers are unique per organization within a financial year.
+  financialYear: { type: Number },
   dueDate: { type: Date },
   amount: { type: Number, required: true },
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -38,6 +41,9 @@ const invoiceSchema = new mongoose.Schema({
   // Bank account printed on this document. Chosen via the invoice form's
   // "Select Bank" dropdown; when unset the org's default bank is used.
   bankDetails: { type: mongoose.Schema.Types.ObjectId, ref: 'BankDetails', default: null },
+  // Round Off chosen on the form. No default: documents saved before this field existed stay
+  // unrounded in their PDF, exactly as before.
+  isRoundOff: { type: Boolean },
   // Editable text shown as the UPI payment note ("tn") on the QR code.
   // Defaults to "Invoice <invoiceNumber>" when left blank — see
   // shared/documentTemplates.js buildUpiUri.
@@ -108,5 +114,21 @@ const invoiceSchema = new mongoose.Schema({
   // trail. Not required — an invoice with no attempts has this null.
   latestEInvoice: { type: mongoose.Schema.Types.ObjectId, ref: 'EInvoice', default: null },
 }, { timestamps: true });
+
+invoiceSchema.pre('validate', function setFinancialYear(next) {
+  if (this.date) {
+    // eslint-disable-next-line global-require
+    this.financialYear = require('../utils/documentNumbering').financialYearOf(this.date);
+  }
+  next();
+});
+
+// Database-level guard against duplicate invoice numbers (e.g. two saves at the same moment).
+// Partial so invoices saved before `financialYear` existed don't block the index until
+// scripts/backfillInvoiceFinancialYear.js has filled it in.
+invoiceSchema.index(
+  { organization: 1, financialYear: 1, invoiceNumber: 1 },
+  { unique: true, partialFilterExpression: { financialYear: { $type: 'number' } } }
+);
 
 module.exports = mongoose.model('Invoice', invoiceSchema);

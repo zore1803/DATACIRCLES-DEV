@@ -304,6 +304,210 @@ async function getNextCounterNumber({ organization, documentTypeKey, session }) 
   return counter.seq;
 }
 
+
+// ---------------------------------------------------------------------------
+// Invoice number series (Invoice only; the other document types still use the
+// plain per-type counter in getNextCounterNumber below).
+//
+// A series is one prefix + suffix within one Indian financial year (Apr-Mar):
+//   - changing the Invoice prefix/suffix starts a fresh series at 1
+//   - each new financial year starts a fresh series at 1 (GST requires invoice
+//     numbers to be unique within a financial year, not across years)
+//   - a series never re-uses a number: it starts after the highest number
+//     already used in it (so existing invoices are never duplicated) and a
+//     number that is already taken is skipped, never back-filled
+//
+// Counter doc id: `${org}_doc_invoice_fy${year}_${prefix}|${suffix}`.
+// ---------------------------------------------------------------------------
+const IST_OFFSET_MS = 330 * 60 * 1000;
+
+// Financial year an invoice belongs to, as its starting calendar year (FY 2026-27 -> 2026).
+// Evaluated in IST so an invoice dated 1 April is never counted in the previous year.
+function financialYearOf(date) {
+  const base = date ? new Date(date) : new Date();
+  const d = new Date((Number.isNaN(base.getTime()) ? Date.now() : base.getTime()) + IST_OFFSET_MS);
+  const year = d.getUTCFullYear();
+  return d.getUTCMonth() >= 3 ? year : year - 1;
+}
+
+function financialYearRange(fy) {
+  return {
+    start: new Date(Date.UTC(fy, 3, 1) - IST_OFFSET_MS),
+    end: new Date(Date.UTC(fy + 1, 3, 1) - IST_OFFSET_MS),
+  };
+}
+
+function escapeForRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function invoiceSeries({ organization, prefix, suffix, date }) {
+  const normalizedPrefix = (prefix || '').toString().trim() || DEFAULT_PREFIX;
+  const normalizedSuffix = (suffix || '').toString().trim();
+  const fy = financialYearOf(date);
+  const bare = normalizedPrefix.replace(/-+$/, '');
+  return {
+    fy,
+    prefix: normalizedPrefix,
+    suffix: normalizedSuffix,
+    counterId: `${organization}_doc_invoice_fy${fy}_${normalizedPrefix}|${normalizedSuffix}`,
+    // Same shape buildInvoiceNumber produces: PREFIX-N or PREFIX-N-SUFFIX.
+    pattern: new RegExp(`^${escapeForRegex(bare)}-?(\\d+)${normalizedSuffix ? `-${escapeForRegex(normalizedSuffix)}` : ''}$`),
+    dateRange: financialYearRange(fy),
+  };
+}
+
+function loadInvoiceModel() {
+  // Lazy: keeps this util free of a model import cycle.
+  // eslint-disable-next-line global-require
+  return require('../models/Invoice');
+}
+
+async function highestUsedInSeries(series, organization, Model = loadInvoiceModel(), numberField = 'invoiceNumber') {
+  const docs = await Model.find({
+    organization,
+    date: { $gte: series.dateRange.start, $lt: series.dateRange.end },
+    [numberField]: { $regex: series.pattern },
+  }).select(numberField).lean();
+  let max = 0;
+  for (const doc of docs) {
+    const match = String(doc[numberField] || '').match(series.pattern);
+    const n = match ? parseInt(match[1], 10) : 0;
+    if (n > max) max = n;
+  }
+  return max;
+}
+
+// Raises the series counter to at least `value`, creating it if needed. Never lowers it.
+async function raiseInvoiceCounter(counterId, value, session) {
+  const opts = { upsert: true };
+  if (session) opts.session = session;
+  try {
+    await Counter.updateOne({ _id: counterId }, { $max: { seq: value } }, opts);
+  } catch (err) {
+    // Two first-time upserts racing: one inserts, the other retries as a plain update.
+    if (err && err.code === 11000) {
+      await Counter.updateOne({ _id: counterId }, { $max: { seq: value } }, session ? { session } : {});
+    } else {
+      throw err;
+    }
+  }
+}
+
+function numberInUse(Model, numberField, organization, number, series, session) {
+  const query = Model.findOne({
+    organization,
+    [numberField]: number,
+    date: { $gte: series.dateRange.start, $lt: series.dateRange.end },
+  }).select('_id');
+  if (session) query.session(session);
+  return query.lean();
+}
+
+// Undo an auto-number's counter increment when the create that took it fails, so the number
+// is not consumed. Only rolls back if nothing newer has been handed out since; otherwise the
+// gap stays (numbers are never back-filled).
+async function releaseInvoiceNumber(series, seq) {
+  try {
+    await Counter.updateOne({ _id: series.counterId, seq }, { $inc: { seq: -1 } });
+  } catch (err) {
+    console.error('Failed to release invoice number', series.counterId, seq, err);
+  }
+}
+
+// Every create path (create, duplicate, convert) aborts its transaction on failure. Hook that
+// abort once per session so auto-numbers taken inside it are released automatically, newest
+// first, without each caller needing its own release call.
+function releaseOnAbort(session, release) {
+  if (!session) return;
+  if (!session.__invoiceNumberReleases) {
+    session.__invoiceNumberReleases = [];
+    const originalAbort = session.abortTransaction.bind(session);
+    session.abortTransaction = async (...args) => {
+      const result = await originalAbort(...args);
+      const releases = session.__invoiceNumberReleases.splice(0).reverse();
+      for (const fn of releases) await fn();
+      return result;
+    };
+  }
+  session.__invoiceNumberReleases.push(release);
+}
+
+async function resolveInvoiceNumberInSeries({ Model, numberField, organization, prefix, suffix, date, providedNumber, session }) {
+  const series = invoiceSeries({ organization, prefix, suffix, date });
+
+  // Manual number: must be unused within its financial year. Moves the counter past it (never
+  // back), inside the caller's transaction so a failed create doesn't move it.
+  if (providedNumber !== null && providedNumber !== undefined && providedNumber !== '') {
+    const number = buildInvoiceNumber({ prefix: series.prefix, number: providedNumber, suffix: series.suffix });
+    if (await numberInUse(Model, numberField, organization, number, series, session)) {
+      const err = new Error(`${number} is already in use.`);
+      err.code = 'DUPLICATE_NUMBER';
+      throw err;
+    }
+    const match = number.match(series.pattern);
+    if (match) await raiseInvoiceCounter(series.counterId, parseInt(match[1], 10), session);
+    return number;
+  }
+
+  // Auto number. Seed from the highest number already used in this series (covers
+  // organizations that had invoices before this counter existed), then take the next one
+  // atomically. Deliberately outside the caller's transaction: a counter write inside a
+  // transaction conflicts with any concurrent create, which would fail it instead of giving it
+  // the next number. Failure is covered by releaseOnAbort.
+  await raiseInvoiceCounter(series.counterId, await highestUsedInSeries(series, organization, Model, numberField));
+  for (let attempt = 0; attempt < 1000; attempt += 1) {
+    const { seq } = await Counter.findOneAndUpdate(
+      { _id: series.counterId },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+    const number = buildInvoiceNumber({ prefix: series.prefix, number: seq, suffix: series.suffix });
+    if (!(await numberInUse(Model, numberField, organization, number, series))) {
+      releaseOnAbort(session, () => releaseInvoiceNumber(series, seq));
+      return number;
+    }
+    // Already taken (e.g. entered manually): skip it; the counter has moved past it.
+  }
+  throw new Error('Could not allocate an invoice number.');
+}
+
+// After an invoice's number is changed by hand: if it belongs to the given series, make sure
+// later auto numbers continue after it. Numbers from another prefix/suffix are left alone.
+async function raiseInvoiceSeriesTo({ organization, prefix, suffix, date, number }) {
+  const series = invoiceSeries({ organization, prefix, suffix, date });
+  const match = String(number || '').match(series.pattern);
+  if (match) await raiseInvoiceCounter(series.counterId, parseInt(match[1], 10));
+}
+
+// Read-only: the next auto number the configured Invoice series would hand out today.
+async function peekNextInvoiceNumber({ organization, prefix, suffix, date }) {
+  const Model = loadInvoiceModel();
+  const series = invoiceSeries({ organization, prefix, suffix, date });
+  const [counter, highest] = await Promise.all([
+    Counter.findById(series.counterId).lean(),
+    highestUsedInSeries(series, organization, Model),
+  ]);
+  let next = Math.max(counter?.seq || 0, highest) + 1;
+  for (let i = 0; i < 1000; i += 1) {
+    const number = buildInvoiceNumber({ prefix: series.prefix, number: next, suffix: series.suffix });
+    if (!(await numberInUse(Model, 'invoiceNumber', organization, number, series))) break;
+    next += 1;
+  }
+  return next;
+}
+
+// Settings "Next Invoice Number": moves the current series (configured prefix/suffix, current
+// financial year) so its next auto number is at least `nextNumber`. Never lowers it and never
+// affects other series, so a later prefix change or new financial year still starts at 1.
+async function applyNextInvoiceNumberSetting({ organization, prefix, suffix, nextNumber }) {
+  const n = Number(nextNumber);
+  if (!Number.isFinite(n) || n < 1) return;
+  const series = invoiceSeries({ organization, prefix, suffix });
+  await raiseInvoiceCounter(series.counterId, await highestUsedInSeries(series, organization));
+  await raiseInvoiceCounter(series.counterId, Math.floor(n) - 1);
+}
+
 // Read-only peek at what the *next* number for each document type will be,
 // without incrementing anything — used by the create-document screens to
 // show the upcoming number (e.g. "2") before the document is actually saved,
@@ -326,6 +530,13 @@ async function getNextNumberPreviews(organizationId) {
     const key = idToKey[c._id];
     if (key) previews[key] = (c.seq || 0) + 1;
   });
+  // Invoice numbers come from their prefix + financial-year series.
+  const settings = await getDocumentSettingsForOrganization(organizationId);
+  previews.invoice = await peekNextInvoiceNumber({
+    organization: organizationId,
+    prefix: settings.documentTypeSettings?.invoice?.prefix || settings.invoicePrefix,
+    suffix: settings.documentTypeSettings?.invoice?.suffix ?? settings.invoiceSuffix,
+  });
   return previews;
 }
 
@@ -337,7 +548,10 @@ async function getNextNumberPreviews(organizationId) {
 // identical separator handling. Pass the create call's transaction `session`
 // through so the uniqueness check and counter increment see a consistent
 // snapshot with the rest of that request.
-async function resolveDocumentNumber({ Model, numberField, organization, documentTypeKey, prefix, suffix = '', providedNumber, session }) {
+async function resolveDocumentNumber({ Model, numberField, organization, documentTypeKey, prefix, suffix = '', providedNumber, session, date }) {
+  if (documentTypeKey === 'invoice') {
+    return resolveInvoiceNumberInSeries({ Model, numberField, organization, prefix, suffix, date, providedNumber, session });
+  }
   const normalizedPrefix = (prefix || '').toString().trim() || DEFAULT_PREFIX;
   const normalizedSuffix = (suffix || '').toString().trim();
 
@@ -471,6 +685,16 @@ async function saveDocumentSettingsForOrganization(organizationId, payload = {})
     };
   }
 
+  const applyInvoiceStart = async () => {
+    if (payload.nextInvoiceNumber === undefined) return;
+    await applyNextInvoiceNumberSetting({
+      organization: organizationId,
+      prefix: preparedDocumentTypeSettings.invoice.prefix || finalInvoicePrefix,
+      suffix: preparedDocumentTypeSettings.invoice.suffix ?? finalInvoiceSuffix,
+      nextNumber: payload.nextInvoiceNumber,
+    });
+  };
+
   if (existing) {
     Object.assign(existing, settingsPayload);
     // Schema type Object: mongoose won't diff the nested keys on its own, so
@@ -479,10 +703,12 @@ async function saveDocumentSettingsForOrganization(organizationId, payload = {})
       if (settingsPayload[p] !== undefined) existing.markModified(p);
     }
     await existing.save();
+    await applyInvoiceStart();
     return existing;
   }
 
   const created = await DocumentSettings.create({ organization: organizationId, ...settingsPayload });
+  await applyInvoiceStart();
   return created;
 }
 
@@ -496,6 +722,12 @@ module.exports = {
   resolveDocumentNumber,
   getNextCounterNumber,
   getNextNumberPreviews,
+  financialYearOf,
+  invoiceSeries,
+  peekNextInvoiceNumber,
+  applyNextInvoiceNumberSetting,
+  releaseInvoiceNumber,
+  raiseInvoiceSeriesTo,
   getDocumentSettingsForOrganization,
   saveDocumentSettingsForOrganization,
   seedTemplateLibrariesFromLegacy,

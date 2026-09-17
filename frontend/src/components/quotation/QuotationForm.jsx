@@ -606,7 +606,9 @@ const QuotationForm = ({
         style: sourceData.style || "Regular",
         isRoundOff: sourceData.isRoundOff !== undefined ? sourceData.isRoundOff : false,
         hideTotals: sourceData.hideTotals || false,
-        isTaxQuotation: true,
+        // Keep the saved GST on/off (a document saved with GST off must reopen with it off).
+        // Only a source that never stored the flag falls back to on.
+        isTaxQuotation: (sourceData.isTaxQuotation ?? sourceData.isTaxInvoice) !== undefined ? !!(sourceData.isTaxQuotation ?? sourceData.isTaxInvoice) : true,
         transactionType: sourceData.transactionType || "intra",
         notes: sourceData.notes || "",
         terms: sourceData.terms || "",
@@ -1061,6 +1063,9 @@ const QuotationForm = ({
         billingAddress: form.billingAddress,
         shippingAddress: form.sameAsBilling ? form.billingAddress : form.shippingAddress,
         signature: form.signature,
+        // Chosen bank account (kept from reopen / split view); omitted when none, so an
+        // update never clears a bank chosen elsewhere.
+        bankDetails: form.bankDetails || undefined,
         amount: (() => {
           let t = form.isTaxQuotation
             ? computeDocument(form, "quotation").grandTotal

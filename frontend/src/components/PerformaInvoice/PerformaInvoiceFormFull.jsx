@@ -597,7 +597,9 @@ const PerformaInvoiceFormFull = ({
         status: sourceData.status || "Draft",
         style: sourceData.style || "",
         isRoundOff: sourceData.isRoundOff !== undefined ? sourceData.isRoundOff : true,
-        isTaxInvoice: true,
+        // Keep the saved GST on/off (a document saved with GST off must reopen with it off).
+        // Only a source that never stored the flag falls back to on.
+        isTaxInvoice: (sourceData.isTaxInvoice ?? sourceData.isTaxQuotation) !== undefined ? !!(sourceData.isTaxInvoice ?? sourceData.isTaxQuotation) : true,
         transactionType: sourceData.transactionType || "intra",
         notes: sourceData.notes || "",
         terms: sourceData.terms || "",
@@ -1054,6 +1056,9 @@ const PerformaInvoiceFormFull = ({
         billingAddress: form.billingAddress,
         shippingAddress: form.sameAsBilling ? form.billingAddress : form.shippingAddress,
         signature: form.signature,
+        // Chosen bank account (kept from reopen / split view); omitted when none, so an
+        // update never clears a bank chosen elsewhere.
+        bankDetails: form.bankDetails || undefined,
         amount: (() => {
           let t = form.isTaxInvoice
             ? computeDocument(form, "performaInvoice").grandTotal

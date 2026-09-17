@@ -25,7 +25,7 @@ import InvoicePdfPreview from "../invoice/InvoicePdfPreview";
 import useFillToBottom from "../../hooks/useFillToBottom";
 import FilterIcon from "../common/FilterIcon";
 import HighlightText from "../common/HighlightText";
-import CompanyFilterPanel from "./CompanyFilterPanel";
+import ToolbarFilterGroup from "./ToolbarFilterGroup";
 import { applyColumnFilters } from "../../utils/advancedFilters";
 import TableSkeletonRows from "../common/TableSkeletonRows";
 import StatTile from "../common/StatTile";
@@ -118,7 +118,7 @@ const OverdueInvoicesIcon = ({ size = 20, ...props }) => (
 // the table — "Overdue" has its own pill style and "Pending" is what a blank
 // status displays as — so neither could ever be selected in the filter panel.
 // The panel now merges these with the values actually present in the data
-// (see CompanyFilterPanel), so this list is a display ORDER hint plus a
+// (see ToolbarFilterGroup), so this list is a display ORDER hint plus a
 // guarantee that the common statuses are offered even when none are loaded.
 const INVOICE_STATUS_OPTIONS = ["Draft", "Pending", "Sent", "Paid", "Overdue", "Accepted", "Rejected", "Delivered", "Void"];
 
@@ -791,8 +791,8 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
           onCancel={clearSelection}
         />
       ) : (
-        <div className="flex items-center gap-4 mb-4" style={{ height: "44px" }}>
-          <div className="relative flex-1 h-full">
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
+          <div className="relative flex-1 min-w-[180px] h-[44px]">
             <SearchIcon
               className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#525866]"
             />
@@ -813,12 +813,23 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
               </button>
             )}
           </div>
+          <ToolbarFilterGroup
+            isOpen={showFilterPanel}
+            columns={INVOICE_FILTER_COLUMNS}
+            data={invoices}
+            getFieldValue={getInvoiceFieldValue}
+            selected={selectedFilters}
+            onApply={setSelectedFilters}
+          />
           <button
-            onClick={() => setShowFilterPanel(true)}
-            className="relative flex items-center justify-center gap-2 px-3 text-sm font-medium text-gray-800 bg-white border rounded-full hover:bg-gray-50 flex-shrink-0"
+            onClick={() => setShowFilterPanel((open) => !open)}
+            aria-expanded={showFilterPanel}
+            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${
+              showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+            }`}
             style={{
               height: "44px",
-              borderColor: Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
+              borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
             }}
           >
             <FilterIcon size={16} />
@@ -1270,17 +1281,7 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
         </div>
       )}
 
-      <CompanyFilterPanel
-        isOpen={showFilterPanel}
-        onClose={() => setShowFilterPanel(false)}
-        columns={INVOICE_FILTER_COLUMNS}
-        data={invoices}
-        getFieldValue={getInvoiceFieldValue}
-        selected={selectedFilters}
-        onApply={setSelectedFilters}
-        title="Filter Invoices"
-        subtitle="Filter this list by column"
-      />
+
 
       <InvoicePdfPreview
         open={!!previewInvoice}

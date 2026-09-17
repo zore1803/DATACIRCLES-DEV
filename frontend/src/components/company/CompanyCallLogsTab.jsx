@@ -29,7 +29,7 @@ import CallLogForm from "./CallLogForm";
 import CallLogDetailView from "./CallLogDetailView";
 import FilterIcon from "../common/FilterIcon";
 import HighlightText from "../common/HighlightText";
-import CompanyFilterPanel from "./CompanyFilterPanel";
+import ToolbarFilterGroup from "./ToolbarFilterGroup";
 import { applyColumnFilters } from "../../utils/advancedFilters";
 import TableSkeletonRows from "../common/TableSkeletonRows";
 import Skeleton from "../common/Skeleton";
@@ -55,7 +55,7 @@ const CALL_STATUS_LABELS = {
 const CALL_LOG_FILTER_COLUMNS = [
   { key: "callType", label: "Type", options: Object.values(CALL_TYPE_LABELS) },
   { key: "status", label: "Status", options: Object.values(CALL_STATUS_LABELS) },
-  { key: "dateTime", label: "Date & Time", options: DATE_RANGES.map((r) => r.label) },
+  { key: "dateTime", label: "Date & Time", placeholder: "All Dates", options: DATE_RANGES.map((r) => r.label) },
 ];
 
 const stripHtml = (html) => (html || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
@@ -654,8 +654,8 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
           onCancel={clearSelection}
         />
       ) : (
-        <div className="flex items-center gap-4 mb-4" style={{ height: "44px" }}>
-          <div className="relative flex-1 h-full">
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
+          <div className="relative flex-1 min-w-[180px] h-[44px]">
             <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
             <input
               type="text"
@@ -674,10 +674,21 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
               </button>
             )}
           </div>
+          <ToolbarFilterGroup
+            isOpen={showFilterPanel}
+            columns={CALL_LOG_FILTER_COLUMNS}
+            data={callLogs}
+            getFieldValue={getCallLogFieldValue}
+            selected={selectedFilters}
+            onApply={setSelectedFilters}
+          />
           <button
-            onClick={() => setShowFilterPanel(true)}
-            className="relative flex items-center justify-center gap-2 px-3 text-sm font-medium text-gray-800 bg-white border rounded-full hover:bg-gray-50 flex-shrink-0"
-            style={{ height: "44px", borderColor: Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA" }}
+            onClick={() => setShowFilterPanel((open) => !open)}
+            aria-expanded={showFilterPanel}
+            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${
+              showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+            }`}
+            style={{ height: "44px", borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA" }}
           >
             <FilterIcon size={16} />
             Filter
@@ -1286,17 +1297,7 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
         </div>
       )}
 
-      <CompanyFilterPanel
-        isOpen={showFilterPanel}
-        onClose={() => setShowFilterPanel(false)}
-        columns={CALL_LOG_FILTER_COLUMNS}
-        data={callLogs}
-        getFieldValue={getCallLogFieldValue}
-        selected={selectedFilters}
-        onApply={setSelectedFilters}
-        title="Filter Call Logs"
-        subtitle="Filter this list by column"
-      />
+
 
       {logToDelete && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10005] p-4">

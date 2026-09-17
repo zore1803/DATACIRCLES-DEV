@@ -4,7 +4,7 @@ const Invoice = require("../models/Invoice");
 const Deal = require("../models/Deal");
 const Contact = require("../models/Contact");
 const Company = require("../models/Company");
-const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
+const { getDocumentSettingsForOrganization, resolveDocumentNumber, invoiceSeries, releaseInvoiceNumber } = require("../utils/documentNumbering");
 const { syncDocumentStock } = require("../utils/inventorySync");
 
 // GST is decided PER LINE ITEM, never by one flat rate over the whole
@@ -489,7 +489,15 @@ async function generateInvoiceForSubscription(subscription, userId, organization
     organization: organizationId,
   });
 
-  await invoice.save();
+  try {
+    await invoice.save();
+  } catch (saveErr) {
+    // No invoice was created, so its number must not be used up: hand it back to the series.
+    const series = invoiceSeries({ organization: organizationId, prefix: effectivePrefix, suffix: effectiveSuffix, date: invoice.date });
+    const match = String(invoiceNumber).match(series.pattern);
+    if (match) await releaseInvoiceNumber(series, parseInt(match[1], 10));
+    throw saveErr;
+  }
 
   // Stock OUT for any product lines — same call every other Invoice creation
   // path uses; services are filtered out inside syncDocumentStock itself.

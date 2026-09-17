@@ -58,6 +58,9 @@ const deliveryChallanSchema = new mongoose.Schema({
   notes: { type: String, default: '' },
   terms: { type: String, default: '' },
   bankDetails: { type: mongoose.Schema.Types.ObjectId, ref: 'BankDetails', default: null },
+  // Round Off chosen on the form. No default: documents saved before this field existed stay
+  // unrounded in their PDF, exactly as before.
+  isRoundOff: { type: Boolean },
   signature: { type: String },
   signatureType: { type: String, enum: ['text', 'upload'], default: 'text' },
   items: [itemSchema],

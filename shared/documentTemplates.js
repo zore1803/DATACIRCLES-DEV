@@ -564,6 +564,22 @@ export function buildDocumentHtml(doc, options = {}) {
 
   const t = computeDocument(doc, type);
 
+  // Round Off, so the printed total matches the rounded amount the form saved. Only when the
+  // document was actually saved rounded (whole-number amount, or no amount yet as in a live
+  // preview): older documents whose stored flag doesn't reflect a real choice keep printing
+  // the exact total they were saved with.
+  const savedAmount = doc.amount;
+  const savedRounded = savedAmount === undefined || savedAmount === null || Number.isInteger(Number(savedAmount));
+  if (doc.isRoundOff === true && savedRounded) {
+    const rounded = Math.round(t.grandTotal);
+    t.roundOff = rounded - t.grandTotal;
+    t.grandTotal = rounded;
+    t.amountInWords = numberToWords(rounded);
+    t.balanceDue = Math.max(0, rounded - t.amountPaid);
+    t.isFullyPaid = t.amountPaid > 0 && t.balanceDue <= 0.01;
+    t.isPartiallyPaid = t.amountPaid > 0.01 && t.balanceDue > 0.01;
+  }
+
   // The party the document is billed to: the deal's customer (company, else
   // contact) takes precedence; the deal's own title is only a fallback for
   // deals that have neither. An explicit override from the caller still wins.

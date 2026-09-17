@@ -1,6 +1,7 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const DeliveryChallan = require("../models/deliveryChallan");
 const getDefaultBankDetails = require("../utils/getDefaultBankDetails");
+const resolveBankDetails = require("../utils/resolveBankDetails");
 const Branding = require("../models/Branding");
 const htmlDocumentPdf = require("../utils/htmlDocumentPdf");
 const sendGridMail = require("../utils/sendGridMail");
@@ -54,6 +55,8 @@ exports.createDeliveryChallan = async (req, res) => {
       signature,
       signatureType,
       discount,
+      bankDetails,
+      isRoundOff,
       isTaxInvoice,
       transactionType,
       receiverGSTIN,
@@ -147,6 +150,9 @@ exports.createDeliveryChallan = async (req, res) => {
       signature,
       signatureType: signatureType || "text",
       discount: discount || { type: "fixed", value: 0 },
+      // Bank account chosen on the form; the PDF prints it (utils/resolveBankDetails.js).
+      bankDetails: bankDetails || null,
+      ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
       // GST on/off + tax data, same as an invoice (see models/deliveryChallan.js).
       isTaxInvoice: !!isTaxInvoice,
       transactionType: transactionType === "inter" ? "inter" : "intra",
@@ -234,6 +240,8 @@ exports.duplicateDeliveryChallan = async (req, res) => {
       signature: source.signature,
       signatureType: normalizedSignatureType,
       discount: source.discount,
+      bankDetails: source.bankDetails || null,
+      isRoundOff: source.isRoundOff,
       isTaxInvoice: !!source.isTaxInvoice,
       transactionType: source.transactionType || "intra",
       receiverGSTIN: source.receiverGSTIN || "",
@@ -404,7 +412,7 @@ exports.downloadDeliveryChallan = async (req, res) => {
       return res.status(404).json({ error: "Delivery Challan not found" });
     }
 
-    const bankDetails = await getDefaultBankDetails(req.user.organization);
+    const bankDetails = await resolveBankDetails(deliveryChallan, req.user.organization);
     const orgDetails = await Branding.findOne({
       organization: req.user.organization,
     }).sort({ updatedAt: -1 });
@@ -471,6 +479,8 @@ exports.updateDeliveryChallan = async (req, res) => {
       signature,
       signatureType,
       discount,
+      bankDetails,
+      isRoundOff,
       isTaxInvoice,
       transactionType,
       receiverGSTIN,
@@ -543,6 +553,9 @@ exports.updateDeliveryChallan = async (req, res) => {
         signature,
         signatureType,
         discount,
+        // Only written when sent, so an update without them leaves the saved values alone.
+        ...(bankDetails !== undefined && { bankDetails: bankDetails || null }),
+        ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
         // Only written when sent, so an update without tax fields leaves them unchanged.
         ...(isTaxInvoice !== undefined && { isTaxInvoice: !!isTaxInvoice }),
         ...(transactionType !== undefined && { transactionType: transactionType === "inter" ? "inter" : "intra" }),
@@ -615,7 +628,7 @@ exports.sendDeliveryChallanEmail = async (req, res) => {
       return res.status(404).json({ error: "Delivery Challan not found" });
     }
 
-    const bankDetails = await getDefaultBankDetails(req.user.organization);
+    const bankDetails = await resolveBankDetails(deliveryChallan, req.user.organization);
     const orgDetails = await Branding.findOne({
       organization: req.user.organization,
     }).sort({ updatedAt: -1 });

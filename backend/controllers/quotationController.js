@@ -1,6 +1,7 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const Quotation = require("../models/quotation");
 const getDefaultBankDetails = require("../utils/getDefaultBankDetails");
+const resolveBankDetails = require("../utils/resolveBankDetails");
 const Branding = require("../models/Branding");
 const htmlDocumentPdf = require("../utils/htmlDocumentPdf");
 const sendGridMail = require("../utils/sendGridMail");
@@ -56,6 +57,8 @@ exports.createQuotation = async (req, res) => {
       signature,
       signatureType,
       discount,
+      bankDetails,
+      isRoundOff,
       receiverGSTIN,
       billingAddress,
       shippingAddress,
@@ -155,6 +158,9 @@ exports.createQuotation = async (req, res) => {
       signature,
       signatureType: signatureType || "text",
       discount: discount || { type: "fixed", value: 0 },
+      // Bank account chosen on the form; the PDF prints it (utils/resolveBankDetails.js).
+      bankDetails: bankDetails || null,
+      ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
       receiverGSTIN: finalReceiverGSTIN,
       billingAddress: finalBillingAddress,
       shippingAddress: finalShippingAddress,
@@ -243,6 +249,7 @@ exports.duplicateQuotation = async (req, res) => {
       signature: source.signature,
       signatureType: normalizedSignatureType,
       discount: source.discount,
+      bankDetails: source.bankDetails || null,
       receiverGSTIN: source.receiverGSTIN,
       billingAddress: source.billingAddress,
       shippingAddress: source.shippingAddress,
@@ -412,7 +419,7 @@ exports.downloadQuotation = async (req, res) => {
       return res.status(404).json({ error: "Quotation not found" });
     }
 
-    const bankDetails = await getDefaultBankDetails(req.user.organization);
+    const bankDetails = await resolveBankDetails(quotation, req.user.organization);
     const orgDetails = await Branding.findOne({
       organization: req.user.organization,
     }).sort({ updatedAt: -1 });
@@ -481,6 +488,8 @@ exports.updateQuotation = async (req, res) => {
       signature,
       signatureType,
       discount,
+      bankDetails,
+      isRoundOff,
       receiverGSTIN,
       billingAddress,
       shippingAddress,
@@ -557,6 +566,9 @@ exports.updateQuotation = async (req, res) => {
         signature,
         signatureType,
         discount,
+        // Only written when sent, so an update without them leaves the saved values alone.
+        ...(bankDetails !== undefined && { bankDetails: bankDetails || null }),
+        ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
         receiverGSTIN: finalReceiverGSTIN,
         billingAddress: finalBillingAddress,
         shippingAddress: finalShippingAddress,
@@ -620,7 +632,7 @@ exports.sendQuotationEmail = async (req, res) => {
       return res.status(404).json({ error: "Quotation not found" });
     }
 
-    const bankDetails = await getDefaultBankDetails(req.user.organization);
+    const bankDetails = await resolveBankDetails(quotation, req.user.organization);
     const orgDetails = await Branding.findOne({
       organization: req.user.organization,
     }).sort({ updatedAt: -1 });

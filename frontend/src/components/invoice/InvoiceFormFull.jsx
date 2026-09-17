@@ -658,7 +658,9 @@ const InvoiceFormFull = ({
         style: sourceData.style || "Regular",
         isRoundOff: sourceData.isRoundOff !== undefined ? sourceData.isRoundOff : false,
         hideTotals: sourceData.hideTotals || false,
-        isTaxInvoice: true,
+        // Keep the saved GST on/off (a document saved with GST off must reopen with it off).
+        // Only a source that never stored the flag falls back to on.
+        isTaxInvoice: (sourceData.isTaxInvoice ?? sourceData.isTaxQuotation) !== undefined ? !!(sourceData.isTaxInvoice ?? sourceData.isTaxQuotation) : true,
         transactionType: sourceData.transactionType || "intra",
         notes: sourceData.notes || "",
         terms: sourceData.terms || "",

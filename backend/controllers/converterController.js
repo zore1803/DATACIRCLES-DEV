@@ -28,7 +28,9 @@ const DOCUMENT_TYPE_MAP = {
 // exact same sequence a directly-created Proforma Invoice would, instead of a
 // separate hardcoded-prefix ("PI"/"QUO"/"DC"/"INV") sequence that ignored
 // Settings entirely.
-const generateDocumentNumber = async (documentTypeKey, organization, session) => {
+// `date`: the new document's date. Invoice numbers run per financial year, and a converted
+// invoice keeps its source document's date, so that date picks the series.
+const generateDocumentNumber = async (documentTypeKey, organization, session, date) => {
   const { Model, numberField, settingsKey, defaultPrefix } = DOCUMENT_TYPE_MAP[documentTypeKey];
   const documentSettings = await getDocumentSettingsForOrganization(organization);
   const typeSettings = documentSettings.documentTypeSettings?.[settingsKey] || {};
@@ -41,6 +43,7 @@ const generateDocumentNumber = async (documentTypeKey, organization, session) =>
     suffix: typeSettings.suffix || '',
     providedNumber: null,
     session,
+    date,
   });
 };
 
@@ -232,7 +235,7 @@ exports.convertToTaxInvoice = async (req, res) => {
       return res.status(404).json({ message: 'Proforma Invoice not found' });
     }
 
-    const invoiceNumber = await generateDocumentNumber('invoice', proformaInvoice.organization, session);
+    const invoiceNumber = await generateDocumentNumber('invoice', proformaInvoice.organization, session, proformaInvoice.date);
 
     const newId = new mongoose.Types.ObjectId();
     const invoiceData = {
@@ -397,7 +400,7 @@ exports.convertQuotationToTaxInvoice = async (req, res) => {
     //   return res.status(400).json({ message: 'Quotation must be accepted to convert to invoice' });
     // }
 
-    const invoiceNumber = await generateDocumentNumber('invoice', quotation.organization, session);
+    const invoiceNumber = await generateDocumentNumber('invoice', quotation.organization, session, quotation.date);
 
     const newId = new mongoose.Types.ObjectId();
     const invoiceData = {
@@ -574,7 +577,7 @@ exports.convertDeliveryChallanToTaxInvoice = async (req, res) => {
     //   return res.status(400).json({ message: 'Delivery Challan must be delivered to convert to invoice' });
     // }
 
-    const invoiceNumber = await generateDocumentNumber('invoice', deliveryChallan.organization, session);
+    const invoiceNumber = await generateDocumentNumber('invoice', deliveryChallan.organization, session, deliveryChallan.date);
 
     const newId = new mongoose.Types.ObjectId();
     const invoiceData = {
@@ -741,7 +744,7 @@ exports.bulkConvertQuotationToTaxInvoice = async (req, res) => {
         throw new Error('Quotation not found or unauthorized');
       }
 
-      const invoiceNumber = await generateDocumentNumber('invoice', quotation.organization, session);
+      const invoiceNumber = await generateDocumentNumber('invoice', quotation.organization, session, quotation.date);
 
       const newId = new mongoose.Types.ObjectId();
       const invoiceData = {
@@ -902,7 +905,7 @@ exports.bulkConvertProformaToTaxInvoice = async (req, res) => {
         throw new Error('Proforma Invoice not found or unauthorized');
       }
 
-      const invoiceNumber = await generateDocumentNumber('invoice', proformaInvoice.organization, session);
+      const invoiceNumber = await generateDocumentNumber('invoice', proformaInvoice.organization, session, proformaInvoice.date);
 
       const newId = new mongoose.Types.ObjectId();
       const invoiceData = {

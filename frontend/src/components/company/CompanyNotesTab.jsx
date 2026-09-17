@@ -30,7 +30,7 @@ import API from "../../services/api";
 import { NoteEditor, NoteViewer, NoteCard } from "./NoteSection";
 import FilterIcon from "../common/FilterIcon";
 import HighlightText from "../common/HighlightText";
-import CompanyFilterPanel from "./CompanyFilterPanel";
+
 import TableSkeletonRows from "../common/TableSkeletonRows";
 import NoteCardSkeleton from "../common/NoteCardSkeleton";
 import StatTile from "../common/StatTile";
@@ -39,6 +39,7 @@ import Skeleton from "../common/Skeleton";
 import BulkActionBar from "../common/BulkActionBar";
 import { useBulkSelection, useBulkStrip } from "../../hooks/useBulkSelection";
 import { exportToCSV } from "../../utils/exportToCSV";
+import ToolbarFilterGroup from "./ToolbarFilterGroup";
 import { bulkDelete } from "../../utils/bulkOperations";
 import useFillToBottom from "../../hooks/useFillToBottom";
 import { applyColumnFilters } from "../../utils/advancedFilters";
@@ -144,7 +145,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
   
   const NOTE_FILTER_COLUMNS = useMemo(() => [
     { key: "type", label: "Type", options: noteTypes },
-    { key: "year", label: "Visibility To", options: NOTE_VISIBILITY_OPTIONS },
+    { key: "year", label: "Visibility To", placeholder: "All Visibility", options: NOTE_VISIBILITY_OPTIONS },
     { key: "contacts", label: "Author" },
   ], [noteTypes]);
 
@@ -884,8 +885,8 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
           onCancel={clearSelection}
         />
       ) : (
-      <div className="flex items-center gap-4 mb-4" style={{ height: "44px" }}>
-        <div className="relative flex-1 h-full">
+      <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
+        <div className="relative flex-1 min-w-[180px] h-[44px]">
           <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
           <input
             type="text"
@@ -932,12 +933,23 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
             <ListViewIcon size={18} />
           </button>
         </div>
+        <ToolbarFilterGroup
+          isOpen={showFilterPanel}
+          columns={NOTE_FILTER_COLUMNS}
+          data={notes}
+          getFieldValue={getNoteFieldValue}
+          selected={selectedFilters}
+          onApply={setSelectedFilters}
+        />
         <button
-          onClick={() => setShowFilterPanel(true)}
-          className="relative flex items-center justify-center gap-2 px-3 text-sm font-medium text-gray-800 bg-white border rounded-full hover:bg-gray-50 flex-shrink-0"
+          onClick={() => setShowFilterPanel((open) => !open)}
+          aria-expanded={showFilterPanel}
+          className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${
+            showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+          }`}
           style={{
             height: "44px",
-            borderColor: Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
+            borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
           }}
         >
           <FilterIcon size={16} />
@@ -1536,17 +1548,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
         </div>
       )}
 
-      <CompanyFilterPanel
-        isOpen={showFilterPanel}
-        onClose={() => setShowFilterPanel(false)}
-        columns={NOTE_FILTER_COLUMNS}
-        data={notes}
-        getFieldValue={getNoteFieldValue}
-        selected={selectedFilters}
-        onApply={setSelectedFilters}
-        title="Filter Notes"
-        subtitle="Filter this list by column"
-      />
+
 
       {noteToDelete && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10005] p-4">

@@ -37,6 +37,9 @@ const proformaInvoiceSchema = new mongoose.Schema({
   notes: { type: String, default: '' },
   terms: { type: String, default: '' },
   bankDetails: { type: mongoose.Schema.Types.ObjectId, ref: 'BankDetails', default: null },
+  // Round Off chosen on the form. No default: documents saved before this field existed stay
+  // unrounded in their PDF, exactly as before.
+  isRoundOff: { type: Boolean },
   isTaxInvoice: { type: Boolean, default: false },
   transactionType: { type: String, enum: ['intra', 'inter'], default: 'intra' },
   signature: { type: String },

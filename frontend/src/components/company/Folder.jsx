@@ -35,7 +35,7 @@ import {
 import { EditablePaginationButtons } from "../common/EditablePaginationButtons";
 import AppToaster from "../AppToaster";
 import FilterIcon from "../common/FilterIcon";
-import CompanyFilterPanel from "./CompanyFilterPanel";
+import ToolbarFilterGroup from "./ToolbarFilterGroup";
 import { applyColumnFilters } from "../../utils/advancedFilters";
 import TableSkeletonRows from "../common/TableSkeletonRows";
 import Skeleton from "../common/Skeleton";
@@ -79,7 +79,7 @@ const getFolderFieldValue = (folder, key) => {
 const FOLDER_FILTER_COLUMNS = [
   { key: "contentType", label: "Content Type", options: ["Files Only", "Links Only", "Mixed", "Empty"] },
   { key: "itemCount", label: "Item Count", options: FOLDER_ITEM_COUNT_RANGES.map((r) => r.label) },
-  { key: "updatedBy", label: "Updated By" },
+  { key: "updatedBy", label: "Updated By", placeholder: "All Updated By" },
 ];
 
 const AttachFileIcon = ({ size = 20, ...props }) => (
@@ -1958,8 +1958,8 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
                 <Skeleton height={44} width={44} shape="circle" className="flex-shrink-0" />
               </div>
             ) : (
-              <div className="flex items-center gap-4 mb-4" style={{ height: "44px" }}>
-                <div className="relative flex-1 h-full">
+              <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
+                <div className="relative flex-1 min-w-[180px] h-[44px]">
                   <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
                   <input
                     type="text"
@@ -1978,12 +1978,23 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
                     </button>
                   )}
                 </div>
+                <ToolbarFilterGroup
+                  isOpen={showFilterPanel}
+                  columns={FOLDER_FILTER_COLUMNS}
+                  data={folders}
+                  getFieldValue={getFolderFieldValue}
+                  selected={selectedFilters}
+                  onApply={setSelectedFilters}
+                />
                 <button
-                  onClick={() => setShowFilterPanel(true)}
-                  className="relative flex items-center justify-center gap-2 px-3 text-sm font-medium text-gray-800 bg-white border rounded-full hover:bg-gray-50 flex-shrink-0"
+                  onClick={() => setShowFilterPanel((open) => !open)}
+                  aria-expanded={showFilterPanel}
+                  className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${
+                    showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+                  }`}
                   style={{
                     height: "44px",
-                    borderColor: Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
+                    borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
                   }}
                 >
                   <FilterIcon size={16} />
@@ -2780,17 +2791,7 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
         )}
 
 
-        <CompanyFilterPanel
-          isOpen={showFilterPanel}
-          onClose={() => setShowFilterPanel(false)}
-          columns={FOLDER_FILTER_COLUMNS}
-          data={folders}
-          getFieldValue={getFolderFieldValue}
-          selected={selectedFilters}
-          onApply={setSelectedFilters}
-          title="Filter Folders"
-          subtitle="Filter this list by column"
-        />
+
 
         <CreateFolderModal
           isOpen={modalState.isOpen}

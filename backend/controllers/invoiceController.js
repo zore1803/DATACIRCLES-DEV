@@ -8,7 +8,8 @@ const Branding = require("../models/Branding");
 const mongoose = require("mongoose");
 const Deal = require("../models/Deal");
 const DocumentSettings = require("../models/DocumentSettings");
-const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
+const { getDocumentSettingsForOrganization, resolveDocumentNumber, invoiceSeries, raiseInvoiceSeriesTo } = require("../utils/documentNumbering");
+const resolveDocumentNumberSeriesRaise = raiseInvoiceSeriesTo;
 const sendPaymentEmail = require("../utils/sendPaymentEmail");
 const sendSMS = require("../utils/sendSMS");
 const sendGridMail = require("../utils/sendGridMail");
@@ -64,6 +65,7 @@ const createInvoice = async (req, res) => {
       dueDate,
       amount,
       discount,
+      isRoundOff,
       status,
       items,
       style,
@@ -195,6 +197,8 @@ const createInvoice = async (req, res) => {
         suffix: effectiveSuffix,
         providedNumber: explicitNumber,
         session,
+        // Invoice numbers run per financial year, taken from the invoice's own date.
+        date,
       });
     } catch (numErr) {
       await session.abortTransaction();
@@ -240,6 +244,7 @@ const createInvoice = async (req, res) => {
       notes,
       terms,
       bankDetails: bankDetails || null,
+      ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
       qrNote: qrNote || "",
       isTaxInvoice,
       signature,
@@ -280,6 +285,9 @@ const createInvoice = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
+    if (err && err.code === 11000 && /invoiceNumber/.test(err.message || "")) {
+      return res.status(409).json({ error: "This invoice number was just used. Please save again." });
+    }
     res.status(500).json({ error: err.message });
   }
 };
@@ -340,6 +348,7 @@ const duplicateInvoice = async (req, res) => {
       date: new Date(),
       amount: source.amount,
       discount: source.discount,
+      isRoundOff: source.isRoundOff,
       status: "Draft",
       items: source.items,
       style: source.style,
@@ -745,6 +754,7 @@ const updateInvoice = async (req, res) => {
       dueDate,
       amount,
       discount,
+      isRoundOff,
       status,
       items,
       style,
@@ -883,6 +893,7 @@ const updateInvoice = async (req, res) => {
     invoice.notes = notes;
     invoice.terms = terms;
     invoice.bankDetails = bankDetails || null;
+    if (isRoundOff !== undefined) invoice.isRoundOff = !!isRoundOff;
     invoice.qrNote = qrNote || "";
     invoice.isTaxInvoice = isTaxInvoice;
     invoice.signature = signature;
@@ -1088,14 +1099,20 @@ const updateInvoiceNumber = async (req, res) => {
       return res.status(400).json({ error: "invoiceNumber is required" });
     }
 
-    // Normalize if you prefer (trim)
     const normalized = invoiceNumber.trim();
 
-    // Check duplicate within same organization for any invoice with same invoiceNumber
+    const current = await Invoice.findOne({ _id: invoiceId, organization: req.user.organization }).select("date");
+    if (!current) {
+      return res.status(404).json({ error: "Invoice not found" });
+    }
+
+    // Unique within the invoice's financial year (same rule as creating one).
+    const series = invoiceSeries({ organization: req.user.organization, date: current.date });
     const existing = await Invoice.findOne({
       invoiceNumber: normalized,
       organization: req.user.organization,
       _id: { $ne: invoiceId },
+      date: { $gte: series.dateRange.start, $lt: series.dateRange.end },
     });
 
     if (existing) {
@@ -1115,8 +1132,21 @@ const updateInvoiceNumber = async (req, res) => {
       return res.status(404).json({ error: "Invoice not found" });
     }
 
+    // If the new number belongs to the configured series, later auto numbers continue after it.
+    const settings = await getDocumentSettingsForOrganization(req.user.organization);
+    await resolveDocumentNumberSeriesRaise({
+      organization: req.user.organization,
+      prefix: settings.documentTypeSettings?.invoice?.prefix || settings.invoicePrefix,
+      suffix: settings.documentTypeSettings?.invoice?.suffix ?? settings.invoiceSuffix,
+      date: invoice.date,
+      number: normalized,
+    });
+
     res.json({ message: "Invoice number updated successfully", invoice });
   } catch (err) {
+    if (err && err.code === 11000) {
+      return res.status(409).json({ error: "Invoice number already exists" });
+    }
     console.error("updateInvoiceNumber error:", err);
     res.status(500).json({ error: err.message });
   }

@@ -29,7 +29,7 @@ import HighlightText from "../common/HighlightText";
 import TaskDetailsModal from "../Task/TaskDetailsModal";
 import TaskKanbanBoard from "../Task/TaskKanbanBoard";
 import FilterIcon from "../common/FilterIcon";
-import CompanyFilterPanel from "./CompanyFilterPanel";
+import ToolbarFilterGroup from "./ToolbarFilterGroup";
 import TableSkeletonRows from "../common/TableSkeletonRows";
 import StatTile from "../common/StatTile";
 import StatTileSkeleton from "../common/StatTileSkeleton";
@@ -48,7 +48,7 @@ const TASK_STATUS_OPTIONS = ["Completed", "In-Progress"];
 const TASK_PRIORITY_OPTIONS = ["Low", "Medium", "High"];
 const TASK_FILTER_COLUMNS = [
   { key: "status", label: "Status", options: TASK_STATUS_OPTIONS },
-  { key: "priority", label: "Priority", options: TASK_PRIORITY_OPTIONS },
+  { key: "priority", label: "Priority", placeholder: "All Priorities", options: TASK_PRIORITY_OPTIONS },
   { key: "dueDate", label: "Due Date", options: DATE_RANGES.map((r) => r.label) },
 ];
 
@@ -833,8 +833,8 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
           onCancel={clearSelection}
         />
       ) : (
-        <div className="flex items-center gap-4 mb-4" style={{ height: "44px" }}>
-          <div className="relative flex-1 h-full">
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
+          <div className="relative flex-1 min-w-[180px] h-[44px]">
             <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
             <input
               type="text"
@@ -853,12 +853,23 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
               </button>
             )}
           </div>
+          <ToolbarFilterGroup
+            isOpen={showFilterPanel}
+            columns={TASK_FILTER_COLUMNS}
+            data={tasks}
+            getFieldValue={getTaskFieldValue}
+            selected={selectedFilters}
+            onApply={setSelectedFilters}
+          />
           <button
-            onClick={() => setShowFilterPanel(true)}
-            className="relative flex items-center justify-center gap-2 px-3 text-sm font-medium text-gray-800 bg-white border rounded-full hover:bg-gray-50 flex-shrink-0"
+            onClick={() => setShowFilterPanel((open) => !open)}
+            aria-expanded={showFilterPanel}
+            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${
+              showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+            }`}
             style={{
               height: "44px",
-              borderColor: Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
+              borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
             }}
           >
             <FilterIcon size={16} />
@@ -1492,17 +1503,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
         </div>
       )}
 
-      <CompanyFilterPanel
-        isOpen={showFilterPanel}
-        onClose={() => setShowFilterPanel(false)}
-        columns={TASK_FILTER_COLUMNS}
-        data={tasks}
-        getFieldValue={getTaskFieldValue}
-        selected={selectedFilters}
-        onApply={setSelectedFilters}
-        title="Filter Tasks"
-        subtitle="Filter this list by column"
-      />
+
 
       <CompanyTaskForm
         open={showTaskForm}

@@ -414,6 +414,9 @@ const DeliveryChallanFormFull = ({
   const [signaturesLoading, setSignaturesLoading] = useState(false);
   const [showQuickDealForm, setShowQuickDealForm] = useState(false);
   const [localDeals, setLocalDeals] = useState(deals);
+  // Your company's state (Branding), compared with the customer's billing state to pick
+  // CGST+SGST (same state) or IGST (other state), same as the other full-width documents.
+  const [sellerState, setSellerState] = useState("");
   const [companies, setCompanies] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -531,6 +534,7 @@ const DeliveryChallanFormFull = ({
       fetchCompanies();
       fetchContacts();
       setLocalDeals(deals);
+      API.get("/branding").then(r => setSellerState((r.data?.state || "").trim().toLowerCase())).catch(() => {});
     } else {
       setIsSliding(false);
       setTimeout(() => setShouldRender(false), 300);
@@ -1051,6 +1055,9 @@ const DeliveryChallanFormFull = ({
         billingAddress: form.billingAddress,
         shippingAddress: form.sameAsBilling ? form.billingAddress : form.shippingAddress,
         signature: form.signature,
+        // Chosen bank account (kept from reopen / split view); omitted when none, so an
+        // update never clears a bank chosen elsewhere.
+        bankDetails: form.bankDetails || undefined,
         amount: (() => {
           let t = form.isTaxInvoice
             ? computeDocument(form, "deliveryChallan").grandTotal
@@ -1374,12 +1381,15 @@ const DeliveryChallanFormFull = ({
                           company && !isAddressEmpty(company.shippingAddresses?.[0])
                             ? { ...emptyAddress(), ...company.shippingAddresses[0] }
                             : emptyAddress();
+                        const customerState = (company?.billingAddress?.state || '').trim().toLowerCase();
+                        const autoType = (sellerState && customerState && sellerState !== customerState) ? 'inter' : 'intra';
                         setForm((prev) => ({
                           ...prev,
                           deal: value,
                           receiverGSTIN: company?.gstin || "",
                           billingAddress: nextBilling,
                           shippingAddress: prev.sameAsBilling ? nextBilling : nextShipping,
+                          transactionType: autoType,
                         }));
                         setHasUnsavedChanges(true);
                       }}
@@ -1521,10 +1531,14 @@ const DeliveryChallanFormFull = ({
                   label="Billing address"
                   value={form.billingAddress}
                   onChange={(next) => {
+                    // Editing the billing state re-checks same-state vs other-state too.
+                    const customerState = (next.state || "").trim().toLowerCase();
+                    const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
                     setForm((prev) => ({
                       ...prev,
                       billingAddress: next,
                       shippingAddress: prev.sameAsBilling ? next : prev.shippingAddress,
+                      transactionType: customerState ? autoType : prev.transactionType,
                     }));
                     setHasUnsavedChanges(true);
                   }}
