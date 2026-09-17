@@ -35,7 +35,7 @@ jobs:
           command_timeout: 20m
           script: |
             set -e
-            cd /home/ubuntu
+            cd /root/datacircles-crm
             git fetch origin main
             git reset --hard origin/main
             # Echoed so a run proves which commit it actually deployed —
