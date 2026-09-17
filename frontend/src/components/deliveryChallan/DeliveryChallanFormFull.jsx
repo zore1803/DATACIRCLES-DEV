@@ -2078,7 +2078,7 @@ export default DeliveryChallanFormFull;
 
 // Thin wrapper around the shared CreateInvoicePanel for deliveryChallan type.
 // Used by Accounting.jsx when opening the two-pane create/edit form.
-import { CreateInvoicePanel } from "../invoice/InvoiceForm";
+import { CreateInvoicePanel } from "../invoice/CreateInvoicePanel";
 
 const CreateDeliveryChallanPanel = (props) => (
   <CreateInvoicePanel {...props} type="deliveryChallan" />

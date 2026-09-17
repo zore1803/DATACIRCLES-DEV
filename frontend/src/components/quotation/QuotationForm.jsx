@@ -2090,7 +2090,7 @@ export default QuotationForm;
 
 // Thin wrapper around the shared CreateInvoicePanel for quotation type.
 // Used by Accounting.jsx when opening the two-pane create/edit form.
-import { CreateInvoicePanel } from "../invoice/InvoiceForm";
+import { CreateInvoicePanel } from "../invoice/CreateInvoicePanel";
 
 const CreateQuotationPanel = (props) => (
   <CreateInvoicePanel {...props} type="quotation" />

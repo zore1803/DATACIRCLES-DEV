@@ -1722,7 +1722,7 @@ const DeliveryChallanForm = ({
 
 export default DeliveryChallanForm;
 
-import { CreateInvoicePanel } from "../invoice/InvoiceForm";
+import { CreateInvoicePanel } from "../invoice/CreateInvoicePanel";
 
 const CreateChallanPanel = (props) => (
   <CreateInvoicePanel {...props} type="deliveryChallan" />

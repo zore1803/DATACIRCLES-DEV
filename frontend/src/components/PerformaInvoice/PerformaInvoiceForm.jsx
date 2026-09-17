@@ -1881,7 +1881,7 @@ const PerformaInvoiceForm = ({
 
 export default PerformaInvoiceForm;
 
-import { CreateInvoicePanel } from "../invoice/InvoiceForm";
+import { CreateInvoicePanel } from "../invoice/CreateInvoicePanel";
 
 const CreatePerformaPanel = (props) => (
   <CreateInvoicePanel {...props} type="performa" />

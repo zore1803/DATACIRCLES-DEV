@@ -2081,7 +2081,7 @@ export default PerformaInvoiceFormFull;
 
 // Thin wrapper around the shared CreateInvoicePanel for performaInvoice type.
 // Used by Accounting.jsx when opening the two-pane create/edit form.
-import { CreateInvoicePanel } from "../invoice/InvoiceForm";
+import { CreateInvoicePanel } from "../invoice/CreateInvoicePanel";
 
 const CreatePerformaInvoicePanel = (props) => (
   <CreateInvoicePanel {...props} type="performaInvoice" />
