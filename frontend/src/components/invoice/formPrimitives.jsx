@@ -3,6 +3,10 @@ import { ChevronDown, MapPin } from "lucide-react";
 import { createPortal } from "react-dom";
 import { getAncestorZoom } from "../../utils/domUtils";
 import { INDIA_STATES, CITIES_BY_STATE, ALL_CITIES } from "../../constants/addressOptions";
+import toast from "react-hot-toast";
+
+// Module-level cache — avoids re-fetching a pincode already looked up this session.
+const pincodeCache = new Map();
 
 /*
  * Small building blocks shared by Accounting.jsx's CreateInvoicePanel (the
@@ -55,17 +59,14 @@ export const emptyAddress = () => ({
 export const isAddressEmpty = (addr) =>
   !addr || Object.values(addr).every((v) => !v || !String(v).trim());
 
-// Looks up an Indian PIN code via India Post's public API (no key required)
-// to fill State/City automatically — a pincode uniquely determines both, so
-// asking the user to also pick them by hand is redundant once it's typed.
-// Matched against this module's own INDIA_STATES/CITIES_BY_STATE (not the
-// raw API district name) so the result lands on a real option in the
-// State/City dropdowns above rather than a lookalike string that fails to
-// match. Same approach as QuickCompanyForm's lookupIndianPincode.
-const lookupIndianPincode = async (pincode) => {
+// Looks up an Indian PIN code via India Post's public API.
+// - Results cached per pincode so re-typing the same code is instant.
+// - Accepts an AbortSignal so a superseded lookup is cancelled cleanly.
+const lookupIndianPincode = async (pincode, signal) => {
   if (!/^\d{6}$/.test(pincode)) return null;
+  if (pincodeCache.has(pincode)) return pincodeCache.get(pincode);
   try {
-    const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
+    const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`, { signal });
     const data = await res.json();
     const po = data?.[0]?.Status === "Success" ? data[0].PostOffice?.[0] : null;
     if (!po) return null;
@@ -82,13 +83,18 @@ const lookupIndianPincode = async (pincode) => {
       po.Name ||
       "";
 
-    return { country: "India", state: matchedState, city: matchedCity };
-  } catch (_) {
-    return null; // Non-fatal — the user can still fill state/city by hand.
+    const result = { country: "India", state: matchedState, city: matchedCity };
+    pincodeCache.set(pincode, result);
+    return result;
+  } catch (err) {
+    if (err?.name === "AbortError") throw err;
+    return null;
   }
 };
 
 export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, required = false, invalid = false, onUseSaved }) => {
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+  const pincodeReqRef = useRef(null);
   const safeValue = value || emptyAddress();
   const fieldBorder = invalid
     ? "border-red-400 focus:ring-red-500/20 focus:border-red-500"
@@ -181,23 +187,61 @@ export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, r
             triggerClassName={pickerTriggerCls}
             onSelect={(o) => onChange({ ...safeValue, city: o.value })}
           />
-          <input
-            type="text"
-            value={safeValue.pincode || ""}
-            disabled={disabled}
-            onChange={async (e) => {
-              const pincode = e.target.value.replace(/\D/g, "").slice(0, 6);
-              onChange({ ...safeValue, pincode });
-              // Only fire once a full 6-digit code is typed — a request per
-              // keystroke would spam pincodes India Post will 404 on anyway.
-              if (pincode.length === 6) {
-                const match = await lookupIndianPincode(pincode);
-                if (match) onChange({ ...safeValue, pincode, ...match });
-              }
-            }}
-            placeholder="Pincode"
-            className={`${inputCls} @md:col-span-1 col-span-2`}
-          />
+          <div className="relative @md:col-span-1 col-span-2">
+            <input
+              type="text"
+              value={safeValue.pincode || ""}
+              disabled={disabled}
+              onChange={async (e) => {
+                const pincode = e.target.value.replace(/\D/g, "").slice(0, 6);
+                onChange({ ...safeValue, pincode });
+
+                // Cancel any in-flight request for the previous value.
+                pincodeReqRef.current?.abort();
+                pincodeReqRef.current = null;
+
+                if (pincode.length !== 6) {
+                  setPincodeLoading(false);
+                  return;
+                }
+
+                // Cache hit — no network call needed.
+                if (pincodeCache.has(pincode)) {
+                  const cached = pincodeCache.get(pincode);
+                  onChange({ ...safeValue, pincode, ...cached });
+                  return;
+                }
+
+                const controller = new AbortController();
+                pincodeReqRef.current = controller;
+                setPincodeLoading(true);
+                try {
+                  const match = await lookupIndianPincode(pincode, controller.signal);
+                  if (pincodeReqRef.current !== controller) return;
+                  if (match) {
+                    onChange({ ...safeValue, pincode, ...match });
+                    toast.success("Address auto-filled from pincode", { duration: 2500 });
+                  }
+                } catch (err) {
+                  if (err?.name !== "AbortError") console.error("Pincode lookup failed", err);
+                } finally {
+                  if (pincodeReqRef.current === controller) {
+                    pincodeReqRef.current = null;
+                    setPincodeLoading(false);
+                  }
+                }
+              }}
+              placeholder="Pincode"
+              className={inputCls}
+            />
+            {pincodeLoading && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0085FF" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                </svg>
+              </div>
+            )}
+          </div>
         </div>
         <div className="relative">
           <input

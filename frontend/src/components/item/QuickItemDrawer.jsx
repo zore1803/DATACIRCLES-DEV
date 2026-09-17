@@ -1,4 +1,4 @@
-import DeleteIcon from "../common/DeleteIcon";
+﻿import DeleteIcon from "../common/DeleteIcon";
 import { UNIT_OPTIONS } from "./unitOptions";
 import VariantImagePicker from "./VariantImagePicker";
 import { stripVariantFileState } from "../../utils/variantResolve";
@@ -18,7 +18,7 @@ import CustomDropdown from "../common/CustomDropdown";
 import EditIcon from "../common/EditIcon";
 
 
-// onSaved(item) fires after the item is actually created in the backend —
+// onSaved(item) fires after the item is actually created in the backend â€”
 // callers use it to refresh their item list / picker, same as ItemForm's
 // fetchItems callback.
 const BLANK_FORM = {
@@ -79,7 +79,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
   const [variantIndex, setVariantIndex] = useState(null);
 
   // Product images: newly picked files plus their preview URLs (there are no
-  // existing images yet — this drawer only creates new items).
+  // existing images yet â€” this drawer only creates new items).
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
   const imageInputRef = useRef(null);
@@ -206,7 +206,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
       setSaving(true);
       // A variant typed into the open "Add Variant" panel only lives in
       // currentVariant until its own "Add Variant" button commits it into
-      // `variants` — saving the drawer directly (without clicking that
+      // `variants` â€” saving the drawer directly (without clicking that
       // button first) used to silently drop it. Auto-commit it here so
       // whatever's on screen actually gets saved.
       const variantsToSave =
@@ -231,19 +231,19 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
         isActive: true,
         variants: variantsToSave,
         // Default discount applied when this product is added to a
-        // document — the user can still change it there.
+        // document â€” the user can still change it there.
         discount: { type: form.discountType, value: parseFloat(form.discountValue) || 0 },
         // Upper bound on document discount %, null = no limit.
         maxDiscountPercent: form.maxDiscountPercent === "" || form.maxDiscountPercent === undefined
           ? null
           : parseFloat(form.maxDiscountPercent),
-        // Stock settings live under a nested `inventory` object — that's the
+        // Stock settings live under a nested `inventory` object â€” that's the
         // only shape itemController.createItem reads (matching ItemForm.jsx).
         // The ledger's opening-stock unit price comes from the Purchase Price
         // field above, so there is no separate opening-price input.
         inventory: {
           // Parent opening stock is inert once the item has variants (each variant tracks
-          // its own), and the Opening Stock block is hidden in that case — but the field's
+          // its own), and the Opening Stock block is hidden in that case â€” but the field's
           // state keeps whatever was typed before the first variant was added. Force it to
           // 0 so a stale quantity can't ride along, matching ItemForm.jsx.
           openingStock: variantsToSave.length > 0 ? 0 : (parseFloat(form.openingQuantity) || 0),
@@ -267,7 +267,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
           fd.append(key, value === null || value === undefined ? "" : (typeof value === "boolean" ? String(value) : value));
         });
         // `_newImageFiles` is form-only state (File objects) and must not be serialized into
-        // the JSON variants payload — the files go as their own multipart parts below.
+        // the JSON variants payload â€” the files go as their own multipart parts below.
         fd.append("variants", JSON.stringify(variantsToSave.map(stripVariantFileState)));
         fd.append("discount", JSON.stringify(payload.discount));
         fd.append("inventory", JSON.stringify(payload.inventory));
@@ -303,11 +303,11 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
   const lbl = "block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2 font-inter";
   const hasVariants = variants.length > 0 || showVariantForm;
 
-  // Portaled to <body> — this drawer is opened from inside CreateInvoicePanel
+  // Portaled to <body> â€” this drawer is opened from inside CreateInvoicePanel
   // (InvoiceForm.jsx), which is itself a `fixed` element with its own
   // z-index (z-[60]) and therefore its own stacking context. Rendered as a
   // plain JSX child there, this drawer's backdrop/panel would be trapped
-  // inside that z-60 context — any z-index set on them, however high,
+  // inside that z-60 context â€” any z-index set on them, however high,
   // only ranks them among CreateInvoicePanel's own siblings, so the whole
   // subtree still paints below the app header/sidebar (z-9992/z-9995)
   // instead of covering and blurring them. Portaling escapes that context
@@ -319,15 +319,15 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
         style={{ opacity: isSliding ? 1 : 0 }}
         onClick={handleClose}
       />
-      {/* Wider than the standard dc-panel-w (33vw/440px) — this drawer holds
-          several 2-column sectioned cards that need the room — but shares the
+      {/* Wider than the standard dc-panel-w (33vw/440px) â€” this drawer holds
+          several 2-column sectioned cards that need the room â€” but shares the
           same dc-panel-card inset/rounded-corner chrome and slide animation
           as the rest of the quick-drawer forms. */}
       <div
-        className={`fixed dc-panel-card z-[100006] w-[calc(100%-3rem)] max-w-[860px] bg-[#F9FAFB] flex flex-col shadow-2xl transform transition-transform duration-300 ease-out font-inter ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
+        className={`fixed dc-panel-card z-[100006] w-[calc(100%-3rem)] max-w-[860px] bg-white flex flex-col shadow-2xl transform transition-transform duration-300 ease-out font-inter ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* ── Header ── */}
+        {/* â”€â”€ Header â”€â”€ */}
         <div className="bg-white border-b border-[#D9D9D9] flex-shrink-0 rounded-t-2xl">
           <div className="flex items-center justify-between px-6 py-3">
             <div className="flex items-center gap-3">
@@ -341,18 +341,18 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
               disabled={saving}
               className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {saving ? "Adding…" : "Add Item"}
+              {saving ? "Addingâ€¦" : "Add Item"}
             </button>
           </div>
         </div>
 
-        {/* ── Scrollable body ── */}
+        {/* â”€â”€ Scrollable body â”€â”€ */}
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
 
-          {/* ── Basic Details — flat section, no card wrapper (matches
-              CompanyForm.jsx/QuickCompanyForm's heading+divider style) ── */}
+          {/* â”€â”€ Basic Details â€” flat section, no card wrapper (matches
+              CompanyForm.jsx/QuickCompanyForm's heading+divider style) â”€â”€ */}
           <div className="space-y-4">
-            <div className="pb-1.5 border-b border-gray-100">
+            <div className="pb-1.5">
               <span className="text-[16px] font-bold text-[#111216]">Basic Details</span>
             </div>
 
@@ -364,7 +364,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                     type="button"
                     onClick={() => {
                       setType(t);
-                      // A service can't have variants — clear any in-progress
+                      // A service can't have variants â€” clear any in-progress
                       // or saved ones so switching away from Product doesn't
                       // leave stale variant state around (which would also
                       // keep hasVariants true and wrongly hide the Selling/
@@ -385,7 +385,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                 ))}
               </div>
 
-              {/* Item/Service Name — label and placeholder follow the Product/Service toggle */}
+              {/* Item/Service Name â€” label and placeholder follow the Product/Service toggle */}
               <div>
                 <label className={lbl}>{type === "Service" ? "Service Name" : "Item Name"} <span className="text-red-500">*</span></label>
                 <input
@@ -403,7 +403,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                 <div>
                   <label className={lbl}>Selling Price</label>
                   <div className="flex h-11 border border-[#1F2937]/10 rounded-full overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 font-inter">
-                    <span className="flex items-center px-2 bg-gray-50 border-r border-[#1F2937]/10 text-gray-500 text-sm flex-shrink-0">₹</span>
+                    <span className="flex items-center px-2 bg-gray-50 border-r border-[#1F2937]/10 text-gray-500 text-sm flex-shrink-0">â‚¹</span>
                     <input
                       type="number"
                       value={form.sellingPrice}
@@ -428,9 +428,9 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                   <label className={lbl}>Tax % <span className="text-red-500">*</span></label>
                   {/* Single control: its value IS the saved GST rate. (This used
                       to be a number box plus a separate breakdown dropdown that
-                      weren't wired together — picking a breakdown option didn't
+                      weren't wired together â€” picking a breakdown option didn't
                       change the number that actually got saved.)
-                      CustomDropdown instead of a native <select> — the
+                      CustomDropdown instead of a native <select> â€” the
                       breakdown labels are long, and a native <select>'s
                       expanded option list uses the OS/browser's own font
                       size on mobile (not stylable via CSS), which rendered
@@ -451,7 +451,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                 <div>
                   <label className={lbl}>Purchase Price</label>
                   <div className="flex h-11 border border-[#1F2937]/10 rounded-full overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 font-inter">
-                    <span className="flex items-center px-3 bg-gray-50 border-r border-[#1F2937]/10 text-gray-500 text-sm">₹</span>
+                    <span className="flex items-center px-3 bg-gray-50 border-r border-[#1F2937]/10 text-gray-500 text-sm">â‚¹</span>
                     <input
                       type="number"
                       value={form.purchasePrice}
@@ -478,17 +478,17 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                   <label className={lbl}>Primary Unit</label>
                   <CustomDropdown
                     options={UNIT_OPTIONS}
-                    value={form.primaryUnit ? form.primaryUnit.replace(" ", " — ") : ""}
-                    onChange={(val) => handleChange("primaryUnit", val.replace(" — ", " "))}
+                    value={form.primaryUnit ? form.primaryUnit.replace(" ", " â€” ") : ""}
+                    onChange={(val) => handleChange("primaryUnit", val.replace(" â€” ", " "))}
                     placeholder="Select Unit"
                     buttonClassName={inp + " flex items-center justify-between text-left"}
                   />
                 </div>
               </div>
 
-              {/* ── Variants — a service has nothing to stock or vary in
+              {/* â”€â”€ Variants â€” a service has nothing to stock or vary in
                   price by SKU, so this section doesn't apply once the
-                  Product/Service toggle above is set to Service. ── */}
+                  Product/Service toggle above is set to Service. â”€â”€ */}
               {type === "Product" && (
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -571,9 +571,9 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                         <label className={lbl}>Stock</label>
                         <input type="number" name="stock" min="0" value={currentVariant.stock} onChange={handleVariantChange} onWheel={(e) => e.target.blur()} className={inp} />
                       </div>
-                      {/* ── Variant-specific overrides ──────────────────────────────────
+                      {/* â”€â”€ Variant-specific overrides â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                           Each belongs to the variant, not the product: a Small and a Large are
-                          scanned, described, pictured and discounted separately. All optional —
+                          scanned, described, pictured and discounted separately. All optional â€”
                           left blank the variant inherits the item's value (variantResolve.js). */}
                       <div className="pt-2 mt-1 border-t border-gray-100">
                         <p className="text-[11px] text-gray-400 mb-2">Leave blank to use the item's value.</p>
@@ -604,7 +604,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                                 className="px-2 bg-gray-50 border-l border-[#1F2937]/10 text-xs text-gray-600 focus:outline-none flex-shrink-0"
                               >
                                 <option value="percentage">%</option>
-                                <option value="amount">₹</option>
+                                <option value="amount">â‚¹</option>
                               </select>
                             </div>
                           </div>
@@ -644,7 +644,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                       <div key={i} className="flex justify-between items-center bg-gray-50 border border-gray-100 rounded-lg p-3">
                         <div className="min-w-0">
                           <div className="text-sm font-medium text-gray-900 truncate">{v.name}</div>
-                          <div className="text-xs text-gray-500 mt-0.5">SKU: {v.sku || "N/A"} · ₹{v.sellingPrice} · Stock: {v.stock}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">SKU: {v.sku || "N/A"} Â· â‚¹{v.sellingPrice} Â· Stock: {v.stock}</div>
                         </div>
                         <div className="flex gap-1 flex-shrink-0 ml-3">
                           <button type="button" onClick={() => handleEditVariant(i)} className="text-blue-600 hover:text-blue-700 p-1.5 rounded hover:bg-blue-50 transition-colors"><EditIcon className="w-4 h-4" /></button>
@@ -658,9 +658,9 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
               )}
           </div>
 
-          {/* ── Additional Information — flat section, no card wrapper ── */}
+          {/* â”€â”€ Additional Information â€” flat section, no card wrapper â”€â”€ */}
           <div className="space-y-4">
-            <div className="pb-1.5 border-b border-gray-100">
+            <div className="pb-1.5">
               <span className="text-[16px] font-bold text-[#111216]">Additional Information</span>
               <span className="ml-2 text-xs text-gray-400 font-normal">Optional</span>
             </div>
@@ -700,7 +700,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
               </div>
 
               {/* Barcode gets its own half-width row rather than sharing a grid row with
-                  Description below — pairing a single-line input against a 140px rich-text
+                  Description below â€” pairing a single-line input against a 140px rich-text
                   editor in a symmetric 2-col grid stretched the row to the editor's height,
                   leaving Barcode's cell with a large dead gap underneath it. */}
               {/* Hidden once the item has variants: each variant carries its own, and an
@@ -720,12 +720,12 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                   theme="snow"
                   value={form.description}
                   onChange={(val) => handleChange("description", val)}
-                  placeholder="Add product description…"
+                  placeholder="Add product descriptionâ€¦"
                   className="rounded-xl border border-[#1F2937]/10 overflow-hidden [&_.ql-editor]:min-h-[150px] [&_.ql-toolbar]:!border-0 [&_.ql-toolbar]:!border-b [&_.ql-toolbar]:!border-gray-100 [&_.ql-toolbar]:rounded-t-xl [&_.ql-container]:!border-0 [&_.ql-container]:rounded-b-xl text-sm"
                 />
               </div>
 
-              {/* Images upload — heading follows the Product/Service toggle */}
+              {/* Images upload â€” heading follows the Product/Service toggle */}
               <div>
                 <label className={lbl}>{type === "Service" ? "Service Images & Videos" : "Product Images & Videos"}</label>
                 <div className="flex items-start gap-4">
@@ -759,18 +759,18 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                       className="hidden"
                     />
                   </div>
-                  <p className="text-[11px] text-gray-400 leading-relaxed">Up to 10 files · 3 MB/image · 50 MB/video<br />Images: 1024×1024 recommended</p>
+                  <p className="text-[11px] text-gray-400 leading-relaxed">Up to 10 files Â· 3 MB/image Â· 50 MB/video<br />Images: 1024Ã—1024 recommended</p>
                 </div>
               </div>
               </>
               )}
           </div>
 
-          {/* ── Opening Stock — flat section, no card wrapper. A service
-              carries no stock at all, not just "no variant-level" stock. ── */}
+          {/* â”€â”€ Opening Stock â€” flat section, no card wrapper. A service
+              carries no stock at all, not just "no variant-level" stock. â”€â”€ */}
           {type === "Product" && !hasVariants && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
+            <div className="flex items-center justify-between pb-1.5">
               <div>
                 <span className="text-[16px] font-bold text-[#111216]">Opening Stock</span>
                 <span className="ml-2 text-xs text-gray-400 font-normal">Optional</span>
@@ -789,28 +789,28 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
           </div>
           )}
 
-          {/* ── More Details collapsible ──
+          {/* â”€â”€ More Details collapsible â”€â”€
               Every field inside it (Discount, Max Discount %, Low Stock Alert) is set per
               variant once variants exist, so the whole section is hidden rather than left
               showing parent copies that the variants would override anyway. */}
           {!hasVariants && (
-          <div className="border border-[#FDE3CC] bg-[#FFF8F1] rounded-2xl overflow-hidden">
+          <div className="border border-[#1F2937]/10 bg-white rounded-2xl overflow-hidden">
             <button type="button" className="w-full p-4 flex items-center gap-3 text-left" onClick={() => setShowMoreDetails(!showMoreDetails)}>
               <ChevronRight className={`w-4 h-4 text-gray-500 transition-transform flex-shrink-0 ${showMoreDetails ? "rotate-90" : ""}`} />
               <div>
                 <p className="text-sm font-bold text-gray-900">More Details?</p>
-                <p className="text-xs text-gray-500 mt-0.5">Low stock alerts, Discount settings…</p>
+                <p className="text-xs text-gray-500 mt-0.5">Low stock alerts, Discount settingsâ€¦</p>
               </div>
             </button>
             {showMoreDetails && (
-              <div className="border-t border-[#FDE3CC] bg-white px-5 py-4 grid grid-cols-2 gap-4">
+              <div className="border-t border-[#1F2937]/10 bg-white px-5 py-4 grid grid-cols-2 gap-4">
                 <div>
                   <label className={lbl}>Discount</label>
                   <div className="flex h-11 border border-[#1F2937]/10 rounded-full overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 bg-white font-inter">
                     <input type="number" min="0" value={form.discountValue} onChange={(e) => handleChange("discountValue", e.target.value)} className="flex-1 px-3 text-sm text-[#1F2937] focus:outline-none" />
                     <select value={form.discountType} onChange={(e) => handleChange("discountType", e.target.value)} className="px-2 bg-gray-50 border-l border-[#1F2937]/10 text-xs text-gray-600 focus:outline-none">
                       <option value="percentage">% Percentage</option>
-                      <option value="amount">₹ Amount</option>
+                      <option value="amount">â‚¹ Amount</option>
                     </select>
                   </div>
                   <p className="mt-1 text-[11px] text-gray-400">Applied in Online Store and invoices.</p>
@@ -846,7 +846,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
           <div className="pb-4" />
         </div>
 
-        {/* ── Footer ── */}
+        {/* â”€â”€ Footer â”€â”€ */}
         <div className="flex items-center justify-between px-6 py-4 bg-white border-t border-gray-100 flex-shrink-0 rounded-b-2xl">
           <button type="button" onClick={handleClose} className="px-6 py-2 border border-gray-200 text-gray-700 text-sm font-bold rounded-[25px] hover:bg-gray-50 transition-colors">
             Cancel
@@ -857,7 +857,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
             disabled={saving}
             className="px-8 py-2 bg-[#158FFF] hover:opacity-90 text-white text-sm font-bold rounded-[25px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {saving ? "Adding…" : "Add Item"}
+            {saving ? "Addingâ€¦" : "Add Item"}
           </button>
         </div>
       </div>

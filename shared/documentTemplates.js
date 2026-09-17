@@ -257,7 +257,9 @@ export function splitGst(taxableAmount, gstRate, transactionType = "intra") {
 }
 
 export function computeDocument(doc, type = "tax") {
-  const supportsTax  = type !== "deliveryChallan";
+  // Every document type can carry GST. A Delivery Challan is taxed only when saved with GST on
+  // (isTaxInvoice); challans saved before that flag existed don't have it and stay untaxed.
+  const supportsTax  = true;
   const taxFlagKey   = type === "quotation" ? "isTaxQuotation" : "isTaxInvoice";
   const transactionType = doc.transactionType === "inter" ? "inter" : "intra";
   const isTax        = supportsTax && !!doc[taxFlagKey];

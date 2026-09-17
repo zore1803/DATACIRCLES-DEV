@@ -21,6 +21,11 @@ const itemSchema = new mongoose.Schema({
   parentItemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', default: null },
   discountType: { type: String, enum: ['amount', 'percentage'], default: 'amount' },
   discount: { type: Number, default: 0, min: 0 },
+  // Line tax data, same as Invoice lines, so a GST challan calculates like an invoice
+  // (₹118 With Tax @18% -> ₹100 + ₹9 CGST + ₹9 SGST) on screen, on save, on reopen and in the PDF.
+  hsn: { type: String, default: '' },
+  gstRate: { type: Number, default: 0, min: 0, max: 100 },
+  taxInclusive: { type: Boolean, default: false },
 });
 
 const deliveryChallanSchema = new mongoose.Schema({
@@ -29,6 +34,13 @@ const deliveryChallanSchema = new mongoose.Schema({
   date: { type: Date, required: true },
   dueDate: { type: Date },
   amount: { type: Number, required: true },
+  // GST on/off for the challan, same flag name the shared document form and computeDocument()
+  // use for invoices. Defaults to false: challans saved before this field existed never carried
+  // GST data, so they must keep rendering untaxed exactly as before.
+  isTaxInvoice: { type: Boolean, default: false },
+  transactionType: { type: String, enum: ['intra', 'inter'], default: 'intra' },
+  receiverGSTIN: { type: String, default: '' },
+  gstRate: { type: Number, min: 0, max: 100, default: 18 },
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
   status: {

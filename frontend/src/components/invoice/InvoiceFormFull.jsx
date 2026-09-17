@@ -1254,7 +1254,9 @@ const InvoiceFormFull = ({
         amount: (() => {
           let t = form.isTaxInvoice
             ? computeDocument(form, "invoice").grandTotal
-            : calculateTotalAmount(form.items, form.discount);
+            // GST off: no tax at all, so the saved amount matches the total the form shows.
+            // Without the explicit 0, calculateTotalAmount's gstRate default (18) added GST.
+            : calculateTotalAmount(form.items, form.discount, 0);
           return form.isRoundOff ? Math.round(t) : t;
         })(),
         isRoundOff: form.isRoundOff,

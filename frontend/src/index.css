@@ -939,3 +939,18 @@ button {
       rgba(0, 0, 0, 0.03) 10px,
       rgba(0, 0, 0, 0.03) 20px);
 }
+
+/* SuccessModal global overlay — dims & blurs every fixed layer (sidebar,
+   header, shadow overlays) so the modal sits cleanly above everything.
+   Each fixed element gets its own filter because backdrop-filter on a
+   sibling fixed element doesn't bleed through stacking contexts. */
+body.success-modal-open > * {
+  filter: blur(3px) brightness(0.55);
+  transition: filter 0.25s ease;
+  pointer-events: none;
+}
+/* The modal portal itself is appended directly to body — exclude it */
+body.success-modal-open > #success-modal-portal {
+  filter: none !important;
+  pointer-events: auto;
+}

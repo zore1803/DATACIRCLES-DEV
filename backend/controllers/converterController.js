@@ -351,6 +351,7 @@ exports.convertProformaToDeliveryChallan = async (req, res) => {
       updatedAt: undefined,
     };
     delete deliveryChallanData.performaInvoiceNumber;
+    delete deliveryChallanData.isTaxInvoice;
     delete deliveryChallanData.receiverGSTIN;
 
     const requiredFields = ['deal', 'deliveryChallanNumber', 'date', 'amount', 'user', 'organization', 'status', 'discount'];

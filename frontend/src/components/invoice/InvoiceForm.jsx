@@ -2334,9 +2334,9 @@ const CreateInvoicePanel = ({
     : (defaultTermsFlat || PREDEFINED_TERMS[type] || "");
   // Per-type capabilities. Delivery challans have no GSTIN / tax / HSN; the
   // quotation tax flag is stored under a different key.
-  const isChallan = type === "deliveryChallan";
-  const supportsTax = !isChallan;
-  const supportsGSTIN = !isChallan;
+  // Delivery Challan uses the same GST on/off, GSTIN and tax calculation as a Tax Invoice.
+  const supportsTax = true;
+  const supportsGSTIN = true;
   const taxFlagKey = type === "quotation" ? "isTaxQuotation" : "isTaxInvoice";
   const docName = docNameFor(type);
   // Document Settings is the single source of truth for the numbering
@@ -2372,7 +2372,7 @@ const CreateInvoicePanel = ({
             sourceDoc[type === "quotation" ? "isTaxQuotation" : "isTaxInvoice"] ||
             false,
           transactionType: sourceDoc.transactionType || "intra",
-          gstRate: sourceDoc.gstRate || 18,
+          gstRate: sourceDoc.gstRate ?? 18,
           // Only an actual edit (initialDoc/editingInvoice) should keep the
           // source's own number — conversionData covers both Convert (a
           // different doc type, where the source's number field usually
@@ -2398,7 +2398,7 @@ const CreateInvoicePanel = ({
                   discountType: item.discountType || "amount",
                   discount: item.discount || 0,
                   showDescription: !!item.description,
-                  gstRate: item.gstRate || 18,
+                  gstRate: item.gstRate ?? 18,
                   taxInclusive: !!item.taxInclusive,
                 }))
               : [blankItem()],
@@ -2679,59 +2679,66 @@ const CreateInvoicePanel = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Builds the product picker list from GET /items. Shared by the initial load and the reload
+  // after "Create product", so both carry the same fields (price, GST, With/Without Tax, stock,
+  // discount). The reload used to be a separate copy without gstRate/taxInclusive/stock, so any
+  // product added after creating one fell back to 18% tax-on-top.
+  const buildCatalogue = (data) =>
+    (data || [])
+      .filter((item) => item.isActive)
+      .flatMap((item) => {
+        // Same variant-only logic as PurchaseForm.jsx/PurchaseOrderForm.jsx
+        // (and the other fetchItems in this file): variants only when
+        // present, otherwise the item itself.
+        const variants = item.variants || [];
+        if (variants.length > 0) {
+          return variants.map((v) => ({
+            _id: v._id,
+            displayName: `${item.name} - ${v.name}`,
+            name: v.name,
+            description: v.description || item.description || "",
+            sellingPrice: v.sellingPrice || item.sellingPrice,
+            hsnSac: v.hsnSac || item.hsnSac || "",
+            isVariant: true,
+            parentItemId: item._id,
+            type: item.type,
+            stock: v.stock ?? item.inventory?.currentStock ?? 0,
+            // Variant-first: the variant's own discount when it sets one, otherwise the parent
+            // item's (utils/variantResolve.js), same as the full-width forms. `v.discount ||`
+            // never fell back: every variant has a discount object, even when its value is unset.
+            discount: resolveDiscount(v, item),
+            // The product's own GST rate and With/Without Tax setting. These were never
+            // copied into the catalogue, so picking a product fell back to a flat 18% added
+            // on top. Same variant-then-parent resolution as the full-width forms
+            // (InvoiceFormFull/QuotationForm/PerformaInvoiceFormFull).
+            gstRate: v.gstRate ?? item.gstRate ?? 0,
+            taxInclusive: !!(v.taxInclusive ?? item.taxInclusive),
+          }));
+        }
+        return [
+          {
+            _id: item._id,
+            displayName: item.name,
+            name: item.name,
+            description: item.description || "",
+            sellingPrice: item.sellingPrice,
+            hsnSac: item.hsnSac || "",
+            isVariant: false,
+            parentItemId: null,
+            type: item.type,
+            stock: item.inventory?.currentStock ?? 0,
+            discount: item.discount,
+            gstRate: item.gstRate ?? 0,
+            taxInclusive: !!item.taxInclusive,
+          },
+        ];
+      });
+
   useEffect(() => {
     const fetchItems = async () => {
       try {
         const res = await API.get("/items?search=&includeVariants=true");
-        const flattened = (res.data || [])
-          .filter((item) => item.isActive)
-          .flatMap((item) => {
-            // Same variant-only logic as PurchaseForm.jsx/PurchaseOrderForm.jsx
-            // (and the other fetchItems in this file): variants only when
-            // present, otherwise the item itself.
-            const variants = item.variants || [];
-            if (variants.length > 0) {
-              return variants.map((v) => ({
-                _id: v._id,
-                displayName: `${item.name} - ${v.name}`,
-                name: v.name,
-                description: v.description || item.description || "",
-                sellingPrice: v.sellingPrice || item.sellingPrice,
-                hsnSac: v.hsnSac || item.hsnSac || "",
-                isVariant: true,
-                parentItemId: item._id,
-                type: item.type,
-                stock: v.stock ?? item.inventory?.currentStock ?? 0,
-                // Discount only lives on the parent Item (variants have no
-                // discount field of their own) — same catalog default for
-                // every variant of a product.
-                discount: v.discount || item.discount,
-                // The product's own GST rate and With/Without Tax setting. These were never
-                // copied into the catalogue, so picking a product fell back to a flat 18% added
-                // on top. Same variant-then-parent resolution as the full-width forms
-                // (InvoiceFormFull/QuotationForm/PerformaInvoiceFormFull).
-                gstRate: v.gstRate ?? item.gstRate ?? 0,
-                taxInclusive: !!(v.taxInclusive ?? item.taxInclusive),
-              }));
-            }
-            return [
-              {
-                _id: item._id,
-                displayName: item.name,
-                name: item.name,
-                description: item.description || "",
-                sellingPrice: item.sellingPrice,
-                hsnSac: item.hsnSac || "",
-                isVariant: false,
-                parentItemId: null,
-                type: item.type,
-                stock: item.inventory?.currentStock ?? 0,
-                discount: item.discount,
-                gstRate: item.gstRate ?? 0,
-                taxInclusive: !!item.taxInclusive,
-              },
-            ];
-          });
+        const flattened = buildCatalogue(res.data);
         setCatalogue(flattened);
       } catch (err) {
         console.error("Fetch items error:", err);
@@ -2894,7 +2901,7 @@ const CreateInvoicePanel = ({
         discountType: "amount",
         discount: 0,
         showDescription: false,
-        gstRate: form.gstRate || 18,
+        gstRate: form.gstRate ?? 18,
         taxInclusive: false,
       };
     }
@@ -4460,20 +4467,7 @@ const CreateInvoicePanel = ({
           onSaved={async () => {
             try {
               const res = await API.get("/items?search=&includeVariants=true");
-              const flattened = (res.data || []).filter((i) => i.isActive).flatMap((item) => {
-                const variants = item.variants || [];
-                if (variants.length > 0) {
-                  return variants.map((v) => ({
-                    _id: v._id, displayName: `${item.name} - ${v.name}`, name: v.name,
-                    description: v.description || item.description || "", sellingPrice: v.sellingPrice || item.sellingPrice,
-                    hsnSac: v.hsnSac || item.hsnSac || "", isVariant: true, parentItemId: item._id,
-                    discount: v.discount || item.discount,
-                  }));
-                }
-                return [{ _id: item._id, displayName: item.name, name: item.name, description: item.description || "",
-                  sellingPrice: item.sellingPrice, hsnSac: item.hsnSac || "", isVariant: false, parentItemId: null, discount: item.discount }];
-              });
-              setCatalogue(flattened);
+              setCatalogue(buildCatalogue(res.data));
             } catch (err) { console.error(err); }
             setShowQuickItemDrawer(false);
           }}

@@ -190,6 +190,7 @@ const ItemSearchSelect = ({
       // previously dropped entirely, so a tax deliveryChallan line item never
       // carried its product's own GST rate.
       gstRate: item.gstRate ?? 0,
+      taxInclusive: !!item.taxInclusive,
       isVariant: item.isVariant || false,
       parentItemId: item.parentItemId || null,
       // The product's own default discount — previously always started at 0.
@@ -390,6 +391,7 @@ const DeliveryChallanFormFull = ({
     amount: 0,
     status: "Draft",
     style: "Regular",
+    isTaxInvoice: true,
     isRoundOff: true,
     notes: defaultNotesForNew,
     terms: defaultTermsForNew,
@@ -456,6 +458,7 @@ const DeliveryChallanFormFull = ({
               // Variant's own rate falls back to the parent item's, same as
               // sellingPrice/hsnSac above.
               gstRate: variant.gstRate ?? item.gstRate ?? 0,
+              taxInclusive: !!(variant.taxInclusive ?? item.taxInclusive),
               // Variant-first: the variant's own discount when it sets one, otherwise the
               // parent item's catalog default (see utils/variantResolve.js).
               discount: resolveDiscount(variant, item),
@@ -477,6 +480,7 @@ const DeliveryChallanFormFull = ({
               sellingPrice: item.sellingPrice,
               hsnSac: item.hsnSac || "",
               gstRate: item.gstRate ?? 0,
+              taxInclusive: !!item.taxInclusive,
               discount: item.discount,
               type: item.type,
               category: item.category || "",
@@ -576,6 +580,7 @@ const DeliveryChallanFormFull = ({
           quantity: item.quantity || 1,
           hsn: item.hsn || "",
           gstRate: item.gstRate || 0,
+          taxInclusive: !!item.taxInclusive,
           isVariant: item.isVariant || false,
           parentItemId: item.parentItemId || null,
           discountType: item.discountType || "amount",
@@ -586,6 +591,8 @@ const DeliveryChallanFormFull = ({
         status: sourceData.status || "Draft",
         style: sourceData.style || "Regular",
         isRoundOff: sourceData.isRoundOff !== undefined ? sourceData.isRoundOff : true,
+        // Keep what was saved. Challans from before GST support have no flag, so they stay untaxed.
+        isTaxInvoice: !!sourceData.isTaxInvoice,
         transactionType: sourceData.transactionType || "intra",
         notes: sourceData.notes || "",
         terms: sourceData.terms || "",
@@ -612,6 +619,7 @@ const DeliveryChallanFormFull = ({
         amount: 0,
         status: "Draft",
         style: "Regular",
+        isTaxInvoice: true,
         transactionType: "intra",
         notes: defaultNotesForNew,
         terms: defaultTermsForNew,
@@ -878,6 +886,7 @@ const DeliveryChallanFormFull = ({
       quantity: 1,
       hsn: item.hsnSac || "",
       gstRate: item.gstRate ?? 0,
+      taxInclusive: !!item.taxInclusive,
       isVariant: false,
               parentItemId: null,
               stock: item.inventory?.currentStock ?? 0,
@@ -1037,9 +1046,12 @@ const DeliveryChallanFormFull = ({
         shippingAddress: form.sameAsBilling ? form.billingAddress : form.shippingAddress,
         signature: form.signature,
         amount: (() => {
-          let t = calculateTotalAmount(form.items, form.discount);
+          let t = form.isTaxInvoice
+            ? computeDocument(form, "deliveryChallan").grandTotal
+            : calculateTotalAmount(form.items, form.discount);
           return form.isRoundOff ? Math.round(t) : t;
         })(),
+        isTaxInvoice: !!form.isTaxInvoice,
         isRoundOff: form.isRoundOff,
         discount: form.discount,
         status: statusValue,
@@ -1056,6 +1068,7 @@ const DeliveryChallanFormFull = ({
           discountType: item.discountType,
           discount: parseFloat(item.discount),
           gstRate: parseFloat(item.gstRate) || 0,
+          taxInclusive: !!item.taxInclusive,
         })),
         style: form.style,
         transactionType: form.transactionType,
@@ -1136,6 +1149,10 @@ const DeliveryChallanFormFull = ({
   
   let finalTotal = subtotalAfterItemDiscounts - invoiceDiscountAmount;
   let taxDetails = null;
+  if (form.isTaxInvoice) {
+    taxDetails = computeDocument(form, "deliveryChallan");
+    finalTotal = taxDetails.grandTotal;
+  }
   
   let roundOffAmount = 0;
   if (form.isRoundOff) {
@@ -1876,6 +1893,24 @@ const DeliveryChallanFormFull = ({
                       <span className="text-gray-900 font-semibold">{formatNumberFixed(roundOffAmount)}</span>
                     </div>
 
+                    {taxDetails && form.transactionType !== "inter" && (
+                      <>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-gray-600 font-medium">CGST</span>
+                          <span className="text-gray-900 font-medium">₹{formatNumberFixed(taxDetails.totalCGST)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-gray-600 font-medium">SGST</span>
+                          <span className="text-gray-900 font-medium">₹{formatNumberFixed(taxDetails.totalSGST)}</span>
+                        </div>
+                      </>
+                    )}
+                    {taxDetails && form.transactionType === "inter" && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600 font-medium">IGST</span>
+                        <span className="text-gray-900 font-medium">₹{formatNumberFixed(taxDetails.totalIGST)}</span>
+                      </div>
+                    )}
 
                     <div className="flex justify-between items-center pt-2">
                       <span className="text-lg font-bold text-gray-900">Total Amount</span>
