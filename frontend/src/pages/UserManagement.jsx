@@ -27,6 +27,7 @@ import AppToaster from "../components/AppToaster";
 import TeamIcon from "../components/common/TeamIcon";
 import EyeIcon from "../components/common/EyeIcon";
 import EditIcon from "../components/common/EditIcon";
+import useBodyScrollLock from "../hooks/useBodyScrollLock";
 
 function ConfirmModal({
   isOpen,
@@ -105,6 +106,7 @@ function UserManagement() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [permissions, setPermissions] = useState({});
   const [showModal, setShowModal] = useState(false);
+  useBodyScrollLock(showModal || formVisible);
   const [orgCode, setOrgCode] = useState("");
   // Distinguishes "still fetching" from "the fetch failed" - the card used to
   // render "Loading..." for both.
@@ -467,35 +469,26 @@ function UserManagement() {
     const adminPct = pct(adminUsed, adminLimit);
     const staffPct = pct(staffUsed, staffLimit);
     const nearCapacity = adminPct >= 90 || staffPct >= 90;
-    const atCapacity = adminUsed >= adminLimit || staffUsed >= staffLimit;
 
     return (
       <div className="bg-primary-100 border border-primary-300 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-2.5">
           <TeamIcon className="w-4 h-4 text-primary-600" />
           <p className="text-xs font-bold text-primary-700">Seat Usage</p>
+          {nearCapacity && (
+            <button
+              onClick={() => navigate("/settings/subscription")}
+              className="ml-auto flex items-center gap-1 px-2.5 py-1 bg-[#0085FF] hover:bg-[#0072db] text-white rounded-lg text-xs font-semibold transition-colors"
+            >
+              <Crown className="w-3.5 h-3.5" />
+              Upgrade Plan
+            </button>
+          )}
         </div>
         <div className="space-y-2.5">
           {renderBar("Admin", adminUsed, adminLimit)}
           {renderBar("Staff", staffUsed, staffLimit)}
         </div>
-        {nearCapacity && (
-          <div className="mt-3 pt-3 border-t border-primary-300">
-            <p className="text-xs text-warning-600 font-medium">
-              {atCapacity
-                ? "You've used all your seats."
-                : "You're almost out of seats."}{" "}
-              Upgrade your plan to add more team members.
-            </p>
-            <button
-              onClick={() => navigate("/settings/subscription")}
-              className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-warning-500 hover:bg-warning-600 text-white rounded-lg text-xs font-semibold transition-colors"
-            >
-              <Crown className="w-3.5 h-3.5" />
-              Upgrade Plan
-            </button>
-          </div>
-        )}
       </div>
     );
   };
@@ -575,161 +568,9 @@ function UserManagement() {
   return (
     <div className="space-y-6 -mt-10 lg:-mt-12">
       <AppToaster />
-      <div className="flex flex-col lg:block gap-6 lg:pr-[344px]">
-        {/* MAIN COLUMN */}
-        <div className="min-w-0 flex flex-col gap-4 lg:h-[calc(100vh-200px)]">
-
-      {/* Header */}
-      <div className="flex flex-row justify-between items-center gap-4 shrink-0">
-        <p className="text-sm font-semibold text-neutral-700">
-          Add your staff. Assign Roles. Multiply your business.
-        </p>
-        <button
-          onClick={() => setFormVisible(!formVisible)}
-          disabled={paymentProcessing}
-          className={`flex items-center gap-1.5 text-sm font-semibold px-3.5 py-1.5 rounded-lg cursor-pointer transition-all ${
-            formVisible
-              ? "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
-              : "bg-[#0085FF] hover:bg-[#0072db] text-white"
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
-        >
-          {paymentProcessing ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Processing...
-            </>
-          ) : formVisible ? (
-            <>
-              <X className="w-4 h-4" />
-              Cancel
-            </>
-          ) : (
-            <>
-              <UserPlus className="w-4 h-4" />
-              Invite User
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Existing Users */}
-      <div className="min-h-0 flex-1 flex flex-col">
-        {loading ? (
-          <div className="px-6 py-12 text-center">
-            <Loader2 className="w-8 h-8 text-primary-600 animate-spin mx-auto mb-3" />
-            <p className="text-neutral-500">Loading users...</p>
-          </div>
-        ) : users.length === 0 ? (
-          <div className="px-6 py-12 text-center text-neutral-500">
-            No users found.
-          </div>
-        ) : (
-          <div className="flex-1 min-h-0 overflow-auto border-t border-neutral-200">
-            <table className="min-w-full">
-              <thead className="sticky top-0 z-10 bg-neutral-50">
-                <tr className="border-b border-neutral-200">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-500">
-                    Name
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-500">
-                    Mobile
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-500">
-                    Email
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-500">
-                    Role
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-neutral-500">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100">
-                {users.map((u) => {
-                  const storedUser = JSON.parse(
-                    localStorage.getItem("user") || "{}"
-                  );
-                  const isSelf = u._id === storedUser._id;
-                  const roleLabel =
-                    u.role.charAt(0).toUpperCase() + u.role.slice(1);
-                  return (
-                    <tr key={u._id} className="hover:bg-neutral-50 transition-colors">
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 text-xs font-bold shrink-0">
-                            {u.name
-                              .split(" ")
-                              .map((p) => p.charAt(0))
-                              .join("")
-                              .slice(0, 2)
-                              .toUpperCase()}
-                          </div>
-                          <span className="text-sm font-medium text-neutral-900">
-                            {u.name}
-                            {isSelf && (
-                              <span className="ml-2 text-xs bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">
-                                You
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-sm text-neutral-700">
-                        {u.phone || "—"}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-neutral-700">
-                        {u.email || "—"}
-                      </td>
-                      <td
-                        className={`px-4 py-4 text-sm ${
-                          isSelf ? "text-neutral-300" : "text-neutral-700"
-                        }`}
-                      >
-                        {roleLabel}
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        {/* The admin seat is the org creator: every permission
-                            by definition, and can't be deleted - so no actions. */}
-                        {u.role === "admin" ? (
-                          <span className="text-xs text-neutral-300">—</span>
-                        ) : (
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => {
-                                setSelectedUser(u);
-                                setPermissions(getInitialPermissions(u));
-                                setShowModal(true);
-                              }}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 text-primary-600 rounded-lg hover:bg-primary-100 text-sm font-semibold transition-colors"
-                            >
-                              <Shield className="w-4 h-4" />
-                              Permissions
-                            </button>
-                            <button
-                              className="inline-flex items-center gap-1 px-3 py-1.5 text-danger-600 rounded-lg hover:bg-danger-100 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              disabled={isSelf}
-                              onClick={() => !isSelf && deleteUser(u._id)}
-                            >
-                              <DeleteIcon className="w-4 h-4" />
-                              Delete
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-        </div>
-        {/* END MAIN COLUMN */}
-
-        {/* SIDEBAR */}
-        <aside className="w-full lg:w-80 space-y-4 mt-1.5 lg:mt-0 lg:fixed lg:top-[150px] lg:right-6 lg:bottom-6 lg:overflow-y-auto lg:pr-1">
+      <div className="flex flex-col gap-6">
+        {/* TOP ROW: Organization Code / Seat Usage / Pending Invitations */}
+        <div className="grid grid-cols-1 md:grid-cols-[0.8fr_1.2fr_1fr] gap-4 mt-4">
           {/* Organization Code */}
           <div className="bg-white border border-neutral-200 rounded-xl p-5 text-center">
             <div className="flex items-center justify-center gap-2 mb-2">
@@ -826,7 +667,159 @@ function UserManagement() {
               </ul>
             )}
           </div>
-        </aside>
+        </div>
+
+        {/* USERS LIST */}
+        <div className="min-w-0 flex flex-col gap-4">
+
+      {/* Header */}
+      <div className="flex flex-row justify-between items-center gap-4 shrink-0">
+        <p className="text-sm font-semibold text-neutral-700">
+          Add your staff. Assign Roles. Multiply your business.
+        </p>
+        <button
+          onClick={() => setFormVisible(!formVisible)}
+          disabled={paymentProcessing}
+          className={`flex items-center gap-1.5 text-sm font-semibold px-3.5 py-1.5 rounded-lg cursor-pointer transition-all ${
+            formVisible
+              ? "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+              : "bg-[#0085FF] hover:bg-[#0072db] text-white"
+          } disabled:opacity-50 disabled:cursor-not-allowed`}
+        >
+          {paymentProcessing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Processing...
+            </>
+          ) : formVisible ? (
+            <>
+              <X className="w-4 h-4" />
+              Cancel
+            </>
+          ) : (
+            <>
+              <UserPlus className="w-4 h-4" />
+              Invite User
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Existing Users */}
+      <div className="min-h-0 flex-1 flex flex-col">
+        {loading ? (
+          <div className="px-6 py-12 text-center">
+            <Loader2 className="w-8 h-8 text-primary-600 animate-spin mx-auto mb-3" />
+            <p className="text-neutral-500">Loading users...</p>
+          </div>
+        ) : users.length === 0 ? (
+          <div className="px-6 py-12 text-center text-neutral-500">
+            No users found.
+          </div>
+        ) : (
+          <div className="flex-1 min-h-0 overflow-auto border border-[#E1E4EA] rounded-xl">
+            <table className="min-w-full border-separate border-spacing-0">
+              <thead className="sticky top-0 z-10 bg-[#F5F7FA]">
+                <tr>
+                  <th className="px-4 py-3 align-middle text-center text-sm font-bold text-[#525866] border-b border-r border-[#E1E4EA]">
+                    Name
+                  </th>
+                  <th className="px-4 py-3 align-middle text-center text-sm font-bold text-[#525866] border-b border-r border-[#E1E4EA]">
+                    Mobile
+                  </th>
+                  <th className="px-4 py-3 align-middle text-center text-sm font-bold text-[#525866] border-b border-r border-[#E1E4EA]">
+                    Email
+                  </th>
+                  <th className="px-4 py-3 align-middle text-center text-sm font-bold text-[#525866] border-b border-r border-[#E1E4EA]">
+                    Role
+                  </th>
+                  <th className="px-4 py-3 align-middle text-center text-sm font-bold text-[#525866] border-b border-[#E1E4EA]">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E1E4EA]">
+                {users.map((u) => {
+                  const storedUser = JSON.parse(
+                    localStorage.getItem("user") || "{}"
+                  );
+                  const isSelf = u._id === storedUser._id;
+                  const roleLabel =
+                    u.role.charAt(0).toUpperCase() + u.role.slice(1);
+                  return (
+                    <tr key={u._id} className="hover:bg-neutral-50 transition-colors">
+                      <td className="px-4 py-4 border-r border-[#E1E4EA]">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 text-xs font-bold shrink-0">
+                            {u.name
+                              .split(" ")
+                              .map((p) => p.charAt(0))
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase()}
+                          </div>
+                          <span className="text-sm font-medium text-neutral-900">
+                            {u.name}
+                            {isSelf && (
+                              <span className="ml-2 text-xs bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">
+                                You
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-center text-neutral-700 border-r border-[#E1E4EA]">
+                        {u.phone || "—"}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-neutral-700 border-r border-[#E1E4EA]">
+                        {u.email || "—"}
+                      </td>
+                      <td
+                        className={`px-4 py-4 text-sm text-center border-r border-[#E1E4EA] ${
+                          isSelf ? "text-neutral-300" : "text-neutral-700"
+                        }`}
+                      >
+                        {roleLabel}
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        {/* The admin seat is the org creator: every permission
+                            by definition, and can't be deleted - so no actions. */}
+                        {u.role === "admin" ? (
+                          <span className="text-xs text-neutral-300">—</span>
+                        ) : (
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedUser(u);
+                                setPermissions(getInitialPermissions(u));
+                                setShowModal(true);
+                              }}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 text-primary-600 rounded-lg hover:bg-primary-100 text-sm font-semibold transition-colors"
+                            >
+                              <Shield className="w-4 h-4" />
+                              Permissions
+                            </button>
+                            <button
+                              className="inline-flex items-center gap-1 px-3 py-1.5 text-danger-600 rounded-lg hover:bg-danger-100 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              disabled={isSelf}
+                              onClick={() => !isSelf && deleteUser(u._id)}
+                            >
+                              <DeleteIcon className="w-4 h-4" />
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+        </div>
+        {/* END USERS LIST */}
       </div>
 
       {/* Invite User Modal */}
@@ -968,39 +961,37 @@ function UserManagement() {
 
       {/* Permissions Modal */}
       {showModal && selectedUser && (
-        <div className="fixed inset-0 bg-neutral-900/60 backdrop-blur-sm flex justify-center items-center z-[100009] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl border-2 border-neutral-200 max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b-2 border-neutral-100 px-6 py-5 z-10">
-              <div className="flex items-center gap-3">
-                <div className="bg-primary-100 p-2.5 rounded-xl">
-                  <Shield className="w-6 h-6 text-primary-600" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-xl font-bold text-neutral-900">
-                    Manage Permissions
-                  </h3>
-                  <p className="text-sm text-neutral-500">
-                    for {selectedUser.name}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-neutral-500" />
-                </button>
-              </div>
+        <>
+          <div
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100009]"
+            onClick={() => setShowModal(false)}
+          />
+          <div className="fixed dc-panel-card dc-panel-w z-[100010] bg-white shadow-2xl flex flex-col overflow-hidden font-inter">
+            {/* Sticky header — matches the CompanyForm header spec */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
+              <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
+                Permissions — {selectedUser.name}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                title="Close"
+                className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity"
+                aria-label="Close"
+              >
+                <X className="w-[18px] h-[18px]" strokeWidth={2} />
+              </button>
             </div>
 
-            <div className="p-6">
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-neutral-700 mb-2">
+            <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6 space-y-6">
+              <div>
+                <label className="block text-[13px] font-medium text-[#161618] mb-2 tracking-[-0.05em]">
                   Quick Preset
                 </label>
                 <select
                   value={derivePreset(permissions)}
                   onChange={handleModalPresetChange}
-                  className="w-full border-2 border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all bg-white"
                 >
                   <option value="">Custom (Manual Selection)</option>
                   <option value="view-only">
@@ -1019,9 +1010,9 @@ function UserManagement() {
                 {resources.map((resource) => (
                   <div
                     key={resource}
-                    className="flex justify-between items-center bg-neutral-50 p-4 rounded-xl border border-neutral-200"
+                    className="flex justify-between items-center gap-3"
                   >
-                    <span className="font-semibold text-neutral-700">
+                    <span className="text-[13px] font-medium text-[#161618]">
                       {resource}
                     </span>
                     <select
@@ -1032,7 +1023,7 @@ function UserManagement() {
                           [resource]: e.target.value,
                         }))
                       }
-                      className="border-2 border-neutral-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white font-medium"
+                      className="border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all bg-white"
                     >
                       {permissionOptions.map((opt) => (
                         <option key={opt} value={opt}>
@@ -1049,23 +1040,24 @@ function UserManagement() {
               </div>
             </div>
 
-            <div className="sticky bottom-0 bg-neutral-50 border-t-2 border-neutral-100 px-6 py-5 flex justify-end gap-3">
+            {/* Sticky footer — compact, matching the note editor card */}
+            <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
               <button
+                type="button"
                 onClick={() => setShowModal(false)}
-                className="px-6 py-3 bg-neutral-100 text-neutral-700 rounded-xl hover:bg-neutral-200 transition-colors font-semibold"
+                className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={savePermissions}
-                className="flex items-center gap-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-xl transition-all font-semibold shadow-lg"
+                className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 transition-colors"
               >
-                <CheckCircle2 className="w-4 h-4" />
                 Save Changes
               </button>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       <ConfirmModal

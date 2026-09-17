@@ -192,14 +192,19 @@ exports.getCurrentUser = async (req, res) => {
     const authProvider = req.auth?.sub ? req.auth.sub.split("|")[0] : null;
     const loginMethod = authProvider === "phone" || authProvider === "temp-phone" ? "phone" : "email";
 
-    // Not populated on req.user (userSyncMiddleware leaves organization as a
-    // bare ObjectId) — fetched here purely for display, e.g. the Danger
-    // Zone "type your organization name to confirm" reset-data prompt.
-    const org = await Organization.findById(user.organization).select("name");
+    // Fetched here purely for display, e.g. the Danger Zone "type your
+    // organization name to confirm" prompt — that has to match what the
+    // user actually SEES as their org name (Settings > Organization
+    // Details' Company Name, stored on Branding), not Organization.name,
+    // which is only ever the name typed once at signup and is never shown
+    // or editable anywhere in the app afterward.
+    const branding = await Branding.findOne({ organization: user.organization })
+      .sort({ updatedAt: -1 })
+      .select("companyName");
 
     res.status(200).json({
       user,
-      organizationName: org?.name || "",
+      organizationName: branding?.companyName || "",
       isTrialActive,
       trialEnd,
       trialUsed,
@@ -1275,6 +1280,102 @@ exports.submitAccountRequest = async (req, res) => {
   } catch (error) {
     console.error("Error submitting account request:", error);
     res.status(500).json({ error: "Failed to submit request. Please try again." });
+  }
+};
+
+// ============ CONNECT WITH GOOGLE (Profile page) ============
+// Links a Google identity to the already-logged-in account, so the SAME
+// account can afterwards be signed into either with its original
+// credential (password/phone) OR that Google account — this is distinct
+// from Auth0 login itself, which only ever resolves ONE identity per
+// request. The frontend authenticates against Auth0's google-oauth2
+// connection via an isolated auth0-spa-js client (kept separate from the
+// app's own Auth0Provider so it never disturbs the caller's real session),
+// then hands the resulting access token here. We never trust a client-sent
+// sub/email — Auth0's own /userinfo endpoint is the source of truth.
+exports.linkGoogleAccount = async (req, res) => {
+  try {
+    const user = req.user;
+    const { accessToken } = req.body;
+    if (!accessToken) {
+      return res.status(400).json({ error: "Missing Google authentication token" });
+    }
+
+    let profile;
+    try {
+      const userinfoRes = await axios.get(`https://${process.env.AUTH0_DOMAIN}/userinfo`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      profile = userinfoRes.data;
+    } catch (verifyErr) {
+      console.error("Failed to verify Google token via Auth0 userinfo:", verifyErr.message);
+      return res.status(401).json({ error: "Could not verify your Google account. Please try again." });
+    }
+
+    const { sub, email } = profile || {};
+    if (!sub || !sub.startsWith("google-oauth2|")) {
+      return res.status(400).json({ error: "That doesn't look like a Google account." });
+    }
+
+    const existingByGoogle = await User.findOne({ auth0Id: sub, _id: { $ne: user._id } });
+    if (existingByGoogle) {
+      return res.status(400).json({ error: "This Google account is already linked to a different DataCircles account." });
+    }
+    if (email) {
+      const existingByEmail = await User.findOne({ email: email.toLowerCase(), _id: { $ne: user._id } });
+      if (existingByEmail) {
+        return res.status(400).json({ error: "This Google account's email is already used by a different DataCircles account." });
+      }
+    }
+    // The whole point of connecting Google is a second, password-free way
+    // to prove you own THIS account's existing email — so if the account
+    // already has one, the Google account must match it. Without this check
+    // someone could link an unrelated Gmail and it'd silently become a
+    // second front door into an account it has nothing to do with.
+    if (user.email && email && user.email.toLowerCase() !== email.toLowerCase()) {
+      return res.status(400).json({
+        error: `Please connect the Google account for ${user.email}, not ${email}.`,
+      });
+    }
+
+    user.auth0Id = sub;
+    // Only fills a blank email — mirrors updateProfile's own first-set path,
+    // never overwrites an email this account already has.
+    if (email && !user.email) {
+      user.email = email.toLowerCase();
+      user.isEmailVerified = true;
+    }
+    await user.save();
+
+    res.json({ success: true, user, message: "Google account connected. You can now sign in with it too." });
+  } catch (error) {
+    console.error("Error linking Google account:", error);
+    res.status(500).json({ error: "Failed to connect Google account. Please try again." });
+  }
+};
+
+// Only ever clears the Google link, never the account itself — and refuses
+// if Google is this account's only way to sign in (no password, no phone),
+// so nobody can lock themselves out from the Profile page.
+exports.unlinkGoogleAccount = async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user.auth0Id || !user.auth0Id.startsWith("google-oauth2|")) {
+      return res.status(400).json({ error: "No Google account is linked" });
+    }
+    if (!user.password && !user.phone) {
+      return res.status(400).json({
+        error: "Add a phone number or set a password before disconnecting Google, so you can still sign in.",
+      });
+    }
+
+    user.auth0Id = undefined;
+    await user.save();
+
+    res.json({ success: true, user, message: "Google account disconnected." });
+  } catch (error) {
+    console.error("Error unlinking Google account:", error);
+    res.status(500).json({ error: "Failed to disconnect Google account. Please try again." });
   }
 };
 

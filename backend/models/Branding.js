@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const brandingSchema = new mongoose.Schema({
   companyName: String,
+  companyType: { type: String, default: '' },
   gstin: String,
   address: String,
   city: { type: String, default: '' },
@@ -9,6 +10,9 @@ const brandingSchema = new mongoose.Schema({
   state: { type: String, default: '' },
   email: String,
   mobile: String,
+  alternateContact: { type: String, default: '' },
+  panNumber: { type: String, default: '' },
+  website: { type: String, default: '' },
   logoUrl: String,
   signatureUrl: String,
   colors: {

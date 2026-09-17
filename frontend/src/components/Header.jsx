@@ -1184,6 +1184,19 @@ const Header = () => {
     setIsSearchOpen(true);
     dispatchDimChrome(true);
   };
+  // Ctrl+K / Cmd+K opens global search from anywhere on the page, matching
+  // the shortcut users expect from most SaaS apps (Linear, Notion, etc).
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (!isSearchOpen) openSearchOverlay();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSearchOpen]);
+
   const handleSearchFocus = (fromRef) => openSearchOverlay(fromRef);
   const handleSearchChange = (e, fromRef) => {
     setSearchQuery(e.target.value);

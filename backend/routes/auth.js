@@ -214,6 +214,10 @@ router.post(
   authController.submitAccountRequest,
 );
 
+// Connect/disconnect a Google identity on the already-logged-in account
+router.post("/link-google", requireAuth, authController.linkGoogleAccount);
+router.delete("/link-google", requireAuth, authController.unlinkGoogleAccount);
+
 // Complete registration
 router.post("/complete-registration", authMiddleware, authController.completeRegistration);
 

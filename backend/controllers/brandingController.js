@@ -78,7 +78,7 @@ exports.getBrandingByOrganization = async (req, res) => {
 // POST update branding for organization
 exports.createOrUpdateBranding = async (req, res) => {
   try {
-    const { companyName, gstin, address, state, email, mobile, colors } = req.body;
+    const { companyName, companyType, gstin, address, state, email, mobile, alternateContact, panNumber, website, colors } = req.body;
     const logoFile = req.files && req.files['logo'] && req.files['logo'][0];
     const signatureFile = req.files && req.files['signature'] && req.files['signature'][0];
 
@@ -86,9 +86,12 @@ exports.createOrUpdateBranding = async (req, res) => {
     const signatureUrlFile = signatureFile ? `https://${process.env.CLOUDFRONT_DOMAIN}/${signatureFile.key}` : undefined;
 
     // Validate required fields — GSTIN is optional (not every business is
-    // GST-registered), matching the frontend's own validation.
-    if (!companyName || !address || !email || !mobile || !colors) {
-      return res.status(400).json({ error: 'Company name, address, email, mobile, and colors are required' });
+    // GST-registered), matching the frontend's own validation. `address` is
+    // no longer collected from Settings (billing/shipping addresses are
+    // managed via the shared SavedAddress book instead) so it's no longer
+    // required here either.
+    if (!companyName || !email || !mobile || !colors) {
+      return res.status(400).json({ error: 'Company name, email, mobile, and colors are required' });
     }
 
     // Validate GSTIN format only if provided
@@ -104,6 +107,16 @@ exports.createOrUpdateBranding = async (req, res) => {
     // Validate mobile format
     if (!/^[0-9]{10}$/.test(mobile)) {
       return res.status(400).json({ error: 'Mobile number must be 10 digits' });
+    }
+
+    // Alternate contact is optional, but must be a valid 10-digit number if given
+    if (alternateContact && !/^[0-9]{10}$/.test(alternateContact)) {
+      return res.status(400).json({ error: 'Alternative contact number must be 10 digits' });
+    }
+
+    // PAN is optional, but must match the standard format if given
+    if (panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panNumber)) {
+      return res.status(400).json({ error: 'Invalid PAN format (e.g., AAAAA0000A)' });
     }
 
     let branding = await Branding.findOne({
@@ -133,11 +146,18 @@ exports.createOrUpdateBranding = async (req, res) => {
     }
 
     branding.companyName = companyName;
+    branding.companyType = companyType || '';
     branding.gstin = gstin;
-    branding.address = address;
+    // `address` is no longer sent by the form — only overwrite it if a
+    // caller explicitly provides one (e.g. an older client), never wipe a
+    // previously saved value just because this request omitted it.
+    if (address !== undefined) branding.address = address;
     branding.state = state || '';
     branding.email = email;
     branding.mobile = mobile;
+    branding.alternateContact = alternateContact || '';
+    branding.panNumber = panNumber ? panNumber.toUpperCase() : '';
+    branding.website = website || '';
     branding.colors = JSON.parse(colors);
 
     // Set logo URL from CloudFront

@@ -957,9 +957,10 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                   onChange={(e) =>
                     handleFormChange("whatsappNumber", {
                       countryCode: form.whatsappNumber?.countryCode || DEFAULT_DIAL_CODE,
-                      number: e.target.value.replace(/[^0-9]/g, ""),
+                      number: e.target.value.replace(/[^0-9]/g, "").slice(0, 10),
                     })
                   }
+                  maxLength={10}
                   className="flex-1 min-w-0 border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
                   placeholder="1234567890"
                 />

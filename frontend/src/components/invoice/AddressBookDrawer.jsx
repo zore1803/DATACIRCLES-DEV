@@ -174,7 +174,7 @@ const AddressBookDrawer = ({
               className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-[#0085FF] hover:bg-blue-600 text-white text-[13px] font-medium transition-colors flex-shrink-0"
             >
               <PlusIcon className="w-4 h-4" />
-              Save New Address
+              Add New Address
             </button>
           )}
         </header>

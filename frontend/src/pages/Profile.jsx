@@ -11,6 +11,8 @@ import AppToaster from "../components/AppToaster";
 import PhoneNumberInput, { splitPhone, joinPhone } from "../components/common/PhoneNumberInput";
 import { DEFAULT_DIAL_CODE } from "../utils/countryDialCodes";
 import useBodyScrollLock from "../hooks/useBodyScrollLock";
+import { createAuth0Client } from "@auth0/auth0-spa-js";
+import { GoogleGIcon } from "../components/settings/GoogleIntegration";
 
 const Profile = () => {
   const { user: auth0User, getAccessTokenSilently, logout } = useAuth0();
@@ -97,6 +99,8 @@ const Profile = () => {
   // fat-finger confirmation before the button unlocks.
   const [accountRequestOrgInput, setAccountRequestOrgInput] = useState("");
   const [organizationName, setOrganizationName] = useState("");
+  const [connectingGoogle, setConnectingGoogle] = useState(false);
+  const [disconnectingGoogle, setDisconnectingGoogle] = useState(false);
 
   // Locks the page behind whichever modal/panel is open so only that
   // card scrolls, not the page underneath it (see useBodyScrollLock).
@@ -179,6 +183,62 @@ const Profile = () => {
       toast.error(err.response?.data?.error || "Failed to submit request. Please try again.");
     } finally {
       setAccountRequestSubmitting(false);
+    }
+  };
+
+  // Uses an isolated auth0-spa-js client — deliberately NOT the app's own
+  // useAuth0 hook/Auth0Provider — so authenticating against Google here
+  // never replaces or disturbs the session already signed into this page.
+  // We only ever read the popup client's resulting access token and hand it
+  // to the backend; nothing from it touches app-wide auth state.
+  const handleConnectGoogle = async () => {
+    setConnectingGoogle(true);
+    try {
+      const linkClient = await createAuth0Client({
+        domain: import.meta.env.VITE_APP_AUTH0_DOMAIN,
+        clientId: import.meta.env.VITE_APP_AUTH0_CLIENT_ID,
+        authorizationParams: {
+          audience: import.meta.env.VITE_APP_AUTH0_AUDIENCE,
+          scope: "openid profile email",
+        },
+        cacheLocation: "memory",
+      });
+      await linkClient.loginWithPopup({
+        authorizationParams: {
+          connection: "google-oauth2",
+          // Steers Google's account picker toward the account this is
+          // connecting to — the backend still requires an exact match
+          // (linkGoogleAccount), this just saves picking the wrong one.
+          ...(user.email ? { login_hint: user.email } : {}),
+        },
+      });
+      const accessToken = await linkClient.getTokenSilently();
+      const res = await API.post("/auth/link-google", { accessToken });
+      setUser(res.data.user);
+      toast.success(res.data.message || "Google account connected!");
+    } catch (err) {
+      console.error(err);
+      if (err?.error === "popup_closed") {
+        // User just closed the Google popup — not a real failure, no toast.
+        return;
+      }
+      toast.error(err.response?.data?.error || "Failed to connect Google account. Please try again.");
+    } finally {
+      setConnectingGoogle(false);
+    }
+  };
+
+  const handleDisconnectGoogle = async () => {
+    setDisconnectingGoogle(true);
+    try {
+      const res = await API.delete("/auth/link-google");
+      setUser(res.data.user);
+      toast.success(res.data.message || "Google account disconnected.");
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || "Failed to disconnect Google account. Please try again.");
+    } finally {
+      setDisconnectingGoogle(false);
     }
   };
 
@@ -967,13 +1027,45 @@ const Profile = () => {
           </div>
 
           <div className="mb-6">
-            <button
-              onClick={handleSaveProfile}
-              disabled={!canSaveAnything || savingName}
-              className="px-5 h-[38px] rounded-full bg-[#0085FF] text-white text-[13px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {savingName ? "Saving..." : "Save and Update"}
-            </button>
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                onClick={handleSaveProfile}
+                disabled={!canSaveAnything || savingName}
+                className="px-5 h-[38px] rounded-full bg-[#0085FF] text-white text-[13px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {savingName ? "Saving..." : "Save and Update"}
+              </button>
+
+              {/* Connect with Google — links a Google identity to THIS
+                  account (verified via Auth0's own /userinfo, see
+                  linkGoogleAccount) so it can be signed into afterward
+                  either with its original credential (password/phone) or
+                  that Google account. */}
+              {user.auth0Id && user.auth0Id.startsWith("google-oauth2|") ? (
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-2 px-4 h-[38px] bg-green-50 border border-green-200 rounded-full text-sm text-green-700 font-medium">
+                    <GoogleGIcon className="w-4 h-4" />
+                    Google account connected
+                  </span>
+                  <button
+                    onClick={handleDisconnectGoogle}
+                    disabled={disconnectingGoogle}
+                    className="text-xs font-semibold text-red-600 hover:underline disabled:opacity-40"
+                  >
+                    {disconnectingGoogle ? "Disconnecting..." : "Disconnect"}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleConnectGoogle}
+                  disabled={connectingGoogle}
+                  className="flex items-center gap-2 px-4 h-[38px] bg-white border border-gray-200 rounded-full text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  <GoogleGIcon className="w-4 h-4" />
+                  {connectingGoogle ? "Connecting..." : "Connect with Google"}
+                </button>
+              )}
+            </div>
 
             {/* Changing the LOGIN credential itself (email for an
                 email/Google-login account, phone for a phone-login one) is
@@ -1270,7 +1362,11 @@ const Profile = () => {
           <div className="bg-white max-w-2xl w-full rounded-2xl shadow-2xl overflow-hidden animate-slideUp max-h-[90vh] flex flex-col">
             <div className="p-6 overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-gray-900">Confirm Action</h3>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {accountRequestType === "delete-account"
+                    ? `Are you sure you want to delete ${organizationName}?`
+                    : "Confirm Action"}
+                </h3>
                 <button
                   onClick={() => setAccountRequestType(null)}
                   className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -1343,9 +1439,53 @@ const Profile = () => {
                   )}
                 </>
               ) : (
-                <p className="text-sm text-gray-700 mb-6">
-                  This submits a request to permanently delete your account and organisation. Our team will verify and process it within 5-7 business days.
-                </p>
+                <>
+                  <p className="text-xs text-red-600 mb-3">
+                    You are performing an action to delete your account. That leads to loss of data in your account. Please make sure and confirm that you want to delete your account.
+                  </p>
+                  <p className="text-xs font-semibold text-red-600 mb-4">
+                    We acknowledge your request and want to inform you that, this action is irreversible and all existing data is erased from your account.
+                  </p>
+
+                  <p className="text-xs text-gray-500 mb-4">
+                    <span className="font-semibold text-gray-700">Note:-</span> This is a necessary security measure to ensure that the request is authorized by the account owner.
+                    <br />
+                    We will send you an email notification once the deletion has been completed. Thank you for choosing our services, and please do not hesitate to contact us if you have any further questions or concerns.
+                  </p>
+
+                  <label className="flex items-start gap-2 mb-6 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={accountRequestAcknowledged}
+                      onChange={(e) => {
+                        setAccountRequestAcknowledged(e.target.checked);
+                        if (!e.target.checked) setAccountRequestOrgInput("");
+                      }}
+                      className="mt-0.5"
+                    />
+                    <span className="text-sm text-gray-900">
+                      Yes, I read and understood the above information and I am sure that I want to delete my data.
+                    </span>
+                  </label>
+
+                  {accountRequestAcknowledged && (
+                    <div className="mb-6">
+                      <p className="text-sm font-semibold text-gray-900 mb-1">
+                        Still want to continue?
+                      </p>
+                      <p className="text-xs text-gray-500 mb-2">
+                        Please enter <span className="font-bold text-red-600">{organizationName}</span> in the input to delete your account.
+                      </p>
+                      <input
+                        type="text"
+                        value={accountRequestOrgInput}
+                        onChange={(e) => setAccountRequestOrgInput(e.target.value)}
+                        placeholder={organizationName}
+                        className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+                      />
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="flex justify-end gap-3">
@@ -1363,7 +1503,7 @@ const Profile = () => {
                   onClick={handleSubmitAccountRequest}
                   disabled={
                     accountRequestSubmitting ||
-                    (accountRequestType === "reset-data" &&
+                    (!!accountRequestType &&
                       (!accountRequestAcknowledged || accountRequestOrgInput.trim() !== organizationName))
                   }
                   className="px-4 py-2.5 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

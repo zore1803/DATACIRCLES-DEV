@@ -173,9 +173,11 @@ export default function PhoneNumberInput({
         inputMode="numeric"
         disabled={disabled}
         value={number}
-        // Digits only — the code comes from the dropdown, so anything typed
-        // here is the subscriber number.
-        onChange={(e) => emit(selected, e.target.value.replace(/[^0-9]/g, ""))}
+        maxLength={10}
+        // Digits only, capped at 10 — the code comes from the dropdown, so
+        // anything typed here is just the subscriber number, and every
+        // number this app deals with (India, +91) is 10 digits.
+        onChange={(e) => emit(selected, e.target.value.replace(/[^0-9]/g, "").slice(0, 10))}
         className={
           inputClassName ||
           "flex-1 min-w-0 border border-[#E0E0E1] rounded-xl px-4 h-12 text-[14px] text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#A0A0A0]"
