@@ -39,8 +39,6 @@ const SAMPLE_DOC = {
   dueDate: new Date(Date.now() + 30 * 86400000),
   receiverGSTIN: "29AAACI5950L1Z6",
   placeOfSupply: "29-KARNATAKA",
-  isTaxInvoice: true,
-  isTaxQuotation: true,
   gstRate: 18,
   discount: { type: "percentage", value: 10 },
   items: [

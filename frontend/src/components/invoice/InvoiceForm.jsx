@@ -5,6 +5,7 @@ import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import SearchIcon from "../common/SearchIcon";
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
+import { Link } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { formatNumberToIndian, formatNumberFixed } from "../../utils/numberFormatter";
 import {
@@ -392,7 +393,6 @@ const InvoiceForm = ({
     amount: 0,
     status: "Draft",
     style: "",
-    isTaxInvoice: true,
     isRoundOff: false,
     hideTotals: false,
     billingAddress: emptyAddress(),
@@ -952,7 +952,7 @@ const InvoiceForm = ({
           !item.name ||
           !item.rate ||
           !item.quantity ||
-          (form.isTaxInvoice && !item.hsn) ||
+          (parseFloat(item.gstRate) > 0 && !item.hsn) ||
           (item.discountType === "percentage" && item.discount > 100)
       );
       if (invalidItems.length > 0) {
@@ -1052,7 +1052,6 @@ const InvoiceForm = ({
         amount: 0,
         status: "Draft",
         style: "",
-        isTaxInvoice: true,
         billingAddress: emptyAddress(),
         shippingAddress: emptyAddress(),
         sameAsBilling: true,
@@ -1135,7 +1134,6 @@ const InvoiceForm = ({
         amount: sourceData.amount || 0,
         status: editingInvoice ? sourceData.status : "Draft",
         style: sourceData.style || "",
-        isTaxInvoice: true,
         billingAddress: { ...emptyAddress(), ...(sourceData.billingAddress || {}) },
         shippingAddress: { ...emptyAddress(), ...(sourceData.shippingAddress || {}) },
         sameAsBilling:
@@ -1179,7 +1177,6 @@ const InvoiceForm = ({
         amount: 0,
         status: "Draft",
         style: "",
-        isTaxInvoice: true,
         billingAddress: emptyAddress(),
         shippingAddress: emptyAddress(),
         sameAsBilling: true,
@@ -1267,10 +1264,8 @@ const InvoiceForm = ({
   // Same shared engine the live preview/PDF use (shared/documentTemplates.js)
   // — honors each item's own gstRate instead of a single document-level
   // rate, so this summary can never disagree with what actually saves/prints.
-  const taxDetails = form.isTaxInvoice ? computeDocument(form, "tax") : null;
-  let finalTotal = taxDetails
-    ? taxDetails.grandTotal
-    : subtotalAfterItemDiscounts - invoiceDiscountAmount;
+  const taxDetails = computeDocument(form, "tax");
+  let finalTotal = taxDetails.grandTotal;
   let roundOffAmount = 0;
   if (form.isRoundOff) {
     const rounded = Math.round(finalTotal);
@@ -1587,41 +1582,11 @@ const InvoiceForm = ({
               </div>
             </div>
 
-            {/* Tax Invoice toggle — lives outside the conditional GST card
-                below so it stays visible with the card hidden, letting the
-                user turn it back on. OFF renders the document titled
-                "Invoice" instead of "Tax Invoice" (shared/templates/
-                Professional.js reads this same form.isTaxInvoice via
-                computeDocument's `t.isTax`), and hides GST-specific fields
-                like Receiver GSTIN and per-item tax rate/HSN. */}
-            <div className="flex items-center gap-2.5 h-10 w-full">
-              <button
-                type="button"
-                onClick={() => {
-                  setForm((prev) => ({ ...prev, isTaxInvoice: !prev.isTaxInvoice }));
-                  setHasUnsavedChanges(true);
-                }}
-                className="flex-shrink-0"
-              >
-                <span
-                  className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${form.isTaxInvoice ? "bg-[#0085FF]" : "bg-[#E1E4EA]"}`}
-                >
-                  <span
-                    className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isTaxInvoice ? "translate-x-4" : "translate-x-0"}`}
-                  />
-                </span>
-              </button>
-              <div className="flex flex-col">
-                <span className="text-[12px] font-medium text-[#1F2937]">Enable Tax Invoice</span>
-                <span className="text-[10px] text-[#99A0AE]">Include GST and tax details</span>
-              </div>
-            </div>
 
             {/* Section 3: GST & Tax Details (conditional) — GST rate is set
                 per item below (Products & Services → More Details), matching
                 the full-width form; there's no document-level rate here
                 since a single rate can't represent a mixed-rate item list. */}
-            {form.isTaxInvoice && (
               <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(15,23,42,0.06),0_8px_20px_-12px_rgba(15,23,42,0.12)] border border-slate-200 p-6">
                 <SectionHeader number="03" title="GST & Tax Details" />
                 <div className="h-px bg-slate-100 -mx-6 my-4" />
@@ -1644,7 +1609,6 @@ const InvoiceForm = ({
                   </div>
                 </div>
               </div>
-            )}
 
             {/* Section 4: Products & Services — the primary work area, so it
                 gets stronger visual weight than the other cards. */}
@@ -2341,7 +2305,6 @@ const CreateInvoicePanel = ({
   // Delivery Challan uses the same GST on/off, GSTIN and tax calculation as a Tax Invoice.
   const supportsTax = true;
   const supportsGSTIN = true;
-  const taxFlagKey = type === "quotation" ? "isTaxQuotation" : "isTaxInvoice";
   const docName = docNameFor(type);
   // Document Settings is the single source of truth for the numbering
   // prefix. Each document type's backend expects its own request field name
@@ -2372,9 +2335,6 @@ const CreateInvoicePanel = ({
             isAddressEmpty(sourceDoc.shippingAddress) ||
             JSON.stringify({ ...emptyAddress(), ...(sourceDoc.billingAddress || {}) }) ===
               JSON.stringify({ ...emptyAddress(), ...(sourceDoc.shippingAddress || {}) }),
-          isTaxInvoice:
-            sourceDoc[type === "quotation" ? "isTaxQuotation" : "isTaxInvoice"] ||
-            false,
           transactionType: sourceDoc.transactionType || "intra",
           gstRate: sourceDoc.gstRate ?? 18,
           // Only an actual edit (initialDoc/editingInvoice) should keep the
@@ -2427,7 +2387,6 @@ const CreateInvoicePanel = ({
           billingAddress: emptyAddress(),
           shippingAddress: emptyAddress(),
           sameAsBilling: true,
-          isTaxInvoice: true,
           transactionType: "intra",
           gstRate: 18,
           invoicePrefix: configuredPrefix,
@@ -2451,7 +2410,7 @@ const CreateInvoicePanel = ({
     const pad = (v) => String(v).padStart(2, "0");
     const out = { details: pad(n++) };
     out.address = pad(n++);
-    if (supportsGSTIN && form.isTaxInvoice) out.billing = pad(n++);
+    if (supportsGSTIN) out.billing = pad(n++);
     out.items = pad(n++);
     out.notes = pad(n++);
     out.terms = pad(n++);
@@ -2868,7 +2827,10 @@ const CreateInvoicePanel = ({
     if (resolvedId) {
       const picked = catalogue.find((c) => c._id === resolvedId);
       if (!picked) return toast.error("Product not found in catalogue.");
-      const blocked = stockBlockReason(picked, parseInt(quickAddQty) || 1);
+      // Only a Tax Invoice actually moves stock, so only it can be blocked by
+      // availability. A Quotation/Pro Forma/Delivery Challan may quote goods
+      // that aren't in hand yet.
+      const blocked = type === "tax" ? stockBlockReason(picked, parseInt(quickAddQty) || 1) : null;
       if (blocked) return toast.error(blocked);
       newItem = {
         _id: picked._id,
@@ -2947,12 +2909,7 @@ const CreateInvoicePanel = ({
   // computeDocument → splitGst, in shared/documentTemplates.js) — honors
   // each item's own gstRate rather than only a document-level rate, so this
   // summary, the preview pane and the saved amount can never disagree.
-  // ("quotation" maps to "tax" here only for computeDocument's internal
-  // isTaxQuotation/isTaxInvoice lookup — this panel's own state field is
-  // always named form.isTaxInvoice regardless of document type.)
-  const taxDetails = form.isTaxInvoice
-    ? computeDocument(form, type === "quotation" ? "tax" : type)
-    : null;
+  const taxDetails = computeDocument(form, type === "quotation" ? "tax" : type);
   const gstSplit = taxDetails
     ? { isInterState: taxDetails.isInterState, cgst: taxDetails.totalCGST, sgst: taxDetails.totalSGST, igst: taxDetails.totalIGST }
     : { cgst: 0, sgst: 0, igst: 0, isInterState: false };
@@ -2981,7 +2938,7 @@ const CreateInvoicePanel = ({
     // requiring it here left submit silently doing nothing: fieldErrors got
     // set on a field with no DOM node to show the red border on, and
     // scrollIntoView on a null ref was a no-op.
-    if (!isDraft && supportsGSTIN && form.isTaxInvoice) {
+    if (!isDraft && supportsGSTIN) {
       if (!form.receiverGSTIN.trim()) nextErrors.receiverGSTIN = true;
       else if (!GSTIN_REGEX.test(form.receiverGSTIN.trim().toUpperCase()))
         nextErrors.receiverGSTIN = true;
@@ -3057,9 +3014,6 @@ const CreateInvoicePanel = ({
       payload.shippingAddress = form.sameAsBilling
         ? form.billingAddress
         : form.shippingAddress;
-      if (supportsTax) {
-        payload[taxFlagKey] = form.isTaxInvoice;
-      }
       // Each document type's create/update endpoint expects its own field
       // name for the prefix/number (invoicePrefix, quotationPrefix,
       // performaInvoicePrefix, deliveryChallanPrefix) — sending the generic
@@ -3163,8 +3117,6 @@ const CreateInvoicePanel = ({
     const html = buildDocumentHtml(
       {
         ...form,
-        isTaxInvoice: supportsTax && !!form.isTaxInvoice,
-        isTaxQuotation: supportsTax && !!form.isTaxInvoice,
       },
       {
         type,
@@ -3329,9 +3281,7 @@ const CreateInvoicePanel = ({
   // Grid template for the wide (row/list) item layout — includes an HSN column
   // only for tax invoices. Card layout ignores this and stacks fields.
   // Description isn't a column any more — it's an optional box under each row.
-  const itemRowCols = form.isTaxInvoice
-    ? "@2xl:grid-cols-[1.9fr_0.7fr_0.7fr_0.55fr_1.1fr_0.9fr_32px]"
-    : "@2xl:grid-cols-[2.2fr_0.8fr_0.6fr_1.2fr_0.9fr_32px]";
+  const itemRowCols = "@2xl:grid-cols-[1.9fr_0.7fr_0.7fr_0.55fr_1.1fr_0.9fr_32px]";
 
   return (
     <div
@@ -3456,34 +3406,59 @@ const CreateInvoicePanel = ({
                       phone screen; document numbering is still reachable via
                       Settings. */}
                   {!isEditing && (
-                    <div className="hidden lg:flex items-center border border-[#E1E4EA] rounded-full overflow-hidden h-9 bg-white flex-shrink-0">
-                      <input
-                        type="text"
-                        value={form.invoicePrefix}
-                        onChange={(e) => setForm((prev) => ({ ...prev, invoicePrefix: e.target.value }))}
-                        title={`${docName} number prefix`}
-                        aria-label={`${docName} number prefix`}
-                        className="w-16 h-full pl-3.5 pr-2 text-sm font-semibold text-[#1F2937] bg-[#F8F9FB] border-r border-[#E1E4EA] rounded-l-full focus:outline-none focus:bg-white"
-                      />
-                      <input
-                        type="text"
-                        placeholder={nextNumberPreview ? String(nextNumberPreview) : "Auto"}
-                        value={form.invoiceNumber}
-                        onChange={(e) => setForm((prev) => ({ ...prev, invoiceNumber: e.target.value }))}
-                        title={`${docName} number (leave blank to auto-generate)`}
-                        aria-label={`${docName} number`}
-                        className="w-20 h-full px-2 text-sm font-semibold text-[#1F2937] border-r border-[#E1E4EA] focus:outline-none"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Suffix"
-                        value={form.invoiceSuffix}
-                        onChange={(e) => setForm((prev) => ({ ...prev, invoiceSuffix: e.target.value }))}
-                        title={`${docName} number suffix (optional)`}
-                        aria-label={`${docName} number suffix`}
-                        className="w-16 h-full pl-2 pr-3.5 text-sm font-semibold text-[#1F2937] bg-[#F8F9FB] rounded-r-full focus:outline-none focus:bg-white"
-                      />
-                    </div>
+                      <div className="hidden lg:flex items-center gap-2">
+                        <div className="flex items-center border border-[#E1E4EA] rounded-full overflow-hidden h-9 bg-white flex-shrink-0">
+                          <div className="relative h-full border-r border-[#E1E4EA] bg-[#F8F9FB] flex items-center">
+                            <select
+                              value={form.invoicePrefix}
+                              onChange={(e) => setForm((prev) => ({ ...prev, invoicePrefix: e.target.value }))}
+                              title={`${docName} number prefix`}
+                              aria-label={`${docName} number prefix`}
+                              className="h-full pl-3.5 pr-7 text-sm font-semibold text-[#1F2937] bg-transparent focus:outline-none appearance-none cursor-pointer"
+                            >
+                              {(docSettings.invoicePrefixes || []).length > 0 ? (
+                                docSettings.invoicePrefixes.map(pfx => (
+                                  <option key={pfx} value={pfx}>{pfx}</option>
+                                ))
+                              ) : (
+                                <option value={form.invoicePrefix}>{form.invoicePrefix || "None"}</option>
+                              )}
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
+                          </div>
+                          <input
+                            type="text"
+                            placeholder={nextNumberPreview ? String(nextNumberPreview) : "Auto"}
+                            value={form.invoiceNumber}
+                            onChange={(e) => setForm((prev) => ({ ...prev, invoiceNumber: e.target.value }))}
+                            title={`${docName} number (leave blank to auto-generate)`}
+                            aria-label={`${docName} number`}
+                            className="w-20 h-full px-2 text-sm font-semibold text-[#1F2937] border-r border-[#E1E4EA] focus:outline-none"
+                          />
+                          <div className="relative h-full bg-[#F8F9FB] flex items-center">
+                            <select
+                              value={form.invoiceSuffix}
+                              onChange={(e) => setForm((prev) => ({ ...prev, invoiceSuffix: e.target.value }))}
+                              title={`${docName} number suffix (optional)`}
+                              aria-label={`${docName} number suffix`}
+                              className="h-full pl-2.5 pr-7 text-sm font-semibold text-[#1F2937] bg-transparent focus:outline-none appearance-none cursor-pointer"
+                            >
+                              <option value="">None</option>
+                              {(docSettings.invoiceSuffixes || []).map(sfx => (
+                                <option key={sfx} value={sfx}>{sfx}</option>
+                              ))}
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
+                          </div>
+                        </div>
+                        <Link
+                          to="/settings/document-settings"
+                          title="Manage Document Numbering"
+                          className="flex items-center justify-center w-7 h-7 rounded-full bg-white border border-[#E1E4EA] hover:bg-gray-50 text-gray-600 transition-colors shrink-0 shadow-sm"
+                        >
+                          <SettingsIcon className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
                   )}
                 </div>
               )}
@@ -3815,36 +3790,8 @@ const CreateInvoicePanel = ({
             />
           </div>
 
-          {/* Tax Invoice toggle — CreateInvoicePanel (the "Update Invoice"
-              edit flow) never exposed this, unlike the split-view panel
-              above, so GST fields and the "Tax Invoice" title were forced on
-              for every document. OFF renders the doc titled "Invoice"
-              instead of "Tax Invoice" (Professional.js reads this same
-              form.isTaxInvoice via computeDocument's `t.isTax`) and hides
-              Receiver GSTIN / per-item GST%. */}
-          {supportsTax && (
-            <div className="flex items-center gap-2.5 h-10 w-full">
-              <button
-                type="button"
-                onClick={() => setField("isTaxInvoice", !form.isTaxInvoice)}
-                className="flex-shrink-0"
-              >
-                <span
-                  className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${form.isTaxInvoice ? "bg-[#0085FF]" : "bg-[#E1E4EA]"}`}
-                >
-                  <span
-                    className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isTaxInvoice ? "translate-x-4" : "translate-x-0"}`}
-                  />
-                </span>
-              </button>
-              <div className="flex flex-col">
-                <span className="text-[12px] font-medium text-[#1F2937]">Enable Tax Invoice</span>
-                <span className="text-[10px] text-[#99A0AE]">Include GST and tax details</span>
-              </div>
-            </div>
-          )}
 
-          {supportsGSTIN && form.isTaxInvoice && (
+          {supportsGSTIN && (
           <>
           <SectionHeader number={sectionNo.billing} title="Billing & Tax Information" />
           <div className="grid grid-cols-1 @md:grid-cols-2 gap-x-6 gap-y-2 w-full">

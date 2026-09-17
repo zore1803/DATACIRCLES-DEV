@@ -57,7 +57,6 @@ exports.createDeliveryChallan = async (req, res) => {
       discount,
       bankDetails,
       isRoundOff,
-      isTaxInvoice,
       transactionType,
       receiverGSTIN,
       gstRate,
@@ -66,6 +65,7 @@ exports.createDeliveryChallan = async (req, res) => {
       deliveryChallanPrefix,
       deliveryChallanSuffix,
       deliveryChallanNumber: clientDeliveryChallanNumber,
+      reference,
     } = req.body;
 
     // Validate required fields
@@ -147,14 +147,14 @@ exports.createDeliveryChallan = async (req, res) => {
       items,
       notes: notes || "",
       terms: terms || "",
+      reference: reference || "",
       signature,
       signatureType: signatureType || "text",
       discount: discount || { type: "fixed", value: 0 },
       // Bank account chosen on the form; the PDF prints it (utils/resolveBankDetails.js).
       bankDetails: bankDetails || null,
       ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
-      // GST on/off + tax data, same as an invoice (see models/deliveryChallan.js).
-      isTaxInvoice: !!isTaxInvoice,
+      // Tax data, same shape as an invoice (see models/deliveryChallan.js).
       transactionType: transactionType === "inter" ? "inter" : "intra",
       receiverGSTIN: receiverGSTIN || "",
       ...(gstRate !== undefined && { gstRate: parseFloat(gstRate) || 0 }),
@@ -237,12 +237,12 @@ exports.duplicateDeliveryChallan = async (req, res) => {
       items: source.items,
       notes: source.notes,
       terms: source.terms,
+      reference: source.reference,
       signature: source.signature,
       signatureType: normalizedSignatureType,
       discount: source.discount,
       bankDetails: source.bankDetails || null,
       isRoundOff: source.isRoundOff,
-      isTaxInvoice: !!source.isTaxInvoice,
       transactionType: source.transactionType || "intra",
       receiverGSTIN: source.receiverGSTIN || "",
       gstRate: source.gstRate,
@@ -481,12 +481,12 @@ exports.updateDeliveryChallan = async (req, res) => {
       discount,
       bankDetails,
       isRoundOff,
-      isTaxInvoice,
       transactionType,
       receiverGSTIN,
       gstRate,
       billingAddress,
       shippingAddress,
+      reference,
     } = req.body;
 
     const requiredFields = ["deal", "date", "amount", "status", "discount"];
@@ -550,6 +550,7 @@ exports.updateDeliveryChallan = async (req, res) => {
         items,
         notes,
         terms,
+        reference: reference || "",
         signature,
         signatureType,
         discount,
@@ -557,7 +558,6 @@ exports.updateDeliveryChallan = async (req, res) => {
         ...(bankDetails !== undefined && { bankDetails: bankDetails || null }),
         ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
         // Only written when sent, so an update without tax fields leaves them unchanged.
-        ...(isTaxInvoice !== undefined && { isTaxInvoice: !!isTaxInvoice }),
         ...(transactionType !== undefined && { transactionType: transactionType === "inter" ? "inter" : "intra" }),
         ...(receiverGSTIN !== undefined && { receiverGSTIN: receiverGSTIN || "" }),
         ...(gstRate !== undefined && { gstRate: parseFloat(gstRate) || 0 }),

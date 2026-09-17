@@ -14,7 +14,10 @@ const variantSchema = new mongoose.Schema({
   sellingPrice: { type: Number, default: 0 },
   stock: { type: Number, default: 0 }, // optional for product inventory
   isActive: { type: Boolean, default: true },
-  gstRate: { type: Number, default: 0 }, // GST rate for this variant
+  // null = no rate set on the variant, so it inherits the parent item's rate
+  // (resolved as `variant.gstRate ?? item.gstRate` wherever a line is built).
+  // An explicit 0 is a real 0% rate and is NOT overridden by the parent.
+  gstRate: { type: Number, default: null },
 
   // --- Variant-specific overrides of the parent's catalog fields ---
   // Once an item has variants the parent is only a grouping container: the variant is what

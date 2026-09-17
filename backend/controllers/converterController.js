@@ -133,7 +133,6 @@ exports.convertToQuotation = async (req, res) => {
       ...invoice.toObject(),
       _id: newId,
       quotationNumber,
-      isTaxQuotation: invoice.isTaxInvoice,
       status: 'Draft',
       createdAt: undefined,
       updatedAt: undefined,
@@ -194,7 +193,6 @@ exports.convertToDeliveryChallan = async (req, res) => {
       updatedAt: undefined,
     };
     delete deliveryChallanData.invoiceNumber;
-    delete deliveryChallanData.isTaxInvoice;
     delete deliveryChallanData.receiverGSTIN;
 
     const requiredFields = ['deal', 'deliveryChallanNumber', 'date', 'amount', 'user', 'organization', 'status', 'discount'];
@@ -242,7 +240,6 @@ exports.convertToTaxInvoice = async (req, res) => {
       ...proformaInvoice.toObject(),
       _id: newId,
       invoiceNumber,
-      isTaxInvoice: proformaInvoice.items.some(item => item.hsn && item.hsn.trim() !== ''),
       createdAt: undefined,
       updatedAt: undefined,
     };
@@ -293,7 +290,6 @@ exports.convertProformaToQuotation = async (req, res) => {
       ...proformaInvoice.toObject(),
       _id: newId,
       quotationNumber,
-      isTaxQuotation: proformaInvoice.items.some(item => item.hsn && item.hsn.trim() !== ''),
       status: 'Draft',
       createdAt: undefined,
       updatedAt: undefined,
@@ -354,7 +350,6 @@ exports.convertProformaToDeliveryChallan = async (req, res) => {
       updatedAt: undefined,
     };
     delete deliveryChallanData.performaInvoiceNumber;
-    delete deliveryChallanData.isTaxInvoice;
     delete deliveryChallanData.receiverGSTIN;
 
     const requiredFields = ['deal', 'deliveryChallanNumber', 'date', 'amount', 'user', 'organization', 'status', 'discount'];
@@ -407,7 +402,6 @@ exports.convertQuotationToTaxInvoice = async (req, res) => {
       ...quotation.toObject(),
       _id: newId,
       invoiceNumber,
-      isTaxInvoice: quotation.isTaxQuotation,
       createdAt: undefined,
       updatedAt: undefined,
     };
@@ -468,7 +462,6 @@ exports.convertQuotationToProforma = async (req, res) => {
       updatedAt: undefined,
     };
     delete proformaInvoiceData.quotationNumber;
-    delete proformaInvoiceData.isTaxQuotation;
 
     const requiredFields = ['deal', 'performaInvoiceNumber', 'date', 'amount', 'user', 'organization', 'status', 'discount'];
     const validationError = validateRequiredFields(proformaInvoiceData, requiredFields, proformaInvoiceData.items);
@@ -530,7 +523,6 @@ exports.convertQuotationToDeliveryChallan = async (req, res) => {
       updatedAt: undefined,
     };
     delete deliveryChallanData.quotationNumber;
-    delete deliveryChallanData.isTaxQuotation;
     delete deliveryChallanData.receiverGSTIN;
 
     const requiredFields = ['deal', 'deliveryChallanNumber', 'date', 'amount', 'user', 'organization', 'status', 'discount'];
@@ -584,7 +576,6 @@ exports.convertDeliveryChallanToTaxInvoice = async (req, res) => {
       ...deliveryChallan.toObject(),
       _id: newId,
       invoiceNumber,
-      isTaxInvoice: false,
       createdAt: undefined,
       updatedAt: undefined,
     };
@@ -697,7 +688,6 @@ exports.convertDeliveryChallanToQuotation = async (req, res) => {
       ...deliveryChallan.toObject(),
       _id: newId,
       quotationNumber,
-      isTaxQuotation: false,
       status: 'Draft',
       createdAt: undefined,
       updatedAt: undefined,
@@ -751,7 +741,6 @@ exports.bulkConvertQuotationToTaxInvoice = async (req, res) => {
         ...quotation.toObject(),
         _id: newId,
         invoiceNumber,
-        isTaxInvoice: quotation.isTaxQuotation,
         createdAt: undefined,
         updatedAt: undefined,
       };
@@ -805,7 +794,6 @@ exports.bulkConvertQuotationToProforma = async (req, res) => {
         ...quotation.toObject(),
         _id: newId,
         performaInvoiceNumber,
-        isTaxInvoice: quotation.isTaxQuotation,
         createdAt: undefined,
         updatedAt: undefined,
       };
@@ -868,7 +856,6 @@ exports.bulkConvertInvoiceToDeliveryChallan = async (req, res) => {
         updatedAt: undefined,
       };
       delete deliveryChallanData.invoiceNumber;
-      delete deliveryChallanData.isTaxInvoice;
       delete deliveryChallanData.receiverGSTIN;
 
       const deliveryChallan = new DeliveryChallan(deliveryChallanData);
@@ -912,7 +899,6 @@ exports.bulkConvertProformaToTaxInvoice = async (req, res) => {
         ...proformaInvoice.toObject(),
         _id: newId,
         invoiceNumber,
-        isTaxInvoice: proformaInvoice.items.some(item => item.hsn && item.hsn.trim() !== ''),
         createdAt: undefined,
         updatedAt: undefined,
       };

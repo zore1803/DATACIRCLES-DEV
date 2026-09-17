@@ -102,7 +102,7 @@ async function run() {
     date: daysFromNow(-10 - i), dueDate: daysFromNow(20 - i),
     amount: d.amount, user: uid, organization: org,
     status: pick(["Draft", "Sent", "Paid"], i),
-    discount: { type: "percentage", value: 5 }, style: "", isTaxInvoice: false,
+    discount: { type: "percentage", value: 5 }, style: "",
     items: lineItems(i),
   }));
   add("Invoice", await Invoice.insertMany(invData));
@@ -112,7 +112,7 @@ async function run() {
     deal: d._id, quotationNumber: `QUO-SEED-${i + 1}`,
     date: daysFromNow(-5 - i), amount: d.amount, user: uid, organization: org,
     status: pick(["Draft", "Sent", "Accepted"], i),
-    discount: { type: "percentage", value: 5 }, style: "", isTaxInvoice: false,
+    discount: { type: "percentage", value: 5 }, style: "",
     items: lineItems(i),
   }));
   add("Quotation", await Quotation.insertMany(quoData));
@@ -122,7 +122,7 @@ async function run() {
     deal: d._id, performaInvoiceNumber: `PRO-SEED-${i + 1}`,
     date: daysFromNow(-5 - i), amount: d.amount, user: uid, organization: org,
     status: pick(["Draft", "Sent"], i),
-    discount: { type: "percentage", value: 5 }, style: "", isTaxInvoice: false,
+    discount: { type: "percentage", value: 5 }, style: "",
     items: lineItems(i),
   }));
   add("ProformaInvoice", await ProformaInvoice.insertMany(proData));
@@ -132,7 +132,7 @@ async function run() {
     deal: d._id, deliveryChallanNumber: `DC-SEED-${i + 1}`,
     date: daysFromNow(-3 - i), amount: d.amount, user: uid, organization: org,
     status: pick(["Draft", "Delivered"], i),
-    discount: { type: "percentage", value: 0 }, style: "", isTaxInvoice: false,
+    discount: { type: "percentage", value: 0 }, style: "",
     items: lineItems(i),
   }));
   add("DeliveryChallan", await DeliveryChallan.insertMany(dcData));

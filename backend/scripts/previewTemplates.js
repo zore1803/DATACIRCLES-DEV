@@ -16,7 +16,6 @@ const SAMPLE_DOC = {
   date: '2026-09-09',
   dueDate: '2026-09-24',
   placeOfSupply: 'Maharashtra (27)',
-  isTaxInvoice: true,
   transactionType: 'intra',
   receiverGSTIN: '27MEHTA5678K1Z9',
   ewayBillNumber: 'EWB99887766',

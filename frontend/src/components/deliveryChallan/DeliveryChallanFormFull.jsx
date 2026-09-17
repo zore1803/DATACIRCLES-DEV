@@ -395,7 +395,6 @@ const DeliveryChallanFormFull = ({
     amount: 0,
     status: "Draft",
     style: "Regular",
-    isTaxInvoice: true,
     isRoundOff: true,
     notes: defaultNotesForNew,
     terms: defaultTermsForNew,
@@ -599,8 +598,6 @@ const DeliveryChallanFormFull = ({
         status: sourceData.status || "Draft",
         style: sourceData.style || "Regular",
         isRoundOff: sourceData.isRoundOff !== undefined ? sourceData.isRoundOff : true,
-        // Keep what was saved. Challans from before GST support have no flag, so they stay untaxed.
-        isTaxInvoice: !!sourceData.isTaxInvoice,
         transactionType: sourceData.transactionType || "intra",
         notes: sourceData.notes || "",
         terms: sourceData.terms || "",
@@ -627,7 +624,6 @@ const DeliveryChallanFormFull = ({
         amount: 0,
         status: "Draft",
         style: "Regular",
-        isTaxInvoice: true,
         transactionType: "intra",
         notes: defaultNotesForNew,
         terms: defaultTermsForNew,
@@ -1016,11 +1012,12 @@ const DeliveryChallanFormFull = ({
           !item.name ||
           !item.rate ||
           !item.quantity ||
+          (parseFloat(item.gstRate) > 0 && !item.hsn) ||
           (item.discountType === "percentage" && item.discount > 100)
       );
       if (invalidItems.length > 0) {
         toast.error(
-          `Please fill in all item details (name, rate, quantity) and ensure percentage discounts are not above 100.`
+          "Please fill in all item details (name, rate, quantity, and HSN/SAC for any item with a GST rate) and ensure percentage discounts are not above 100."
         );
         setIsSubmitting(false);
         return;
@@ -1059,12 +1056,9 @@ const DeliveryChallanFormFull = ({
         // update never clears a bank chosen elsewhere.
         bankDetails: form.bankDetails || undefined,
         amount: (() => {
-          let t = form.isTaxInvoice
-            ? computeDocument(form, "deliveryChallan").grandTotal
-            : calculateTotalAmount(form.items, form.discount);
+          let t = computeDocument(form, "deliveryChallan").grandTotal;
           return form.isRoundOff ? Math.round(t) : t;
         })(),
-        isTaxInvoice: !!form.isTaxInvoice,
         isRoundOff: form.isRoundOff,
         discount: form.discount,
         status: statusValue,
@@ -1161,11 +1155,8 @@ const DeliveryChallanFormFull = ({
   );
   
   let finalTotal = subtotalAfterItemDiscounts - invoiceDiscountAmount;
-  let taxDetails = null;
-  if (form.isTaxInvoice) {
-    taxDetails = computeDocument(form, "deliveryChallan");
-    finalTotal = taxDetails.grandTotal;
-  }
+  const taxDetails = computeDocument(form, "deliveryChallan");
+  finalTotal = taxDetails.grandTotal;
   
   let roundOffAmount = 0;
   if (form.isRoundOff) {

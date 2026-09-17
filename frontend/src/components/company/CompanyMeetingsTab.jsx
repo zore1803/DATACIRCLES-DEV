@@ -18,7 +18,8 @@ import {
   PinOff,
   AlarmClock,
   EyeOff,
-  X, ArrowUp, ArrowDown } from "lucide-react";
+  X, ArrowUp, ArrowDown
+} from "lucide-react";
 import { EditablePaginationButtons } from "../common/EditablePaginationButtons";
 import toast from "react-hot-toast";
 import API from "../../services/api";
@@ -210,7 +211,7 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
     const startY = e.clientY;
     const DRAG_THRESHOLD = 5;
     let dragStarted = false;
-    let positionGhost = () => {};
+    let positionGhost = () => { };
 
     const beginDrag = () => {
       dragStarted = true;
@@ -218,7 +219,7 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
       window.getSelection?.()?.removeAllRanges();
       const rect = th.getBoundingClientRect();
       const label = BASE_COLUMNS.find((vc) => vc.id === colId)?.label || colId;
-    
+
       const previewRows = (meetings || []).slice(0, 10).map((m) => {
         let val = m[colId];
         if (typeof val === 'object' && val !== null) val = val?.name || val?.title || "";
@@ -778,8 +779,8 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
               Array.from({ length: 4 }).map((_, i) => <StatTileSkeleton key={i} />)
             ) : (
               kpiTiles.map((tile) => (
-              <StatTile key={tile.label} tile={tile} />
-            )))}
+                <StatTile key={tile.label} tile={tile} />
+              )))}
           </div>
 
           <div className="-mx-6" style={{ marginTop: 24, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
@@ -807,90 +808,87 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
           onCancel={clearSelection}
         />
       ) : (
-      <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
-        <div className="relative flex-1 min-w-[180px] h-[44px]">
-          <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search meetings by title, deal, or participants..."
-            className="w-full h-full pl-11 pr-3.5 border border-[rgba(31,41,55,0.1)] rounded-full text-sm focus:outline-none focus:border-[#0085FF]"
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
+          <div className="relative flex-1 min-w-[180px] h-[44px]">
+            <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search meetings by title, deal, or participants..."
+              className="w-full h-full pl-11 pr-3.5 border border-[rgba(31,41,55,0.1)] rounded-full text-sm focus:outline-none focus:border-[#0085FF]"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-900 focus:outline-none"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+          <ToolbarFilterGroup
+            isOpen={showFilterPanel}
+            columns={MEETING_FILTER_COLUMNS}
+            data={meetings}
+            getFieldValue={getMeetingFieldValue}
+            selected={selectedFilters}
+            onApply={setSelectedFilters}
           />
-          {searchTerm && (
+          <button
+            onClick={() => setShowFilterPanel((open) => !open)}
+            aria-expanded={showFilterPanel}
+            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+              }`}
+            style={{
+              height: "44px",
+              borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
+            }}
+          >
+            <FilterIcon size={16} />
+            Filter
+            {Object.values(selectedFilters).flat().length > 0 && (
+              <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full ring-2 ring-white">
+                {Object.values(selectedFilters).flat().length}
+              </span>
+            )}
+          </button>
+          <div className="relative flex items-center gap-1.5 p-1 bg-[#F1F1F5] rounded-full flex-shrink-0 overflow-hidden" style={{ height: "44px" }}>
+            <span
+              className="absolute top-1 w-9 h-9 rounded-full bg-white shadow-[0px_0px_6px_rgba(0,0,0,0.1)] transition-all duration-300 ease-out pointer-events-none"
+              style={{ left: viewMode === "list" ? 46 : 4 }}
+            />
             <button
-              type="button"
-              onClick={() => setSearchTerm("")}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-900 focus:outline-none"
+              onClick={() => setViewMode("day")}
+              title="Day view"
+              className={`relative z-10 w-9 h-9 flex items-center justify-center rounded-full transition-colors ${viewMode === "day"
+                  ? "text-[#0085FF]"
+                  : "text-gray-500 hover:text-gray-700"
+                }`}
             >
-              <X size={16} />
+              <DayViewIcon size={20} />
             </button>
-          )}
-        </div>
-        <ToolbarFilterGroup
-          isOpen={showFilterPanel}
-          columns={MEETING_FILTER_COLUMNS}
-          data={meetings}
-          getFieldValue={getMeetingFieldValue}
-          selected={selectedFilters}
-          onApply={setSelectedFilters}
-        />
-        <button
-          onClick={() => setShowFilterPanel((open) => !open)}
-          aria-expanded={showFilterPanel}
-          className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${
-            showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
-          }`}
-          style={{
-            height: "44px",
-            borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
-          }}
-        >
-          <FilterIcon size={16} />
-          Filter
-          {Object.values(selectedFilters).flat().length > 0 && (
-            <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full ring-2 ring-white">
-              {Object.values(selectedFilters).flat().length}
-            </span>
-          )}
-        </button>
-        <div className="relative flex items-center gap-1.5 p-1 bg-[#F1F1F5] rounded-full flex-shrink-0 overflow-hidden" style={{ height: "44px" }}>
-          <span
-            className="absolute top-1 w-9 h-9 rounded-full bg-white shadow-[0px_0px_6px_rgba(0,0,0,0.1)] transition-all duration-300 ease-out pointer-events-none"
-            style={{ left: viewMode === "list" ? 46 : 4 }}
-          />
+            <button
+              onClick={() => setViewMode("list")}
+              title="List view"
+              className={`relative z-10 w-9 h-9 flex items-center justify-center rounded-full transition-colors ${viewMode === "list"
+                  ? "text-[#0085FF]"
+                  : "text-gray-500 hover:text-gray-700"
+                }`}
+            >
+              <ListViewIcon size={15} />
+            </button>
+          </div>
           <button
-            onClick={() => setViewMode("day")}
-            title="Day view"
-            className={`relative z-10 w-9 h-9 flex items-center justify-center rounded-full transition-colors ${
-              viewMode === "day"
-                ? "text-[#0085FF]"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
+            onClick={() => setManualMeetingFormOpen(true)}
+            className="flex items-center justify-center rounded-full border hover:bg-gray-50 flex-shrink-0"
+            style={{ width: "44px", height: "44px", borderColor: "#E1E4EA" }}
+            title="Add Meeting"
           >
-            <DayViewIcon size={20} />
-          </button>
-          <button
-            onClick={() => setViewMode("list")}
-            title="List view"
-            className={`relative z-10 w-9 h-9 flex items-center justify-center rounded-full transition-colors ${
-              viewMode === "list"
-                ? "text-[#0085FF]"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            <ListViewIcon size={15} />
+            <PlusIcon className="w-4 h-4" />
           </button>
         </div>
-        <button
-          onClick={() => setManualMeetingFormOpen(true)}
-          className="flex items-center justify-center rounded-full border hover:bg-gray-50 flex-shrink-0"
-          style={{ width: "44px", height: "44px", borderColor: "#E1E4EA" }}
-          title="Add Meeting"
-        >
-          <PlusIcon className="w-4 h-4" />
-        </button>
-      </div>
       )}
 
       {/* Meeting list or empty state */}
@@ -923,7 +921,7 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
                   className="px-3 py-2.5"
                 >
                   <div className="flex justify-center items-center w-full">
-                    <Checkbox checked={selectedItems.length > 0 && selectedItems.length === paginatedMeetings.length} onChange={(e) => e.target.checked ? selectAll(paginatedMeetings) : clearSelection()}  uncheckedColor="text-[#525866]"/>
+                    <Checkbox checked={selectedItems.length > 0 && selectedItems.length === paginatedMeetings.length} onChange={(e) => e.target.checked ? selectAll(paginatedMeetings) : clearSelection()} uncheckedColor="text-[#525866]" />
                   </div>
                 </th>
                 {orderedColumns.map((col) => {
@@ -935,15 +933,14 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
                       key={col.id}
                       data-col-id={col.id}
                       onMouseDown={(e) => startColumnDrag(e, col.id)}
-                      style={{ 
-                        width: colWidths[col.id], 
-                        height: 56, 
+                      style={{
+                        width: colWidths[col.id],
+                        height: 56,
                         opacity: isDragging ? 0.35 : 1,
                         ...getStickyStyle(col.id, true)
                       }}
-                      className={`py-2.5 font-medium text-[#525252] text-xs cursor-grab active:cursor-grabbing bg-[#F5F7FA] ${
-                        col.firstCol ? "pl-6 pr-3" : "px-3"
-                      } ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
+                      className={`py-2.5 font-medium text-[#525252] text-xs cursor-grab active:cursor-grabbing bg-[#F5F7FA] ${col.firstCol ? "pl-6 pr-3" : "px-3"
+                        } ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
                     >
                       <div className={`flex items-center justify-between w-full ${isLoading ? "[&_button]:invisible" : ""}`}>
                         <div
@@ -1075,9 +1072,8 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
                       <div
                         data-resize-handle="true"
                         onMouseDown={(e) => startResize(e, col.id)}
-                        className={`absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none hover:bg-blue-400 z-10 ${
-                          resizingCol === col.id ? "bg-blue-500" : "bg-transparent"
-                        }`}
+                        className={`absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none hover:bg-blue-400 z-10 ${resizingCol === col.id ? "bg-blue-500" : "bg-transparent"
+                          }`}
                       />
                       {boundarySide && <div style={getPinnedBoundaryOverlayStyle(boundarySide)} />}
                     </th>
@@ -1096,8 +1092,8 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
               ) : paginatedMeetings.length === 0 ? (
                 <tr>
                   <td colSpan={orderedColumns.length + 1}>
-  <EmptyState icon={TeamIcon} noun="Meeting" isFiltered />
-</td>
+                    <EmptyState icon={TeamIcon} noun="Meeting" isFiltered />
+                  </td>
                 </tr>
               ) : (
                 paginatedMeetings.map((meeting) => {
@@ -1199,130 +1195,130 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
                   );
                   const cells = {
                     title: (
-                        <td key="title" style={{ height: 60 }} className="pl-6 pr-3 border-r border-b border-[#E1E4EA]">
-                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#222530" }} className="truncate block">
-                            <HighlightText text={meeting.title || "Untitled Meeting"} query={searchTerm} />
-                          </span>
-                        </td>
+                      <td key="title" style={{ height: 60 }} className="pl-6 pr-3 border-r border-b border-[#E1E4EA]">
+                        <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#222530" }} className="truncate block">
+                          <HighlightText text={meeting.title || "Untitled Meeting"} query={searchTerm} />
+                        </span>
+                      </td>
                     ),
                     type: (
-                        <td key="type" style={{ height: 60 }} className="pl-6 pr-3 border-r border-b border-[#E1E4EA]">
+                      <td key="type" style={{ height: 60 }} className="pl-6 pr-3 border-r border-b border-[#E1E4EA]">
+                        <span
+                          className="inline-flex items-center justify-center capitalize"
+                          style={{
+                            padding: "5px 12px",
+                            borderRadius: 53,
+                            backgroundColor: "rgba(0, 133, 255, 0.1)",
+                            fontFamily: "Inter",
+                            fontWeight: 500,
+                            fontSize: 12,
+                            lineHeight: "120%",
+                            color: "#0085FF",
+                          }}
+                        >
+                          <HighlightText text={meeting.meetingType || "General"} query={searchTerm} />
+                        </span>
+                      </td>
+                    ),
+                    dateTime: (
+                      <td key="dateTime" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                        <div className="flex flex-col">
+                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866" }} className="truncate">
+                            {meeting.scheduledAt
+                              ? new Date(meeting.scheduledAt).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" })
+                              : "—"}
+                          </span>
+                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "rgba(28, 28, 29, 0.5)" }} className="truncate">
+                            {meeting.scheduledAt
+                              ? new Date(meeting.scheduledAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+                              : "—"}
+                          </span>
+                        </div>
+                      </td>
+                    ),
+                    duration: (
+                      <td key="duration" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                        <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866" }}>
+                          {meeting.duration ? <HighlightText text={`${meeting.duration} min`} query={searchTerm} /> : "—"}
+                        </span>
+                      </td>
+                    ),
+                    attendees: (
+                      <td key="attendees" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                        {attendees.length ? (
+                          <div className="flex items-center">
+                            {attendees.slice(0, 3).map((p, i) => (
+                              <div
+                                key={p._id || i}
+                                className="rounded-full bg-gray-200 border border-white flex items-center justify-center text-[9px] font-semibold text-gray-600 flex-shrink-0"
+                                style={{ width: 24, height: 24, marginLeft: i === 0 ? 0 : -8 }}
+                              >
+                                {(p.name || "?").charAt(0).toUpperCase()}
+                              </div>
+                            ))}
+                            {attendees.length > 3 && (
+                              <div
+                                className="rounded-full bg-[#D9D9D9] border border-white flex items-center justify-center flex-shrink-0"
+                                style={{ height: 24, padding: "0 6px", borderRadius: 12, marginLeft: -8 }}
+                              >
+                                <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 10, lineHeight: "120%", color: "#78788D", whiteSpace: "nowrap" }}>
+                                  +{attendees.length - 3} more
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                    ),
+                    organiser: (
+                      <td key="organiser" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                        <div className="flex items-center" style={{ gap: 6 }}>
+                          <div
+                            className="rounded-full bg-blue-100 border border-white flex items-center justify-center text-[10px] font-semibold text-blue-700 flex-shrink-0"
+                            style={{ width: 24, height: 24 }}
+                          >
+                            {organizer?.name?.charAt(0)?.toUpperCase() || "?"}
+                          </div>
+                          <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 12, lineHeight: "120%", color: "#1C1C1D" }} className="truncate">
+                            <HighlightText text={organizer?.name || "Unknown"} query={searchTerm} />
+                          </span>
+                        </div>
+                      </td>
+                    ),
+                    relatedTo: (
+                      <td key="relatedTo" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                        <div className="flex flex-col">
+                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#0085FF" }} className="truncate">
+                            <HighlightText text={meeting.dealCode || meeting.company?.name || "—"} query={searchTerm} />
+                          </span>
+                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866" }} className="truncate">
+                            {meeting.amount ? `₹${Number(meeting.amount).toLocaleString("en-IN")}` : "—"}
+                          </span>
+                        </div>
+                      </td>
+                    ),
+                    status: (
+                      <td key="status" style={{ height: 60 }} className="px-3 border-b border-[#E1E4EA]">
+                        <div className="flex items-center justify-between w-full" style={{ gap: 8 }}>
                           <span
                             className="inline-flex items-center justify-center capitalize"
                             style={{
                               padding: "5px 12px",
                               borderRadius: 53,
-                              backgroundColor: "rgba(0, 133, 255, 0.1)",
+                              backgroundColor: meeting.status === "completed" ? "rgba(0, 201, 80, 0.1)" : "rgba(0, 133, 255, 0.1)",
                               fontFamily: "Inter",
                               fontWeight: 500,
                               fontSize: 12,
                               lineHeight: "120%",
-                              color: "#0085FF",
+                              color: meeting.status === "completed" ? "#00C950" : "#0085FF",
                             }}
                           >
-                            <HighlightText text={meeting.meetingType || "General"} query={searchTerm} />
+                            <HighlightText text={meeting.status || "scheduled"} query={searchTerm} />
                           </span>
-                        </td>
-                    ),
-                    dateTime: (
-                        <td key="dateTime" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
-                          <div className="flex flex-col">
-                            <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866" }} className="truncate">
-                              {meeting.scheduledAt
-                                ? new Date(meeting.scheduledAt).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" })
-                                : "—"}
-                            </span>
-                            <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "rgba(28, 28, 29, 0.5)" }} className="truncate">
-                              {meeting.scheduledAt
-                                ? new Date(meeting.scheduledAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
-                                : "—"}
-                            </span>
-                          </div>
-                        </td>
-                    ),
-                    duration: (
-                        <td key="duration" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
-                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866" }}>
-                            {meeting.duration ? <HighlightText text={`${meeting.duration} min`} query={searchTerm} /> : "—"}
-                          </span>
-                        </td>
-                    ),
-                    attendees: (
-                        <td key="attendees" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
-                          {attendees.length ? (
-                            <div className="flex items-center">
-                              {attendees.slice(0, 3).map((p, i) => (
-                                <div
-                                  key={p._id || i}
-                                  className="rounded-full bg-gray-200 border border-white flex items-center justify-center text-[9px] font-semibold text-gray-600 flex-shrink-0"
-                                  style={{ width: 24, height: 24, marginLeft: i === 0 ? 0 : -8 }}
-                                >
-                                  {(p.name || "?").charAt(0).toUpperCase()}
-                                </div>
-                              ))}
-                              {attendees.length > 3 && (
-                                <div
-                                  className="rounded-full bg-[#D9D9D9] border border-white flex items-center justify-center flex-shrink-0"
-                                  style={{ height: 24, padding: "0 6px", borderRadius: 12, marginLeft: -8 }}
-                                >
-                                  <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 10, lineHeight: "120%", color: "#78788D", whiteSpace: "nowrap" }}>
-                                    +{attendees.length - 3} more
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-400">—</span>
-                          )}
-                        </td>
-                    ),
-                    organiser: (
-                        <td key="organiser" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
-                          <div className="flex items-center" style={{ gap: 6 }}>
-                            <div
-                              className="rounded-full bg-blue-100 border border-white flex items-center justify-center text-[10px] font-semibold text-blue-700 flex-shrink-0"
-                              style={{ width: 24, height: 24 }}
-                            >
-                              {organizer?.name?.charAt(0)?.toUpperCase() || "?"}
-                            </div>
-                            <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 12, lineHeight: "120%", color: "#1C1C1D" }} className="truncate">
-                              <HighlightText text={organizer?.name || "Unknown"} query={searchTerm} />
-                            </span>
-                          </div>
-                        </td>
-                    ),
-                    relatedTo: (
-                        <td key="relatedTo" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
-                          <div className="flex flex-col">
-                            <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#0085FF" }} className="truncate">
-                              <HighlightText text={meeting.dealCode || meeting.company?.name || "—"} query={searchTerm} />
-                            </span>
-                            <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866" }} className="truncate">
-                              {meeting.amount ? `₹${Number(meeting.amount).toLocaleString("en-IN")}` : "—"}
-                            </span>
-                          </div>
-                        </td>
-                    ),
-                    status: (
-                        <td key="status" style={{ height: 60 }} className="px-3 border-b border-[#E1E4EA]">
-                          <div className="flex items-center justify-between w-full" style={{ gap: 8 }}>
-                            <span
-                              className="inline-flex items-center justify-center capitalize"
-                              style={{
-                                padding: "5px 12px",
-                                borderRadius: 53,
-                                backgroundColor: meeting.status === "completed" ? "rgba(0, 201, 80, 0.1)" : "rgba(0, 133, 255, 0.1)",
-                                fontFamily: "Inter",
-                                fontWeight: 500,
-                                fontSize: 12,
-                                lineHeight: "120%",
-                                color: meeting.status === "completed" ? "#00C950" : "#0085FF",
-                              }}
-                            >
-                              <HighlightText text={meeting.status || "scheduled"} query={searchTerm} />
-                            </span>
-                          </div>
-                        </td>
+                        </div>
+                      </td>
                     ),
                   };
                   return (
@@ -1385,173 +1381,131 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
                       })}
                     </tr>
                   );
-              })
+                })
               )}
             </tbody>
           </table>
         </div>
       ) : (
         <div className="flex flex-row items-start" style={{ gap: 18, marginTop: 24 }}>
-        <div
-          className="flex flex-col items-start flex-shrink-0"
-          style={{
-            boxSizing: "border-box",
-            padding: 20,
-            gap: 24,
-            width: 319,
-            background: "#FFFFFF",
-            border: "1px solid #E1E4EA",
-            borderRadius: 14,
-          }}
-        >
           <div
-            className="flex flex-row justify-between items-center self-stretch flex-shrink-0"
-            style={{ padding: 0, gap: 24, width: 279, height: 17 }}
-          >
-            <span
-              style={{
-                fontFamily: "Inter",
-                fontWeight: 600,
-                fontSize: 14,
-                lineHeight: "120%",
-                color: "#1C1C1D",
-              }}
-            >
-              Calendar
-            </span>
-            <span
-              style={{
-                fontFamily: "Inter",
-                fontWeight: 600,
-                fontSize: 12,
-                lineHeight: "120%",
-                color: "#0085FF",
-                cursor: "pointer",
-              }}
-            >
-              View Calendar
-            </span>
-          </div>
-          <div className="flex flex-row justify-between items-center self-stretch flex-shrink-0" style={{ padding: 0 }}>
-            {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((day) => (
-              <span
-                key={day}
-                style={{
-                  fontFamily: "Inter",
-                  fontWeight: 500,
-                  fontSize: 12,
-                  lineHeight: "120%",
-                  color: "#6B7280",
-                }}
-              >
-                {day}
-              </span>
-            ))}
-          </div>
-          {(() => {
-            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-            const firstWeekday = (monthStart.getDay() + 6) % 7;
-            const cells = [
-              ...Array(firstWeekday).fill(null),
-              ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-            ];
-            const meetingDays = new Set(
-              meetings
-                .filter((m) => m.scheduledAt)
-                .map((m) => new Date(m.scheduledAt))
-                .filter(
-                  (d) =>
-                    d.getFullYear() === now.getFullYear() &&
-                    d.getMonth() === now.getMonth(),
-                )
-                .map((d) => d.getDate()),
-            );
-            return (
-              <div
-                className="grid self-stretch flex-shrink-0"
-                style={{ gridTemplateColumns: "repeat(7, 1fr)", rowGap: 12 }}
-              >
-                {cells.map((day, idx) => (
-                  <div
-                    key={idx}
-                    className="flex flex-col items-center justify-center"
-                    style={{ width: 24, justifySelf: "center" }}
-                  >
-                    {day && meetingDays.has(day) && (
-                      <span
-                        className="flex-shrink-0"
-                        style={{ width: 6, height: 6, borderRadius: 99, background: "#0085FF", marginBottom: 2 }}
-                      />
-                    )}
-                    {day && (
-                      <span
-                        className="flex items-center justify-center"
-                        style={{
-                          width: 24,
-                          height: 24,
-                          borderRadius: 99,
-                          fontFamily: "Inter Tight",
-                          fontWeight: 400,
-                          fontSize: 14,
-                          lineHeight: "17px",
-                          background: day === now.getDate() ? "#0085FF" : "transparent",
-                          color: day === now.getDate() ? "#FFFFFF" : "#333333",
-                        }}
-                      >
-                        {day}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-          <div style={{ width: 279, height: 0, border: "1px solid #E1E4EA", flexShrink: 0 }} />
-          <span
-            className="self-stretch flex-shrink-0"
+            className="flex flex-col items-start flex-shrink-0"
             style={{
-              fontFamily: "Inter",
-              fontWeight: 600,
-              fontSize: 14,
-              lineHeight: "120%",
-              color: "#1C1C1D",
+              boxSizing: "border-box",
+              padding: 20,
+              gap: 24,
+              width: 319,
+              background: "#FFFFFF",
+              border: "1px solid #E1E4EA",
+              borderRadius: 14,
             }}
           >
-            Meeting Type Legend
-          </span>
-          <div
-            className="grid self-stretch flex-shrink-0"
-            style={{ gridTemplateColumns: "repeat(3, 1fr)", columnGap: 12, rowGap: 12 }}
-          >
-            {["Sales", "Meeting", "Demo", "Review", "Support", "Others"].map((label) => (
-              <div key={label} className="flex items-center" style={{ gap: 4 }}>
+            <div
+              className="flex flex-row justify-between items-center self-stretch flex-shrink-0"
+              style={{ padding: 0, gap: 24, width: 279, height: 17 }}
+            >
+              <span
+                style={{
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  fontSize: 14,
+                  lineHeight: "120%",
+                  color: "#1C1C1D",
+                }}
+              >
+                Calendar
+              </span>
+              <span
+                style={{
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  fontSize: 12,
+                  lineHeight: "120%",
+                  color: "#0085FF",
+                  cursor: "pointer",
+                }}
+              >
+                View Calendar
+              </span>
+            </div>
+            <div className="flex flex-row justify-between items-center self-stretch flex-shrink-0" style={{ padding: 0 }}>
+              {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((day) => (
                 <span
-                  className="flex-shrink-0"
-                  style={{ width: 10, height: 10, borderRadius: 9999, background: "#0085FF" }}
-                />
-                <span
-                  className="truncate"
+                  key={day}
                   style={{
                     fontFamily: "Inter",
-                    fontWeight: 600,
+                    fontWeight: 500,
                     fontSize: 12,
                     lineHeight: "120%",
-                    color: "#1C1C1D",
+                    color: "#6B7280",
                   }}
                 >
-                  {label}
+                  {day}
                 </span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="flex flex-col items-start flex-shrink-0" style={{ gap: 24 }}>
-          <div
-            className="flex flex-row items-center self-stretch flex-shrink-0"
-            style={{ padding: 0, gap: 24, width: 989, height: 17 }}
-          >
+              ))}
+            </div>
+            {(() => {
+              const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+              const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+              const firstWeekday = (monthStart.getDay() + 6) % 7;
+              const cells = [
+                ...Array(firstWeekday).fill(null),
+                ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+              ];
+              const meetingDays = new Set(
+                meetings
+                  .filter((m) => m.scheduledAt)
+                  .map((m) => new Date(m.scheduledAt))
+                  .filter(
+                    (d) =>
+                      d.getFullYear() === now.getFullYear() &&
+                      d.getMonth() === now.getMonth(),
+                  )
+                  .map((d) => d.getDate()),
+              );
+              return (
+                <div
+                  className="grid self-stretch flex-shrink-0"
+                  style={{ gridTemplateColumns: "repeat(7, 1fr)", rowGap: 12 }}
+                >
+                  {cells.map((day, idx) => (
+                    <div
+                      key={idx}
+                      className="flex flex-col items-center justify-center"
+                      style={{ width: 24, justifySelf: "center" }}
+                    >
+                      {day && meetingDays.has(day) && (
+                        <span
+                          className="flex-shrink-0"
+                          style={{ width: 6, height: 6, borderRadius: 99, background: "#0085FF", marginBottom: 2 }}
+                        />
+                      )}
+                      {day && (
+                        <span
+                          className="flex items-center justify-center"
+                          style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: 99,
+                            fontFamily: "Inter Tight",
+                            fontWeight: 400,
+                            fontSize: 14,
+                            lineHeight: "17px",
+                            background: day === now.getDate() ? "#0085FF" : "transparent",
+                            color: day === now.getDate() ? "#FFFFFF" : "#333333",
+                          }}
+                        >
+                          {day}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+            <div style={{ width: 279, height: 0, border: "1px solid #E1E4EA", flexShrink: 0 }} />
             <span
+              className="self-stretch flex-shrink-0"
               style={{
                 fontFamily: "Inter",
                 fontWeight: 600,
@@ -1560,466 +1514,508 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
                 color: "#1C1C1D",
               }}
             >
-              Upcoming Meetings
+              Meeting Type Legend
             </span>
+            <div
+              className="grid self-stretch flex-shrink-0"
+              style={{ gridTemplateColumns: "repeat(3, 1fr)", columnGap: 12, rowGap: 12 }}
+            >
+              {["Sales", "Meeting", "Demo", "Review", "Support", "Others"].map((label) => (
+                <div key={label} className="flex items-center" style={{ gap: 4 }}>
+                  <span
+                    className="flex-shrink-0"
+                    style={{ width: 10, height: 10, borderRadius: 9999, background: "#0085FF" }}
+                  />
+                  <span
+                    className="truncate"
+                    style={{
+                      fontFamily: "Inter",
+                      fontWeight: 600,
+                      fontSize: 12,
+                      lineHeight: "120%",
+                      color: "#1C1C1D",
+                    }}
+                  >
+                    {label}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-          {(() => {
-            const dotColors = ["#0085FF", "#34C759", "#FF8400"];
-            const realUpcomingMeetings = [...meetings]
-              .filter((m) => m.scheduledAt && new Date(m.scheduledAt) >= now)
-              .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
-              .slice(0, 3);
-            if (realUpcomingMeetings.length === 0) return null;
-            const upcomingMeetings = realUpcomingMeetings;
-            return (
-              <div className="relative flex-shrink-0" style={{ isolation: "isolate", width: 994 }}>
-                {upcomingMeetings.map((meeting, idx) => {
-                  const start = new Date(meeting.scheduledAt);
-                  const duration = meeting.duration || 30;
-                  const end = new Date(start.getTime() + duration * 60000);
-                  const color = dotColors[idx % dotColors.length];
-                  const isFirst = idx === 0;
-                  const isLast = idx === upcomingMeetings.length - 1;
-                  return (
-                    <div
-                      key={`${meeting._id}-${idx}`}
-                      className="relative flex flex-row items-center"
-                      style={{ gap: 12, width: "100%" }}
-                    >
-                      {/* Connector line: each row draws only the portion between
+          <div className="flex flex-col items-start flex-shrink-0" style={{ gap: 24 }}>
+            <div
+              className="flex flex-row items-center self-stretch flex-shrink-0"
+              style={{ padding: 0, gap: 24, width: 989, height: 17 }}
+            >
+              <span
+                style={{
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  fontSize: 14,
+                  lineHeight: "120%",
+                  color: "#1C1C1D",
+                }}
+              >
+                Upcoming Meetings
+              </span>
+            </div>
+            {(() => {
+              const dotColors = ["#0085FF", "#34C759", "#FF8400"];
+              const realUpcomingMeetings = [...meetings]
+                .filter((m) => m.scheduledAt && new Date(m.scheduledAt) >= now)
+                .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
+                .slice(0, 3);
+              if (realUpcomingMeetings.length === 0) return null;
+              const upcomingMeetings = realUpcomingMeetings;
+              return (
+                <div className="relative flex-shrink-0" style={{ isolation: "isolate", width: 994 }}>
+                  {upcomingMeetings.map((meeting, idx) => {
+                    const start = new Date(meeting.scheduledAt);
+                    const duration = meeting.duration || 30;
+                    const end = new Date(start.getTime() + duration * 60000);
+                    const color = dotColors[idx % dotColors.length];
+                    const isFirst = idx === 0;
+                    const isLast = idx === upcomingMeetings.length - 1;
+                    return (
+                      <div
+                        key={`${meeting._id}-${idx}`}
+                        className="relative flex flex-row items-center"
+                        style={{ gap: 12, width: "100%" }}
+                      >
+                        {/* Connector line: each row draws only the portion between
                           its own top/bottom edge and its own dot's center, sized
                           in percentages of THIS row's actual (content-driven)
                           height — so it lines up exactly regardless of how tall
                           any individual card renders. */}
-                      {!isFirst && (
-                        <div className="absolute" style={{ width: 1, left: 4, top: 0, height: "50%", background: "#E7E7E9" }} />
-                      )}
-                      {!isLast && (
-                        <div className="absolute" style={{ width: 1, left: 4, top: "50%", height: "50%", background: "#E7E7E9" }} />
-                      )}
-                      <span
-                        className="relative flex-shrink-0"
-                        style={{ width: 10, height: 10, borderRadius: 9999, background: color, zIndex: 1 }}
-                      />
-                      <div
-                        className="flex flex-col justify-center items-start flex-1"
-                        style={{
-                          boxSizing: "border-box",
-                          padding: 24,
-                          gap: 10,
-                          minHeight: 120,
-                          border: "1px solid #E1E4EA",
-                          borderTop: isFirst ? "1px solid #E1E4EA" : "none",
-                          borderRadius: `${isFirst ? "8px 8px" : "0 0"} ${isLast ? "8px 8px" : "0 0"}`,
-                        }}
-                      >
-                        <div className="flex flex-row items-start" style={{ gap: 95, width: "100%" }}>
-                          <div className="flex flex-col justify-center items-center flex-shrink-0" style={{ width: 44, gap: 4 }}>
-                            <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 12, lineHeight: "120%", color: "#1C1C1D", textAlign: "center" }}>
-                              {start.toLocaleDateString("en-US", { month: "short" }).toUpperCase()}
-                            </span>
-                            <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 32, lineHeight: "120%", color: "#1C1C1D", textAlign: "center" }}>
-                              {start.getDate()}
-                            </span>
-                            <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D", textAlign: "center" }}>
-                              {start.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()}
-                            </span>
-                          </div>
-                          <div className="flex flex-col items-start flex-shrink-0" style={{ width: 240, gap: 8 }}>
-                            <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 16, lineHeight: "120%", color: "#1C1C1D" }} className="truncate">
-                              {meeting.title || "Untitled Meeting"}
-                            </span>
-                            <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 8 }}>
-                              <AlarmClock size={14} style={{ color: "#78788D" }} />
-                              <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }}>
-                                {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} - {end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} ({duration} mins)
+                        {!isFirst && (
+                          <div className="absolute" style={{ width: 1, left: 4, top: 0, height: "50%", background: "#E7E7E9" }} />
+                        )}
+                        {!isLast && (
+                          <div className="absolute" style={{ width: 1, left: 4, top: "50%", height: "50%", background: "#E7E7E9" }} />
+                        )}
+                        <span
+                          className="relative flex-shrink-0"
+                          style={{ width: 10, height: 10, borderRadius: 9999, background: color, zIndex: 1 }}
+                        />
+                        <div
+                          className="flex flex-col justify-center items-start flex-1"
+                          style={{
+                            boxSizing: "border-box",
+                            padding: 24,
+                            gap: 10,
+                            minHeight: 120,
+                            border: "1px solid #E1E4EA",
+                            borderTop: isFirst ? "1px solid #E1E4EA" : "none",
+                            borderRadius: `${isFirst ? "8px 8px" : "0 0"} ${isLast ? "8px 8px" : "0 0"}`,
+                          }}
+                        >
+                          <div className="flex flex-row items-start" style={{ gap: 95, width: "100%" }}>
+                            <div className="flex flex-col justify-center items-center flex-shrink-0" style={{ width: 44, gap: 4 }}>
+                              <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 12, lineHeight: "120%", color: "#1C1C1D", textAlign: "center" }}>
+                                {start.toLocaleDateString("en-US", { month: "short" }).toUpperCase()}
+                              </span>
+                              <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 32, lineHeight: "120%", color: "#1C1C1D", textAlign: "center" }}>
+                                {start.getDate()}
+                              </span>
+                              <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D", textAlign: "center" }}>
+                                {start.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()}
                               </span>
                             </div>
-                            {(() => {
-                              const attendees = [...(meeting.internalParticipants || []), ...(meeting.participants || [])];
-                              const visibleAttendees = attendees.slice(0, 3);
-                              const extraAttendees = attendees.length - visibleAttendees.length;
-                              if (attendees.length === 0) return null;
-                              return (
-                                <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 12 }}>
-                                  <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 10, lineHeight: "120%", color: "#78788D" }}>
-                                    Attendees
-                                  </span>
-                                  <div className="flex flex-row items-center flex-shrink-0">
-                                    {visibleAttendees.map((att, i) => (
-                                      <div
-                                        key={att._id || i}
-                                        className="flex items-center justify-center flex-shrink-0"
-                                        style={{
-                                          width: 20,
-                                          height: 20,
-                                          borderRadius: "50%",
-                                          background: "#D9D9D9",
-                                          border: "1px solid #FFFFFF",
-                                          marginLeft: i === 0 ? 0 : -4,
-                                        }}
-                                      >
-                                        <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 10, color: "#78788D" }}>
-                                          {(att.name || "?").charAt(0).toUpperCase()}
-                                        </span>
-                                      </div>
-                                    ))}
-                                    {extraAttendees > 0 && (
-                                      <div
-                                        className="flex items-center justify-center flex-shrink-0"
-                                        style={{
-                                          height: 20,
-                                          padding: "0 6px",
-                                          borderRadius: 10,
-                                          background: "#D9D9D9",
-                                          border: "1px solid #FFFFFF",
-                                          marginLeft: -4,
-                                        }}
-                                      >
-                                        <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 10, color: "#78788D", whiteSpace: "nowrap" }}>
-                                          +{extraAttendees} more
-                                        </span>
-                                      </div>
-                                    )}
+                            <div className="flex flex-col items-start flex-shrink-0" style={{ width: 240, gap: 8 }}>
+                              <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 16, lineHeight: "120%", color: "#1C1C1D" }} className="truncate">
+                                {meeting.title || "Untitled Meeting"}
+                              </span>
+                              <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 8 }}>
+                                <AlarmClock size={14} style={{ color: "#78788D" }} />
+                                <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }}>
+                                  {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} - {end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} ({duration} mins)
+                                </span>
+                              </div>
+                              {(() => {
+                                const attendees = [...(meeting.internalParticipants || []), ...(meeting.participants || [])];
+                                const visibleAttendees = attendees.slice(0, 3);
+                                const extraAttendees = attendees.length - visibleAttendees.length;
+                                if (attendees.length === 0) return null;
+                                return (
+                                  <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 12 }}>
+                                    <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 10, lineHeight: "120%", color: "#78788D" }}>
+                                      Attendees
+                                    </span>
+                                    <div className="flex flex-row items-center flex-shrink-0">
+                                      {visibleAttendees.map((att, i) => (
+                                        <div
+                                          key={att._id || i}
+                                          className="flex items-center justify-center flex-shrink-0"
+                                          style={{
+                                            width: 20,
+                                            height: 20,
+                                            borderRadius: "50%",
+                                            background: "#D9D9D9",
+                                            border: "1px solid #FFFFFF",
+                                            marginLeft: i === 0 ? 0 : -4,
+                                          }}
+                                        >
+                                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 10, color: "#78788D" }}>
+                                            {(att.name || "?").charAt(0).toUpperCase()}
+                                          </span>
+                                        </div>
+                                      ))}
+                                      {extraAttendees > 0 && (
+                                        <div
+                                          className="flex items-center justify-center flex-shrink-0"
+                                          style={{
+                                            height: 20,
+                                            padding: "0 6px",
+                                            borderRadius: 10,
+                                            background: "#D9D9D9",
+                                            border: "1px solid #FFFFFF",
+                                            marginLeft: -4,
+                                          }}
+                                        >
+                                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 10, color: "#78788D", whiteSpace: "nowrap" }}>
+                                            +{extraAttendees} more
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              );
-                            })()}
-                          </div>
-                          <div className="flex flex-col items-start flex-shrink-0" style={{ gap: 4 }}>
-                            <span
-                              className="inline-flex items-center justify-center flex-shrink-0"
-                              style={{
-                                padding: "5px 12px",
-                                borderRadius: 53,
-                                background: "rgba(0, 133, 255, 0.1)",
-                                fontFamily: "Inter",
-                                fontWeight: 500,
-                                fontSize: 12,
-                                lineHeight: "120%",
-                                color: "#0085FF",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              Upcoming
-                            </span>
-                            <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 8 }}>
+                                );
+                              })()}
+                            </div>
+                            <div className="flex flex-col items-start flex-shrink-0" style={{ gap: 4 }}>
                               <span
-                                className="flex items-center justify-center flex-shrink-0"
-                                style={{ width: 16, height: 16, background: "#E1E4EA", borderRadius: 103 }}
+                                className="inline-flex items-center justify-center flex-shrink-0"
+                                style={{
+                                  padding: "5px 12px",
+                                  borderRadius: 53,
+                                  background: "rgba(0, 133, 255, 0.1)",
+                                  fontFamily: "Inter",
+                                  fontWeight: 500,
+                                  fontSize: 12,
+                                  lineHeight: "120%",
+                                  color: "#0085FF",
+                                  whiteSpace: "nowrap",
+                                }}
                               >
-                                <VideoIcon className="w-2.5 h-2.5" style={{ color: "#000000" }} />
+                                Upcoming
                               </span>
-                              <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }} className="capitalize">
-                                {meeting.meetingType?.replace("-", " ") || "General"}
-                              </span>
+                              <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 8 }}>
+                                <span
+                                  className="flex items-center justify-center flex-shrink-0"
+                                  style={{ width: 16, height: 16, background: "#E1E4EA", borderRadius: 103 }}
+                                >
+                                  <VideoIcon className="w-2.5 h-2.5" style={{ color: "#000000" }} />
+                                </span>
+                                <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }} className="capitalize">
+                                  {meeting.meetingType?.replace("-", " ") || "General"}
+                                </span>
+                              </div>
+                              {meeting.company?.name && (
+                                <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }} className="truncate">
+                                  Related to: {meeting.company.name}
+                                </span>
+                              )}
                             </div>
-                            {meeting.company?.name && (
-                              <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }} className="truncate">
-                                Related to: {meeting.company.name}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex flex-row items-center flex-shrink-0 flex-1 justify-end" style={{ gap: 8 }}>
-                            <div
-                              className="flex items-center justify-center flex-shrink-0"
-                              style={{ width: 32, height: 32, borderRadius: "50%", background: "#D9D9D9", border: "1px solid #FFFFFF" }}
-                            >
-                              <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 12, color: "#78788D" }}>
-                                {(meeting.createdBy?.name || "?").charAt(0).toUpperCase()}
-                              </span>
+                            <div className="flex flex-row items-center flex-shrink-0 flex-1 justify-end" style={{ gap: 8 }}>
+                              <div
+                                className="flex items-center justify-center flex-shrink-0"
+                                style={{ width: 32, height: 32, borderRadius: "50%", background: "#D9D9D9", border: "1px solid #FFFFFF" }}
+                              >
+                                <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 12, color: "#78788D" }}>
+                                  {(meeting.createdBy?.name || "?").charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                              <div className="flex flex-col items-start" style={{ minWidth: 120 }}>
+                                <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 12, lineHeight: "120%", color: "#1C1C1D" }} className="truncate">
+                                  {meeting.createdBy?.name || "Unassigned"}
+                                </span>
+                                <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }}>
+                                  Organiser
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleMeetingClick(meeting); }}
+                                className="flex items-center justify-center flex-shrink-0 hover:bg-gray-100 rounded-lg transition-colors"
+                                style={{ marginLeft: 12, padding: 4 }}
+                                title="View meeting"
+                              >
+                                <EyeIcon size={16} style={{ color: "#78788D" }} />
+                              </button>
                             </div>
-                            <div className="flex flex-col items-start" style={{ minWidth: 120 }}>
-                              <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 12, lineHeight: "120%", color: "#1C1C1D" }} className="truncate">
-                                {meeting.createdBy?.name || "Unassigned"}
-                              </span>
-                              <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }}>
-                                Organiser
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); handleMeetingClick(meeting); }}
-                              className="flex items-center justify-center flex-shrink-0 hover:bg-gray-100 rounded-lg transition-colors"
-                              style={{ marginLeft: 12, padding: 4 }}
-                              title="View meeting"
-                            >
-                              <EyeIcon size={16} style={{ color: "#78788D" }} />
-                            </button>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-          <div className="flex flex-row items-center self-stretch flex-shrink-0" style={{ padding: 0, gap: 12 }}>
-            <span
-              className="flex-shrink-0"
-              style={{ width: 10, height: 10, borderRadius: 9999, background: "#0085FF" }}
-            />
-            <span
-              onClick={() => setViewMode("list")}
-              style={{
-                fontFamily: "Inter",
-                fontWeight: 600,
-                fontSize: 12,
-                lineHeight: "120%",
-                color: "#0085FF",
-                cursor: "pointer",
-              }}
+                    );
+                  })}
+                </div>
+              );
+            })()}
+            <div className="flex flex-row items-center self-stretch flex-shrink-0" style={{ padding: 0, gap: 12 }}>
+              <span
+                className="flex-shrink-0"
+                style={{ width: 10, height: 10, borderRadius: 9999, background: "#0085FF" }}
+              />
+              <span
+                onClick={() => setViewMode("list")}
+                style={{
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  fontSize: 12,
+                  lineHeight: "120%",
+                  color: "#0085FF",
+                  cursor: "pointer",
+                }}
+              >
+                View All Upcoming Meetings
+              </span>
+            </div>
+            <div
+              className="flex flex-row items-center self-stretch flex-shrink-0"
+              style={{ padding: 0, gap: 24, width: 989, height: 17 }}
             >
-              View All Upcoming Meetings
-            </span>
-          </div>
-          <div
-            className="flex flex-row items-center self-stretch flex-shrink-0"
-            style={{ padding: 0, gap: 24, width: 989, height: 17 }}
-          >
-            <span
-              style={{
-                fontFamily: "Inter",
-                fontWeight: 600,
-                fontSize: 14,
-                lineHeight: "120%",
-                color: "#1C1C1D",
-              }}
-            >
-              Completed Meetings
-            </span>
-          </div>
-          {(() => {
-            const dotColors = ["#0085FF", "#34C759", "#FF8400"];
-            const realCompletedMeetings = [...meetings]
-              .filter((m) => m.scheduledAt && new Date(m.scheduledAt) < now)
-              .sort((a, b) => new Date(b.scheduledAt) - new Date(a.scheduledAt))
-              .slice(0, 3);
-            if (realCompletedMeetings.length === 0) return null;
-            const completedMeetings = realCompletedMeetings;
-            return (
-              <div className="relative flex-shrink-0" style={{ isolation: "isolate", width: 994 }}>
-                {isLoading ? (
-                  [1, 2, 3].map((_, idx) => (
-                    <div key={idx} className="relative flex flex-row items-center" style={{ gap: 12, width: "100%" }}>
-                      {idx !== 0 && (
-                        <div className="absolute" style={{ width: 1, left: 4, top: 0, height: "50%", background: "#E7E7E9" }} />
-                      )}
-                      {idx !== 2 && (
-                        <div className="absolute" style={{ width: 1, left: 4, top: "50%", height: "50%", background: "#E7E7E9" }} />
-                      )}
-                      <span className="relative flex-shrink-0" style={{ width: 10, height: 10, borderRadius: 9999, background: "#E1E4EA", zIndex: 1 }} />
-                      <div
-                        className="flex flex-col justify-center items-start flex-1"
-                        style={{
-                          boxSizing: "border-box", padding: 24, gap: 10, minHeight: 120, border: "1px solid #E1E4EA",
-                          borderTop: idx === 0 ? "1px solid #E1E4EA" : "none",
-                          borderRadius: `${idx === 0 ? "8px 8px" : "0 0"} ${idx === 2 ? "8px 8px" : "0 0"}`,
-                        }}
-                      >
-                        <Skeleton height={20} width={200} className="mb-2" />
-                        <Skeleton height={14} width={150} />
+              <span
+                style={{
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  fontSize: 14,
+                  lineHeight: "120%",
+                  color: "#1C1C1D",
+                }}
+              >
+                Completed Meetings
+              </span>
+            </div>
+            {(() => {
+              const dotColors = ["#0085FF", "#34C759", "#FF8400"];
+              const realCompletedMeetings = [...meetings]
+                .filter((m) => m.scheduledAt && new Date(m.scheduledAt) < now)
+                .sort((a, b) => new Date(b.scheduledAt) - new Date(a.scheduledAt))
+                .slice(0, 3);
+              if (realCompletedMeetings.length === 0) return null;
+              const completedMeetings = realCompletedMeetings;
+              return (
+                <div className="relative flex-shrink-0" style={{ isolation: "isolate", width: 994 }}>
+                  {isLoading ? (
+                    [1, 2, 3].map((_, idx) => (
+                      <div key={idx} className="relative flex flex-row items-center" style={{ gap: 12, width: "100%" }}>
+                        {idx !== 0 && (
+                          <div className="absolute" style={{ width: 1, left: 4, top: 0, height: "50%", background: "#E7E7E9" }} />
+                        )}
+                        {idx !== 2 && (
+                          <div className="absolute" style={{ width: 1, left: 4, top: "50%", height: "50%", background: "#E7E7E9" }} />
+                        )}
+                        <span className="relative flex-shrink-0" style={{ width: 10, height: 10, borderRadius: 9999, background: "#E1E4EA", zIndex: 1 }} />
+                        <div
+                          className="flex flex-col justify-center items-start flex-1"
+                          style={{
+                            boxSizing: "border-box", padding: 24, gap: 10, minHeight: 120, border: "1px solid #E1E4EA",
+                            borderTop: idx === 0 ? "1px solid #E1E4EA" : "none",
+                            borderRadius: `${idx === 0 ? "8px 8px" : "0 0"} ${idx === 2 ? "8px 8px" : "0 0"}`,
+                          }}
+                        >
+                          <Skeleton height={20} width={200} className="mb-2" />
+                          <Skeleton height={14} width={150} />
+                        </div>
                       </div>
-                    </div>
-                  ))
-                ) : completedMeetings.map((meeting, idx) => {
-                  const start = new Date(meeting.scheduledAt);
-                  const duration = meeting.duration || 30;
-                  const end = new Date(start.getTime() + duration * 60000);
-                  const color = dotColors[idx % dotColors.length];
-                  const isFirst = idx === 0;
-                  const isLast = idx === completedMeetings.length - 1;
-                  return (
-                    <div
-                      key={`${meeting._id}-${idx}`}
-                      className="relative flex flex-row items-center"
-                      style={{ gap: 12, width: "100%" }}
-                    >
-                      {!isFirst && (
-                        <div className="absolute" style={{ width: 1, left: 4, top: 0, height: "50%", background: "#E7E7E9" }} />
-                      )}
-                      {!isLast && (
-                        <div className="absolute" style={{ width: 1, left: 4, top: "50%", height: "50%", background: "#E7E7E9" }} />
-                      )}
-                      <span
-                        className="relative flex-shrink-0"
-                        style={{ width: 10, height: 10, borderRadius: 9999, background: color, zIndex: 1 }}
-                      />
+                    ))
+                  ) : completedMeetings.map((meeting, idx) => {
+                    const start = new Date(meeting.scheduledAt);
+                    const duration = meeting.duration || 30;
+                    const end = new Date(start.getTime() + duration * 60000);
+                    const color = dotColors[idx % dotColors.length];
+                    const isFirst = idx === 0;
+                    const isLast = idx === completedMeetings.length - 1;
+                    return (
                       <div
-                        className="flex flex-col justify-center items-start flex-1"
-                        style={{
-                          boxSizing: "border-box",
-                          padding: 24,
-                          gap: 10,
-                          minHeight: 120,
-                          border: "1px solid #E1E4EA",
-                          borderTop: isFirst ? "1px solid #E1E4EA" : "none",
-                          borderRadius: `${isFirst ? "8px 8px" : "0 0"} ${isLast ? "8px 8px" : "0 0"}`,
-                        }}
+                        key={`${meeting._id}-${idx}`}
+                        className="relative flex flex-row items-center"
+                        style={{ gap: 12, width: "100%" }}
                       >
-                        <div className="flex flex-row items-start" style={{ gap: 95, width: "100%" }}>
-                          <div className="flex flex-col justify-center items-center flex-shrink-0" style={{ width: 44, gap: 4 }}>
-                            <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 12, lineHeight: "120%", color: "#1C1C1D", textAlign: "center" }}>
-                              {start.toLocaleDateString("en-US", { month: "short" }).toUpperCase()}
-                            </span>
-                            <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 32, lineHeight: "120%", color: "#1C1C1D", textAlign: "center" }}>
-                              {start.getDate()}
-                            </span>
-                            <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D", textAlign: "center" }}>
-                              {start.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()}
-                            </span>
-                          </div>
-                          <div className="flex flex-col items-start flex-shrink-0" style={{ width: 240, gap: 8 }}>
-                            <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 16, lineHeight: "120%", color: "#1C1C1D" }} className="truncate">
-                              {meeting.title || "Untitled Meeting"}
-                            </span>
-                            <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 8 }}>
-                              <AlarmClock size={14} style={{ color: "#78788D" }} />
-                              <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }}>
-                                {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} - {end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} ({duration} mins)
+                        {!isFirst && (
+                          <div className="absolute" style={{ width: 1, left: 4, top: 0, height: "50%", background: "#E7E7E9" }} />
+                        )}
+                        {!isLast && (
+                          <div className="absolute" style={{ width: 1, left: 4, top: "50%", height: "50%", background: "#E7E7E9" }} />
+                        )}
+                        <span
+                          className="relative flex-shrink-0"
+                          style={{ width: 10, height: 10, borderRadius: 9999, background: color, zIndex: 1 }}
+                        />
+                        <div
+                          className="flex flex-col justify-center items-start flex-1"
+                          style={{
+                            boxSizing: "border-box",
+                            padding: 24,
+                            gap: 10,
+                            minHeight: 120,
+                            border: "1px solid #E1E4EA",
+                            borderTop: isFirst ? "1px solid #E1E4EA" : "none",
+                            borderRadius: `${isFirst ? "8px 8px" : "0 0"} ${isLast ? "8px 8px" : "0 0"}`,
+                          }}
+                        >
+                          <div className="flex flex-row items-start" style={{ gap: 95, width: "100%" }}>
+                            <div className="flex flex-col justify-center items-center flex-shrink-0" style={{ width: 44, gap: 4 }}>
+                              <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 12, lineHeight: "120%", color: "#1C1C1D", textAlign: "center" }}>
+                                {start.toLocaleDateString("en-US", { month: "short" }).toUpperCase()}
+                              </span>
+                              <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 32, lineHeight: "120%", color: "#1C1C1D", textAlign: "center" }}>
+                                {start.getDate()}
+                              </span>
+                              <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D", textAlign: "center" }}>
+                                {start.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()}
                               </span>
                             </div>
-                            {(() => {
-                              const attendees = [...(meeting.internalParticipants || []), ...(meeting.participants || [])];
-                              const visibleAttendees = attendees.slice(0, 3);
-                              const extraAttendees = attendees.length - visibleAttendees.length;
-                              if (attendees.length === 0) return null;
-                              return (
-                                <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 12 }}>
-                                  <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 10, lineHeight: "120%", color: "#78788D" }}>
-                                    Attendees
-                                  </span>
-                                  <div className="flex flex-row items-center flex-shrink-0">
-                                    {visibleAttendees.map((att, i) => (
-                                      <div
-                                        key={att._id || i}
-                                        className="flex items-center justify-center flex-shrink-0"
-                                        style={{
-                                          width: 20,
-                                          height: 20,
-                                          borderRadius: "50%",
-                                          background: "#D9D9D9",
-                                          border: "1px solid #FFFFFF",
-                                          marginLeft: i === 0 ? 0 : -4,
-                                        }}
-                                      >
-                                        <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 10, color: "#78788D" }}>
-                                          {(att.name || "?").charAt(0).toUpperCase()}
-                                        </span>
-                                      </div>
-                                    ))}
-                                    {extraAttendees > 0 && (
-                                      <div
-                                        className="flex items-center justify-center flex-shrink-0"
-                                        style={{
-                                          height: 20,
-                                          padding: "0 6px",
-                                          borderRadius: 10,
-                                          background: "#D9D9D9",
-                                          border: "1px solid #FFFFFF",
-                                          marginLeft: -4,
-                                        }}
-                                      >
-                                        <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 10, color: "#78788D", whiteSpace: "nowrap" }}>
-                                          +{extraAttendees} more
-                                        </span>
-                                      </div>
-                                    )}
+                            <div className="flex flex-col items-start flex-shrink-0" style={{ width: 240, gap: 8 }}>
+                              <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 16, lineHeight: "120%", color: "#1C1C1D" }} className="truncate">
+                                {meeting.title || "Untitled Meeting"}
+                              </span>
+                              <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 8 }}>
+                                <AlarmClock size={14} style={{ color: "#78788D" }} />
+                                <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }}>
+                                  {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} - {end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} ({duration} mins)
+                                </span>
+                              </div>
+                              {(() => {
+                                const attendees = [...(meeting.internalParticipants || []), ...(meeting.participants || [])];
+                                const visibleAttendees = attendees.slice(0, 3);
+                                const extraAttendees = attendees.length - visibleAttendees.length;
+                                if (attendees.length === 0) return null;
+                                return (
+                                  <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 12 }}>
+                                    <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 10, lineHeight: "120%", color: "#78788D" }}>
+                                      Attendees
+                                    </span>
+                                    <div className="flex flex-row items-center flex-shrink-0">
+                                      {visibleAttendees.map((att, i) => (
+                                        <div
+                                          key={att._id || i}
+                                          className="flex items-center justify-center flex-shrink-0"
+                                          style={{
+                                            width: 20,
+                                            height: 20,
+                                            borderRadius: "50%",
+                                            background: "#D9D9D9",
+                                            border: "1px solid #FFFFFF",
+                                            marginLeft: i === 0 ? 0 : -4,
+                                          }}
+                                        >
+                                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 10, color: "#78788D" }}>
+                                            {(att.name || "?").charAt(0).toUpperCase()}
+                                          </span>
+                                        </div>
+                                      ))}
+                                      {extraAttendees > 0 && (
+                                        <div
+                                          className="flex items-center justify-center flex-shrink-0"
+                                          style={{
+                                            height: 20,
+                                            padding: "0 6px",
+                                            borderRadius: 10,
+                                            background: "#D9D9D9",
+                                            border: "1px solid #FFFFFF",
+                                            marginLeft: -4,
+                                          }}
+                                        >
+                                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 10, color: "#78788D", whiteSpace: "nowrap" }}>
+                                            +{extraAttendees} more
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              );
-                            })()}
-                          </div>
-                          <div className="flex flex-col items-start flex-shrink-0" style={{ gap: 4 }}>
-                            <span
-                              className="inline-flex items-center justify-center flex-shrink-0"
-                              style={{
-                                padding: "5px 12px",
-                                borderRadius: 53,
-                                background: "rgba(52, 199, 89, 0.1)",
-                                fontFamily: "Inter",
-                                fontWeight: 500,
-                                fontSize: 12,
-                                lineHeight: "120%",
-                                color: "#34C759",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              Completed
-                            </span>
-                            <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 8 }}>
+                                );
+                              })()}
+                            </div>
+                            <div className="flex flex-col items-start flex-shrink-0" style={{ gap: 4 }}>
                               <span
-                                className="flex items-center justify-center flex-shrink-0"
-                                style={{ width: 16, height: 16, background: "#E1E4EA", borderRadius: 103 }}
+                                className="inline-flex items-center justify-center flex-shrink-0"
+                                style={{
+                                  padding: "5px 12px",
+                                  borderRadius: 53,
+                                  background: "rgba(52, 199, 89, 0.1)",
+                                  fontFamily: "Inter",
+                                  fontWeight: 500,
+                                  fontSize: 12,
+                                  lineHeight: "120%",
+                                  color: "#34C759",
+                                  whiteSpace: "nowrap",
+                                }}
                               >
-                                <VideoIcon className="w-2.5 h-2.5" style={{ color: "#000000" }} />
+                                Completed
                               </span>
-                              <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }} className="capitalize">
-                                {meeting.meetingType?.replace("-", " ") || "General"}
-                              </span>
+                              <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 8 }}>
+                                <span
+                                  className="flex items-center justify-center flex-shrink-0"
+                                  style={{ width: 16, height: 16, background: "#E1E4EA", borderRadius: 103 }}
+                                >
+                                  <VideoIcon className="w-2.5 h-2.5" style={{ color: "#000000" }} />
+                                </span>
+                                <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }} className="capitalize">
+                                  {meeting.meetingType?.replace("-", " ") || "General"}
+                                </span>
+                              </div>
+                              {meeting.company?.name && (
+                                <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }} className="truncate">
+                                  Related to: {meeting.company.name}
+                                </span>
+                              )}
                             </div>
-                            {meeting.company?.name && (
-                              <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }} className="truncate">
-                                Related to: {meeting.company.name}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex flex-row items-center flex-shrink-0 flex-1 justify-end" style={{ gap: 8 }}>
-                            <div
-                              className="flex items-center justify-center flex-shrink-0"
-                              style={{ width: 32, height: 32, borderRadius: "50%", background: "#D9D9D9", border: "1px solid #FFFFFF" }}
-                            >
-                              <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 12, color: "#78788D" }}>
-                                {(meeting.createdBy?.name || "?").charAt(0).toUpperCase()}
-                              </span>
+                            <div className="flex flex-row items-center flex-shrink-0 flex-1 justify-end" style={{ gap: 8 }}>
+                              <div
+                                className="flex items-center justify-center flex-shrink-0"
+                                style={{ width: 32, height: 32, borderRadius: "50%", background: "#D9D9D9", border: "1px solid #FFFFFF" }}
+                              >
+                                <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 12, color: "#78788D" }}>
+                                  {(meeting.createdBy?.name || "?").charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                              <div className="flex flex-col items-start" style={{ minWidth: 120 }}>
+                                <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 12, lineHeight: "120%", color: "#1C1C1D" }} className="truncate">
+                                  {meeting.createdBy?.name || "Unassigned"}
+                                </span>
+                                <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }}>
+                                  Organiser
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleMeetingClick(meeting); }}
+                                className="flex items-center justify-center flex-shrink-0 hover:bg-gray-100 rounded-lg transition-colors"
+                                style={{ marginLeft: 12, padding: 4 }}
+                                title="View meeting"
+                              >
+                                <EyeIcon size={16} style={{ color: "#78788D" }} />
+                              </button>
                             </div>
-                            <div className="flex flex-col items-start" style={{ minWidth: 120 }}>
-                              <span style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 12, lineHeight: "120%", color: "#1C1C1D" }} className="truncate">
-                                {meeting.createdBy?.name || "Unassigned"}
-                              </span>
-                              <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: "#78788D" }}>
-                                Organiser
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); handleMeetingClick(meeting); }}
-                              className="flex items-center justify-center flex-shrink-0 hover:bg-gray-100 rounded-lg transition-colors"
-                              style={{ marginLeft: 12, padding: 4 }}
-                              title="View meeting"
-                            >
-                              <EyeIcon size={16} style={{ color: "#78788D" }} />
-                            </button>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-          <div className="flex flex-row items-center self-stretch flex-shrink-0" style={{ padding: 0, gap: 12 }}>
-            <span
-              className="flex-shrink-0"
-              style={{ width: 10, height: 10, borderRadius: 9999, background: "#0085FF" }}
-            />
-            <span
-              onClick={() => setViewMode("list")}
-              style={{
-                fontFamily: "Inter",
-                fontWeight: 600,
-                fontSize: 12,
-                lineHeight: "120%",
-                color: "#0085FF",
-                cursor: "pointer",
-              }}
-            >
-              View All Completed Meetings
-            </span>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+            <div className="flex flex-row items-center self-stretch flex-shrink-0" style={{ padding: 0, gap: 12 }}>
+              <span
+                className="flex-shrink-0"
+                style={{ width: 10, height: 10, borderRadius: 9999, background: "#0085FF" }}
+              />
+              <span
+                onClick={() => setViewMode("list")}
+                style={{
+                  fontFamily: "Inter",
+                  fontWeight: 600,
+                  fontSize: 12,
+                  lineHeight: "120%",
+                  color: "#0085FF",
+                  cursor: "pointer",
+                }}
+              >
+                View All Completed Meetings
+              </span>
+            </div>
           </div>
-        </div>
         </div>
       )}
 

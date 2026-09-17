@@ -73,7 +73,6 @@ const createInvoice = async (req, res) => {
       terms,
       bankDetails,
       qrNote,
-      isTaxInvoice,
       signature,
       signatureType,
       receiverGSTIN,
@@ -147,22 +146,21 @@ const createInvoice = async (req, res) => {
         .json({ error: "Invoice percentage discount cannot exceed 100%" });
     }
 
-    // Validate GST fields if tax invoice
-    if (isTaxInvoice) {
-      if (!["intra", "inter"].includes(transactionType)) {
-        await session.abortTransaction();
-        session.endSession();
-        return res
-          .status(400)
-          .json({ error: "Transaction type must be 'intra' or 'inter'" });
-      }
-      if (gstRate < 0 || gstRate > 100) {
-        await session.abortTransaction();
-        session.endSession();
-        return res
-          .status(400)
-          .json({ error: "GST rate must be between 0 and 100" });
-      }
+    // Validate GST fields — tax is purely line-item-driven now, so these are
+    // always validated (no more document-level on/off gate).
+    if (transactionType && !["intra", "inter"].includes(transactionType)) {
+      await session.abortTransaction();
+      session.endSession();
+      return res
+        .status(400)
+        .json({ error: "Transaction type must be 'intra' or 'inter'" });
+    }
+    if (gstRate !== undefined && (gstRate < 0 || gstRate > 100)) {
+      await session.abortTransaction();
+      session.endSession();
+      return res
+        .status(400)
+        .json({ error: "GST rate must be between 0 and 100" });
     }
 
     // Verify amount calculation
@@ -246,14 +244,13 @@ const createInvoice = async (req, res) => {
       bankDetails: bankDetails || null,
       ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
       qrNote: qrNote || "",
-      isTaxInvoice,
       signature,
       signatureType,
       receiverGSTIN: finalReceiverGSTIN,
       billingAddress: finalBillingAddress,
       shippingAddress: finalShippingAddress,
-      transactionType: isTaxInvoice ? transactionType || "intra" : undefined,
-      gstRate: isTaxInvoice ? gstRate || 18 : undefined,
+      transactionType: transactionType || "intra",
+      gstRate: gstRate || 18,
       invoiceNumber: finalInvoiceNumber,
       user: req.user.id,
       organization: req.user.organization,
@@ -354,7 +351,6 @@ const duplicateInvoice = async (req, res) => {
       style: source.style,
       notes: source.notes,
       terms: source.terms,
-      isTaxInvoice: source.isTaxInvoice,
       signature: source.signature,
       signatureType: normalizedSignatureType,
       receiverGSTIN: source.receiverGSTIN,
@@ -762,7 +758,6 @@ const updateInvoice = async (req, res) => {
       terms,
       bankDetails,
       qrNote,
-      isTaxInvoice,
       signature,
       signatureType,
       receiverGSTIN,
@@ -818,18 +813,17 @@ const updateInvoice = async (req, res) => {
         .json({ error: "Invoice percentage discount cannot exceed 100%" });
     }
 
-    // Validate GST fields if tax invoice
-    if (isTaxInvoice) {
-      if (!["intra", "inter"].includes(transactionType)) {
-        return res
-          .status(400)
-          .json({ error: "Transaction type must be 'intra' or 'inter'" });
-      }
-      if (gstRate < 0 || gstRate > 100) {
-        return res
-          .status(400)
-          .json({ error: "GST rate must be between 0 and 100" });
-      }
+    // Validate GST fields — tax is purely line-item-driven now, so these are
+    // always validated (no more document-level on/off gate).
+    if (transactionType && !["intra", "inter"].includes(transactionType)) {
+      return res
+        .status(400)
+        .json({ error: "Transaction type must be 'intra' or 'inter'" });
+    }
+    if (gstRate !== undefined && (gstRate < 0 || gstRate > 100)) {
+      return res
+        .status(400)
+        .json({ error: "GST rate must be between 0 and 100" });
     }
 
     // Verify amount calculation
@@ -895,14 +889,13 @@ const updateInvoice = async (req, res) => {
     invoice.bankDetails = bankDetails || null;
     if (isRoundOff !== undefined) invoice.isRoundOff = !!isRoundOff;
     invoice.qrNote = qrNote || "";
-    invoice.isTaxInvoice = isTaxInvoice;
     invoice.signature = signature;
     invoice.signatureType = signatureType;
     invoice.receiverGSTIN = finalReceiverGSTIN;
     invoice.billingAddress = finalBillingAddress;
     invoice.shippingAddress = finalShippingAddress;
-    invoice.transactionType = isTaxInvoice ? transactionType || "intra" : undefined;
-    invoice.gstRate = isTaxInvoice ? gstRate || 18 : undefined;
+    invoice.transactionType = transactionType || "intra";
+    invoice.gstRate = gstRate || 18;
 
     await invoice.save({ session });
 

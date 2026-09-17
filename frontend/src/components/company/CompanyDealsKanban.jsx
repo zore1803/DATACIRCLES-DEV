@@ -59,7 +59,8 @@ import {
   User,
   Tag,
   IndianRupee,
-  X, ArrowUp, ArrowDown } from "lucide-react";
+  X, ArrowUp, ArrowDown
+} from "lucide-react";
 import { EditablePaginationButtons } from "../common/EditablePaginationButtons";
 import toast from "react-hot-toast";
 import confetti from "canvas-confetti";
@@ -1576,9 +1577,8 @@ export default function CompanyDealsKanban({
           <button
             onClick={() => setShowFilterPanel((open) => !open)}
             aria-expanded={showFilterPanel}
-            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${
-              showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
-            }`}
+            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+              }`}
             style={{
               height: "44px",
               borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
@@ -1741,7 +1741,7 @@ export default function CompanyDealsKanban({
                         "Select All", which spans every record across all pages. */}
                     <th style={{ width: 44, height: 56 }} className="px-3 py-2.5 border-r border-b border-[#E1E4EA]">
                       <div className="flex justify-center items-center w-full">
-                        <Checkbox checked={selectedDeals.length > 0 && selectedDeals.length === paginatedDeals.length} onChange={handleSelectAllDeals}  uncheckedColor="text-[#525866]"/>
+                        <Checkbox checked={selectedDeals.length > 0 && selectedDeals.length === paginatedDeals.length} onChange={handleSelectAllDeals} uncheckedColor="text-[#525866]" />
                       </div>
                     </th>
                     {(() => {
@@ -1906,8 +1906,8 @@ export default function CompanyDealsKanban({
                   {paginatedDeals.length === 0 ? (
                     <tr>
                       <td colSpan={7}>
-  <EmptyState icon={Handshake} noun="Deal" isFiltered />
-</td>
+                        <EmptyState icon={Handshake} noun="Deal" isFiltered />
+                      </td>
                     </tr>
                   ) : (
                     paginatedDeals.map((deal) => {

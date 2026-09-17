@@ -55,9 +55,7 @@ const FullWidthDocumentPanel = ({
   // "billing" | "shipping" | null — which field group opened the saved
   // address book (AddressBookDrawer).
   const [addressDrawer, setAddressDrawer] = useState(null);
-  const taxOn = supportsTax && !!form.isTaxInvoice;
-  const doc = { ...form, isTaxInvoice: taxOn, isTaxQuotation: taxOn };
-  const t = computeDocument(doc, type);
+  const t = computeDocument(form, type);
   const totalTax = t.totalCGST + t.totalSGST + t.totalIGST;
 
   const inputClass =
@@ -179,32 +177,6 @@ const FullWidthDocumentPanel = ({
         </div>
 
       </div>
-
-      {/* Own row below Details, not squeezed beside Due Date — it kept
-          landing at a different height than Due Date's field depending on
-          whether the quick-set row pushed that cell taller, which read as
-          misaligned. */}
-      {supportsTax && (
-        <div className="flex items-center gap-2.5 h-10 w-full mt-2">
-          <button
-            type="button"
-            onClick={() => setField("isTaxInvoice", !form.isTaxInvoice)}
-            className="flex-shrink-0"
-          >
-            <span
-              className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${form.isTaxInvoice ? "bg-[#0085FF]" : "bg-[#E1E4EA]"}`}
-            >
-              <span
-                className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isTaxInvoice ? "translate-x-4" : "translate-x-0"}`}
-              />
-            </span>
-          </button>
-          <div className="flex flex-col">
-            <span className="text-[12px] font-medium text-[#1F2937]">Enable Tax Invoice</span>
-            <span className="text-[10px] text-[#99A0AE]">Include GST and tax details</span>
-          </div>
-        </div>
-      )}
 
       {/* 02 — Billing & Shipping Address, side by side.
           Flex, not grid: AddressFieldsGroup carries its own `@md:col-span-2`

@@ -20,7 +20,8 @@ import {
   List,
   LayoutGrid,
   X,
-  CheckCircle, ArrowUp, ArrowDown } from "lucide-react";
+  CheckCircle, ArrowUp, ArrowDown
+} from "lucide-react";
 import { EditablePaginationButtons } from "../common/EditablePaginationButtons";
 import toast from "react-hot-toast";
 import API from "../../services/api";
@@ -230,7 +231,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
     const startY = e.clientY;
     const DRAG_THRESHOLD = 5;
     let dragStarted = false;
-    let positionGhost = () => {};
+    let positionGhost = () => { };
 
     const beginDrag = () => {
       dragStarted = true;
@@ -238,7 +239,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
       window.getSelection?.()?.removeAllRanges();
       const rect = th.getBoundingClientRect();
       const label = BASE_COLUMNS.find((vc) => vc.id === colId)?.label || colId;
-    
+
       const previewRows = (tasks || []).slice(0, 10).map((t) => {
         let val = t[colId];
         if (colId === 'assignedTo') val = val?.name || "Unassigned";
@@ -805,8 +806,8 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
               Array.from({ length: 4 }).map((_, i) => <StatTileSkeleton key={i} />)
             ) : (
               kpiTiles.map((tile) => (
-              <StatTile key={tile.label} tile={tile} />
-            )))}
+                <StatTile key={tile.label} tile={tile} />
+              )))}
           </div>
 
           <div className="-mx-6" style={{ marginTop: 24, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
@@ -864,9 +865,8 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
           <button
             onClick={() => setShowFilterPanel((open) => !open)}
             aria-expanded={showFilterPanel}
-            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${
-              showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
-            }`}
+            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+              }`}
             style={{
               height: "44px",
               borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
@@ -898,22 +898,22 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
           <EmptyState icon={ListChecks} noun="Task" onCreate={() => setShowTaskForm(true)} />
         </div>
       ) : (
-      <div
-        ref={fillContainerRef}
-        className="box-border flex flex-col items-start w-full bg-white overflow-x-auto overflow-y-auto"
-        style={{
-          ...fillStyle,
-          border: "1px solid #E1E4EA",
-          borderRadius: 8,
-        }}
-      >
-        <table
-          className="text-sm text-left border-collapse"
-          style={{ tableLayout: "fixed", width: "100%", minWidth: totalTableWidth, maxWidth: "100%" }}
+        <div
+          ref={fillContainerRef}
+          className="box-border flex flex-col items-start w-full bg-white overflow-x-auto overflow-y-auto"
+          style={{
+            ...fillStyle,
+            border: "1px solid #E1E4EA",
+            borderRadius: 8,
+          }}
         >
-          <thead className="sticky top-0 z-30 bg-[#F5F7FA] border-b border-[#E1E4EA]">
-            <tr>
-              {/* Page-scoped select-all: ticks exactly the rows on the CURRENT page
+          <table
+            className="text-sm text-left border-collapse"
+            style={{ tableLayout: "fixed", width: "100%", minWidth: totalTableWidth, maxWidth: "100%" }}
+          >
+            <thead className="sticky top-0 z-30 bg-[#F5F7FA] border-b border-[#E1E4EA]">
+              <tr>
+                {/* Page-scoped select-all: ticks exactly the rows on the CURRENT page
                   (10 per page -> 10, 50 -> 50). Distinct from the bulk strip's
                   "Select All", which spans every record across all pages.
                   This is its OWN column now — it previously sat above the
@@ -922,305 +922,303 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
                   per-task done/not-done toggles, and there was no per-row
                   selection checkbox anywhere. Matches Tasks.jsx, which has a
                   dedicated `selection` column separate from its row content. */}
-              <th
-                style={{
-                  width: 44,
-                  height: 56,
-                  position: "sticky",
-                  left: 0,
-                  zIndex: 35,
-                  backgroundColor: "#F5F7FA",
-                  boxShadow: "inset -1px 0 0 #E1E4EA, inset 0 -1px 0 #E1E4EA",
-                }}
-                className="px-3 py-2.5"
-              >
-                <div className="flex justify-center items-center w-full">
-                  <Checkbox checked={selectedItems.length > 0 && selectedItems.length === paginatedTasks.length} onChange={(e) => e.target.checked ? selectAll(paginatedTasks) : clearSelection()}  uncheckedColor="text-[#525866]"/>
-                </div>
-              </th>
-              {orderedColumns.map((col) => {
-                const isDragging = draggedColKey === col.id;
-                const isDragOver = dragOverColKey === col.id && draggedColKey && draggedColKey !== col.id;
-                const boundarySide = getBoundaryShadowSide(col.id);
-                return (
-                  <th
-                    key={col.id}
-                    data-col-id={col.id}
-                    onMouseDown={(e) => startColumnDrag(e, col.id)}
-                    style={{
-                      width: colWidths[col.id],
-                      height: 56,
-                      opacity: isDragging ? 0.35 : 1,
-                      ...getStickyStyle(col.id, true)
-                    }}
-                    className={`py-2.5 font-medium text-[#525252] text-xs cursor-grab active:cursor-grabbing bg-[#F5F7FA] ${
-                      col.id === "title" ? "pl-6 pr-3" : "px-3"
-                    } ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
-                  >
-                    <div className={`flex items-center justify-between w-full ${isLoading ? "[&_button]:invisible" : ""}`}>
-                      {col.pinnable ? (
-                        <div
-                          className="relative flex items-center justify-start flex-1 group cursor-pointer select-none min-w-0"
-                          onDoubleClick={() => togglePinColumn(col.id)}
-                        >
-                          <div className="flex items-center gap-1.5 flex-1 overflow-hidden">
-                            {isLoading ? (
-                              <Skeleton width="65%" height={12} />
-                            ) : (
-                              <div className="flex items-center gap-1.5 min-w-0 truncate">
-                                <span className="truncate flex-1 min-w-0" title={col.label}>
-                                  {col.label}
-                                  {sortConfig.key === col.id && (sortConfig.direction === "asc"
-                                    ? <ArrowUp className="w-3 h-3 text-[#0085FF] flex-shrink-0" />
-                                    : <ArrowDown className="w-3 h-3 text-[#0085FF] flex-shrink-0" />)}
-                                </span>
-                                {(leftPinned.has(col.id) || rightPinned.has(col.id)) && (
-                                  <Pin size={12} className="text-blue-500 fill-blue-500 flex-shrink-0 ml-1" style={{ transform: "rotate(45deg)" }} />
-                                )}
-                              </div>
-                            )}
+                <th
+                  style={{
+                    width: 44,
+                    height: 56,
+                    position: "sticky",
+                    left: 0,
+                    zIndex: 35,
+                    backgroundColor: "#F5F7FA",
+                    boxShadow: "inset -1px 0 0 #E1E4EA, inset 0 -1px 0 #E1E4EA",
+                  }}
+                  className="px-3 py-2.5"
+                >
+                  <div className="flex justify-center items-center w-full">
+                    <Checkbox checked={selectedItems.length > 0 && selectedItems.length === paginatedTasks.length} onChange={(e) => e.target.checked ? selectAll(paginatedTasks) : clearSelection()} uncheckedColor="text-[#525866]" />
+                  </div>
+                </th>
+                {orderedColumns.map((col) => {
+                  const isDragging = draggedColKey === col.id;
+                  const isDragOver = dragOverColKey === col.id && draggedColKey && draggedColKey !== col.id;
+                  const boundarySide = getBoundaryShadowSide(col.id);
+                  return (
+                    <th
+                      key={col.id}
+                      data-col-id={col.id}
+                      onMouseDown={(e) => startColumnDrag(e, col.id)}
+                      style={{
+                        width: colWidths[col.id],
+                        height: 56,
+                        opacity: isDragging ? 0.35 : 1,
+                        ...getStickyStyle(col.id, true)
+                      }}
+                      className={`py-2.5 font-medium text-[#525252] text-xs cursor-grab active:cursor-grabbing bg-[#F5F7FA] ${col.id === "title" ? "pl-6 pr-3" : "px-3"
+                        } ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
+                    >
+                      <div className={`flex items-center justify-between w-full ${isLoading ? "[&_button]:invisible" : ""}`}>
+                        {col.pinnable ? (
+                          <div
+                            className="relative flex items-center justify-start flex-1 group cursor-pointer select-none min-w-0"
+                            onDoubleClick={() => togglePinColumn(col.id)}
+                          >
+                            <div className="flex items-center gap-1.5 flex-1 overflow-hidden">
+                              {isLoading ? (
+                                <Skeleton width="65%" height={12} />
+                              ) : (
+                                <div className="flex items-center gap-1.5 min-w-0 truncate">
+                                  <span className="truncate flex-1 min-w-0" title={col.label}>
+                                    {col.label}
+                                    {sortConfig.key === col.id && (sortConfig.direction === "asc"
+                                      ? <ArrowUp className="w-3 h-3 text-[#0085FF] flex-shrink-0" />
+                                      : <ArrowDown className="w-3 h-3 text-[#0085FF] flex-shrink-0" />)}
+                                  </span>
+                                  {(leftPinned.has(col.id) || rightPinned.has(col.id)) && (
+                                    <Pin size={12} className="text-blue-500 fill-blue-500 flex-shrink-0 ml-1" style={{ transform: "rotate(45deg)" }} />
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ) : null}
+                        ) : null}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (openColumnMenuKey === col.id) {
+                              setOpenColumnMenuKey(null);
+                              setColumnMenuPos(null);
+                              return;
+                            }
+                            // rect is VISUAL px; the menu is portaled into document.body, which paints
+                            // inside the dynamic <html> zoom, so rect-derived values must be divided by
+                            // that zoom or the browser applies it twice. The resulting drift is
+                            // PROPORTIONAL to the button's x position (pos x (zoom-1)), which is why it
+                            // was invisible on the first column and obvious on the last — and why the
+                            // old fixed `-80` nudge for the last column could never be right everywhere.
+                            // MENU_W and the +4/8 gaps are already in portal space, so they are NOT divided.
+                            const zMenu = getAncestorZoom(document.body);
+                            const MENU_W = 190;
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            let calculatedLeft = rect.right / zMenu - MENU_W;
+                            calculatedLeft = Math.min(calculatedLeft, window.innerWidth / zMenu - MENU_W - 8);
+                            calculatedLeft = Math.max(calculatedLeft, 8);
+                            setColumnMenuPos({ top: rect.bottom / zMenu + 4, left: calculatedLeft });
+                            setOpenColumnMenuKey(col.id);
+                          }}
+                          className="p-1 rounded hover:bg-gray-200 transition-colors text-gray-500 flex-shrink-0"
+                          title="Column options"
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+
+                        {openColumnMenuKey === col.id && columnMenuPos && createPortal(
+                          <>
+                            <div className="fixed inset-0 z-[9998]" onClick={() => { setOpenColumnMenuKey(null); setColumnMenuPos(null); }} />
+                            <div
+                              ref={columnMenuRef}
+                              style={{ position: "fixed", top: columnMenuPos.top, left: columnMenuPos.left }}
+                              className="w-[160px] z-[9999] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right"
+                            >
+                              <button
+                                onClick={() => {
+                                  setOpenColumnMenuKey(null);
+                                  setColumnMenuPos(null);
+                                  getColumnPinSide(col.id) === "left" ? unpinColumn(col.id) : pinColumnToSide(col.id, "left");
+                                }}
+                                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap ${getColumnPinSide(col.id) === "left" ? "bg-blue-50 text-blue-700" : "text-[#161618] hover:bg-gray-50"}`}
+                              >
+                                {getColumnPinSide(col.id) === "left" ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5 text-[#1C1B1F]" />}
+                                Pin to Left
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setOpenColumnMenuKey(null);
+                                  setColumnMenuPos(null);
+                                  getColumnPinSide(col.id) === "right" ? unpinColumn(col.id) : pinColumnToSide(col.id, "right");
+                                }}
+                                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap ${getColumnPinSide(col.id) === "right" ? "bg-blue-50 text-blue-700" : "text-[#161618] hover:bg-gray-50"}`}
+                              >
+                                {getColumnPinSide(col.id) === "right" ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5 text-[#1C1B1F]" />}
+                                Pin to Right
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setOpenColumnMenuKey(null);
+                                  setColumnMenuPos(null);
+                                  handleSort(col.id, "asc");
+                                  setListPage(1);
+                                }}
+                                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap ${sortConfig.key === col.id && sortConfig.direction === "asc" ? "bg-blue-50 text-blue-700 font-medium" : "text-[#161618] hover:bg-gray-50"}`}
+                              >
+                                <ChevronUp className="w-3.5 h-3.5 text-[#1C1B1F]" />
+                                Sort Ascending
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setOpenColumnMenuKey(null);
+                                  setColumnMenuPos(null);
+                                  handleSort(col.id, "desc");
+                                  setListPage(1);
+                                }}
+                                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap ${sortConfig.key === col.id && sortConfig.direction === "desc" ? "bg-blue-50 text-blue-700 font-medium" : "text-[#161618] hover:bg-gray-50"}`}
+                              >
+                                <ChevronDown className="w-3.5 h-3.5 text-[#1C1B1F]" />
+                                Sort Descending
+                              </button>
+                              <div className="w-full border-t border-[#F1F1F5] my-0.5" />
+                              <button
+                                onClick={() => {
+                                  setOpenColumnMenuKey(null);
+                                  setColumnMenuPos(null);
+                                  toggleHideColumn(col.id);
+                                }}
+                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap text-[#161618] hover:bg-gray-50"
+                              >
+                                <EyeOff className="w-3.5 h-3.5 text-[#1C1B1F]" />
+                                Hide Column
+                              </button>
+                            </div>
+                          </>,
+                          document.body
+                        )}
+                      </div>
+                      <div
+                        data-resize-handle="true"
+                        onMouseDown={(e) => startResize(e, col.id)}
+                        className={`absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none hover:bg-blue-400 z-10 ${resizingCol === col.id ? "bg-blue-500" : "bg-transparent"
+                          }`}
+                      />
+                      {boundarySide && <div style={getPinnedBoundaryOverlayStyle(boundarySide)} />}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody className="bg-white">
+              {isLoading ? (
+                <TableSkeletonRows
+                  columns={orderedColumns.map(c => colWidths[c.id])}
+                  hasCheckbox={true}
+                  numRows={listLimit}
+                  rowHeight={54}
+                />
+              ) : paginatedTasks.length === 0 ? (
+                <tr>
+                  <td colSpan={orderedColumns.length + 1}>
+                    <EmptyState icon={ListChecks} noun="Task" isFiltered />
+                  </td>
+                </tr>
+              ) : (
+                paginatedTasks.map((task) => {
+                  const isSelected = selectedItems.includes(task._id);
+                  const isCompleted = task.status === "Completed";
+                  const assignees = getTaskAssignees(task);
+                  const progress = getTaskProgress(task);
+                  const isOverdue = !isCompleted && task.dueDate && new Date(task.dueDate) < new Date();
+                  const priority = task.priority || null;
+                  const priorityStyles = {
+                    high: { bg: "rgba(205, 54, 54, 0.1)", color: "#CD3636" },
+                    medium: { bg: "rgba(188, 170, 0, 0.1)", color: "#BCAA00" },
+                    low: { bg: "rgba(0, 201, 80, 0.1)", color: "#00C950" },
+                  };
+                  const linkedEntity = task.relatedEntities?.[0];
+                  const dueLabel = formatTaskDueLabel(task.dueDate);
+                  const textDecoration = isCompleted ? "line-through" : "none";
+                  const primaryAssignee = assignees[0];
+                  const avatarUrl = primaryAssignee?.profileUrl || primaryAssignee?.userData?.mainData?.profilePic;
+                  const isActionsOpen = openRowActionsId === task._id;
+                  const taskActionsMenu = (
+                    <div className="relative flex items-center justify-center flex-shrink-0" onMouseDown={(e) => e.stopPropagation()}>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (openColumnMenuKey === col.id) {
-                            setOpenColumnMenuKey(null);
-                            setColumnMenuPos(null);
+                          if (isActionsOpen) {
+                            setOpenRowActionsId(null);
+                            setRowActionsPos(null);
                             return;
                           }
-                          // rect is VISUAL px; the menu is portaled into document.body, which paints
-                          // inside the dynamic <html> zoom, so rect-derived values must be divided by
-                          // that zoom or the browser applies it twice. The resulting drift is
-                          // PROPORTIONAL to the button's x position (pos x (zoom-1)), which is why it
-                          // was invisible on the first column and obvious on the last — and why the
-                          // old fixed `-80` nudge for the last column could never be right everywhere.
-                          // MENU_W and the +4/8 gaps are already in portal space, so they are NOT divided.
+                          // rect is VISUAL px; the menu is portaled into
+                          // document.body, which paints inside the app's
+                          // dynamic <html> zoom, so rect-derived values are
+                          // divided by that zoom, the menu is centered on
+                          // the row rather than hanging off an edge, and
+                          // both axes are clamped to the viewport — same
+                          // approach as the Deals table's row-actions menu.
                           const zMenu = getAncestorZoom(document.body);
-                          const MENU_W = 190;
+                          const MENU_W = 160;
+                          const MENU_H = 110; // View Task + Edit Task + divider + Delete Task
+                          const MARGIN = 8;
+
                           const rect = e.currentTarget.getBoundingClientRect();
-                          let calculatedLeft = rect.right / zMenu - MENU_W;
-                          calculatedLeft = Math.min(calculatedLeft, window.innerWidth / zMenu - MENU_W - 8);
-                          calculatedLeft = Math.max(calculatedLeft, 8);
-                          setColumnMenuPos({ top: rect.bottom / zMenu + 4, left: calculatedLeft });
-                          setOpenColumnMenuKey(col.id);
+                          const viewportH = window.innerHeight / zMenu;
+                          const viewportW = window.innerWidth / zMenu;
+
+                          const rowCenter = (rect.top + rect.bottom) / (2 * zMenu);
+                          let calcTop = rowCenter - MENU_H / 2;
+                          calcTop = Math.max(MARGIN, Math.min(calcTop, viewportH - MENU_H - MARGIN));
+
+                          let calcLeft = rect.right / zMenu - MENU_W;
+                          calcLeft = Math.min(calcLeft, viewportW - MENU_W - MARGIN);
+                          calcLeft = Math.max(calcLeft, MARGIN);
+
+                          setRowActionsPos({ top: calcTop, left: calcLeft });
+                          setOpenRowActionsId(task._id);
                         }}
-                        className="p-1 rounded hover:bg-gray-200 transition-colors text-gray-500 flex-shrink-0"
-                        title="Column options"
+                        className="p-1 rounded hover:bg-gray-200 text-gray-800 flex-shrink-0"
+                        title="More options"
                       >
-                        <ChevronDown className="w-3.5 h-3.5" />
+                        <MoreVertIcon className="w-5 h-5" />
                       </button>
 
-                      {openColumnMenuKey === col.id && columnMenuPos && createPortal(
+                      {isActionsOpen && rowActionsPos && createPortal(
                         <>
-                          <div className="fixed inset-0 z-[9998]" onClick={() => { setOpenColumnMenuKey(null); setColumnMenuPos(null); }} />
+                          <div className="fixed inset-0 z-[9998]" onClick={() => { setOpenRowActionsId(null); setRowActionsPos(null); }} />
                           <div
-                            ref={columnMenuRef}
-                            style={{ position: "fixed", top: columnMenuPos.top, left: columnMenuPos.left }}
+                            ref={rowActionsRef}
+                            style={{ position: "fixed", top: rowActionsPos.top, left: rowActionsPos.left }}
                             className="w-[160px] z-[9999] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             <button
                               onClick={() => {
-                                setOpenColumnMenuKey(null);
-                                setColumnMenuPos(null);
-                                getColumnPinSide(col.id) === "left" ? unpinColumn(col.id) : pinColumnToSide(col.id, "left");
+                                setOpenRowActionsId(null);
+                                setRowActionsPos(null);
+                                handleTaskClick(task);
                               }}
-                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap ${getColumnPinSide(col.id) === "left" ? "bg-blue-50 text-blue-700" : "text-[#161618] hover:bg-gray-50"}`}
+                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                             >
-                              {getColumnPinSide(col.id) === "left" ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5 text-[#1C1B1F]" />}
-                              Pin to Left
+                              <EyeIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
+                              View Task
                             </button>
                             <button
                               onClick={() => {
-                                setOpenColumnMenuKey(null);
-                                setColumnMenuPos(null);
-                                getColumnPinSide(col.id) === "right" ? unpinColumn(col.id) : pinColumnToSide(col.id, "right");
+                                setOpenRowActionsId(null);
+                                setRowActionsPos(null);
+                                handleEditTask(task);
                               }}
-                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap ${getColumnPinSide(col.id) === "right" ? "bg-blue-50 text-blue-700" : "text-[#161618] hover:bg-gray-50"}`}
+                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                             >
-                              {getColumnPinSide(col.id) === "right" ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5 text-[#1C1B1F]" />}
-                              Pin to Right
-                            </button>
-                            <button
-                              onClick={() => {
-                                setOpenColumnMenuKey(null);
-                                setColumnMenuPos(null);
-                                handleSort(col.id, "asc");
-                                setListPage(1);
-                              }}
-                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap ${sortConfig.key === col.id && sortConfig.direction === "asc" ? "bg-blue-50 text-blue-700 font-medium" : "text-[#161618] hover:bg-gray-50"}`}
-                            >
-                              <ChevronUp className="w-3.5 h-3.5 text-[#1C1B1F]" />
-                              Sort Ascending
-                            </button>
-                            <button
-                              onClick={() => {
-                                setOpenColumnMenuKey(null);
-                                setColumnMenuPos(null);
-                                handleSort(col.id, "desc");
-                                setListPage(1);
-                              }}
-                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap ${sortConfig.key === col.id && sortConfig.direction === "desc" ? "bg-blue-50 text-blue-700 font-medium" : "text-[#161618] hover:bg-gray-50"}`}
-                            >
-                              <ChevronDown className="w-3.5 h-3.5 text-[#1C1B1F]" />
-                              Sort Descending
+                              <EditIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
+                              Edit Task
                             </button>
                             <div className="w-full border-t border-[#F1F1F5] my-0.5" />
                             <button
                               onClick={() => {
-                                setOpenColumnMenuKey(null);
-                                setColumnMenuPos(null);
-                                toggleHideColumn(col.id);
+                                setOpenRowActionsId(null);
+                                setRowActionsPos(null);
+                                setTaskToDelete(task);
                               }}
-                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap text-[#161618] hover:bg-gray-50"
+                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-red-600 hover:bg-red-50 whitespace-nowrap"
                             >
-                              <EyeOff className="w-3.5 h-3.5 text-[#1C1B1F]" />
-                              Hide Column
+                              <DeleteIcon className="w-4 h-4" />
+                              Delete Task
                             </button>
                           </div>
                         </>,
                         document.body
                       )}
                     </div>
-                    <div
-                      data-resize-handle="true"
-                      onMouseDown={(e) => startResize(e, col.id)}
-                      className={`absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none hover:bg-blue-400 z-10 ${
-                        resizingCol === col.id ? "bg-blue-500" : "bg-transparent"
-                      }`}
-                    />
-                    {boundarySide && <div style={getPinnedBoundaryOverlayStyle(boundarySide)} />}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody className="bg-white">
-            {isLoading ? (
-              <TableSkeletonRows
-                columns={orderedColumns.map(c => colWidths[c.id])}
-                hasCheckbox={true}
-                numRows={listLimit}
-                rowHeight={54}
-              />
-            ) : paginatedTasks.length === 0 ? (
-              <tr>
-                <td colSpan={orderedColumns.length + 1}>
-  <EmptyState icon={ListChecks} noun="Task" isFiltered />
-</td>
-              </tr>
-            ) : (
-              paginatedTasks.map((task) => {
-                const isSelected = selectedItems.includes(task._id);
-                const isCompleted = task.status === "Completed";
-                const assignees = getTaskAssignees(task);
-                const progress = getTaskProgress(task);
-                const isOverdue = !isCompleted && task.dueDate && new Date(task.dueDate) < new Date();
-                const priority = task.priority || null;
-                const priorityStyles = {
-                  high: { bg: "rgba(205, 54, 54, 0.1)", color: "#CD3636" },
-                  medium: { bg: "rgba(188, 170, 0, 0.1)", color: "#BCAA00" },
-                  low: { bg: "rgba(0, 201, 80, 0.1)", color: "#00C950" },
-                };
-                const linkedEntity = task.relatedEntities?.[0];
-                const dueLabel = formatTaskDueLabel(task.dueDate);
-                const textDecoration = isCompleted ? "line-through" : "none";
-                const primaryAssignee = assignees[0];
-                const avatarUrl = primaryAssignee?.profileUrl || primaryAssignee?.userData?.mainData?.profilePic;
-                const isActionsOpen = openRowActionsId === task._id;
-                const taskActionsMenu = (
-                  <div className="relative flex items-center justify-center flex-shrink-0" onMouseDown={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isActionsOpen) {
-                          setOpenRowActionsId(null);
-                          setRowActionsPos(null);
-                          return;
-                        }
-                        // rect is VISUAL px; the menu is portaled into
-                        // document.body, which paints inside the app's
-                        // dynamic <html> zoom, so rect-derived values are
-                        // divided by that zoom, the menu is centered on
-                        // the row rather than hanging off an edge, and
-                        // both axes are clamped to the viewport — same
-                        // approach as the Deals table's row-actions menu.
-                        const zMenu = getAncestorZoom(document.body);
-                        const MENU_W = 160;
-                        const MENU_H = 110; // View Task + Edit Task + divider + Delete Task
-                        const MARGIN = 8;
-
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const viewportH = window.innerHeight / zMenu;
-                        const viewportW = window.innerWidth / zMenu;
-
-                        const rowCenter = (rect.top + rect.bottom) / (2 * zMenu);
-                        let calcTop = rowCenter - MENU_H / 2;
-                        calcTop = Math.max(MARGIN, Math.min(calcTop, viewportH - MENU_H - MARGIN));
-
-                        let calcLeft = rect.right / zMenu - MENU_W;
-                        calcLeft = Math.min(calcLeft, viewportW - MENU_W - MARGIN);
-                        calcLeft = Math.max(calcLeft, MARGIN);
-
-                        setRowActionsPos({ top: calcTop, left: calcLeft });
-                        setOpenRowActionsId(task._id);
-                      }}
-                      className="p-1 rounded hover:bg-gray-200 text-gray-800 flex-shrink-0"
-                      title="More options"
-                    >
-                      <MoreVertIcon className="w-5 h-5" />
-                    </button>
-
-                    {isActionsOpen && rowActionsPos && createPortal(
-                      <>
-                        <div className="fixed inset-0 z-[9998]" onClick={() => { setOpenRowActionsId(null); setRowActionsPos(null); }} />
-                        <div
-                          ref={rowActionsRef}
-                          style={{ position: "fixed", top: rowActionsPos.top, left: rowActionsPos.left }}
-                          className="w-[160px] z-[9999] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            onClick={() => {
-                              setOpenRowActionsId(null);
-                              setRowActionsPos(null);
-                              handleTaskClick(task);
-                            }}
-                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
-                          >
-                            <EyeIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
-                            View Task
-                          </button>
-                          <button
-                            onClick={() => {
-                              setOpenRowActionsId(null);
-                              setRowActionsPos(null);
-                              handleEditTask(task);
-                            }}
-                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
-                          >
-                            <EditIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
-                            Edit Task
-                          </button>
-                          <div className="w-full border-t border-[#F1F1F5] my-0.5" />
-                          <button
-                            onClick={() => {
-                              setOpenRowActionsId(null);
-                              setRowActionsPos(null);
-                              setTaskToDelete(task);
-                            }}
-                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-red-600 hover:bg-red-50 whitespace-nowrap"
-                          >
-                            <DeleteIcon className="w-4 h-4" />
-                            Delete Task
-                          </button>
-                        </div>
-                      </>,
-                      document.body
-                    )}
-                  </div>
-                );
+                  );
                   const cells = {
                     // Per-row selection checkbox — this is what was missing.
                     // `isSelected`/`toggleItem` already existed in this file but
@@ -1229,165 +1227,165 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
                     // keeps ticking a box from also firing the row's
                     // handleTaskClick and opening the task.
                     __select: (
-                        <td key="__select" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex justify-center items-center w-full">
-                            <Checkbox checked={isSelected} onChange={(e) => {
-                                e.stopPropagation();
-                                toggleItem(task._id);
-                              }} />
-                          </div>
-                        </td>
+                      <td key="__select" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-center items-center w-full">
+                          <Checkbox checked={isSelected} onChange={(e) => {
+                            e.stopPropagation();
+                            toggleItem(task._id);
+                          }} />
+                        </div>
+                      </td>
                     ),
                     title: (
-                        <td key="title" style={{ height: 60 }} className="pl-6 pr-3 py-3 border-r border-b border-[#E1E4EA]">
-                          <div className="flex items-start gap-3 w-full overflow-hidden">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleToggleTaskStatus(task);
-                              }}
-                              title={isCompleted ? "Mark as pending" : "Mark as complete"}
-                              className={`flex-shrink-0 mt-0.5 p-0.5 rounded-full transition-all duration-200 ${isCompleted ? "bg-green-100 text-green-600" : "text-gray-300 hover:text-green-500 hover:bg-green-50"}`}
+                      <td key="title" style={{ height: 60 }} className="pl-6 pr-3 py-3 border-r border-b border-[#E1E4EA]">
+                        <div className="flex items-start gap-3 w-full overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleTaskStatus(task);
+                            }}
+                            title={isCompleted ? "Mark as pending" : "Mark as complete"}
+                            className={`flex-shrink-0 mt-0.5 p-0.5 rounded-full transition-all duration-200 ${isCompleted ? "bg-green-100 text-green-600" : "text-gray-300 hover:text-green-500 hover:bg-green-50"}`}
+                          >
+                            <CheckCircle className="w-5 h-5" />
+                          </button>
+                          <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                            <span
+                              style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 14, lineHeight: "20px", color: "#0E121B", textDecoration }}
+                              className="truncate"
                             >
-                              <CheckCircle className="w-5 h-5" />
-                            </button>
-                            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                              <HighlightText text={task.title || "Untitled Task"} query={searchTerm} />
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <BriefcaseIcon className="flex-shrink-0" />
+                              <span
+                                style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "20px", color: "#8D8D8E", textDecoration }}
+                                className="truncate"
+                              >
+                                Related to: <HighlightText text={linkedEntity?.entityId?.name || linkedEntity?.entityId?.title || "(Deal Name)"} query={searchTerm} />
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    ),
+                    assignedTo: (
+                      <td key="assignedTo" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                        {primaryAssignee ? (
+                          <div className="flex items-center justify-start gap-2">
+                            {avatarUrl ? (
+                              <img
+                                src={avatarUrl}
+                                alt={primaryAssignee.name}
+                                className="rounded-full object-cover flex-shrink-0 border border-white"
+                                style={{ width: 32, height: 32 }}
+                              />
+                            ) : (
+                              <div
+                                className="rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-semibold text-gray-600 flex-shrink-0 border border-white"
+                                style={{ width: 32, height: 32 }}
+                              >
+                                {primaryAssignee.name?.charAt(0)?.toUpperCase() || "?"}
+                              </div>
+                            )}
+                            <div className="flex flex-col min-w-0">
                               <span
                                 style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 14, lineHeight: "20px", color: "#0E121B", textDecoration }}
                                 className="truncate"
                               >
-                                <HighlightText text={task.title || "Untitled Task"} query={searchTerm} />
+                                <HighlightText text={primaryAssignee.name} query={searchTerm} />
+                                {assignees.length > 1 ? ` +${assignees.length - 1}` : ""}
                               </span>
-                              <div className="flex items-center gap-1">
-                                <BriefcaseIcon className="flex-shrink-0" />
-                                <span
-                                  style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "20px", color: "#8D8D8E", textDecoration }}
-                                  className="truncate"
-                                >
-                                  Related to: <HighlightText text={linkedEntity?.entityId?.name || linkedEntity?.entityId?.title || "(Deal Name)"} query={searchTerm} />
-                                </span>
-                              </div>
+                              <span
+                                style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "20px", color: "#8D8D8E", textDecoration }}
+                                className="truncate"
+                              >
+                                {primaryAssignee.role || "Team Member"}
+                              </span>
                             </div>
                           </div>
-                        </td>
-                    ),
-                    assignedTo: (
-                        <td key="assignedTo" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
-                          {primaryAssignee ? (
-                            <div className="flex items-center justify-start gap-2">
-                              {avatarUrl ? (
-                                <img
-                                  src={avatarUrl}
-                                  alt={primaryAssignee.name}
-                                  className="rounded-full object-cover flex-shrink-0 border border-white"
-                                  style={{ width: 32, height: 32 }}
-                                />
-                              ) : (
-                                <div
-                                  className="rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-semibold text-gray-600 flex-shrink-0 border border-white"
-                                  style={{ width: 32, height: 32 }}
-                                >
-                                  {primaryAssignee.name?.charAt(0)?.toUpperCase() || "?"}
-                                </div>
-                              )}
-                              <div className="flex flex-col min-w-0">
-                                <span
-                                  style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 14, lineHeight: "20px", color: "#0E121B", textDecoration }}
-                                  className="truncate"
-                                >
-                                  <HighlightText text={primaryAssignee.name} query={searchTerm} />
-                                  {assignees.length > 1 ? ` +${assignees.length - 1}` : ""}
-                                </span>
-                                <span
-                                  style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "20px", color: "#8D8D8E", textDecoration }}
-                                  className="truncate"
-                                >
-                                  {primaryAssignee.role || "Team Member"}
-                                </span>
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-400">—</span>
-                          )}
-                        </td>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
                     ),
                     status: (
-                        <td key="status" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                      <td key="status" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                        <span
+                          className="inline-flex items-center justify-center"
+                          style={{
+                            padding: "5px 12px",
+                            borderRadius: 53,
+                            backgroundColor: isCompleted ? "rgba(0, 201, 80, 0.1)" : "rgba(0, 133, 255, 0.1)",
+                            fontFamily: "Inter",
+                            fontWeight: 500,
+                            fontSize: 12,
+                            lineHeight: "120%",
+                            color: isCompleted ? "#00C950" : "#0085FF",
+                          }}
+                        >
+                          <HighlightText text={isCompleted ? "Completed" : "In-Progress"} query={searchTerm} />
+                        </span>
+                      </td>
+                    ),
+                    priority: (
+                      <td key="priority" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                        {priority ? (
                           <span
                             className="inline-flex items-center justify-center"
                             style={{
                               padding: "5px 12px",
                               borderRadius: 53,
-                              backgroundColor: isCompleted ? "rgba(0, 201, 80, 0.1)" : "rgba(0, 133, 255, 0.1)",
+                              backgroundColor: (priorityStyles[priority] || priorityStyles.medium).bg,
                               fontFamily: "Inter",
                               fontWeight: 500,
                               fontSize: 12,
                               lineHeight: "120%",
-                              color: isCompleted ? "#00C950" : "#0085FF",
+                              color: (priorityStyles[priority] || priorityStyles.medium).color,
                             }}
                           >
-                            <HighlightText text={isCompleted ? "Completed" : "In-Progress"} query={searchTerm} />
+                            <HighlightText text={priority.charAt(0).toUpperCase() + priority.slice(1)} query={searchTerm} />
                           </span>
-                        </td>
-                    ),
-                    priority: (
-                        <td key="priority" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
-                          {priority ? (
-                            <span
-                              className="inline-flex items-center justify-center"
-                              style={{
-                                padding: "5px 12px",
-                                borderRadius: 53,
-                                backgroundColor: (priorityStyles[priority] || priorityStyles.medium).bg,
-                                fontFamily: "Inter",
-                                fontWeight: 500,
-                                fontSize: 12,
-                                lineHeight: "120%",
-                                color: (priorityStyles[priority] || priorityStyles.medium).color,
-                              }}
-                            >
-                              <HighlightText text={priority.charAt(0).toUpperCase() + priority.slice(1)} query={searchTerm} />
-                            </span>
-                          ) : (
-                            <span className="text-xs text-gray-400">—</span>
-                          )}
-                        </td>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
                     ),
                     dueDate: (
-                        <td key="dueDate" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
-                          <div className="flex flex-col gap-0.5">
-                            <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866", textDecoration }}>
-                              <HighlightText text={`${dueLabel.day} ${dueLabel.time}`} query={searchTerm} />
+                      <td key="dueDate" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                        <div className="flex flex-col gap-0.5">
+                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866", textDecoration }}>
+                            <HighlightText text={`${dueLabel.day} ${dueLabel.time}`} query={searchTerm} />
+                          </span>
+                          {isCompleted ? (
+                            <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#00C950" }}>
+                              Completed
                             </span>
-                            {isCompleted ? (
-                              <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#00C950" }}>
-                                Completed
+                          ) : (
+                            isOverdue && (
+                              <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#CD3636" }}>
+                                Overdue
                               </span>
-                            ) : (
-                              isOverdue && (
-                                <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#CD3636" }}>
-                                  Overdue
-                                </span>
-                              )
-                            )}
-                          </div>
-                        </td>
+                            )
+                          )}
+                        </div>
+                      </td>
                     ),
                     progress: (
-                        <td key="progress" style={{ height: 60 }} className="px-3 border-b border-[#E1E4EA]">
-                          <div className="flex items-center gap-3">
-                            <div className="flex-1 rounded-full overflow-hidden" style={{ height: 5, backgroundColor: "#D9D9D9" }}>
-                              <div
-                                className="h-full rounded-full"
-                                style={{ width: `${progress}%`, backgroundColor: progress === 100 ? "#00C950" : "#0085FF" }}
-                              />
-                            </div>
-                            <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866" }} className="flex-shrink-0">
-                              {progress}%
-                            </span>
+                      <td key="progress" style={{ height: 60 }} className="px-3 border-b border-[#E1E4EA]">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 rounded-full overflow-hidden" style={{ height: 5, backgroundColor: "#D9D9D9" }}>
+                            <div
+                              className="h-full rounded-full"
+                              style={{ width: `${progress}%`, backgroundColor: progress === 100 ? "#00C950" : "#0085FF" }}
+                            />
                           </div>
-                        </td>
+                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866" }} className="flex-shrink-0">
+                            {progress}%
+                          </span>
+                        </div>
+                      </td>
                     ),
                   };
                   return (
@@ -1443,11 +1441,11 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
                       })}
                     </tr>
                   );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {listTotalCount > 0 && (

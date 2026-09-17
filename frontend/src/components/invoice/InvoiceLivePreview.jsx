@@ -31,15 +31,9 @@ const InvoiceLivePreview = ({
   copyType = "original",
 }) => {
   const html = useMemo(() => {
-    // The edit form keeps a single `isTaxInvoice` flag regardless of document
-    // type, while saved documents store the quotation flag separately. Feed
-    // both so the shared template reads the right one for this type.
-    const taxOn = supportsTax && !!form.isTaxInvoice;
-    const doc = {
-      ...form,
-      isTaxInvoice: taxOn,
-      isTaxQuotation: taxOn,
-    };
+    // Tax is line-item-driven: computeDocument() derives it from each item's
+    // own gstRate, so the form object is passed straight through.
+    const doc = { ...form };
 
     // Same encoder settings the PDF uses, so the preview shows the identical
     // QR the customer will scan off the printed page.

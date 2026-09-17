@@ -12,6 +12,10 @@ const postalAddressSchema = new mongoose.Schema({
 const proformaInvoiceSchema = new mongoose.Schema({
   deal: { type: mongoose.Schema.Types.ObjectId, ref: 'Deal', required: true },
   performaInvoiceNumber: { type: String, required: true },
+  // Free-text field (e.g. a customer's PO number) — has no bearing on
+  // performaInvoiceNumber/numbering, purely informational. Matches the same
+  // field on Invoice/Quotation.
+  reference: { type: String, default: '' },
   date: { type: Date, required: true },
   dueDate: { type: Date },
   amount: { type: Number, required: true },
@@ -40,8 +44,8 @@ const proformaInvoiceSchema = new mongoose.Schema({
   // Round Off chosen on the form. No default: documents saved before this field existed stay
   // unrounded in their PDF, exactly as before.
   isRoundOff: { type: Boolean },
-  isTaxInvoice: { type: Boolean, default: false },
   transactionType: { type: String, enum: ['intra', 'inter'], default: 'intra' },
+  gstRate: { type: Number, min: 0, max: 100, default: 18 },
   signature: { type: String },
   signatureType: { type: String, enum: ['text', 'upload'], default: 'text' },
   receiverGSTIN: { type: String }, // Added receiverGSTIN field
@@ -67,6 +71,15 @@ const proformaInvoiceSchema = new mongoose.Schema({
     // this line's rate already includes GST instead of taxing it again.
     taxInclusive: { type: Boolean, default: false },
   }],
+  // For parity with Invoice/Quotation/DeliveryChallan — reserved for the
+  // e-signature workflow, not currently set by the create/edit form.
+  digitalSignature: {
+    status: { type: String, enum: ['pending', 'signed', 'cancelled', 'failed', 'none'], default: 'none' },
+    provider: { type: String, enum: ['docusign', 'zoho', 'internal', 'other'] },
+    documentId: { type: String },
+    signedAt: { type: Date },
+    signedUrl: { type: String }
+  },
   // Set when this pro forma invoice was created via the "Duplicate" action,
   // pointing at the source document it was cloned from.
   duplicatedFrom: { type: mongoose.Schema.Types.ObjectId, ref: 'ProformaInvoice' },

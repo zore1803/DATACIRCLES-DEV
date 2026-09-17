@@ -398,7 +398,6 @@ const QuotationForm = ({
     amount: 0,
     status: "Draft",
     style: "Regular",
-    isTaxQuotation: true,
     isRoundOff: false,
     hideTotals: false,
     notes: defaultNotesForNew,
@@ -545,11 +544,11 @@ const QuotationForm = ({
 
   useEffect(() => {
     if (formOverride) {
-      // The split-view panel (CreateInvoicePanel) stores numbering/tax-flag
-      // under generic keys shared by every document type — this screen's own
-      // form uses quotation-specific ones, so they're remapped on the way in.
+      // The split-view panel (CreateInvoicePanel) stores numbering under
+      // generic keys shared by every document type — this screen's own form
+      // uses quotation-specific ones, so they're remapped on the way in.
       const {
-        invoicePrefix, invoiceSuffix, invoiceNumber, isTaxInvoice,
+        invoicePrefix, invoiceSuffix, invoiceNumber,
         ...rest
       } = formOverride;
       setForm((prev) => ({
@@ -558,7 +557,6 @@ const QuotationForm = ({
         quotationPrefix: invoicePrefix ?? prev.quotationPrefix,
         quotationSuffix: invoiceSuffix ?? prev.quotationSuffix,
         quotationNumber: invoiceNumber ?? prev.quotationNumber,
-        isTaxQuotation: isTaxInvoice ?? prev.isTaxQuotation,
       }));
       setHasUnsavedChanges(false);
       return;
@@ -606,9 +604,6 @@ const QuotationForm = ({
         style: sourceData.style || "Regular",
         isRoundOff: sourceData.isRoundOff !== undefined ? sourceData.isRoundOff : false,
         hideTotals: sourceData.hideTotals || false,
-        // Keep the saved GST on/off (a document saved with GST off must reopen with it off).
-        // Only a source that never stored the flag falls back to on.
-        isTaxQuotation: (sourceData.isTaxQuotation ?? sourceData.isTaxInvoice) !== undefined ? !!(sourceData.isTaxQuotation ?? sourceData.isTaxInvoice) : true,
         transactionType: sourceData.transactionType || "intra",
         notes: sourceData.notes || "",
         terms: sourceData.terms || "",
@@ -635,7 +630,6 @@ const QuotationForm = ({
         amount: 0,
         status: "Draft",
         style: "Regular",
-        isTaxQuotation: true,
         transactionType: "intra",
         notes: defaultNotesForNew,
         terms: defaultTermsForNew,
@@ -1024,11 +1018,12 @@ const QuotationForm = ({
           !item.name ||
           !item.rate ||
           !item.quantity ||
+          (parseFloat(item.gstRate) > 0 && !item.hsn) ||
           (item.discountType === "percentage" && item.discount > 100)
       );
       if (invalidItems.length > 0) {
         toast.error(
-          "Please fill in all item details (name, rate, quantity) and ensure percentage discounts are not above 100."
+          "Please fill in all item details (name, rate, quantity, and HSN/SAC for any item with a GST rate) and ensure percentage discounts are not above 100."
         );
         setIsSubmitting(false);
         return;
@@ -1067,9 +1062,7 @@ const QuotationForm = ({
         // update never clears a bank chosen elsewhere.
         bankDetails: form.bankDetails || undefined,
         amount: (() => {
-          let t = form.isTaxQuotation
-            ? computeDocument(form, "quotation").grandTotal
-            : calculateTotalAmount(form.items, form.discount);
+          let t = computeDocument(form, "quotation").grandTotal;
           return form.isRoundOff ? Math.round(t) : t;
         })(),
         isRoundOff: form.isRoundOff,
@@ -1091,7 +1084,6 @@ const QuotationForm = ({
           taxInclusive: !!item.taxInclusive,
         })),
         style: form.style,
-        isTaxQuotation: form.isTaxQuotation,
         transactionType: form.transactionType,
       };
 
@@ -1117,7 +1109,6 @@ const QuotationForm = ({
         amount: 0,
         status: "Draft",
         style: "",
-        isTaxQuotation: true,
       });
       await fetchData();
       onClose();
@@ -1170,11 +1161,8 @@ const QuotationForm = ({
   );
   
   let finalTotal = subtotalAfterItemDiscounts - invoiceDiscountAmount;
-  let taxDetails = null;
-  if (form.isTaxQuotation) {
-    taxDetails = computeDocument(form, "quotation");
-    finalTotal = taxDetails.grandTotal;
-  }
+  const taxDetails = computeDocument(form, "quotation");
+  finalTotal = taxDetails.grandTotal;
   
   let roundOffAmount = 0;
   if (form.isRoundOff) {
@@ -1311,15 +1299,13 @@ const QuotationForm = ({
                   onClick={() => {
                     // Mirror of the remap on the way in: the split-view
                     // panel expects the generic invoicePrefix/invoiceSuffix/
-                    // invoiceNumber/isTaxInvoice keys, not this screen's
-                    // quotation-specific ones.
-                    const { quotationPrefix, quotationSuffix, quotationNumber, isTaxQuotation, ...rest } = form;
+                    // invoiceNumber keys, not this screen's quotation-specific ones.
+                    const { quotationPrefix, quotationSuffix, quotationNumber, ...rest } = form;
                     onExitFullWidth({
                       ...rest,
                       invoicePrefix: quotationPrefix,
                       invoiceSuffix: quotationSuffix,
                       invoiceNumber: quotationNumber,
-                      isTaxInvoice: isTaxQuotation,
                     });
                   }}
                   title="Back to split view with live preview"

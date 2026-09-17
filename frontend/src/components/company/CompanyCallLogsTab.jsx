@@ -21,7 +21,8 @@ import {
   Clock,
   Table2,
   List as ListIcon,
-  User, ArrowUp, ArrowDown } from "lucide-react";
+  User, ArrowUp, ArrowDown
+} from "lucide-react";
 import { EditablePaginationButtons } from "../common/EditablePaginationButtons";
 import toast from "react-hot-toast";
 import API from "../../services/api";
@@ -174,7 +175,7 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
     const startY = e.clientY;
     const DRAG_THRESHOLD = 5;
     let dragStarted = false;
-    let positionGhost = () => {};
+    let positionGhost = () => { };
 
     const beginDrag = () => {
       dragStarted = true;
@@ -685,9 +686,8 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
           <button
             onClick={() => setShowFilterPanel((open) => !open)}
             aria-expanded={showFilterPanel}
-            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${
-              showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
-            }`}
+            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+              }`}
             style={{ height: "44px", borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA" }}
           >
             <FilterIcon size={16} />
@@ -865,7 +865,7 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
                   className="px-3 py-2.5"
                 >
                   <div className="flex justify-center items-center w-full">
-                    <Checkbox checked={selectedItems.length > 0 && selectedItems.length === paginatedLogs.length} onChange={(e) => (e.target.checked ? selectAll(paginatedLogs) : clearSelection())}  uncheckedColor="text-[#525866]"/>
+                    <Checkbox checked={selectedItems.length > 0 && selectedItems.length === paginatedLogs.length} onChange={(e) => (e.target.checked ? selectAll(paginatedLogs) : clearSelection())} uncheckedColor="text-[#525866]" />
                   </div>
                 </th>
                 {orderedColumns.map((col) => {
@@ -1013,8 +1013,8 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
               ) : paginatedLogs.length === 0 ? (
                 <tr>
                   <td colSpan={orderedColumns.length + 1}>
-  <EmptyState icon={CellphoneIcon} noun="Call log" isFiltered />
-</td>
+                    <EmptyState icon={CellphoneIcon} noun="Call log" isFiltered />
+                  </td>
                 </tr>
               ) : (
                 paginatedLogs.map((log) => {

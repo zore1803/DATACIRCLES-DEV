@@ -48,7 +48,6 @@ const invoiceSchema = new mongoose.Schema({
   // Defaults to "Invoice <invoiceNumber>" when left blank — see
   // shared/documentTemplates.js buildUpiUri.
   qrNote: { type: String, default: '' },
-  isTaxInvoice: { type: Boolean, default: false },
   signature: { type: String },
   signatureType: { type: String, enum: ['text', 'upload'], default: 'text' },
   receiverGSTIN: { type: String }, // Added receiverGSTIN field

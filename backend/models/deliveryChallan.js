@@ -34,13 +34,10 @@ const deliveryChallanSchema = new mongoose.Schema({
   date: { type: Date, required: true },
   dueDate: { type: Date },
   amount: { type: Number, required: true },
-  // GST on/off for the challan, same flag name the shared document form and computeDocument()
-  // use for invoices. Defaults to false: challans saved before this field existed never carried
-  // GST data, so they must keep rendering untaxed exactly as before.
-  isTaxInvoice: { type: Boolean, default: false },
   transactionType: { type: String, enum: ['intra', 'inter'], default: 'intra' },
   receiverGSTIN: { type: String, default: '' },
   gstRate: { type: Number, min: 0, max: 100, default: 18 },
+  reference: { type: String, default: '' },
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
   status: {

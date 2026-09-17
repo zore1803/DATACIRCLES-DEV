@@ -1989,9 +1989,8 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
                 <button
                   onClick={() => setShowFilterPanel((open) => !open)}
                   aria-expanded={showFilterPanel}
-                  className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${
-                    showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
-                  }`}
+                  className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+                    }`}
                   style={{
                     height: "44px",
                     borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",

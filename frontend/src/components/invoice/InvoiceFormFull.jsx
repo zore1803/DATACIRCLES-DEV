@@ -3,6 +3,7 @@ import { resolveField, resolveDiscount, resolveMaxDiscountPercent } from "../../
 import PdfIcon from "../common/PdfIcon";
 import PlusIcon from "../common/PlusIcon";
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { formatNumberToIndian, formatNumberFixed } from "../../utils/numberFormatter";
 import {
   IndianRupeeIcon,
@@ -434,7 +435,6 @@ const InvoiceFormFull = ({
     amount: 0,
     status: "Draft",
     style: "Regular",
-    isTaxInvoice: true,
     gstRate: 18,
     transactionType: "intra",
     isRoundOff: false,
@@ -660,7 +660,6 @@ const InvoiceFormFull = ({
         hideTotals: sourceData.hideTotals || false,
         // Keep the saved GST on/off (a document saved with GST off must reopen with it off).
         // Only a source that never stored the flag falls back to on.
-        isTaxInvoice: (sourceData.isTaxInvoice ?? sourceData.isTaxQuotation) !== undefined ? !!(sourceData.isTaxInvoice ?? sourceData.isTaxQuotation) : true,
         transactionType: sourceData.transactionType || "intra",
         notes: sourceData.notes || "",
         terms: sourceData.terms || "",
@@ -691,7 +690,6 @@ const InvoiceFormFull = ({
         amount: 0,
         status: "Draft",
         style: "Regular",
-        isTaxInvoice: true,
         gstRate: 18,
         transactionType: "intra",
         notes: defaultNotesForNew,
@@ -1216,13 +1214,12 @@ const InvoiceFormFull = ({
           !item.name ||
           !item.rate ||
           !item.quantity ||
-          (form.isTaxInvoice && !item.hsn) ||
+          (parseFloat(item.gstRate) > 0 && !item.hsn) ||
           (item.discountType === "percentage" && item.discount > 100)
       );
       if (invalidItems.length > 0) {
         toast.error(
-          `Please fill in all item details (name, rate, quantity${form.isTaxInvoice ? ", and HSN/SAC" : ""
-          }) and ensure percentage discounts are not above 100.`
+          "Please fill in all item details (name, rate, quantity, and HSN/SAC for any item with a GST rate) and ensure percentage discounts are not above 100."
         );
         setIsSubmitting(false);
         return;
@@ -1260,11 +1257,7 @@ const InvoiceFormFull = ({
         qrNote: form.qrNote || "",
         signature: form.signature,
         amount: (() => {
-          let t = form.isTaxInvoice
-            ? computeDocument(form, "invoice").grandTotal
-            // GST off: no tax at all, so the saved amount matches the total the form shows.
-            // Without the explicit 0, calculateTotalAmount's gstRate default (18) added GST.
-            : calculateTotalAmount(form.items, form.discount, 0);
+          let t = computeDocument(form, "invoice").grandTotal;
           return form.isRoundOff ? Math.round(t) : t;
         })(),
         isRoundOff: form.isRoundOff,
@@ -1298,7 +1291,6 @@ const InvoiceFormFull = ({
           taxInclusive: !!item.taxInclusive,
         })),
         style: form.style,
-        isTaxInvoice: form.isTaxInvoice,
         transactionType: form.transactionType,
       };
 
@@ -1324,7 +1316,6 @@ const InvoiceFormFull = ({
         amount: 0,
         status: "Draft",
         style: "",
-        isTaxInvoice: true,
         gstRate: 18,
         transactionType: "intra",
       });
@@ -1384,11 +1375,8 @@ const InvoiceFormFull = ({
   );
   
   let finalTotal = subtotalAfterItemDiscounts - invoiceDiscountAmount;
-  let taxDetails = null;
-  if (form.isTaxInvoice) {
-    taxDetails = computeDocument(form, "invoice");
-    finalTotal = taxDetails.grandTotal;
-  }
+  const taxDetails = computeDocument(form, "invoice");
+  finalTotal = taxDetails.grandTotal;
   
   let roundOffAmount = 0;
   if (form.isRoundOff) {
@@ -1468,45 +1456,82 @@ const InvoiceFormFull = ({
               </button>
               
               <div className="flex items-center gap-4">
-                <div className="flex flex-col">
-                  <h2 className="text-xl font-bold text-slate-900 flex items-center gap-1 cursor-pointer">
-                    Create Invoice <ChevronDown className="w-5 h-5 text-gray-400" />
-                  </h2>
-                </div>
-                
-                <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden h-10 bg-white">
-                  <input
-                    type="text"
-                    value={form.invoicePrefix}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, invoicePrefix: e.target.value }));
-                      setHasUnsavedChanges(true);
-                    }}
-                    className="w-20 px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 border-r border-gray-300 focus:outline-none focus:bg-white"
-                  />
-                  <input
-                    type="text"
-                    placeholder={nextNumberPreview ? String(nextNumberPreview) : "Auto"}
-                    value={form.invoiceNumber}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, invoiceNumber: e.target.value }));
-                      setHasUnsavedChanges(true);
-                    }}
-                    className="w-24 px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Suffix"
-                    value={form.invoiceSuffix}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, invoiceSuffix: e.target.value }));
-                      setHasUnsavedChanges(true);
-                    }}
-                    title="Invoice number suffix (optional)"
-                    aria-label="Invoice number suffix"
-                    className="w-20 px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 border-l border-gray-300 focus:outline-none focus:bg-white"
-                  />
-                </div>
+                {editingInvoice ? (
+                  <div className="flex flex-col">
+                    <h2 className="text-xl font-bold text-slate-900 flex items-center gap-1 cursor-pointer">
+                      {editingInvoice.invoiceNumber || "Edit Invoice"} <ChevronDown className="w-5 h-5 text-gray-400" />
+                    </h2>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-col">
+                      <h2 className="text-xl font-bold text-slate-900 flex items-center gap-1 cursor-pointer">
+                        Create Invoice <ChevronDown className="w-5 h-5 text-gray-400" />
+                      </h2>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden h-10 bg-white flex-shrink-0">
+                        <div className="relative h-full border-r border-gray-300 bg-gray-50 flex items-center">
+                          <select
+                            value={form.invoicePrefix}
+                            onChange={(e) => {
+                              setForm((prev) => ({ ...prev, invoicePrefix: e.target.value }));
+                              setHasUnsavedChanges(true);
+                            }}
+                            title="Invoice number prefix"
+                            aria-label="Invoice number prefix"
+                            className="h-full pl-3.5 pr-7 text-sm font-semibold text-gray-700 bg-transparent focus:outline-none appearance-none cursor-pointer"
+                          >
+                            {(documentTypeSettings?.invoice?.prefixes || []).length > 0 ? (
+                              documentTypeSettings.invoice.prefixes.map(pfx => (
+                                <option key={pfx} value={pfx}>{pfx}</option>
+                              ))
+                            ) : (
+                              <option value={form.invoicePrefix}>{form.invoicePrefix || "None"}</option>
+                            )}
+                          </select>
+                          <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder={nextNumberPreview ? String(nextNumberPreview) : "Auto"}
+                          value={form.invoiceNumber}
+                          onChange={(e) => {
+                            setForm((prev) => ({ ...prev, invoiceNumber: e.target.value }));
+                            setHasUnsavedChanges(true);
+                          }}
+                          className="w-24 px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none"
+                        />
+                        <div className="relative h-full border-l border-gray-300 bg-gray-50 flex items-center">
+                          <select
+                            value={form.invoiceSuffix}
+                            onChange={(e) => {
+                              setForm((prev) => ({ ...prev, invoiceSuffix: e.target.value }));
+                              setHasUnsavedChanges(true);
+                            }}
+                            title="Invoice number suffix (optional)"
+                            aria-label="Invoice number suffix"
+                            className="h-full pl-2.5 pr-7 text-sm font-semibold text-gray-700 bg-transparent focus:outline-none appearance-none cursor-pointer"
+                          >
+                            <option value="">None</option>
+                            {(documentTypeSettings?.invoice?.suffixes || []).map(sfx => (
+                              <option key={sfx} value={sfx}>{sfx}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
+                        </div>
+                      </div>
+                      <Link
+                        to="/settings/document-settings"
+                        title="Manage Document Numbering"
+                        className="flex items-center justify-center w-8 h-8 rounded-full bg-white border border-[#E1E4EA] hover:bg-gray-50 text-gray-600 transition-colors shrink-0 shadow-sm"
+                      >
+                        <SettingsIcon className="w-4 h-4" />
+                      </Link>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 

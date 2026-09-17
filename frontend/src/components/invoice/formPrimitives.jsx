@@ -3,6 +3,7 @@ import { ChevronDown, MapPin } from "lucide-react";
 import { createPortal } from "react-dom";
 import { getAncestorZoom } from "../../utils/domUtils";
 import { INDIA_STATES, CITIES_BY_STATE, ALL_CITIES } from "../../constants/addressOptions";
+import { canonicalStateName } from "../../utils/gstStateCode";
 import toast from "react-hot-toast";
 
 // Module-level cache — avoids re-fetching a pincode already looked up this session.
@@ -71,8 +72,8 @@ const lookupIndianPincode = async (pincode, signal) => {
     const po = data?.[0]?.Status === "Success" ? data[0].PostOffice?.[0] : null;
     if (!po) return null;
 
-    const matchedState = INDIA_STATES.find((s) => s.toLowerCase() === po.State?.toLowerCase());
-    if (!matchedState) return null;
+    const matchedState = canonicalStateName(po.State, INDIA_STATES);
+    if (!matchedState || !INDIA_STATES.includes(matchedState)) return null;
 
     const cities = CITIES_BY_STATE[matchedState] || [];
     const districtOrTaluk = po.District || po.Block || po.Taluk || "";

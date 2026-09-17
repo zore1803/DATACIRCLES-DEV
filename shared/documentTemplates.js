@@ -257,12 +257,10 @@ export function splitGst(taxableAmount, gstRate, transactionType = "intra") {
 }
 
 export function computeDocument(doc, type = "tax") {
-  // Every document type can carry GST. A Delivery Challan is taxed only when saved with GST on
-  // (isTaxInvoice); challans saved before that flag existed don't have it and stay untaxed.
-  const supportsTax  = true;
-  const taxFlagKey   = type === "quotation" ? "isTaxQuotation" : "isTaxInvoice";
+  // Tax is purely line-item-driven: each item carries its own gstRate, and
+  // splitGst() naturally produces zero tax for a 0% item. There is no more
+  // document-level GST on/off flag.
   const transactionType = doc.transactionType === "inter" ? "inter" : "intra";
-  const isTax        = supportsTax && !!doc[taxFlagKey];
 
   const baseRows = (doc.items || []).map((it) => {
     const rate     = parseFloat(it.rate) || 0;
@@ -302,12 +300,12 @@ export function computeDocument(doc, type = "tax") {
 
   const rows = baseRows.map((r) => {
     const taxable = r.taxable * netFactor;
-    const gst = isTax
-      ? splitGst(taxable, r.gstRate, transactionType)
-      : { cgst: 0, sgst: 0, igst: 0, cgstRate: 0, sgstRate: 0, igstRate: 0 };
+    const gst = splitGst(taxable, r.gstRate, transactionType);
     const tax = gst.cgst + gst.sgst + gst.igst;
     return { ...r, taxable, ...gst, tax, amount: taxable + tax };
   });
+
+  const isTax = rows.some((r) => r.tax > 0);
 
   const hsnMap = {};
   rows.forEach((r) => {
