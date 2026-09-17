@@ -261,13 +261,10 @@ exports.updateProfile = async (req, res) => {
       user.email = email;
       user.isEmailVerified = false;
     }
-    if (phone && phone !== user.phone) {
-      if (!/^\d{10}$/.test(phone)) {
-        return res.status(400).json({ error: "Please enter a valid 10-digit phone number" });
-      }
-      user.phone = phone;
-      user.isPhoneVerified = false;
-    }
+    // Phone changes are intentionally NOT accepted here — a new number must
+    // be verified via sendPhoneChangeOtp/verifyPhoneChangeOtp before it is
+    // ever written to the user record, so an unverified number can't slip
+    // into the database just by hitting "Save and Update".
 
     // If a file was uploaded via multer-s3
     if (req.file && req.fileLocation) {
@@ -923,6 +920,85 @@ exports.verifyProfilePhoneOtp = async (req, res) => {
     res.json({ success: true, message: "Phone number verified successfully", user });
   } catch (error) {
     console.error("Error verifying profile phone OTP:", error);
+    res.status(500).json({ error: "Error verifying OTP. Please try again." });
+  }
+};
+
+// Changing to a NEW phone number from the Profile page: the number is only
+// ever written to the user record once the OTP sent to it is confirmed —
+// sendProfilePhoneOtp/verifyProfilePhoneOtp above verify a number already on
+// file, they don't gate writing a new one.
+exports.sendPhoneChangeOtp = async (req, res) => {
+  try {
+    const user = req.user;
+    const { phone } = req.body;
+    if (!phone || !/^\d{10}$/.test(phone)) {
+      return res.status(400).json({ error: "Please enter a valid 10-digit phone number" });
+    }
+    if (phone === user.phone) {
+      return res.status(400).json({ error: "This is already your current phone number" });
+    }
+    const existing = await User.findOne({ phone, _id: { $ne: user._id } });
+    if (existing) {
+      return res.status(400).json({ error: "This phone number is already in use" });
+    }
+
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    await TempOTP.deleteMany({ phone });
+    await new TempOTP({
+      phone,
+      otp,
+      expires: new Date(Date.now() + 10 * 60 * 1000),
+    }).save();
+
+    const url = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_KEY}&route=dlt&sender_id=DTACRL&message=204838&variables_values=${otp}&flash=0&numbers=${phone}&schedule_time=`;
+
+    try {
+      const response = await axios.get(url);
+      if (response.data?.return) {
+        return res.json({ success: true, message: "OTP sent to your new phone number" });
+      }
+      return res.status(500).json({ error: "Failed to send OTP" });
+    } catch (smsError) {
+      console.error("Error sending phone change OTP:", smsError);
+      return res.status(500).json({ error: "Error sending OTP" });
+    }
+  } catch (error) {
+    console.error("Error sending phone change OTP:", error);
+    res.status(500).json({ error: "Error sending OTP. Please try again." });
+  }
+};
+
+exports.verifyPhoneChangeOtp = async (req, res) => {
+  try {
+    const user = req.user;
+    const { phone, otp } = req.body;
+    if (!phone || !otp) {
+      return res.status(400).json({ error: "Phone number and OTP are required" });
+    }
+
+    const tempOtp = await TempOTP.findOne({
+      phone,
+      otp: otp.toString(),
+      expires: { $gt: new Date() },
+    });
+    if (!tempOtp) {
+      return res.status(400).json({ error: "Invalid or expired OTP. Please request a new one." });
+    }
+    await tempOtp.deleteOne();
+
+    const existing = await User.findOne({ phone, _id: { $ne: user._id } });
+    if (existing) {
+      return res.status(400).json({ error: "This phone number is already in use" });
+    }
+
+    user.phone = phone;
+    user.isPhoneVerified = true;
+    await user.save();
+
+    res.json({ success: true, message: "Phone number updated and verified successfully", user });
+  } catch (error) {
+    console.error("Error verifying phone change OTP:", error);
     res.status(500).json({ error: "Error verifying OTP. Please try again." });
   }
 };

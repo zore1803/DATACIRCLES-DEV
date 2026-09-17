@@ -255,7 +255,8 @@ export default function KanbanSettings() {
           />
           <button
             onClick={handleAdd}
-            className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg w-full sm:w-auto"
+            style={{ backgroundColor: "#0085FF" }}
+            className="flex items-center justify-center gap-2 hover:opacity-90 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg w-full sm:w-auto"
           >
             <PlusIcon className="w-4 h-4" />
             <span className="hidden sm:inline">Add Stage</span>

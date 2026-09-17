@@ -152,6 +152,23 @@ router.post(
   authController.verifyProfilePhoneOtp,
 );
 
+// Changing to a new (not-yet-saved) phone number — verified before it's written
+router.post(
+  "/send-phone-change-otp",
+  requireAuth,
+  globalOtpLimiter,
+  sendOtpLimiter,
+  phoneOtpLimiter,
+  authController.sendPhoneChangeOtp,
+);
+router.post(
+  "/verify-phone-change-otp",
+  requireAuth,
+  globalOtpLimiter,
+  verifyOtpLimiter,
+  authController.verifyPhoneChangeOtp,
+);
+
 // Complete registration
 router.post("/complete-registration", authMiddleware, authController.completeRegistration);
 

@@ -948,7 +948,8 @@ const CompanyFieldSettings = () => {
 
           <button
             onClick={handleAdd}
-            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg"
+            style={{ backgroundColor: "#0085FF" }}
+            className="flex items-center gap-2 hover:opacity-90 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg"
           >
             <PlusIcon className="w-4 h-4" />
             Add Field(s)
@@ -957,15 +958,15 @@ const CompanyFieldSettings = () => {
       </div>
 
       {/* Standalone Category Creator */}
-      <div className="bg-purple-50 rounded-2xl border-2 border-purple-200 shadow-sm p-4 sm:p-6 mb-6">
+      <div className="bg-blue-50 rounded-2xl border-2 border-blue-200 shadow-sm p-4 sm:p-6 mb-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="bg-purple-100 p-2 rounded-lg">
-              <FolderPlus className="w-5 h-5 text-purple-600" />
+            <div className="bg-blue-100 p-2 rounded-lg">
+              <FolderPlus className="w-5 h-5 text-blue-600" />
             </div>
             <div>
-              <h3 className="font-bold text-purple-900">Create Empty Section</h3>
-              <p className="text-xs text-purple-700">Create a new section to organize future fields</p>
+              <h3 className="font-bold text-blue-900">Create Empty Section</h3>
+              <p className="text-xs text-blue-700">Create a new section to organize future fields</p>
             </div>
           </div>
           <div className="flex w-full sm:w-auto gap-2">
@@ -975,11 +976,12 @@ const CompanyFieldSettings = () => {
               value={newStandaloneCategory}
               onChange={(e) => setNewStandaloneCategory(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleCreateStandaloneCategory()}
-              className="flex-1 sm:w-64 px-4 py-2 border-2 border-purple-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+              className="flex-1 sm:w-64 px-4 py-2 border-2 border-blue-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
             <button
               onClick={handleCreateStandaloneCategory}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl font-semibold transition-colors flex items-center gap-2 whitespace-nowrap"
+              style={{ backgroundColor: "#0085FF" }}
+              className="hover:opacity-90 text-white px-4 py-2 rounded-xl font-semibold transition-colors flex items-center gap-2 whitespace-nowrap"
             >
               <PlusIcon className="w-4 h-4" /> Create
             </button>

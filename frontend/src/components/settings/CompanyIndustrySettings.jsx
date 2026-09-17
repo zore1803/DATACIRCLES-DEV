@@ -180,7 +180,8 @@ const CompanyIndustrySettings = () => {
 
           <button
             onClick={handleAdd}
-            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg"
+            style={{ backgroundColor: "#0085FF" }}
+            className="flex items-center gap-2 hover:opacity-90 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg"
           >
             <PlusIcon className="w-4 h-4" />
             Add Industry

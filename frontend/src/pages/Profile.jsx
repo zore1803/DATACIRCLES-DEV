@@ -15,7 +15,6 @@ const Profile = () => {
   const [nameDraft, setNameDraft] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [phoneDraft, setPhoneDraft] = useState("");
-  const [savingPhone, setSavingPhone] = useState(false);
   // Inline OTP verify widgets for the email/phone fields below — "target"
   // holds which one ("email" | "phone" | null) currently has its OTP input
   // open, since only one can be verified at a time.
@@ -23,6 +22,14 @@ const Profile = () => {
   const [verifyOtpValue, setVerifyOtpValue] = useState("");
   const [verifySending, setVerifySending] = useState(false);
   const [verifyChecking, setVerifyChecking] = useState(false);
+  // A phone number the user has typed but not yet saved — it only reaches
+  // the database once the OTP sent to it is confirmed, so it never
+  // overwrites the verified number just because "Save and Update" was
+  // clicked. Non-null while that confirmation is pending.
+  const [pendingPhone, setPendingPhone] = useState(null);
+  const [phoneChangeOtpValue, setPhoneChangeOtpValue] = useState("");
+  const [phoneChangeSending, setPhoneChangeSending] = useState(false);
+  const [phoneChangeChecking, setPhoneChangeChecking] = useState(false);
   const [profileImage, setProfileImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [profileBase64, setProfileBase64] = useState(null);
@@ -151,8 +158,9 @@ const Profile = () => {
     }
   };
 
-  const hasProfileChanges =
-    user && (nameDraft.trim() !== (user.name || "") || phoneDraft.trim() !== (user.phone || ""));
+  const hasNameChange = user && nameDraft.trim() !== (user.name || "");
+  const hasPhoneChange = user && phoneDraft.trim() !== (user.phone || "");
+  const hasProfileChanges = hasNameChange || hasPhoneChange;
 
   const handleSaveProfile = async () => {
     const trimmedName = nameDraft.trim();
@@ -167,23 +175,70 @@ const Profile = () => {
       return;
     }
 
+    // A changed phone number is never written straight to the database —
+    // it's only sent to handleSendPhoneChangeOtp via the "click here to
+    // verify" link below, and only reaches the database once that OTP is
+    // confirmed (see handleConfirmPhoneChangeOtp). This button only ever
+    // saves the name.
+    if (!hasNameChange) return;
+
     setSavingName(true);
-    setSavingPhone(true);
     try {
-      const payload = { name: trimmedName };
-      if (trimmedPhone && trimmedPhone !== user.phone) payload.phone = trimmedPhone;
-      const res = await API.post("/auth/profile", payload);
+      const res = await API.post("/auth/profile", { name: trimmedName });
       setUser(res.data.user);
       setNameDraft(res.data.user.name || "");
-      setPhoneDraft(res.data.user.phone || "");
       toast.success("Profile updated successfully!");
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.error || "Failed to update profile. Please try again.");
     } finally {
       setSavingName(false);
-      setSavingPhone(false);
     }
+  };
+
+  const handleSendPhoneChangeOtp = async (phone) => {
+    setPhoneChangeSending(true);
+    try {
+      await API.post("/auth/send-phone-change-otp", { phone });
+      setPendingPhone(phone);
+      setPhoneChangeOtpValue("");
+      toast.success("OTP sent to your new phone number");
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || "Failed to send OTP. Please try again.");
+    } finally {
+      setPhoneChangeSending(false);
+    }
+  };
+
+  const handleConfirmPhoneChangeOtp = async () => {
+    if (!phoneChangeOtpValue.trim()) {
+      toast.error("Please enter the OTP");
+      return;
+    }
+    setPhoneChangeChecking(true);
+    try {
+      const res = await API.post("/auth/verify-phone-change-otp", {
+        phone: pendingPhone,
+        otp: phoneChangeOtpValue.trim(),
+      });
+      setUser(res.data.user);
+      setPhoneDraft(res.data.user.phone || "");
+      setPendingPhone(null);
+      setPhoneChangeOtpValue("");
+      toast.success("Phone number updated and verified successfully!");
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || "Invalid or expired OTP. Please try again.");
+    } finally {
+      setPhoneChangeChecking(false);
+    }
+  };
+
+  const handleCancelPhoneChange = () => {
+    setPendingPhone(null);
+    setPhoneChangeOtpValue("");
+    setPhoneDraft(user?.phone || "");
   };
 
   const openVerify = (target) => {
@@ -386,13 +441,71 @@ const Profile = () => {
                 type="tel"
                 value={phoneDraft}
                 onChange={(e) => setPhoneDraft(e.target.value)}
-                disabled={savingPhone}
+                disabled={!!pendingPhone}
                 placeholder="Add a phone number"
                 className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-full text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
+
+              {/* A new, not-yet-saved phone number must be confirmed with an
+                  OTP before it's written to the database — this box appears
+                  as soon as that OTP has been sent, ahead of "Save and
+                  Update", so the number can never be changed without it. */}
+              {hasPhoneChange && !pendingPhone && (
+                <button
+                  onClick={() => {
+                    if (!/^\d{10}$/.test(phoneDraft.trim())) {
+                      toast.error("Please enter a valid 10-digit phone number");
+                      return;
+                    }
+                    handleSendPhoneChangeOtp(phoneDraft.trim());
+                  }}
+                  disabled={phoneChangeSending}
+                  className="mt-2 text-xs text-[#0085FF] hover:underline disabled:opacity-40"
+                >
+                  {phoneChangeSending ? "Sending OTP..." : "Click here to verify your new phone number"}
+                </button>
+              )}
+
+              {pendingPhone && (
+                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                  <p className="text-xs text-gray-700 mb-2">
+                    Enter the OTP sent to <span className="font-semibold">{pendingPhone}</span> to confirm this number. It won't be saved until verified.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={phoneChangeOtpValue}
+                      onChange={(e) => setPhoneChangeOtpValue(e.target.value)}
+                      placeholder="Enter OTP"
+                      className="w-32 px-3 py-1.5 bg-white border border-gray-200 rounded-full text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={handleConfirmPhoneChangeOtp}
+                      disabled={phoneChangeChecking}
+                      className="text-xs font-semibold text-[#0085FF] hover:underline disabled:opacity-40"
+                    >
+                      {phoneChangeChecking ? "Verifying..." : "Verify & Save"}
+                    </button>
+                    <button
+                      onClick={() => handleSendPhoneChangeOtp(pendingPhone)}
+                      disabled={phoneChangeSending}
+                      className="text-xs text-gray-500 hover:underline disabled:opacity-40"
+                    >
+                      Resend
+                    </button>
+                    <button
+                      onClick={handleCancelPhoneChange}
+                      className="text-xs text-gray-500 hover:underline"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {[
                 (user.email || user.profileEmail) && !user.isEmailVerified && "email",
-                user.phone && !hasProfileChanges && !user.isPhoneVerified && "phone",
+                user.phone && !pendingPhone && !hasProfileChanges && !user.isPhoneVerified && "phone",
               ]
                 .filter(Boolean)
                 .map((target) => (
@@ -440,10 +553,10 @@ const Profile = () => {
           <div className="flex justify-start mb-6">
             <button
               onClick={handleSaveProfile}
-              disabled={!hasProfileChanges || savingName || savingPhone}
+              disabled={!hasNameChange || savingName}
               className="px-5 h-[38px] rounded-full bg-[#0085FF] text-white text-[13px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {savingName || savingPhone ? "Saving..." : "Save and Update"}
+              {savingName ? "Saving..." : "Save and Update"}
             </button>
           </div>
 
