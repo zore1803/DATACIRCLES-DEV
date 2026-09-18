@@ -1,7 +1,11 @@
 import Checkbox from "../common/Checkbox";
 import React, { useEffect, useState, useRef } from "react";
 import { COUNTRY_DIAL_CODES, DEFAULT_DIAL_CODE } from "../../utils/countryDialCodes";
-import { X, Paperclip, Twitter, Linkedin, Instagram, Facebook } from "lucide-react";
+import { X, Paperclip } from "lucide-react";
+import instagramLogo from "../../assets/insta-logo.png";
+import twitterLogo from "../../assets/twitter-logo.png";
+import linkedinLogo from "../../assets/linkedin-logo.png";
+import facebookLogo from "../../assets/facebook-logo.png";
 import { FaWhatsapp } from "react-icons/fa";
 import API from "../../services/api";
 import CustomDropdown from "../common/CustomDropdown";
@@ -1127,8 +1131,13 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
               <div className="space-y-3">
                 <div>
                   <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center">
-                      <Twitter className="w-[18px] h-[18px]" strokeWidth={2} />
+                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
+                      <img
+                        src={twitterLogo}
+                        alt=""
+                        className="w-[18px] h-[18px] object-contain"
+                        style={{ transform: "scale(1.56)" }}
+                      />
                     </span>
                     X (Twitter)
                   </label>
@@ -1142,8 +1151,13 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                 </div>
                 <div>
                   <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center">
-                      <Linkedin className="w-[18px] h-[18px]" strokeWidth={2} />
+                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
+                      <img
+                        src={linkedinLogo}
+                        alt=""
+                        className="w-[18px] h-[18px] object-contain"
+                        style={{ transform: "scale(1.5)" }}
+                      />
                     </span>
                     LinkedIn
                   </label>
@@ -1157,8 +1171,13 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                 </div>
                 <div>
                   <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center">
-                      <Instagram className="w-[18px] h-[18px]" strokeWidth={2} />
+                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
+                      <img
+                        src={instagramLogo}
+                        alt=""
+                        className="w-[18px] h-[18px] object-contain"
+                        style={{ transform: "scale(1.4)" }}
+                      />
                     </span>
                     Instagram
                   </label>
@@ -1172,8 +1191,13 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                 </div>
                 <div>
                   <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center">
-                      <Facebook className="w-[18px] h-[18px]" strokeWidth={2} />
+                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
+                      <img
+                        src={facebookLogo}
+                        alt=""
+                        className="w-[18px] h-[18px] object-contain"
+                        style={{ transform: "scale(1.21)" }}
+                      />
                     </span>
                     Facebook
                   </label>

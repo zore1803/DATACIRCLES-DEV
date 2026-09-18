@@ -11,7 +11,14 @@ const DEFAULT_TASK_STATUSES = ["Pending", "In Progress", "Completed"];
 const DEFAULT_NOTE_TYPES = ["General Note", "Meeting Note", "Call Note", "Follow-up Note"];
 const DEFAULT_MEETING_TYPES = ["General Meeting", "Client Call", "Demo", "Follow-up"];
 
+const TABS = [
+  { id: "task", label: "Task" },
+  { id: "note", label: "Note" },
+  { id: "meeting", label: "Meeting" },
+];
+
 function SystemDefaultsSettings() {
+  const [activeTab, setActiveTab] = useState("task");
   const [taskStatuses, setTaskStatuses] = useState([]);
   const [noteTypes, setNoteTypes] = useState([]);
   const [meetingTypes, setMeetingTypes] = useState([]);
@@ -199,334 +206,359 @@ function SystemDefaultsSettings() {
   }
 
   return (
-    <div className="space-y-6">
-      
-      {/* Header Card */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-        <div className="mb-8 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          <div className="bg-blue-100 p-2 rounded-lg">
-            <Settings2 className="w-5 h-5 text-blue-600" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-xl font-bold text-gray-900">System Defaults</h3>
-            <p className="text-sm text-gray-500 mt-1">Customize the dropdown options available when creating Tasks, Notes, and Meetings.</p>
-          </div>
+    <div className="space-y-6 -mt-8">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        <div className="relative inline-flex items-center bg-gray-100 rounded-full p-1 mb-5">
+          <span
+            className="absolute top-1 bottom-1 w-24 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
+            style={{ left: 4 + TABS.findIndex((t) => t.id === activeTab) * 96 }}
+          />
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`relative z-10 w-24 py-2 text-sm font-semibold rounded-full transition-colors ${
+                activeTab === tab.id ? "text-[#0085FF]" : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        
         {/* Task Statuses Card */}
-        <div className="bg-white rounded-2xl border-2 border-gray-200 shadow-lg p-4 sm:p-6 h-fit">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
-            <div className="bg-indigo-100 p-2 rounded-lg">
-              <Timer className="w-5 h-5 text-indigo-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-xl font-bold text-gray-900">Task Statuses</h3>
-            </div>
-            <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-2.5 py-0.5 rounded-full border border-indigo-200">
-              {taskStatuses.length} Total
-            </span>
-          </div>
-
-          <form onSubmit={handleAddTaskStatus} className="flex gap-2 mb-6">
+        {activeTab === "task" && (
+        <div>
+          <form onSubmit={handleAddTaskStatus} className="flex gap-2 mb-5">
             <input
               type="text"
               value={newTaskStatus}
               onChange={(e) => setNewTaskStatus(e.target.value)}
               placeholder="Add custom status (e.g. Under Review)"
-              className="flex-1 px-4 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="flex-1 min-w-0 px-4 py-2 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
               disabled={isSaving}
             />
             <button
               type="submit"
               disabled={isSaving || !newTaskStatus.trim()}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-colors flex items-center gap-2"
+              className="flex-shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-full disabled:opacity-50 transition-colors flex items-center gap-1.5"
             >
               <PlusIcon className="w-4 h-4" /> Add
             </button>
           </form>
 
-          <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-            {taskStatuses.map((status, index) => {
-              const isDefault = DEFAULT_TASK_STATUSES.includes(status);
-              const isEditing = editingTaskIndex === index;
-              return (
-                <div key={index} className="border-2 border-gray-200 rounded-xl p-4 bg-gray-50 hover:border-indigo-300 transition-all">
-                  {isEditing ? (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={editTaskValue}
-                        onChange={(e) => setEditTaskValue(e.target.value)}
-                        className="flex-1 px-3 py-1.5 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => handleEditTaskSave(index)}
-                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1"
-                      >
-                        <Check className="w-3 h-3" /> Save
-                      </button>
-                      <button
-                        onClick={() => setEditingTaskIndex(null)}
-                        className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1"
-                      >
-                        <X className="w-3 h-3" /> Cancel
-                      </button>
-                    </div>
-                  ) : (
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                        <span className="font-bold text-gray-900">{status}</span>
+          <div className="overflow-x-auto rounded-xl border border-[#E1E4EA]">
+            <table className="min-w-full border-collapse text-sm text-left">
+              <thead className="bg-[#F5F7FA] border-b border-[#E1E4EA]">
+                <tr>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Status</th>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Type</th>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866] text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white">
+                {taskStatuses.map((status, index) => {
+                  const isDefault = DEFAULT_TASK_STATUSES.includes(status);
+                  const isEditing = editingTaskIndex === index;
+                  return (
+                    <tr key={index} className="group hover:bg-[#F5F7FA] transition-colors border-b border-[#E1E4EA] last:border-b-0">
+                      <td className="px-4 py-3">
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editTaskValue}
+                            onChange={(e) => setEditTaskValue(e.target.value)}
+                            className="w-full max-w-xs px-3 py-1.5 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+                            autoFocus
+                          />
+                        ) : (
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDefault ? "bg-gray-300" : "bg-indigo-500"}`} />
+                            <span className="text-sm font-semibold text-gray-900">{status}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
                         {isDefault ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-gray-200 text-gray-700 text-xs font-semibold rounded-full border border-gray-300">
-                            <Lock className="w-3 h-3" /> System Default
+                          <span className="inline-flex items-center gap-1 text-xs text-gray-900">
+                            <Lock className="w-3 h-3" /> System default
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full border border-indigo-200">
-                            Custom Status
-                          </span>
+                          <span className="text-xs text-indigo-500">Custom</span>
                         )}
-                      </div>
-                    </div>
-                    {!isDefault && (
-                      <div className="flex flex-wrap gap-2 mt-2 sm:mt-0">
-                        <button
-                          type="button"
-                          onClick={() => { setEditingTaskIndex(index); setEditTaskValue(status); }}
-                          disabled={isSaving}
-                          className="flex items-center gap-1 px-3 py-1.5 text-blue-600 hover:bg-blue-50 rounded-lg font-semibold text-xs border border-blue-200 transition-colors disabled:opacity-50"
-                        >
-                          <EditIcon className="w-3 h-3" /> Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTaskStatus(status)}
-                          disabled={isSaving}
-                          className="flex items-center gap-1 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg font-semibold text-xs border border-red-200 transition-colors disabled:opacity-50"
-                        >
-                          <DeleteIcon className="w-4 h-4" /> Delete
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  )}
-                </div>
-              );
-            })}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {isEditing ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleEditTaskSave(index)}
+                              className="flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+                              title="Save"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setEditingTaskIndex(null)}
+                              className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 transition-colors"
+                              title="Cancel"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : !isDefault ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => { setEditingTaskIndex(index); setEditTaskValue(status); }}
+                              disabled={isSaving}
+                              className="flex items-center justify-center w-7 h-7 rounded-full text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                              title="Edit"
+                            >
+                              <EditIcon className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTaskStatus(status)}
+                              disabled={isSaving}
+                              className="flex items-center justify-center w-7 h-7 rounded-full text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                              title="Delete"
+                            >
+                              <DeleteIcon className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
+        )}
 
         {/* Note Types Card */}
-        <div className="bg-white rounded-2xl border-2 border-gray-200 shadow-lg p-4 sm:p-6 h-fit">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
-            <div className="bg-purple-100 p-2 rounded-lg">
-              <PdfIcon className="w-4 h-4 text-purple-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-xl font-bold text-gray-900">Note Types</h3>
-            </div>
-            <span className="bg-purple-100 text-purple-700 text-xs font-semibold px-2.5 py-0.5 rounded-full border border-purple-200">
-              {noteTypes.length} Total
-            </span>
-          </div>
-
-          <form onSubmit={handleAddNoteType} className="flex gap-2 mb-6">
+        {activeTab === "note" && (
+        <div>
+          <form onSubmit={handleAddNoteType} className="flex gap-2 mb-5">
             <input
               type="text"
               value={newNoteType}
               onChange={(e) => setNewNoteType(e.target.value)}
               placeholder="Add custom note type (e.g. Customer Feedback)"
-              className="flex-1 px-4 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              className="flex-1 min-w-0 px-4 py-2 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-400"
               disabled={isSaving}
             />
             <button
               type="submit"
               disabled={isSaving || !newNoteType.trim()}
-              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-colors flex items-center gap-2"
+              className="flex-shrink-0 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-full disabled:opacity-50 transition-colors flex items-center gap-1.5"
             >
               <PlusIcon className="w-4 h-4" /> Add
             </button>
           </form>
 
-          <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-            {noteTypes.map((type, index) => {
-              const isDefault = DEFAULT_NOTE_TYPES.includes(type);
-              const isEditing = editingNoteIndex === index;
-              return (
-                <div key={index} className="border-2 border-gray-200 rounded-xl p-4 bg-gray-50 hover:border-purple-300 transition-all">
-                  {isEditing ? (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={editNoteValue}
-                        onChange={(e) => setEditNoteValue(e.target.value)}
-                        className="flex-1 px-3 py-1.5 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => handleEditNoteSave(index)}
-                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1"
-                      >
-                        <Check className="w-3 h-3" /> Save
-                      </button>
-                      <button
-                        onClick={() => setEditingNoteIndex(null)}
-                        className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1"
-                      >
-                        <X className="w-3 h-3" /> Cancel
-                      </button>
-                    </div>
-                  ) : (
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                        <span className="font-bold text-gray-900">{type}</span>
+          <div className="overflow-x-auto rounded-xl border border-[#E1E4EA]">
+            <table className="min-w-full border-collapse text-sm text-left">
+              <thead className="bg-[#F5F7FA] border-b border-[#E1E4EA]">
+                <tr>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Note Type</th>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Type</th>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866] text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white">
+                {noteTypes.map((type, index) => {
+                  const isDefault = DEFAULT_NOTE_TYPES.includes(type);
+                  const isEditing = editingNoteIndex === index;
+                  return (
+                    <tr key={index} className="group hover:bg-[#F5F7FA] transition-colors border-b border-[#E1E4EA] last:border-b-0">
+                      <td className="px-4 py-3">
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editNoteValue}
+                            onChange={(e) => setEditNoteValue(e.target.value)}
+                            className="w-full max-w-xs px-3 py-1.5 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-400"
+                            autoFocus
+                          />
+                        ) : (
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDefault ? "bg-gray-300" : "bg-purple-500"}`} />
+                            <span className="text-sm font-semibold text-gray-900">{type}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
                         {isDefault ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-gray-200 text-gray-700 text-xs font-semibold rounded-full border border-gray-300">
-                            <Lock className="w-3 h-3" /> System Default
+                          <span className="inline-flex items-center gap-1 text-xs text-gray-900">
+                            <Lock className="w-3 h-3" /> System default
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full border border-purple-200">
-                            Custom Type
-                          </span>
+                          <span className="text-xs text-purple-500">Custom</span>
                         )}
-                      </div>
-                    </div>
-                    {!isDefault && (
-                      <div className="flex flex-wrap gap-2 mt-2 sm:mt-0">
-                        <button
-                          type="button"
-                          onClick={() => { setEditingNoteIndex(index); setEditNoteValue(type); }}
-                          disabled={isSaving}
-                          className="flex items-center gap-1 px-3 py-1.5 text-blue-600 hover:bg-blue-50 rounded-lg font-semibold text-xs border border-blue-200 transition-colors disabled:opacity-50"
-                        >
-                          <EditIcon className="w-3 h-3" /> Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveNoteType(type)}
-                          disabled={isSaving}
-                          className="flex items-center gap-1 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg font-semibold text-xs border border-red-200 transition-colors disabled:opacity-50"
-                        >
-                          <DeleteIcon className="w-4 h-4" /> Delete
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  )}
-                </div>
-              );
-            })}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {isEditing ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleEditNoteSave(index)}
+                              className="flex items-center justify-center w-7 h-7 rounded-full bg-purple-600 hover:bg-purple-700 text-white transition-colors"
+                              title="Save"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setEditingNoteIndex(null)}
+                              className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 transition-colors"
+                              title="Cancel"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : !isDefault ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => { setEditingNoteIndex(index); setEditNoteValue(type); }}
+                              disabled={isSaving}
+                              className="flex items-center justify-center w-7 h-7 rounded-full text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                              title="Edit"
+                            >
+                              <EditIcon className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveNoteType(type)}
+                              disabled={isSaving}
+                              className="flex items-center justify-center w-7 h-7 rounded-full text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                              title="Delete"
+                            >
+                              <DeleteIcon className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
+        )}
 
         {/* Meeting Types Card */}
-        <div className="bg-white rounded-2xl border-2 border-gray-200 shadow-lg p-4 sm:p-6 h-fit">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
-            <div className="bg-emerald-100 p-2 rounded-lg">
-              <CalendarDays className="w-5 h-5 text-emerald-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-xl font-bold text-gray-900">Meeting Types</h3>
-            </div>
-            <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold px-2.5 py-0.5 rounded-full border border-emerald-200">
-              {meetingTypes.length} Total
-            </span>
-          </div>
-
-          <form onSubmit={handleAddMeetingType} className="flex gap-2 mb-6">
+        {activeTab === "meeting" && (
+        <div>
+          <form onSubmit={handleAddMeetingType} className="flex gap-2 mb-5">
             <input
               type="text"
               value={newMeetingType}
               onChange={(e) => setNewMeetingType(e.target.value)}
               placeholder="Add custom meeting type (e.g. Board Review)"
-              className="flex-1 px-4 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              className="flex-1 min-w-0 px-4 py-2 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
               disabled={isSaving}
             />
             <button
               type="submit"
               disabled={isSaving || !newMeetingType.trim()}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-colors flex items-center gap-2"
+              className="flex-shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-full disabled:opacity-50 transition-colors flex items-center gap-1.5"
             >
               <PlusIcon className="w-4 h-4" /> Add
             </button>
           </form>
 
-          <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-            {meetingTypes.map((type, index) => {
-              const isDefault = DEFAULT_MEETING_TYPES.includes(type);
-              const isEditing = editingMeetingIndex === index;
-              return (
-                <div key={index} className="border-2 border-gray-200 rounded-xl p-4 bg-gray-50 hover:border-emerald-300 transition-all">
-                  {isEditing ? (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={editMeetingValue}
-                        onChange={(e) => setEditMeetingValue(e.target.value)}
-                        className="flex-1 px-3 py-1.5 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => handleEditMeetingSave(index)}
-                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1"
-                      >
-                        <Check className="w-3 h-3" /> Save
-                      </button>
-                      <button
-                        onClick={() => setEditingMeetingIndex(null)}
-                        className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1"
-                      >
-                        <X className="w-3 h-3" /> Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                      <div className="flex-1">
-                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                          <span className="font-bold text-gray-900">{type}</span>
-                          {isDefault ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-gray-200 text-gray-700 text-xs font-semibold rounded-full border border-gray-300">
-                              <Lock className="w-3 h-3" /> System Default
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full border border-emerald-200">
-                              Custom Type
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {!isDefault && (
-                        <div className="flex flex-wrap gap-2 mt-2 sm:mt-0">
-                          <button
-                            type="button"
-                            onClick={() => { setEditingMeetingIndex(index); setEditMeetingValue(type); }}
-                            disabled={isSaving}
-                            className="flex items-center gap-1 px-3 py-1.5 text-blue-600 hover:bg-blue-50 rounded-lg font-semibold text-xs border border-blue-200 transition-colors disabled:opacity-50"
-                          >
-                            <EditIcon className="w-3 h-3" /> Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveMeetingType(type)}
-                            disabled={isSaving}
-                            className="flex items-center gap-1 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg font-semibold text-xs border border-red-200 transition-colors disabled:opacity-50"
-                          >
-                            <DeleteIcon className="w-4 h-4" /> Delete
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div className="overflow-x-auto rounded-xl border border-[#E1E4EA]">
+            <table className="min-w-full border-collapse text-sm text-left">
+              <thead className="bg-[#F5F7FA] border-b border-[#E1E4EA]">
+                <tr>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Meeting Type</th>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Type</th>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866] text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white">
+                {meetingTypes.map((type, index) => {
+                  const isDefault = DEFAULT_MEETING_TYPES.includes(type);
+                  const isEditing = editingMeetingIndex === index;
+                  return (
+                    <tr key={index} className="group hover:bg-[#F5F7FA] transition-colors border-b border-[#E1E4EA] last:border-b-0">
+                      <td className="px-4 py-3">
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editMeetingValue}
+                            onChange={(e) => setEditMeetingValue(e.target.value)}
+                            className="w-full max-w-xs px-3 py-1.5 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
+                            autoFocus
+                          />
+                        ) : (
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDefault ? "bg-gray-300" : "bg-emerald-500"}`} />
+                            <span className="text-sm font-semibold text-gray-900">{type}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {isDefault ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-gray-900">
+                            <Lock className="w-3 h-3" /> System default
+                          </span>
+                        ) : (
+                          <span className="text-xs text-emerald-500">Custom</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {isEditing ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleEditMeetingSave(index)}
+                              className="flex items-center justify-center w-7 h-7 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                              title="Save"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setEditingMeetingIndex(null)}
+                              className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 transition-colors"
+                              title="Cancel"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : !isDefault ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => { setEditingMeetingIndex(index); setEditMeetingValue(type); }}
+                              disabled={isSaving}
+                              className="flex items-center justify-center w-7 h-7 rounded-full text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                              title="Edit"
+                            >
+                              <EditIcon className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMeetingType(type)}
+                              disabled={isSaving}
+                              className="flex items-center justify-center w-7 h-7 rounded-full text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                              title="Delete"
+                            >
+                              <DeleteIcon className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
+        )}
 
       </div>
     </div>

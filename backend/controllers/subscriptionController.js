@@ -6121,7 +6121,26 @@ exports.sendReferralEmail = async (req, res) => {
     const html = generateReferralEmailHTML(referralLink, org?.name || '', senderName, message?.trim() || '');
     await sendGridMail({ to: email.trim(), subject: `${senderName} thinks DataCircles could help your team`, html });
 
-    res.json({ success: true });
+    // Logged only AFTER the mail actually went out, so the list never
+    // claims an invite SendGrid rejected. Still not a Referral — see
+    // models/ReferralInvite.js.
+    const ReferralInvite = require('../models/ReferralInvite');
+    const invite = await ReferralInvite.findOneAndUpdate(
+      { organization: req.user.organization, email: email.trim().toLowerCase() },
+      {
+        $set: {
+          invitedBy: req.user._id || req.user.id,
+          invitedByName: senderName,
+          referralCode: referralCode._id,
+          lastSentAt: new Date(),
+        },
+        $inc: { sendCount: 1 },
+        $setOnInsert: { organization: req.user.organization, email: email.trim().toLowerCase() },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: false }
+    );
+
+    res.json({ success: true, invite: { _id: invite._id, email: invite.email, lastSentAt: invite.lastSentAt, sendCount: invite.sendCount } });
   } catch (error) {
     console.error('sendReferralEmail error:', error);
     res.status(500).json({ error: error.message });

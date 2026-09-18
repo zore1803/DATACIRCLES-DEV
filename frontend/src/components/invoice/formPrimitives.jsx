@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { ChevronDown, MapPin } from "lucide-react";
 import { createPortal } from "react-dom";
 import { getAncestorZoom } from "../../utils/domUtils";
-import { INDIA_STATES, CITIES_BY_STATE, ALL_CITIES } from "../../constants/addressOptions";
+import { INDIA_STATES, CITIES_BY_STATE, ALL_CITIES, COUNTRIES } from "../../constants/addressOptions";
 
 /*
  * Small building blocks shared by Accounting.jsx's CreateInvoicePanel (the
@@ -97,6 +97,7 @@ export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, r
   // Match the height/radius/pill shape of the company form's inputs beside them.
   const pickerTriggerCls = "h-[38px] rounded-full text-[13px]";
 
+  const countryOptions = COUNTRIES.map((n) => ({ value: n, label: n }));
   const stateOptions = INDIA_STATES.map((n) => ({ value: n, label: n }));
   // Scoped to the selected state; before one is picked, offer every city we
   // know so the field is still usable rather than an empty dropdown.
@@ -148,10 +149,18 @@ export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, r
             className={inputCls}
           />
         </div>
-        {/* State comes before City: the city list is scoped to the chosen
-            state, so asking for the state first is what makes the city
-            dropdown short enough to be useful. */}
-        <div className="grid grid-cols-2 @md:grid-cols-3 gap-3">
+        {/* Country/State first row, City/Pincode second — state and city
+            stay adjacent since the city list is scoped to the chosen state. */}
+        <div className="grid grid-cols-2 gap-3">
+          <PickerSelect
+            value={safeValue.country || ""}
+            options={countryOptions}
+            placeholder="Country"
+            disabled={disabled}
+            allowCustom
+            triggerClassName={pickerTriggerCls}
+            onSelect={(o) => onChange({ ...safeValue, country: o.value })}
+          />
           <PickerSelect
             value={safeValue.state || ""}
             options={stateOptions}
@@ -196,16 +205,6 @@ export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, r
               }
             }}
             placeholder="Pincode"
-            className={`${inputCls} @md:col-span-1 col-span-2`}
-          />
-        </div>
-        <div className="relative">
-          <input
-            type="text"
-            value={safeValue.country || ""}
-            disabled={disabled}
-            onChange={(e) => onChange({ ...safeValue, country: e.target.value })}
-            placeholder="Country"
             className={inputCls}
           />
         </div>
@@ -271,7 +270,9 @@ export const PickerSelect = ({
         position: "fixed",
         left: `${left_}px`,
         width: `${width}px`,
-        zIndex: 99999, // Ensure it floats above dialogs
+        // Above every known panel/drawer z-index (the Saved Addresses drawer
+        // alone uses z-[100004]) so the dropdown never renders behind them.
+        zIndex: 100050,
       };
 
       if (spaceBelow < 256 && spaceAbove > spaceBelow) {

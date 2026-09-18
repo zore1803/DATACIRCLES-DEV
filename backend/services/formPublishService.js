@@ -160,4 +160,22 @@ async function archiveForm(formDefinitionId, organizationId) {
   return form;
 }
 
-module.exports = { saveDraft, publishForm, pauseForm, resumeForm, archiveForm };
+/**
+ * Purpose: Take a form back out of "archived". Archiving is the only way to retire a form short of
+ * deleting it, so without this a mis-archived form could only be republished straight back to live
+ * — there was no way to get it back as an editable, offline form.
+ * Returns it to "draft" rather than to whatever it was before: unarchiving must never silently put
+ * a public form back online. Publishing it again is a separate, deliberate action, and the form
+ * keeps its publishState (slug, last active version), so republishing reuses the same public URL.
+ * Errors thrown: throws unless the form is currently "archived".
+ */
+async function unarchiveForm(formDefinitionId, organizationId) {
+  const form = await FormDefinition.findOne({ _id: formDefinitionId, organization: organizationId });
+  if (!form) throw new Error("FormDefinition not found");
+  if (form.status !== "archived") throw new Error(`Cannot unarchive a form with status "${form.status}"`);
+  form.status = "draft";
+  await form.save();
+  return form;
+}
+
+module.exports = { saveDraft, publishForm, pauseForm, resumeForm, archiveForm, unarchiveForm };

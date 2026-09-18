@@ -212,7 +212,7 @@ const Settings = () => {
       borderColor: "border-purple-200",
       hoverBg: "hover:bg-purple-50",
       component: <Referrals />,
-      category: "Billing",
+      category: "Other",
     },
     {
       id: "profile",
@@ -433,14 +433,14 @@ const Settings = () => {
     {
       id: "help-center",
       icon: <HelpCircle className="w-5 h-5" />,
-      label: "Help Center",
+      label: "Support",
       description: "Browse help articles and FAQs",
       color: "text-cyan-600",
       bgColor: "bg-cyan-50",
       borderColor: "border-cyan-200",
       hoverBg: "hover:bg-cyan-50",
       component: <HelpCenter />,
-      category: "General",
+      category: "Other",
     },
   ];
 
@@ -482,6 +482,7 @@ const Settings = () => {
     "Customization",
     "Automation",
     "Support",
+    "Other",
   ];
 
   const categoryIcons = {

@@ -660,7 +660,7 @@ const mergeContacts = async (req, res) => {
     });
 
     // 2. Merge Social Media Fields
-    const socialPlatforms = ["twitter", "linkedin", "facebook", "whatsapp"];
+    const socialPlatforms = ["twitter", "linkedin", "instagram", "facebook", "whatsapp"];
     socialPlatforms.forEach((platform) => {
       if (
         (!primary.socialMedia[platform] ||

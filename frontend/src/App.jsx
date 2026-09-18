@@ -14,6 +14,7 @@ import {
 import { Auth0Provider, useAuth0 } from "@auth0/auth0-react";
 import API, { configureAxios } from "./services/api";
 import Intercom from "./components/common/Intercom";
+import AppToaster from "./components/AppToaster";
 import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
 import Contacts from "./pages/Contacts";
@@ -375,6 +376,16 @@ function App() {
     <Router>
       <TopLoadingBarProvider>
       <div className="min-h-screen bg-white relative">
+        {/* Single global toaster. Many page/tab components also mount their
+            own <AppToaster/> (pre-existing duplication) — each mounted
+            Toaster renders its own copy of every toast stacked in the same
+            position, so the dismiss (X) button only removed the front-most
+            copy while identical ones sat underneath, looking broken. This
+            root instance guarantees at least one Toaster is always mounted so
+            toasts fire and dismiss immediately no matter what page/tab is
+            active; the duplicate per-component mounts still need cleaning up
+            separately to fully stop the stacking. */}
+        <AppToaster />
         <OfflineBanner />
         {userIsAuthenticated && adminNotice && !shouldHideNavigation && (
           <div className="bg-indigo-600 text-white px-4 py-3 flex items-center justify-between gap-3 relative z-[100010]">

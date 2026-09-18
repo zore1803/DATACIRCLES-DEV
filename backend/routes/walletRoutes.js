@@ -11,5 +11,6 @@ router.get('/', requireAuth, walletController.getWallet);
 router.get('/transactions', requireAuth, walletController.getTransactions);
 router.post('/order', requireAuth, walletController.createOrder);
 router.post('/verify', requireAuth, walletController.verifyPayment);
+router.post('/reminder', requireAuth, walletController.setReminder);
 
 module.exports = router;

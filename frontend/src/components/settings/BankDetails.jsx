@@ -17,7 +17,8 @@ import {
   CheckCircle,
   ArrowRight,
   Landmark,
-  ArrowLeftRight,
+  Info,
+  AlertTriangle,
 } from "lucide-react";
 import { MdAccountBalance } from "react-icons/md";
 import React from "react";
@@ -152,10 +153,6 @@ const BankDetails = () => {
     setDeleteBankId(null);
   };
 
-  const handleTransferFunds = () => {
-    toast("Transfer Funds is coming soon", { icon: "🏦" });
-  };
-
   if (loading) {
     return (
       <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
@@ -179,14 +176,6 @@ const BankDetails = () => {
       {document.getElementById('settings-header-actions') &&
         createPortal(
           <>
-            <button
-              type="button"
-              onClick={handleTransferFunds}
-              className="inline-flex items-center gap-2 h-[38px] rounded-full border border-[#1F2937]/10 bg-white px-4 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 whitespace-nowrap"
-            >
-              <ArrowLeftRight className="h-4 w-4" />
-              Transfer Funds
-            </button>
             <button
               type="button"
               onClick={handleOpenAdd}
@@ -297,7 +286,7 @@ const BankDetails = () => {
                   <button
                     type="button"
                     onClick={() => handleSetDefault(bank._id)}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-purple-600 hover:underline"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#0085FF] hover:underline"
                   >
                     <StarIcon className="h-3.5 w-3.5 align-middle" />
                     Make Default
@@ -310,7 +299,7 @@ const BankDetails = () => {
                   <button
                     type="button"
                     onClick={() => handleOpenEdit(bank)}
-                    className="rounded-lg p-1.5 text-gray-400 transition hover:bg-sky-50 hover:text-sky-600"
+                    className="rounded-lg p-1.5 text-[#0085FF] transition hover:bg-blue-50 hover:opacity-90"
                     title="Edit bank"
                   >
                     <EditIcon className="h-4 w-4" />
@@ -318,7 +307,7 @@ const BankDetails = () => {
                   <button
                     type="button"
                     onClick={() => handleDelete(bank._id)}
-                    className="rounded-lg p-1.5 text-gray-400 transition hover:bg-rose-50 hover:text-rose-600"
+                    className="rounded-lg p-1.5 text-rose-600 transition hover:bg-rose-50 hover:text-rose-700"
                     title="Delete bank"
                   >
                     <DeleteIcon className="w-4 h-4" />
@@ -329,6 +318,45 @@ const BankDetails = () => {
           ))}
         </div>
       )}
+
+      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
+        <p className="text-sm font-bold text-gray-900">Please Note</p>
+        <ul className="mt-3 space-y-2.5">
+          <li className="flex items-start gap-2 text-xs font-semibold text-rose-600">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-rose-500" />
+            <span>
+              <span className="font-semibold text-rose-600">Account No, IFSC and UPI ID are visible to customers</span>{" "}
+              <span className="font-normal text-gray-600">
+                on every invoice sent from the account marked Default — only add details you're okay sharing outside your organization.
+              </span>
+            </span>
+          </li>
+          <li className="flex items-start gap-2 text-xs font-semibold text-rose-600">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-rose-500" />
+            <span>
+              <span className="font-semibold text-rose-600">Deleting a bank account from here</span>{" "}
+              <span className="font-normal text-gray-600">
+                will remove its details from all existing invoices, and it cannot be undone.
+              </span>
+            </span>
+          </li>
+          <li className="flex items-start gap-2 text-xs text-gray-600">
+            <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+            <span>
+              Marking an account <span className="font-semibold text-gray-800">Default</span>{" "}
+              immediately replaces the previous default — new invoices and payments will start
+              using this account right away.
+            </span>
+          </li>
+          <li className="flex items-start gap-2 text-xs text-gray-600">
+            <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+            <span>
+              The account number here is only masked on screen for display — it is still sent to
+              customers in full on invoices, so treat it like any other confidential detail.
+            </span>
+          </li>
+        </ul>
+      </div>
 
       {deleteBankId && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/30 backdrop-blur-sm">

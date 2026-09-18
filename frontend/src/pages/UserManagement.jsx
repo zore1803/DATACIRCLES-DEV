@@ -1,5 +1,6 @@
 import DeleteIcon from "../components/common/DeleteIcon";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import API, { configureAxios } from "../services/api";
 import { useNavigate } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
@@ -823,42 +824,40 @@ function UserManagement() {
       </div>
 
       {/* Invite User Modal */}
-      {formVisible && (
-        <div
-          className="fixed inset-0 bg-neutral-900/60 backdrop-blur-sm flex justify-center items-center z-[100009] p-4"
-          onClick={() => !paymentProcessing && setFormVisible(false)}
-        >
+      {formVisible && createPortal(
+        <>
           <div
-            className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl border-2 border-neutral-200 max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="sticky top-0 bg-white border-b-2 border-neutral-100 px-6 py-5 z-10">
-              <div className="flex items-center gap-3">
-                <div className="bg-primary-100 p-2.5 rounded-xl">
-                  <UserPlus className="w-6 h-6 text-primary-600" />
-                </div>
-                <h3 className="flex-1 text-xl font-bold text-neutral-900">
-                  Invite New User
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setFormVisible(false)}
-                  className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-neutral-500" />
-                </button>
-              </div>
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100009]"
+            onClick={() => !paymentProcessing && setFormVisible(false)}
+          />
+          <div className="fixed dc-panel-card dc-panel-w z-[100010] bg-white shadow-2xl flex flex-col overflow-hidden font-inter">
+            {/* Sticky header — matches the Permissions panel header spec */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
+              <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
+                Invite New User
+              </h2>
+              <button
+                type="button"
+                onClick={() => setFormVisible(false)}
+                title="Close"
+                className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity"
+                aria-label="Close"
+              >
+                <X className="w-[18px] h-[18px]" strokeWidth={2} />
+              </button>
             </div>
 
-            <form onSubmit={handleInvite}>
-              <div className="p-6 space-y-6">
+            <form
+              onSubmit={handleInvite}
+              className="flex-1 min-h-0 flex flex-col"
+            >
+              <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6 space-y-6">
                 <div>
-                  <label className="flex items-center gap-2 text-sm font-semibold text-neutral-700 mb-2">
-                    <Mail className="w-4 h-4" />
+                  <label className="block text-[13px] font-medium text-[#161618] mb-2 tracking-[-0.05em]">
                     Email Address
                   </label>
                   <input
-                    className="w-full border-2 border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all bg-white"
                     type="email"
                     placeholder="colleague@company.com"
                     value={form.email}
@@ -868,102 +867,93 @@ function UserManagement() {
                 </div>
 
                 <div>
-                  <label className="flex items-center gap-2 text-sm font-semibold text-neutral-700 mb-3">
-                    <Shield className="w-4 h-4" />
-                    Permissions
+                  <label className="block text-[13px] font-medium text-[#161618] mb-2 tracking-[-0.05em]">
+                    Quick Preset
                   </label>
+                  <select
+                    value={derivePreset(form.permissions)}
+                    onChange={handleInvitePresetChange}
+                    className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all bg-white"
+                  >
+                    <option value="">Custom (Manual Selection)</option>
+                    <option value="view-only">
+                      👁️ View Only - Read-only access
+                    </option>
+                    <option value="own-only">
+                      👤 Own Only - Only access what they own
+                    </option>
+                    <option value="full-access">
+                      🔓 Full Access - Edit everything
+                    </option>
+                  </select>
+                </div>
 
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-neutral-500 mb-2">
-                      Quick Preset
-                    </label>
-                    <select
-                      value={derivePreset(form.permissions)}
-                      onChange={handleInvitePresetChange}
-                      className="w-full border-2 border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                <div className="space-y-3">
+                  {resources.map((resource) => (
+                    <div
+                      key={resource}
+                      className="flex justify-between items-center gap-3"
                     >
-                      <option value="">Custom (Manual Selection)</option>
-                      <option value="view-only">
-                        👁️ View Only - Read-only access
-                      </option>
-                      <option value="own-only">
-                        👤 Own Only - Only access what they own
-                      </option>
-                      <option value="full-access">
-                        🔓 Full Access - Edit everything
-                      </option>
-                    </select>
-                  </div>
-
-                  <div className="bg-neutral-50 rounded-xl p-5 border border-neutral-200">
-                    <div className="grid md:grid-cols-2 gap-4">
-                      {resources.map((resource) => (
-                        <div
-                          key={resource}
-                          className="flex justify-between items-center bg-white p-3 rounded-lg border border-neutral-200"
-                        >
-                          <span className="font-medium text-neutral-700">
-                            {resource}
-                          </span>
-                          <select
-                            value={form.permissions[resource] || "no"}
-                            onChange={(e) =>
-                              setForm({
-                                ...form,
-                                permissions: {
-                                  ...form.permissions,
-                                  [resource]: e.target.value,
-                                },
-                              })
-                            }
-                            className="border border-neutral-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                          >
-                            {permissionOptions.map((opt) => (
-                              <option key={opt} value={opt}>
-                                {opt === "no"
-                                  ? "None"
-                                  : opt === "readonly"
-                                  ? "View"
-                                  : opt === "own-only"
-                                  ? "Own Only"
-                                  : "Edit"}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ))}
+                      <span className="text-[13px] font-medium text-[#161618]">
+                        {resource}
+                      </span>
+                      <select
+                        value={form.permissions[resource] || "no"}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            permissions: {
+                              ...form.permissions,
+                              [resource]: e.target.value,
+                            },
+                          })
+                        }
+                        className="border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all bg-white"
+                      >
+                        {permissionOptions.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt === "no"
+                              ? "None"
+                              : opt === "readonly"
+                              ? "View Only"
+                              : opt === "own-only"
+                              ? "Own Only"
+                              : "Edit Access"}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  </div>
+                  ))}
                 </div>
               </div>
 
-              <div className="sticky bottom-0 bg-neutral-50 border-t-2 border-neutral-100 px-6 py-5 flex justify-end gap-3">
+              <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setFormVisible(false)}
-                  className="px-6 py-3 bg-neutral-100 text-neutral-700 font-semibold rounded-xl hover:bg-neutral-200 transition-colors"
+                  className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={paymentProcessing}
-                  className="flex items-center gap-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-xl transition-all disabled:opacity-50 shadow-lg"
+                  className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 transition-colors disabled:opacity-50"
                 >
-                  <Mail className="w-4 h-4" />
                   Send Invite
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </>,
+        document.body
       )}
 
       {/* Permissions Modal */}
-      {showModal && selectedUser && (
+      {showModal && selectedUser && createPortal(
         <>
           <div
-            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100009]"
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100009]"
             onClick={() => setShowModal(false)}
           />
           <div className="fixed dc-panel-card dc-panel-w z-[100010] bg-white shadow-2xl flex flex-col overflow-hidden font-inter">
@@ -1057,7 +1047,8 @@ function UserManagement() {
               </button>
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
 
       <ConfirmModal

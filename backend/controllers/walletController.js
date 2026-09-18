@@ -12,6 +12,8 @@ const getWallet = async (req, res) => {
       creditValueInRupees: config.creditValueInRupees,
       gstRate: config.gstRate,
       usagePricing: config.usagePricing,
+      reminderThreshold: wallet.reminderThreshold,
+      reminderEmail: wallet.reminderEmail,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -54,4 +56,17 @@ const verifyPayment = async (req, res) => {
   }
 };
 
-module.exports = { getWallet, getTransactions, createOrder, verifyPayment };
+const setReminder = async (req, res) => {
+  try {
+    const { threshold, email } = req.body;
+    if (threshold !== null && !(Number(threshold) >= 0)) {
+      return res.status(400).json({ error: 'threshold must be a non-negative number or null' });
+    }
+    const wallet = await walletService.setReminder(req.user.organization, threshold, email);
+    res.json({ reminderThreshold: wallet.reminderThreshold, reminderEmail: wallet.reminderEmail });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+module.exports = { getWallet, getTransactions, createOrder, verifyPayment, setReminder };

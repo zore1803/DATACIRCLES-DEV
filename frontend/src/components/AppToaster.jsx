@@ -9,7 +9,7 @@ import { X } from "lucide-react";
 const AppToaster = (props) => (
   <Toaster
     position="top-right"
-    toastOptions={{ duration: 5000 }}
+    toastOptions={{ duration: 5000, style: { borderRadius: "9999px" } }}
     // Full-width document panels (Invoice/Quotation/Pro Forma/Delivery Challan)
     // render at z-[10000]+, above react-hot-toast's default z-index of 9999 —
     // toasts fired while one of those is open were rendering invisibly behind

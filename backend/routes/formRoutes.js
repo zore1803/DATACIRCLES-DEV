@@ -29,10 +29,16 @@ const mutateGate = [requireAuth, subscriptionGate, restrictByPlan("forms", "writ
 // --- Forms CRUD / publish ---
 router.get("/forms", readGate, formController.listForms);
 router.post("/forms", writeGate, formController.createForm);
+// Declared BEFORE /forms/:id-style routes are relevant only for GETs, but kept
+// here with the rest of the collection routes: exporting is a read of existing
+// forms, so it uses readGate even though it is a POST (the body only carries
+// the id/column selection).
+router.post("/forms/export-selected", readGate, formController.exportSelectedForms);
 router.get("/forms/:id", readGate, formController.getForm);
 router.patch("/forms/:id", mutateGate, formController.updateForm);
 router.post("/forms/:id/publish", mutateGate, formController.publishForm);
 router.post("/forms/:id/archive", mutateGate, formController.archiveForm);
+router.post("/forms/:id/unarchive", mutateGate, formController.unarchiveForm);
 router.post("/forms/:id/pause", mutateGate, formController.pauseForm);
 router.post("/forms/:id/resume", mutateGate, formController.resumeForm);
 router.delete("/forms/:id", mutateGate, formController.deleteForm);

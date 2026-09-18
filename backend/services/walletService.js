@@ -16,6 +16,7 @@ const razorpay = require('../config/razorpay');
 const Wallet = require('../models/Wallet');
 const WalletTransaction = require('../models/WalletTransaction');
 const WalletConfig = require('../models/WalletConfig');
+const sendGridMail = require('../utils/sendGridMail');
 
 const RAZORPAY_ORDER_REF = 'razorpay_order';
 
@@ -94,6 +95,47 @@ async function getOrCreateWallet(organizationId) {
 async function getBalance(organizationId) {
   const wallet = await getOrCreateWallet(organizationId);
   return wallet.balance;
+}
+
+/**
+ * Purpose: Set (or clear, with threshold=null) the low-balance email
+ * reminder for an organization's wallet.
+ * Inputs: organizationId, threshold (number|null), email (string)
+ * Outputs: Promise<WalletDocument>
+ */
+async function setReminder(organizationId, threshold, email) {
+  const wallet = await getOrCreateWallet(organizationId);
+  wallet.reminderThreshold = threshold === null ? null : Number(threshold);
+  wallet.reminderEmail = email || null;
+  // A newly (re)armed reminder should be able to fire again even if the
+  // balance is already below the new threshold.
+  wallet.reminderAlertSent = false;
+  await wallet.save();
+  return wallet;
+}
+
+// Fires the low-balance email once per dip below threshold, and re-arms
+// itself once the balance recovers above it (e.g. after a top-up).
+async function checkReminder(organizationId, balanceAfter) {
+  const wallet = await Wallet.findOne({ organization: organizationId });
+  if (!wallet || wallet.reminderThreshold == null || !wallet.reminderEmail) return;
+
+  if (balanceAfter <= wallet.reminderThreshold && !wallet.reminderAlertSent) {
+    wallet.reminderAlertSent = true;
+    await wallet.save();
+    try {
+      await sendGridMail({
+        to: wallet.reminderEmail,
+        subject: 'DataCircles wallet balance is running low',
+        text: `Your wallet balance has dropped to ${balanceAfter} credits, at or below your reminder threshold of ${wallet.reminderThreshold} credits. Add credits to avoid interruption.`,
+      });
+    } catch (err) {
+      console.error('Failed to send wallet low-balance reminder email:', err);
+    }
+  } else if (balanceAfter > wallet.reminderThreshold && wallet.reminderAlertSent) {
+    wallet.reminderAlertSent = false;
+    await wallet.save();
+  }
 }
 
 /**
@@ -219,6 +261,7 @@ async function applyLedgerEntry(organizationId, delta, opts) {
   } finally {
     await session.endSession();
   }
+  await checkReminder(organizationId, result.balance);
   return result;
 }
 
@@ -371,6 +414,7 @@ module.exports = {
   updateConfig,
   getOrCreateWallet,
   getBalance,
+  setReminder,
   listTransactions,
   credit,
   debit,
