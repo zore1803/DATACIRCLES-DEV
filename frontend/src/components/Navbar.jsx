@@ -810,7 +810,44 @@ const Navbar = () => {
               header strip (e.g. VendorDetailsPageNew.jsx) read this
               element's real bottom edge at runtime to line their own
               border up with it, instead of hardcoding a top offset. */}
+          {/* The company switcher is an org-scoped control: it shows the current workspace's
+              branding and links to that org's settings. A super admin is not inside any
+              organization, so it showed their initials against a company they do not belong to
+              and linked to settings they do not use. The anchor div stays (page header strips
+              measure its bottom edge at runtime) - only the control inside it is org-only. */}
           <div id="sidebar-switcher-anchor" className="relative flex items-center gap-3 min-w-0 flex-1">
+            {/* Super admin gets the product's own branding in the slot the org switcher occupies,
+                rather than leaving the top-left corner empty. Collapsed shows just the mark, so it
+                lines up with the 40px avatar the org side puts here. */}
+            {isSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => navigate("/super-admin-overview")}
+                title="Data Circles Admin"
+                className={`box-border flex flex-row items-center min-w-0 rounded-md hover:opacity-80 transition-opacity ${
+                  isHovered || isMobileOpen
+                    ? "h-10 self-stretch gap-2 px-1.5 py-1.5 flex-1"
+                    : "w-10 h-10 justify-center p-0 mx-auto"
+                }`}
+              >
+                {/* DataCircles.png is a WHITE mark, meant for dark chrome - unfiltered it was
+                    invisible against this pale sidebar. Inverting it is the same treatment the
+                    header used for this exact asset. */}
+                <img
+                  src="/DataCircles.png"
+                  alt=""
+                  className="w-8 h-8 rounded-md object-contain flex-shrink-0"
+                  style={{ filter: "invert(100%)" }}
+                />
+                {(isHovered || isMobileOpen) && (
+                  <span className="text-[14px] font-semibold leading-[120%] text-[#0A0A0A] truncate">
+                    Data Circles Admin
+                  </span>
+                )}
+              </button>
+            )}
+
+            {!isSuperAdmin && (
             <button
               type="button"
               onClick={() => setIsCompanyMenuOpen((v) => !v)}
@@ -848,13 +885,14 @@ const Navbar = () => {
                 <ChevronDown className="w-4 h-4 flex-shrink-0 text-[#0A0A0A]" />
               )}
             </button>
+            )}
 
             {/* There's no multi-organization API yet, so the menu shows the
                 current workspace and a way to edit it rather than inventing
                 companies to switch between. Anchored to the switcher button
                 itself (top-full), not the strip around it, so it always opens
                 flush below the button regardless of the strip's height. */}
-            {isCompanyMenuOpen && (isHovered || isMobileOpen) && (
+            {!isSuperAdmin && isCompanyMenuOpen && (isHovered || isMobileOpen) && (
               <>
                 <div
                   className="fixed inset-0 z-[9996]"

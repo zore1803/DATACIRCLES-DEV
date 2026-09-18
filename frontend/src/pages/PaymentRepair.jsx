@@ -51,6 +51,7 @@ const PaymentRepair = () => {
   const [applying, setApplying] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [errorHint, setErrorHint] = useState("");
 
   const runCheck = async (apply = false) => {
     const trimmed = paymentId.trim();
@@ -65,6 +66,7 @@ const PaymentRepair = () => {
 
     apply ? setApplying(true) : setChecking(true);
     setError("");
+    setErrorHint("");
     if (!apply) setResult(null);
 
     try {
@@ -87,6 +89,7 @@ const PaymentRepair = () => {
         err.response?.data?.message ||
         "Failed to check this payment";
       setError(msg);
+      setErrorHint(err.response?.data?.hint || "");
       toast.error(msg);
     } finally {
       apply ? setApplying(false) : setChecking(false);
@@ -177,8 +180,9 @@ const PaymentRepair = () => {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-sm text-red-800">
-          {error}
+        <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4">
+          <p className="text-sm font-semibold text-red-800">{error}</p>
+          {errorHint && <p className="text-sm text-red-700 mt-1.5">{errorHint}</p>}
         </div>
       )}
 

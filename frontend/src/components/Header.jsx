@@ -1396,33 +1396,22 @@ const Header = () => {
 
   if (isSuperAdmin || isSuperAdminRoute) {
     return (
-      <header className="fixed top-0 left-0 right-0 bg-white border-b border-gray-200 shadow-sm z-[9992] h-16">
-        <div className="flex items-center justify-start h-full px-4 lg:pl-10">
-          {/* Branding Section */}
-          {isLoadingData ? (
-            <BrandingShimmer />
-          ) : (
-            <div
-              className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity duration-200"
-              onClick={() => {
-                navigate(
-                  isSuperAdmin ? "/super-admin-overview" : "/settings/brand",
-                  {
-                    state: isSuperAdmin ? {} : { activeSection: "brand" },
-                  },
-                );
-              }}
-            >
-              {renderCompanyLogo()}
-              <div
-                className="font-semibold text-lg whitespace-nowrap font-sf"
-                style={{ color: branding?.colors?.secondary }}
-              >
-                {branding?.companyName || "Data Circles Admin"}
-              </div>
-            </div>
-          )}
-        </div>
+      // Same geometry and tint as the org-side header below: starts at the sidebar's right edge
+      // (--sidebar-width) rather than spanning the full width, and paints --chrome-bg so the two
+      // read as one continuous surface. Previously this was a full-width white bar sitting on top
+      // of the tinted sidebar, so the super admin chrome looked detached from its own nav.
+      <header
+        className="fixed top-0 right-0 border-b border-gray-200 z-[9992] h-16 transition-all duration-300 ease-in-out"
+        style={{
+          left: "var(--sidebar-width, 0px)",
+          background: "var(--chrome-bg, #EBEDFF)",
+          top: "var(--dc-offline-offset, 0px)",
+        }}
+      >
+        {/* Branding moved into the sidebar's top-left slot (Navbar.jsx) so it sits where the org
+            switcher does on the org side, instead of being repeated here. This bar stays as the
+            chrome surface the sidebar joins onto. */}
+        <div className="flex items-center justify-start h-full px-4 sm:px-6 lg:px-8" />
       </header>
     );
   }

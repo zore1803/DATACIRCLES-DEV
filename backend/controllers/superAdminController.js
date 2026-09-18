@@ -1338,11 +1338,28 @@ const checkPayment = async (req, res) => {
       return res.status(400).json({ error: 'A valid Razorpay payment id (pay_...) is required.' });
     }
 
+    // Test and live are entirely separate datasets on Razorpay's side: a live
+    // payment id fetched with test keys (or vice versa) comes back as "does
+    // not exist", which reads like a typo but is really a mode mismatch. Say
+    // which mode this server is in so that's obvious from the error itself.
+    const keyMode = (process.env.RAZORPAY_KEY_ID || '').startsWith('rzp_live_')
+      ? 'live'
+      : (process.env.RAZORPAY_KEY_ID || '').startsWith('rzp_test_')
+        ? 'test'
+        : 'unknown';
+
     let payment;
     try {
       payment = await razorpay.payments.fetch(paymentId);
     } catch (fetchErr) {
-      return res.status(404).json({ error: `Razorpay has no payment with id "${paymentId}".`, details: fetchErr.message });
+      return res.status(404).json({
+        error: `Razorpay has no payment with id "${paymentId}" in ${keyMode.toUpperCase()} mode.`,
+        keyMode,
+        hint: keyMode === 'unknown'
+          ? 'This server has no recognisable RAZORPAY_KEY_ID configured.'
+          : `This server is using ${keyMode} API keys, and test/live payments are separate on Razorpay. If you can see this payment in the Razorpay dashboard, check whether the dashboard's Test Mode toggle matches — a ${keyMode === 'live' ? 'test' : 'live'}-mode payment is invisible to ${keyMode} keys.`,
+        details: fetchErr.message,
+      });
     }
 
     const paymentSummary = {
