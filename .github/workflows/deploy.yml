@@ -35,13 +35,59 @@ jobs:
           command_timeout: 20m
           script: |
             set -e
-            cd /root/datacircles-crm
+            cd /home/ubuntu/datacircles-crm
+
+            # BuildKit reuses unchanged layers far more aggressively than the
+            # legacy builder (and skips stages nothing depends on), which is
+            # most of the win on a commit that only touches source files.
+            export DOCKER_BUILDKIT=1
+            export COMPOSE_DOCKER_CLI_BUILD=1
+
+            BEFORE=$(git rev-parse HEAD)
             git fetch origin main
             git reset --hard origin/main
-            # Echoed so a run proves which commit it actually deployed —
-            # four runs previously reported success against a stale host
-            # without ever landing a commit on the live server.
+            AFTER=$(git rev-parse HEAD)
             echo "Deployed commit: $(git rev-parse --short HEAD)"
-            docker compose build crm-backend crm-frontend
-            docker compose up -d crm-backend crm-frontend
+
+            # Rebuild only the service whose inputs actually changed. The
+            # frontend's `npm run build` (Vite) is by far the slowest step on
+            # this instance, so skipping it on a backend-only push is the
+            # difference between a ~10m deploy and a ~2m one. A manual re-run
+            # (BEFORE == AFTER, nothing in the diff) falls through to
+            # rebuilding both, since "no changes" there means "redeploy what's
+            # already here", not "nothing to do".
+            CHANGED=$(git diff --name-only "$BEFORE" "$AFTER" || true)
+            echo "Changed files:"
+            echo "$CHANGED"
+
+            BUILD_BACKEND=false
+            BUILD_FRONTEND=false
+
+            if [ -z "$CHANGED" ]; then
+              echo "No file diff (re-run or forced deploy) — rebuilding both."
+              BUILD_BACKEND=true
+              BUILD_FRONTEND=true
+            else
+              # shared/ and the compose file feed BOTH images, so either one
+              # changing has to rebuild both.
+              if echo "$CHANGED" | grep -qE '^(backend/|shared/|docker-compose\.yml)'; then
+                BUILD_BACKEND=true
+              fi
+              if echo "$CHANGED" | grep -qE '^(frontend/|shared/|docker-compose\.yml)'; then
+                BUILD_FRONTEND=true
+              fi
+            fi
+
+            SERVICES=""
+            [ "$BUILD_BACKEND" = true ] && SERVICES="$SERVICES crm-backend"
+            [ "$BUILD_FRONTEND" = true ] && SERVICES="$SERVICES crm-frontend"
+
+            if [ -z "$SERVICES" ]; then
+              echo "Neither backend nor frontend inputs changed — nothing to rebuild."
+              exit 0
+            fi
+
+            echo "Rebuilding:$SERVICES"
+            docker compose build $SERVICES
+            docker compose up -d $SERVICES
             docker image prune -f
