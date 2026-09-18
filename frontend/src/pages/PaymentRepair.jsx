@@ -97,9 +97,14 @@ const PaymentRepair = () => {
   };
 
   // Only offer the repair button for the one case it actually applies to:
-  // Razorpay took the money, but this subscription was never confirmed.
+  // money taken, and the PAYMENT side never landed. A subscription stuck on
+  // an unconfirmed mandate (blockedOnMandate) has already applied the payment
+  // — replaying it there would do nothing, so the button stays hidden.
   const canRepair =
-    result?.captured && result?.subscription && !result?.subscription?.isPaymentConfirmed;
+    result?.captured &&
+    result?.subscription &&
+    !result?.subscription?.isPaymentConfirmed &&
+    !result?.blockedOnMandate;
 
   const statusBanner = () => {
     if (!result) return null;
@@ -118,11 +123,21 @@ const PaymentRepair = () => {
         title: "Payment captured and already applied",
       };
     }
-    if (result.reconcileResult?.reconciled) {
+    if (result.subscription?.isPaymentConfirmed) {
       return {
         tone: "bg-emerald-50 border-emerald-200 text-emerald-900",
         icon: <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />,
         title: "Fixed — subscription is now confirmed",
+      };
+    }
+    // Money is fully applied; activation is waiting on the e-mandate. This is
+    // NOT a missing-payment problem, so it gets its own verdict rather than
+    // being lumped in with "never applied" below.
+    if (result.blockedOnMandate) {
+      return {
+        tone: "bg-amber-50 border-amber-200 text-amber-900",
+        icon: <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />,
+        title: "Payment applied — blocked on bank mandate",
       };
     }
     if (!result.subscription) {
@@ -239,6 +254,21 @@ const PaymentRepair = () => {
                   <Row label="Email" value={result.subscription.organization?.email} />
                   <Row label="Plan" value={result.subscription.planName} />
                   <Row label="Payment Status" value={result.subscription.paymentStatus} />
+                  <Row
+                    label="Mandate Status"
+                    value={
+                      <span
+                        className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
+                          result.subscription.mandateStatus === "confirmed"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        {result.subscription.mandateStatus || "not set"}
+                      </span>
+                    }
+                  />
+                  <Row label="App Status" value={result.subscription.appStatus} />
                   <Row
                     label="Payment Confirmed"
                     value={

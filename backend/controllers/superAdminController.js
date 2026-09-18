@@ -1402,7 +1402,29 @@ const checkPayment = async (req, res) => {
       planName: subscription.planName,
       paymentStatus: subscription.paymentStatus,
       isPaymentConfirmed: subscription.isPaymentConfirmed,
+      mandateStatus: subscription.mandateStatus,
+      appStatus: subscription.appStatus,
     };
+
+    // Activation is an AND-gate (see reconcileMandate): paymentStatus must be
+    // 'payment_completed' AND mandateStatus 'confirmed'. So a subscription can
+    // sit unconfirmed with the money already fully applied — the blocker is
+    // then the e-mandate, and replaying the payment can't fix it. Separating
+    // the two halves here stops this tool reporting "payment never applied"
+    // for what is really a stuck mandate.
+    const paymentSideDone = subscription.paymentStatus === 'payment_completed';
+    const mandateConfirmed = subscription.mandateStatus === 'confirmed';
+
+    if (!subscription.isPaymentConfirmed && paymentSideDone && !mandateConfirmed) {
+      return res.json({
+        payment: paymentSummary,
+        captured: true,
+        subscription: subscriptionSummary,
+        alreadyReconciled: false,
+        blockedOnMandate: true,
+        message: `The payment itself is already applied (paymentStatus is "payment_completed") — what's missing is the bank mandate, which is "${subscription.mandateStatus || 'not set'}" rather than "confirmed". Activation needs both. Replaying the payment will not change this; the customer's e-mandate authorization has to succeed (or be re-collected).`,
+      });
+    }
 
     if (subscription.isPaymentConfirmed) {
       return res.json({
@@ -1452,9 +1474,15 @@ const checkPayment = async (req, res) => {
         isPaymentConfirmed: refreshed.isPaymentConfirmed,
         mandateStatus: refreshed.mandateStatus,
       },
-      message: result.reconciled
-        ? 'Reconciled — subscription is now confirmed.'
-        : `Not reconciled: ${result.reason || 'unknown reason'}.`,
+      // reconcileSubscriptionPayment reports `reconciled: true` as soon as it
+      // hands a captured payment to the webhook handler — which is not the
+      // same as the subscription ending up active, because of the mandate
+      // AND-gate above. Report what actually happened to the subscription.
+      message: refreshed?.isPaymentConfirmed
+        ? 'Reconciled — subscription is now confirmed and active.'
+        : result.reconciled
+          ? `Payment was replayed, but the subscription is still not confirmed — mandate status is "${refreshed?.mandateStatus || 'not set'}" and activation needs it to be "confirmed".`
+          : `Not reconciled: ${result.reason || 'unknown reason'}.`,
     });
   } catch (err) {
     console.error('Super admin payment check/repair error:', err);
