@@ -86,6 +86,9 @@ router.get('/organizations/:orgId/payments', superAdminController.getOrganizatio
 // ever applied, and (with apply: true) replays it through the normal
 // reconciliation path. Replaces scripts/repairUnacknowledgedPayment.js.
 router.post('/payments/check', superAdminAuth, superAdminController.checkPayment);
+// The other half of the activation gate: asks Razorpay for the mandate token's
+// real state and syncs it if a token.confirmed webhook was missed.
+router.post('/payments/check-mandate', superAdminAuth, superAdminController.checkMandate);
 router.post('/organizations/:organizationId/start-trial', superAdminAuth, superAdminController.adminStartTrialForOrganization);
 router.post('/subscriptions/:subscriptionId/adjust-trial', superAdminAuth, superAdminController.adminAdjustTrial);
 router.post('/subscriptions/:subscriptionId/end-trial', superAdminAuth, superAdminController.adminEndTrialNow);

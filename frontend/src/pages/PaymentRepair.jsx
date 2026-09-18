@@ -52,6 +52,9 @@ const PaymentRepair = () => {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [errorHint, setErrorHint] = useState("");
+  const [mandateChecking, setMandateChecking] = useState(false);
+  const [mandateApplying, setMandateApplying] = useState(false);
+  const [mandateResult, setMandateResult] = useState(null);
 
   const runCheck = async (apply = false) => {
     const trimmed = paymentId.trim();
@@ -67,7 +70,10 @@ const PaymentRepair = () => {
     apply ? setApplying(true) : setChecking(true);
     setError("");
     setErrorHint("");
-    if (!apply) setResult(null);
+    if (!apply) {
+      setResult(null);
+      setMandateResult(null);
+    }
 
     try {
       configureAxios();
@@ -93,6 +99,35 @@ const PaymentRepair = () => {
       toast.error(msg);
     } finally {
       apply ? setApplying(false) : setChecking(false);
+    }
+  };
+
+  const runMandateCheck = async (apply = false) => {
+    apply ? setMandateApplying(true) : setMandateChecking(true);
+    try {
+      configureAxios();
+      const res = await API.post("/super-admin/payments/check-mandate", {
+        paymentId: paymentId.trim(),
+        apply,
+      });
+      setMandateResult(res.data);
+      if (apply) {
+        if (res.data.subscription?.isPaymentConfirmed) {
+          toast.success("Mandate synced — subscription is now active.");
+          runCheck(false);
+        } else {
+          toast.error(res.data.message || "Mandate synced but subscription still not confirmed.");
+        }
+      }
+    } catch (err) {
+      const msg =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        "Failed to check the mandate";
+      toast.error(msg);
+      setMandateResult({ checked: false, message: msg });
+    } finally {
+      apply ? setMandateApplying(false) : setMandateChecking(false);
     }
   };
 
@@ -292,6 +327,77 @@ const PaymentRepair = () => {
               )}
             </div>
           </div>
+
+          {result.blockedOnMandate && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Check the mandate with Razorpay</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Asks Razorpay what this mandate's real state is. If Razorpay says it's confirmed
+                    and we only missed the webhook, you can sync it and activate the subscription.
+                    A mandate the bank actually rejected stays rejected.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => runMandateCheck(false)}
+                  disabled={mandateChecking || mandateApplying}
+                  className="inline-flex items-center justify-center gap-2 h-[42px] px-5 rounded-lg bg-[#0085FF] hover:bg-blue-600 text-white text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex-shrink-0"
+                >
+                  {mandateChecking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  {mandateChecking ? "Checking…" : "Check Mandate"}
+                </button>
+              </div>
+
+              {mandateResult && (
+                <div className="mt-5 pt-5 border-t border-gray-100">
+                  <p className="text-sm text-gray-800">{mandateResult.message}</p>
+
+                  {mandateResult.token && (
+                    <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div>
+                        <p className="text-xs text-gray-400">Razorpay says</p>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {mandateResult.token.recurringStatus || "unknown"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400">Method</p>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {mandateResult.token.method || "—"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400">Bank</p>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {mandateResult.token.bank || "—"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400">We have</p>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {mandateResult.storedMandateStatus || "—"}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {mandateResult.canFix && !mandateResult.applied && (
+                    <button
+                      type="button"
+                      onClick={() => runMandateCheck(true)}
+                      disabled={mandateApplying}
+                      className="mt-4 inline-flex items-center justify-center gap-2 h-[42px] px-5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {mandateApplying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
+                      {mandateApplying ? "Syncing…" : "Sync Mandate & Activate"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {canRepair && (
             <div className="bg-white rounded-xl border border-gray-200 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

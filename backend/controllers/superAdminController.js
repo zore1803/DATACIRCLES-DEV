@@ -23,6 +23,7 @@ const {
   setAppStatus,
   cancelSubscription,
   reconcileSubscriptionPayment,
+  reconcileMandate,
 } = require('./subscriptionController');
 const razorpay = require('../config/razorpay');
 const {
@@ -1490,6 +1491,142 @@ const checkPayment = async (req, res) => {
   }
 };
 
+// Companion to checkPayment for the other half of the activation AND-gate.
+// When a subscription is stuck with mandateStatus 'pending', the token.confirmed
+// webhook either never arrived or was never correlated — but Razorpay itself
+// still knows the token's real state. This asks Razorpay directly and, only if
+// Razorpay says the mandate is genuinely confirmed, applies that fact through
+// reconcileMandate (the same helper the token webhook calls), which re-runs the
+// AND-gate and activates. It never invents a confirmation Razorpay doesn't
+// report: a mandate the bank actually rejected stays rejected here.
+const checkMandate = async (req, res) => {
+  try {
+    const { paymentId, apply } = req.body;
+    if (!paymentId || !paymentId.startsWith('pay_')) {
+      return res.status(400).json({ error: 'A valid Razorpay payment id (pay_...) is required.' });
+    }
+
+    let payment;
+    try {
+      payment = await razorpay.payments.fetch(paymentId);
+    } catch (fetchErr) {
+      return res.status(404).json({ error: `Razorpay has no payment with id "${paymentId}".`, details: fetchErr.message });
+    }
+
+    let subscription = payment.invoice_id
+      ? await Subscription.findOne({ registrationLinkId: payment.invoice_id })
+      : null;
+    if (!subscription && payment.notes?.organization_id) {
+      subscription = await Subscription.findOne({ organization: payment.notes.organization_id });
+    }
+    if (!subscription) {
+      return res.status(404).json({ error: 'No subscription could be matched to this payment.' });
+    }
+
+    const tokenId = subscription.mandateTokenId || payment.token_id;
+    const customerId = payment.customer_id;
+    if (!tokenId) {
+      return res.json({
+        checked: false,
+        message: 'This payment carries no mandate token id, so there is no mandate to look up. It may not be a registration-link (mandate) payment at all.',
+      });
+    }
+    if (!customerId) {
+      return res.json({
+        checked: false,
+        tokenId,
+        message: 'Razorpay did not return a customer id on this payment, which is required to fetch the token.',
+      });
+    }
+
+    let token;
+    try {
+      token = await razorpay.customers.fetchToken(customerId, tokenId);
+    } catch (tokenErr) {
+      return res.status(502).json({
+        error: 'Could not fetch the mandate token from Razorpay.',
+        tokenId,
+        customerId,
+        details: tokenErr.message,
+      });
+    }
+
+    // Razorpay reports recurring state under recurring_details.status for
+    // e-mandate/UPI-autopay tokens, and some flows expose recurring_status at
+    // the top level — read both rather than assuming one shape.
+    const razorpayMandateStatus =
+      token?.recurring_details?.status || token?.recurring_status || null;
+    const tokenSummary = {
+      id: token?.id,
+      method: token?.method,
+      bank: token?.bank,
+      recurringStatus: razorpayMandateStatus,
+      failureReason: token?.recurring_details?.failure_reason || null,
+      maxAmount: token?.max_amount ? token.max_amount / 100 : null,
+      expiredAt: token?.expired_at ? new Date(token.expired_at * 1000) : null,
+    };
+
+    const base = {
+      checked: true,
+      token: tokenSummary,
+      storedMandateStatus: subscription.mandateStatus,
+      isPaymentConfirmed: subscription.isPaymentConfirmed,
+    };
+
+    if (razorpayMandateStatus !== 'confirmed') {
+      return res.json({
+        ...base,
+        canFix: false,
+        message: `Razorpay reports this mandate as "${razorpayMandateStatus || 'unknown'}", not "confirmed"${
+          tokenSummary.failureReason ? ` (${tokenSummary.failureReason})` : ''
+        }. The authorization genuinely has not succeeded, so there is nothing to sync — the customer needs to complete or re-do the mandate.`,
+      });
+    }
+
+    if (subscription.mandateStatus === 'confirmed' && subscription.isPaymentConfirmed) {
+      return res.json({ ...base, canFix: false, message: 'Already in sync — mandate confirmed and subscription active.' });
+    }
+
+    if (!apply) {
+      return res.json({
+        ...base,
+        canFix: true,
+        message: `Razorpay says this mandate IS confirmed, but this system still has it as "${subscription.mandateStatus}" — the token webhook was missed. Re-submit with apply: true to sync it and activate the subscription.`,
+      });
+    }
+
+    // Apply exactly what the token webhook would have: record the token facts,
+    // then let reconcileMandate run the AND-gate and save.
+    if (!subscription.mandateTokenId) subscription.mandateTokenId = tokenId;
+    subscription.mandateStatus = 'confirmed';
+    if (token.max_amount) subscription.mandateMaxAmount = token.max_amount / 100;
+    if (token.expired_at) subscription.mandateExpiresAt = new Date(token.expired_at * 1000);
+    await reconcileMandate(subscription);
+
+    const refreshed = await Subscription.findById(subscription._id).populate('organization', 'name email');
+    res.json({
+      ...base,
+      canFix: true,
+      applied: true,
+      subscription: {
+        _id: refreshed._id,
+        organization: refreshed.organization,
+        planName: refreshed.planName,
+        paymentStatus: refreshed.paymentStatus,
+        mandateStatus: refreshed.mandateStatus,
+        appStatus: refreshed.appStatus,
+        isPaymentConfirmed: refreshed.isPaymentConfirmed,
+      },
+      message: refreshed?.isPaymentConfirmed
+        ? 'Mandate synced from Razorpay — subscription is now confirmed and active.'
+        : `Mandate synced, but the subscription is still not confirmed (paymentStatus is "${refreshed?.paymentStatus}").`,
+    });
+  } catch (err) {
+    console.error('Super admin mandate check/repair error:', err);
+    res.status(500).json({ error: 'Failed to check/sync mandate', details: err.message });
+  }
+};
+
 // Restarts a trial IN PLACE on the org's existing Subscription document —
 // deliberately does NOT delegate to startFreeTrial() anymore. Two reasons,
 // both found by tracing rather than assumed:
@@ -2256,6 +2393,7 @@ module.exports = {
   updateTicketStatus,
   getOrganizationPayments,
   checkPayment,
+  checkMandate,
   adminStartTrialForOrganization,
   adminAdjustTrial,
   adminEndTrialNow,
