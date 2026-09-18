@@ -57,6 +57,10 @@ export const subscriptionAPI = {
   
   // Verify payment after client receives payment response
   verifyPayment: (paymentData) => API.post('/subscription/verify-payment', paymentData),
+  // Pull-based counterpart to verifyPayment: asks the backend to ask Razorpay whether the pending
+  // registration link was actually paid. Needed because verifyPayment only ever runs if the
+  // customer's checkout tab survives long enough to post back.
+  reconcilePayment: () => API.post('/subscription/reconcile-payment'),
   
   // Get payment history
   getPaymentHistory: (params) => API.get('/subscription/payments', { params }),

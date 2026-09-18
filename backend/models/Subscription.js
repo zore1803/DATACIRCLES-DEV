@@ -42,6 +42,11 @@ const subscriptionSchema = new mongoose.Schema({
   // requested them, since the Registration Link's invoice/order ids aren't
   // known until after creation. inv_… id.
   registrationLinkId: { type: String },
+  // Every registration link this subscription has ever had, newest last. Only the CURRENT link id
+  // is kept above, so a payment made against an attempt that was then superseded (customer pays,
+  // closes the tab, hits Resume - which mints a new link) became unfindable by id: the webhook
+  // handler has an organization_id fallback, but a pull-based reconcile had nothing to look up.
+  priorRegistrationLinkIds: [{ type: String }],
   mandateStatus: {
     type: String,
     enum: ['none', 'pending', 'confirmed', 'paused', 'cancelled', 'rejected'],

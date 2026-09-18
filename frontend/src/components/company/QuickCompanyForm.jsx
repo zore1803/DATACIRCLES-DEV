@@ -1040,29 +1040,50 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
               + Add another shipping address
             </button>
 
+            {/* Grouped by the field's category, so a section created in Settings > Company Fields
+                actually appears as its own headed group here. Previously every custom field was
+                rendered in one flat "Custom Fields" block and `category` was ignored, so sections
+                only ever showed on the company detail view (CompanyDetails.jsx), never on this
+                form. Same ordering rule as there: named sections A-Z, Uncategorized last. */}
             {fieldDefinitions.length > 0 && (
               <div className="pt-4 space-y-4">
-                <div className="flex items-center gap-3">
-                  <span className="flex-1 h-px bg-[#D9D9D9]" />
-                  <h3 className="flex-shrink-0 text-[14px] font-medium leading-[120%] text-[#1F2937]">
-                    Custom Fields
-                  </h3>
-                  <span className="flex-1 h-px bg-[#D9D9D9]" />
-                </div>
-                {fieldDefinitions.map((fieldDef) => (
-                  <div key={fieldDef.name} ref={(el) => (customFieldRefs.current[fieldDef.name] = el)}>
-                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                      {fieldDef.name} {fieldDef.required && <span className="text-[#FF4935]">*</span>}
-                    </label>
-                    {renderFieldInput(
-                      fieldDef,
-                      additionalFields[fieldDef.name]
-                    )}
-                    {additionalFieldErrors[fieldDef.name] && (
-                      <p className="mt-1 text-xs text-red-600">{additionalFieldErrors[fieldDef.name]}</p>
-                    )}
-                  </div>
-                ))}
+                {Object.entries(
+                  fieldDefinitions.reduce((acc, fieldDef) => {
+                    const cat = fieldDef.category || "Uncategorized";
+                    (acc[cat] = acc[cat] || []).push(fieldDef);
+                    return acc;
+                  }, {})
+                )
+                  .sort(([a], [b]) => {
+                    if (a === "Uncategorized") return 1;
+                    if (b === "Uncategorized") return -1;
+                    return a.localeCompare(b);
+                  })
+                  .map(([category, catFields]) => (
+                    <div key={category} className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <span className="flex-1 h-px bg-[#D9D9D9]" />
+                        <h3 className="flex-shrink-0 text-[14px] font-medium leading-[120%] text-[#1F2937]">
+                          {category === "Uncategorized" ? "Custom Fields" : category}
+                        </h3>
+                        <span className="flex-1 h-px bg-[#D9D9D9]" />
+                      </div>
+                      {catFields.map((fieldDef) => (
+                        <div key={fieldDef.name} ref={(el) => (customFieldRefs.current[fieldDef.name] = el)}>
+                          <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
+                            {fieldDef.name} {fieldDef.required && <span className="text-[#FF4935]">*</span>}
+                          </label>
+                          {renderFieldInput(
+                            fieldDef,
+                            additionalFields[fieldDef.name]
+                          )}
+                          {additionalFieldErrors[fieldDef.name] && (
+                            <p className="mt-1 text-xs text-red-600">{additionalFieldErrors[fieldDef.name]}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
               </div>
             )}
 

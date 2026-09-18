@@ -60,6 +60,7 @@ import AddFormIcon from "../common/AddFormIcon";
 import PlusIcon from "../common/PlusIcon";
 import DeleteIcon from "../common/DeleteIcon";
 import EyeIcon from "../common/EyeIcon";
+import EditIcon from "../common/EditIcon";
 import MoreIcon from "../common/MoreIcon";
 import SearchIcon from "../common/SearchIcon";
 import FilterIcon from "../common/FilterIcon";
@@ -315,6 +316,24 @@ const FormsList = () => {
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [bulkStatusMenuOpen, setBulkStatusMenuOpen] = useState(false);
+  // Delays the bulk strip's unmount so it can play a slide-out-right exit on deselect, mirroring
+  // the slide-in entrance — same pair of flags Companies.jsx uses for its strip.
+  const [showBulkStrip, setShowBulkStrip] = useState(false);
+  const [bulkStripClosing, setBulkStripClosing] = useState(false);
+  useEffect(() => {
+    if (selectedForms.length > 0) {
+      setBulkStripClosing(false);
+      setShowBulkStrip(true);
+    } else if (showBulkStrip) {
+      setBulkStripClosing(true);
+      const t = setTimeout(() => {
+        setShowBulkStrip(false);
+        setBulkStripClosing(false);
+      }, 300);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedForms.length]);
 
   // Column machinery
   const [showColumnSettings, setShowColumnSettings] = useState(false);
@@ -711,6 +730,15 @@ const FormsList = () => {
                 <EyeIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                 Open Form
               </button>
+              {permission !== "readonly" && (
+                <button
+                  onClick={() => { setOpenRowActionsId(null); setRowActionsPos(null); navigate(`/forms/${form._id}/builder`); }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-[#161618] hover:bg-gray-50"
+                >
+                  <EditIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
+                  Edit Form
+                </button>
+              )}
               <button
                 onClick={() => { setOpenRowActionsId(null); setRowActionsPos(null); copyPublicLink(form); }}
                 className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-[#161618] hover:bg-gray-50"
@@ -980,11 +1008,18 @@ const FormsList = () => {
   // --- Render -----------------------------------------------------------------
   return (
     <div>
-      {/* Toolbar — lives in the Settings header strip (see HeaderStripPortal) and collapses into
-          the bulk strip while rows are selected, exactly like the Companies toolbar. */}
-      <HeaderStripPortal>
-        {selectedForms.length > 0 ? (
-        <div className="flex flex-wrap items-center justify-end gap-3">
+      {/* Bulk strip: its own fixed bar laid over the entire Settings header strip, matching that
+          bar's geometry exactly. #settings-header-actions is only the right-hand slot, so
+          rendering the strip there left it floating in the bar's empty space and gave it nothing
+          to slide across. Sits one z-index above the bar it covers. */}
+      {showBulkStrip && (
+        <div
+          className="fixed right-0 h-16 px-4 sm:px-6 lg:px-8 border-b border-[#E1E4EA] bg-white flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
+          style={{ left: "var(--sidebar-width, 0px)", zIndex: 41, minHeight: "64px", maxHeight: "64px", boxSizing: "border-box" }}
+        >
+          <div
+            className={`${bulkStripClosing ? "animate-slideOutRight" : "animate-slideInLeft"} flex flex-nowrap items-center justify-between gap-4 w-full h-full overflow-x-auto`}
+          >
           <div className="flex flex-nowrap items-center">
             <button
               onClick={() => setShowExportModal(true)}
@@ -1062,9 +1097,20 @@ const FormsList = () => {
               <CheckSquare className="w-4 h-4" />
               Select All
             </button>
+            <button
+              onClick={exitSelectionMode}
+              className="h-10 px-4 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-[25px] hover:bg-gray-50 focus:outline-none transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap"
+            >
+              <X className="w-4 h-4" />
+              Deselect All
+            </button>
+            </div>
           </div>
         </div>
-      ) : (
+      )}
+
+      {/* Normal toolbar — lives in the Settings header strip's actions slot. */}
+      <HeaderStripPortal>
         <div className="flex items-center gap-2 lg:gap-3">
           <div className="relative flex-1 min-w-0 flex items-center">
             <div
@@ -1141,7 +1187,6 @@ const FormsList = () => {
             </button>
           ) : null}
         </div>
-        )}
       </HeaderStripPortal>
 
       <div

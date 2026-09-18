@@ -236,13 +236,13 @@ function SystemDefaultsSettings() {
               value={newTaskStatus}
               onChange={(e) => setNewTaskStatus(e.target.value)}
               placeholder="Add custom status (e.g. Under Review)"
-              className="flex-1 min-w-0 px-4 py-2 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+              className="flex-1 min-w-0 px-4 py-2 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
               disabled={isSaving}
             />
             <button
               type="submit"
               disabled={isSaving || !newTaskStatus.trim()}
-              className="flex-shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-full disabled:opacity-50 transition-colors flex items-center gap-1.5"
+              className="flex-shrink-0 px-4 py-2 bg-[#0085FF] hover:bg-blue-600 text-white text-sm font-semibold rounded-full disabled:opacity-50 transition-colors flex items-center gap-1.5"
             >
               <PlusIcon className="w-4 h-4" /> Add
             </button>
@@ -269,12 +269,12 @@ function SystemDefaultsSettings() {
                             type="text"
                             value={editTaskValue}
                             onChange={(e) => setEditTaskValue(e.target.value)}
-                            className="w-full max-w-xs px-3 py-1.5 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+                            className="w-full max-w-xs px-3 py-1.5 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
                             autoFocus
                           />
                         ) : (
                           <div className="flex items-center gap-2.5">
-                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDefault ? "bg-gray-300" : "bg-indigo-500"}`} />
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDefault ? "bg-gray-300" : "bg-[#0085FF]"}`} />
                             <span className="text-sm font-semibold text-gray-900">{status}</span>
                           </div>
                         )}
@@ -285,7 +285,7 @@ function SystemDefaultsSettings() {
                             <Lock className="w-3 h-3" /> System default
                           </span>
                         ) : (
-                          <span className="text-xs text-indigo-500">Custom</span>
+                          <span className="text-xs text-[#0085FF]">Custom</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -293,7 +293,7 @@ function SystemDefaultsSettings() {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => handleEditTaskSave(index)}
-                              className="flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+                              className="flex items-center justify-center w-7 h-7 rounded-full bg-[#0085FF] hover:bg-blue-600 text-white transition-colors"
                               title="Save"
                             >
                               <Check className="w-3.5 h-3.5" />
@@ -347,13 +347,13 @@ function SystemDefaultsSettings() {
               value={newNoteType}
               onChange={(e) => setNewNoteType(e.target.value)}
               placeholder="Add custom note type (e.g. Customer Feedback)"
-              className="flex-1 min-w-0 px-4 py-2 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-400"
+              className="flex-1 min-w-0 px-4 py-2 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
               disabled={isSaving}
             />
             <button
               type="submit"
               disabled={isSaving || !newNoteType.trim()}
-              className="flex-shrink-0 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-full disabled:opacity-50 transition-colors flex items-center gap-1.5"
+              className="flex-shrink-0 px-4 py-2 bg-[#0085FF] hover:bg-blue-600 text-white text-sm font-semibold rounded-full disabled:opacity-50 transition-colors flex items-center gap-1.5"
             >
               <PlusIcon className="w-4 h-4" /> Add
             </button>
@@ -380,12 +380,12 @@ function SystemDefaultsSettings() {
                             type="text"
                             value={editNoteValue}
                             onChange={(e) => setEditNoteValue(e.target.value)}
-                            className="w-full max-w-xs px-3 py-1.5 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-400"
+                            className="w-full max-w-xs px-3 py-1.5 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
                             autoFocus
                           />
                         ) : (
                           <div className="flex items-center gap-2.5">
-                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDefault ? "bg-gray-300" : "bg-purple-500"}`} />
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDefault ? "bg-gray-300" : "bg-[#0085FF]"}`} />
                             <span className="text-sm font-semibold text-gray-900">{type}</span>
                           </div>
                         )}
@@ -396,7 +396,7 @@ function SystemDefaultsSettings() {
                             <Lock className="w-3 h-3" /> System default
                           </span>
                         ) : (
-                          <span className="text-xs text-purple-500">Custom</span>
+                          <span className="text-xs text-[#0085FF]">Custom</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -404,7 +404,7 @@ function SystemDefaultsSettings() {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => handleEditNoteSave(index)}
-                              className="flex items-center justify-center w-7 h-7 rounded-full bg-purple-600 hover:bg-purple-700 text-white transition-colors"
+                              className="flex items-center justify-center w-7 h-7 rounded-full bg-[#0085FF] hover:bg-blue-600 text-white transition-colors"
                               title="Save"
                             >
                               <Check className="w-3.5 h-3.5" />
@@ -458,13 +458,13 @@ function SystemDefaultsSettings() {
               value={newMeetingType}
               onChange={(e) => setNewMeetingType(e.target.value)}
               placeholder="Add custom meeting type (e.g. Board Review)"
-              className="flex-1 min-w-0 px-4 py-2 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
+              className="flex-1 min-w-0 px-4 py-2 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
               disabled={isSaving}
             />
             <button
               type="submit"
               disabled={isSaving || !newMeetingType.trim()}
-              className="flex-shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-full disabled:opacity-50 transition-colors flex items-center gap-1.5"
+              className="flex-shrink-0 px-4 py-2 bg-[#0085FF] hover:bg-blue-600 text-white text-sm font-semibold rounded-full disabled:opacity-50 transition-colors flex items-center gap-1.5"
             >
               <PlusIcon className="w-4 h-4" /> Add
             </button>
@@ -491,12 +491,12 @@ function SystemDefaultsSettings() {
                             type="text"
                             value={editMeetingValue}
                             onChange={(e) => setEditMeetingValue(e.target.value)}
-                            className="w-full max-w-xs px-3 py-1.5 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
+                            className="w-full max-w-xs px-3 py-1.5 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
                             autoFocus
                           />
                         ) : (
                           <div className="flex items-center gap-2.5">
-                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDefault ? "bg-gray-300" : "bg-emerald-500"}`} />
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDefault ? "bg-gray-300" : "bg-[#0085FF]"}`} />
                             <span className="text-sm font-semibold text-gray-900">{type}</span>
                           </div>
                         )}
@@ -507,7 +507,7 @@ function SystemDefaultsSettings() {
                             <Lock className="w-3 h-3" /> System default
                           </span>
                         ) : (
-                          <span className="text-xs text-emerald-500">Custom</span>
+                          <span className="text-xs text-[#0085FF]">Custom</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -515,7 +515,7 @@ function SystemDefaultsSettings() {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => handleEditMeetingSave(index)}
-                              className="flex items-center justify-center w-7 h-7 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                              className="flex items-center justify-center w-7 h-7 rounded-full bg-[#0085FF] hover:bg-blue-600 text-white transition-colors"
                               title="Save"
                             >
                               <Check className="w-3.5 h-3.5" />

@@ -2,19 +2,26 @@ import DeleteIcon from "../common/DeleteIcon";
 import PlusIcon from "../common/PlusIcon";
 import { useEffect, useState } from "react";
 import API from "../../services/api";
-import {
-  Save,
-  X,
-  Database,
-  AlertCircle,
-  CheckCircle2,
-  Tag,
-  Info,
-} from "lucide-react";
+import { X, Check, Lock, Tag, Info } from "lucide-react";
 import toast from "react-hot-toast";
 import AppToaster from "../AppToaster";
-import ListIcon from "../common/ListIcon";
 import EditIcon from "../common/EditIcon";
+
+// The industries every company form ships with. Mirrors the list CompanyFieldSettings renders as
+// "Default System Industries" - these come from the backend seed, not from /company-industries
+// (which only ever returns an org's own additions).
+const DEFAULT_INDUSTRIES = [
+  "Information Technology & Services",
+  "Finance & Banking",
+  "Healthcare & Pharmaceuticals",
+  "Education & EdTech",
+  "Retail & E-Commerce",
+  "Manufacturing",
+  "Real Estate",
+  "Marketing & Advertising",
+  "Travel & Hospitality",
+  "Nonprofit / Government / Public Sector",
+];
 
 const CompanyIndustrySettings = () => {
   const [industries, setIndustries] = useState([]);
@@ -22,6 +29,8 @@ const CompanyIndustrySettings = () => {
   const [editIndex, setEditIndex] = useState(null);
   const [editValue, setEditValue] = useState("");
   const [loading, setLoading] = useState(true);
+  // Which list the new card shows - same pill switcher as SystemDefaultsSettings.
+  const [activeTab, setActiveTab] = useState("custom");
 
   useEffect(() => {
     fetchIndustries();
@@ -154,131 +163,182 @@ const CompanyIndustrySettings = () => {
     <div className="space-y-6">
       <AppToaster />
 
-      {/* Add New Industry */}
-      <div className="bg-white rounded-2xl border-2 border-gray-200 shadow-lg p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="bg-green-100 p-2 rounded-lg">
-            <PlusIcon className="w-4 h-4 text-green-600" />
-          </div>
-          <h3 className="text-xl font-bold text-gray-900">Add New Industry</h3>
+      {/* ------------------------------------------------------------------ *
+       * NEW UI (System Defaults style). Built above the existing sections so
+       * they can be removed one at a time; shares the same state/handlers, so
+       * both write through the same code paths.
+       * ------------------------------------------------------------------ */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        <div className="relative inline-flex items-center bg-gray-100 rounded-full p-1 mb-5">
+          <span
+            className="absolute top-1 bottom-1 w-24 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
+            style={{ left: 4 + (activeTab === "custom" ? 0 : 96) }}
+          />
+          {[
+            { id: "custom", label: "Custom" },
+            { id: "system", label: "System" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`relative z-10 w-24 py-2 text-sm font-semibold rounded-full transition-colors ${
+                activeTab === tab.id ? "text-[#0085FF]" : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Industry Name
-            </label>
-            <input
-              type="text"
-              placeholder="e.g., Technology, Healthcare, Finance"
-              value={newIndustryName}
-              onChange={(e) => setNewIndustryName(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && handleAdd()}
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-            />
-          </div>
-
-          <button
-            onClick={handleAdd}
-            style={{ backgroundColor: "#0085FF" }}
-            className="flex items-center gap-2 hover:opacity-90 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg"
-          >
-            <PlusIcon className="w-4 h-4" />
-            Add Industry
-          </button>
-        </div>
-      </div>
-
-      {/* Industries List */}
-      <div className="bg-white rounded-2xl border-2 border-gray-200 shadow-lg p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="bg-blue-100 p-2 rounded-lg">
-            <ListIcon className="w-5 h-5 text-blue-600" />
-          </div>
-          <h3 className="text-xl font-bold text-gray-900">Custom Industries</h3>
-        </div>
-
-        {industries.length === 0 ? (
-          <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-xl">
-            <Database className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium mb-2">No custom industries configured yet</p>
-            <p className="text-sm text-gray-400">
-              Add your first custom industry using the form above
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {industries.map((industry, index) => (
-              <div
-                key={industry._id || index}
-                className="border-2 border-gray-200 rounded-xl p-5 hover:border-gray-300 hover:shadow-md transition-all"
+        {activeTab === "custom" && (
+          <>
+            <form
+              onSubmit={(e) => { e.preventDefault(); handleAdd(); }}
+              className="flex gap-2 mb-5"
+            >
+              <input
+                type="text"
+                value={newIndustryName}
+                onChange={(e) => setNewIndustryName(e.target.value)}
+                placeholder="Add custom industry (e.g. Logistics)"
+                className="flex-1 min-w-0 px-4 py-2 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
+              />
+              <button
+                type="submit"
+                disabled={!newIndustryName.trim()}
+                className="flex-shrink-0 px-4 py-2 bg-[#0085FF] hover:bg-blue-600 text-white text-sm font-semibold rounded-full disabled:opacity-50 transition-colors flex items-center gap-1.5"
               >
-                {editIndex === index ? (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Industry Name
-                      </label>
-                      <input
-                        type="text"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onKeyPress={(e) => e.key === "Enter" && handleUpdate()}
-                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        autoFocus
-                      />
-                    </div>
+                <PlusIcon className="w-4 h-4" /> Add
+              </button>
+            </form>
 
-                    <div className="flex gap-3 pt-2">
-                      <button
-                        onClick={handleUpdate}
-                        className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors"
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        Save Changes
-                      </button>
-                      <button
-                        onClick={handleCancel}
-                        className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-5 py-2.5 rounded-xl font-semibold transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="bg-blue-100 p-1.5 rounded-lg">
-                          <Tag className="w-4 h-4 text-blue-600" />
-                        </div>
-                        <span className="font-bold text-gray-900">
-                          {industry.name}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 ml-4">
-                      <button
-                        onClick={() => handleEdit(index)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-blue-600 hover:bg-blue-50 rounded-lg font-semibold transition-colors text-sm border border-blue-200"
-                      >
-                        <EditIcon className="w-4 h-4" />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(index)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg font-semibold transition-colors text-sm border border-red-200"
-                      >
-                        <DeleteIcon className="w-4 h-4" />
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                )}
+            {industries.length === 0 ? (
+              <div className="text-center py-12 rounded-xl border border-[#E1E4EA]">
+                <Tag className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                <p className="text-sm text-gray-600">No custom industries yet</p>
+                <p className="text-xs text-gray-400 mt-0.5">Add your first industry to get started</p>
               </div>
-            ))}
-          </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-[#E1E4EA]">
+                <table className="min-w-full border-collapse text-sm text-left">
+                  <thead className="bg-[#F5F7FA] border-b border-[#E1E4EA]">
+                    <tr>
+                      <th className="px-4 py-3 text-sm font-bold text-[#525866]">Industry</th>
+                      <th className="px-4 py-3 text-sm font-bold text-[#525866]">Type</th>
+                      <th className="px-4 py-3 text-sm font-bold text-[#525866] text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white">
+                    {industries.map((industry, index) => {
+                      const isEditing = editIndex === index;
+                      return (
+                        <tr key={industry._id || index} className="group hover:bg-[#F5F7FA] transition-colors border-b border-[#E1E4EA] last:border-b-0">
+                          <td className="px-4 py-3">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyPress={(e) => e.key === "Enter" && handleUpdate()}
+                                className="w-full max-w-xs px-3 py-1.5 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
+                                autoFocus
+                              />
+                            ) : (
+                              <div className="flex items-center gap-2.5">
+                                <span className="w-2 h-2 rounded-full flex-shrink-0 bg-[#0085FF]" />
+                                <span className="text-sm font-semibold text-gray-900">{industry.name}</span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs text-[#0085FF]">Custom</span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {isEditing ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  type="button"
+                                  onClick={handleUpdate}
+                                  className="flex items-center justify-center w-7 h-7 rounded-full bg-[#0085FF] hover:bg-blue-600 text-white transition-colors"
+                                  title="Save"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancel}
+                                  className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 transition-colors"
+                                  title="Cancel"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEdit(index)}
+                                  className="flex items-center justify-center w-7 h-7 rounded-full text-blue-600 hover:bg-blue-50 transition-colors"
+                                  title="Edit"
+                                >
+                                  <EditIcon className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(index)}
+                                  className="flex items-center justify-center w-7 h-7 rounded-full text-red-600 hover:bg-red-50 transition-colors"
+                                  title="Delete"
+                                >
+                                  <DeleteIcon className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === "system" && (
+          <>
+            <div className="overflow-x-auto rounded-xl border border-[#E1E4EA]">
+              <table className="min-w-full border-collapse text-sm text-left">
+                <thead className="bg-[#F5F7FA] border-b border-[#E1E4EA]">
+                  <tr>
+                    <th className="px-4 py-3 text-sm font-bold text-[#525866]">Industry</th>
+                    <th className="px-4 py-3 text-sm font-bold text-[#525866] text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white">
+                  {DEFAULT_INDUSTRIES.map((name) => (
+                    <tr key={name} className="group hover:bg-[#F5F7FA] transition-colors border-b border-[#E1E4EA] last:border-b-0">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <span className="w-2 h-2 rounded-full flex-shrink-0 bg-gray-300" />
+                          <span className="text-sm font-semibold text-gray-900">{name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="inline-flex items-center gap-1 text-xs text-gray-900">
+                          <Lock className="w-3 h-3" /> System default
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-gray-400 mt-3">
+              These appear in every company form and cannot be edited or removed. Add your own
+              under the Custom tab.
+            </p>
+          </>
         )}
       </div>
 

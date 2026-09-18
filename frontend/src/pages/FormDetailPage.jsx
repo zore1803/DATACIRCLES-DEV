@@ -13,8 +13,11 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import API from "../services/api";
 import toast from "react-hot-toast";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Pencil, Send, Inbox, AlertTriangle, X, ChevronDown, FileText, Database, Globe, Download as DownloadIcon2 } from "lucide-react";
+import useBodyScrollLock from "../hooks/useBodyScrollLock";
+import StatTile from "../components/common/StatTile";
 import PublicLinkCard from "../components/forms/PublicLinkCard";
+import ConfirmDialog from "../components/common/ConfirmDialog";
 
 // Second independent copy of this exact pattern within Forms (FormsList.jsx has the first) — per
 // architecture doc §6/decision 1, "copy, don't extract." Logged as flagged debt in
@@ -192,28 +195,38 @@ function OverviewTab({ form, activeVersion, submissionCount, pendingReviewCount,
   // stats are meaningful, so it's the only one that shows them.
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-          <p className="text-xs text-gray-500 font-medium">Status</p>
-          <div className="mt-1"><FormStatusBadge status={form.status} /></div>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {activeVersion ? `Published ${timeAgo(activeVersion.publishedAt)}` : "—"}
-          </p>
-        </div>
-        <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-          <p className="text-xs text-gray-500 font-medium">Submissions</p>
-          <p className="text-xl font-bold text-gray-900 mt-1">{submissionCount}</p>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {lastSubmittedAt ? `Last submission ${timeAgo(lastSubmittedAt)}` : "None yet"}
-          </p>
-        </div>
-        <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-          <p className="text-xs text-gray-500 font-medium">Pending Reviews</p>
-          <p className="text-xl font-bold text-gray-900 mt-1">{pendingReviewCount}</p>
-          <p className={`text-xs mt-0.5 ${pendingReviewCount > 0 ? "text-amber-600 font-medium" : "text-gray-400"}`}>
-            {pendingReviewCount > 0 ? "Needs attention" : "All clear"}
-          </p>
-        </div>
+      {/* Same StatTile every other module's overview/KPI row uses (Referrals, Dashboard, company
+          profile tabs), so this reads as one consistent stat style across the app instead of its
+          own bespoke cards. */}
+      <div className="flex flex-col sm:flex-row items-stretch gap-4">
+        <StatTile
+          tile={{
+            icon: Send,
+            iconClass: "text-blue-600",
+            label: "Status",
+            value: <FormStatusBadge status={form.status} />,
+            subtitle: activeVersion ? `Published ${timeAgo(activeVersion.publishedAt)}` : "—",
+          }}
+        />
+        <StatTile
+          tile={{
+            icon: Inbox,
+            iconClass: "text-emerald-600",
+            label: "Submissions",
+            value: submissionCount,
+            subtitle: lastSubmittedAt ? `Last ${timeAgo(lastSubmittedAt)}` : "None yet",
+          }}
+        />
+        <StatTile
+          tile={{
+            icon: AlertTriangle,
+            iconClass: pendingReviewCount > 0 ? "text-amber-500" : "text-gray-400",
+            label: "Pending Reviews",
+            value: pendingReviewCount,
+            subtitle: pendingReviewCount > 0 ? "Needs attention" : "All clear",
+            subtitleClass: pendingReviewCount > 0 ? "text-amber-600 font-medium" : "text-gray-400",
+          }}
+        />
       </div>
 
       <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
@@ -228,14 +241,14 @@ function OverviewTab({ form, activeVersion, submissionCount, pendingReviewCount,
       <div className="flex flex-wrap gap-3">
         <button
           onClick={() => navigate(`/forms/${form._id}/builder`)}
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+          className="px-4 py-2.5 bg-[#0085FF] text-white text-sm font-semibold rounded-full hover:bg-blue-600 transition-colors"
         >
           {ctaLabel}
         </button>
         {submissionCount > 0 && (
           <button
             onClick={() => setActiveTab("Submissions")}
-            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+            className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-full hover:bg-gray-50 transition-colors"
           >
             View Submissions
           </button>
@@ -243,7 +256,7 @@ function OverviewTab({ form, activeVersion, submissionCount, pendingReviewCount,
         {pendingReviewCount > 0 && (
           <button
             onClick={() => setActiveTab("Duplicate Reviews")}
-            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+            className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-full hover:bg-gray-50 transition-colors"
           >
             Review Duplicates
           </button>
@@ -274,6 +287,9 @@ function FormSettingsTab({ form, onFormUpdated }) {
   const [archiving, setArchiving] = useState(false);
   const [pausing, setPausing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Which destructive action is awaiting confirmation: "archive" | "delete" | null. Replaces two
+  // window.confirm() calls - the native dialog can't be styled and looked nothing like the app.
+  const [confirm, setConfirm] = useState(null);
 
   const saveTitle = async () => {
     if (!title.trim()) {
@@ -320,7 +336,7 @@ function FormSettingsTab({ form, onFormUpdated }) {
   };
 
   const archive = async () => {
-    if (!window.confirm("Archive this form permanently? Unlike Pause, this cannot be undone — the form can't be republished, only deleted afterward.")) return;
+    setConfirm(null);
     setArchiving(true);
     try {
       const res = await API.post(`/forms/${form._id}/archive`);
@@ -334,7 +350,7 @@ function FormSettingsTab({ form, onFormUpdated }) {
   };
 
   const deleteForm = async () => {
-    if (!window.confirm("Permanently delete this form? This cannot be undone.")) return;
+    setConfirm(null);
     setDeleting(true);
     try {
       await API.delete(`/forms/${form._id}`);
@@ -354,12 +370,12 @@ function FormSettingsTab({ form, onFormUpdated }) {
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
             onClick={saveTitle}
             disabled={saving}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 bg-[#0085FF] text-white text-sm font-semibold rounded-full hover:bg-blue-600 disabled:opacity-50"
           >
             {saving ? "Saving..." : "Save"}
           </button>
@@ -380,7 +396,7 @@ function FormSettingsTab({ form, onFormUpdated }) {
             <button
               onClick={publish}
               disabled={publishing}
-              className="px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50"
+              className="px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-full hover:bg-green-700 disabled:opacity-50"
             >
               {publishing ? "Publishing..." : "Publish"}
             </button>
@@ -389,7 +405,7 @@ function FormSettingsTab({ form, onFormUpdated }) {
             <button
               onClick={togglePause}
               disabled={pausing}
-              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-semibold rounded-full hover:bg-gray-50 disabled:opacity-50"
             >
               {pausing ? "Working..." : form.status === "paused" ? "Resume" : "Pause"}
             </button>
@@ -403,9 +419,9 @@ function FormSettingsTab({ form, onFormUpdated }) {
           description="Permanently retires this form — unlike Pause, there is no way back to Published. An archived form with no submissions can then be deleted."
         >
           <button
-            onClick={archive}
+            onClick={() => setConfirm("archive")}
             disabled={archiving}
-            className="px-4 py-2 bg-white border border-red-300 text-red-600 text-sm font-semibold rounded-lg hover:bg-red-50 disabled:opacity-50"
+            className="px-4 py-2 bg-white border border-red-300 text-red-600 text-sm font-semibold rounded-full hover:bg-red-50 disabled:opacity-50"
           >
             {archiving ? "Archiving..." : "Archive Form"}
           </button>
@@ -422,14 +438,27 @@ function FormSettingsTab({ form, onFormUpdated }) {
           }
         >
           <button
-            onClick={deleteForm}
+            onClick={() => setConfirm("delete")}
             disabled={deleting}
-            className="px-4 py-2 bg-white border border-red-300 text-red-600 text-sm font-semibold rounded-lg hover:bg-red-50 disabled:opacity-50"
+            className="px-4 py-2 bg-white border border-red-300 text-red-600 text-sm font-semibold rounded-full hover:bg-red-50 disabled:opacity-50"
           >
             {deleting ? "Deleting..." : "Delete Form"}
           </button>
         </SettingsSection>
       )}
+
+      <ConfirmDialog
+        isOpen={confirm !== null}
+        title={confirm === "archive" ? "Archive this form?" : "Delete this form?"}
+        message={
+          confirm === "archive"
+            ? "Unlike Pause, this cannot be undone — the form can't be republished, only deleted afterward."
+            : "This permanently removes the form. This cannot be undone."
+        }
+        confirmLabel={confirm === "archive" ? "Archive" : "Delete"}
+        onConfirm={confirm === "archive" ? archive : deleteForm}
+        onCancel={() => setConfirm(null)}
+      />
     </div>
   );
 }
@@ -439,27 +468,45 @@ const IMPORT_STATUS_LABEL = { not_imported: "Not imported", imported: "Imported"
 
 const PROCESSING_STATUS_LABEL = { pending: "Pending", validated: "Validated", rejected: "Rejected" };
 
-function CollapsibleSection({ title, defaultOpen = true, children }) {
+// Section chrome for the submission panel. Deliberately NOT a bordered box with a grey header
+// bar per section - four of those stacked made the panel read as four competing cards. This is a
+// quiet label + a chevron, with the content sitting directly beneath on the panel's own surface.
+function CollapsibleSection({ title, icon: Icon, iconClass = "bg-gray-100 text-gray-500", defaultOpen = true, children }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
+    <section>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-100"
+        className="w-full flex items-center gap-2.5 group mb-2.5"
       >
-        {title}
-        <span className="text-gray-400">{open ? "−" : "+"}</span>
+        {Icon && (
+          <span className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${iconClass}`}>
+            <Icon className="w-3.5 h-3.5" />
+          </span>
+        )}
+        <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider group-hover:text-gray-700 transition-colors">
+          {title}
+        </span>
+        <span className="flex-1 h-px bg-gray-100" />
+        <ChevronDown
+          className={`w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-all flex-shrink-0 ${open ? "" : "-rotate-90"}`}
+        />
       </button>
-      {open && <div className="p-3">{children}</div>}
-    </div>
+      {open && children}
+    </section>
   );
 }
 
 function LabelValueRow({ label, value }) {
   return (
-    <div className="flex items-start justify-between gap-4 py-1 text-sm">
-      <span className="text-gray-500 shrink-0">{label}</span>
-      <span className="text-gray-800 text-right break-words">{value ?? <span className="text-gray-300">—</span>}</span>
+    // Label above value rather than side-by-side: submitted values are arbitrary form fields, so
+    // long labels and long values both wrapped badly in a two-column row. Rows live inside a
+    // bordered card (see callers) so a list of values reads as a record, not loose text.
+    <div className="px-3.5 py-2.5">
+      <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-1">{label}</p>
+      <p className="text-sm text-gray-900 font-medium break-words leading-snug">
+        {value ?? <span className="text-gray-300 font-normal">—</span>}
+      </p>
     </div>
   );
 }
@@ -469,6 +516,20 @@ function SubmissionDrawer({ formId, submissionId, onClose }) {
   const [resolvedFields, setResolvedFields] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showRaw, setShowRaw] = useState(false);
+  // Slide-in/out exactly like QuickCompanyForm: mount closed, flip to open on the next tick so the
+  // transform transition actually runs, and on close play the exit before unmounting.
+  const [isOpen, setIsOpen] = useState(false);
+  useBodyScrollLock(isOpen);
+
+  useEffect(() => {
+    const t = setTimeout(() => setIsOpen(true), 10);
+    return () => clearTimeout(t);
+  }, []);
+
+  const handleClose = () => {
+    setIsOpen(false);
+    setTimeout(onClose, 300);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -494,44 +555,74 @@ function SubmissionDrawer({ formId, submissionId, onClose }) {
     metaByFieldId.get(key)?.type === "file" && typeof value === "string" && /^https?:\/\//.test(value);
 
   return (
-    <div className="fixed inset-0 z-[10000] flex justify-end">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-white h-full shadow-xl overflow-y-auto p-6 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900">Submission</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-sm">Close</button>
+    <>
+      {/* Same panel shell every create/edit form in the app uses (QuickCompanyForm et al.):
+          dc-panel-card/dc-panel-w inset card, blurred backdrop, sticky uppercase header with an
+          X, and a scrollable px-8 py-6 body — instead of this drawer's own flush-to-edge sheet. */}
+      <div
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
+        style={{ opacity: isOpen ? 1 : 0 }}
+        onClick={handleClose}
+      />
+
+      <div
+        className={`
+          fixed dc-panel-card dc-panel-w z-[10003]
+          bg-white shadow-2xl flex flex-col overflow-hidden
+          transform transition-transform duration-300 ease-in-out font-inter
+          ${isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}
+        `}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
+          <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
+            Submission
+          </h2>
+          <button
+            type="button"
+            onClick={handleClose}
+            title="Close"
+            className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity"
+            aria-label="Close"
+          >
+            <X className="w-[18px] h-[18px]" strokeWidth={2} />
+          </button>
         </div>
 
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 flex flex-col gap-6">
         {loading || !submission ? (
           <p className="text-sm text-gray-400">Loading…</p>
         ) : (
           <>
-            <div className="flex flex-wrap gap-1.5">
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                {PROCESSING_STATUS_LABEL[submission.processingStatus] || submission.processingStatus}
-              </span>
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                {REVIEW_STATUS_LABEL[submission.reviewStatus] || submission.reviewStatus}
-              </span>
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                {IMPORT_STATUS_LABEL[submission.importStatus] || submission.importStatus}
-              </span>
+            {/* Subject line + statuses, in the panel's own voice. The pills carry their real
+                status colours now (the same maps the list uses) - as flat grey they read as
+                inert labels and lost the one thing a status is for. Timeline folded in here
+                too: two dates did not need a section of their own. */}
+            <div className="pb-4 border-b border-gray-100">
+              <div className="min-w-0">
+                <div>
+                  <p className="text-base font-semibold text-gray-900 leading-tight">
+                    {new Date(submission.submittedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Submitted at {new Date(submission.submittedAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}
+                    {submission.reviewedAt ? ` · reviewed ${timeAgo(submission.reviewedAt)}` : ""}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                <StatusPill value={submission.processingStatus} labelMap={PROCESSING_STATUS_LABEL} colorMap={PROCESSING_STATUS_BADGE} />
+                <StatusPill value={submission.reviewStatus} labelMap={REVIEW_STATUS_LABEL} colorMap={REVIEW_STATUS_BADGE} />
+                <StatusPill value={submission.importStatus} labelMap={IMPORT_STATUS_LABEL} colorMap={IMPORT_STATUS_BADGE} />
+              </div>
             </div>
 
-            <CollapsibleSection title="Timeline">
-              <ul className="text-sm text-gray-700 flex flex-col gap-1">
-                <li>Submitted {timeAgo(submission.submittedAt)}</li>
-                {submission.reviewedAt && <li>Reviewed {timeAgo(submission.reviewedAt)}</li>}
-              </ul>
-            </CollapsibleSection>
-
             {fieldKeys.length > 0 && (
-              <CollapsibleSection title="Submitted Values">
-                <div className="flex flex-col divide-y divide-gray-100">
+              <CollapsibleSection title="Submitted Values" icon={FileText} iconClass="bg-blue-50 text-blue-600">
+                <div className="flex flex-col divide-y divide-gray-100 rounded-xl border border-gray-200 bg-gray-50/50 overflow-hidden">
                   {fieldKeys.map((key) =>
                     isImageValue(key, fieldData[key]) ? (
-                      <div key={key} className="py-2 flex items-start gap-3">
-                        <span className="text-xs text-gray-500 w-32 shrink-0">{submittedLabel(key)}</span>
+                      <div key={key} className="px-3.5 py-2.5 flex items-start gap-3">
+                        <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide w-28 shrink-0 pt-1">{submittedLabel(key)}</span>
                         <a href={fieldData[key]} target="_blank" rel="noreferrer" className="shrink-0">
                           <img src={fieldData[key]} alt="" className="w-16 h-16 rounded border border-gray-200 object-contain bg-gray-50" />
                         </a>
@@ -545,10 +636,10 @@ function SubmissionDrawer({ formId, submissionId, onClose }) {
             )}
 
             {submission.uploadedFiles?.length > 0 && (
-              <CollapsibleSection title="Uploaded Files">
-                <ul className="flex flex-col gap-1.5">
+              <CollapsibleSection title="Uploaded Files" icon={DownloadIcon2} iconClass="bg-violet-50 text-violet-600">
+                <ul className="flex flex-col divide-y divide-gray-100 rounded-xl border border-gray-200 bg-gray-50/50 overflow-hidden">
                   {submission.uploadedFiles.map((f, i) => (
-                    <li key={i} className="text-sm">
+                    <li key={i} className="text-sm px-3.5 py-2.5">
                       <a href={f.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline break-all">
                         {f.originalName || f.url}
                       </a>
@@ -560,28 +651,34 @@ function SubmissionDrawer({ formId, submissionId, onClose }) {
             )}
 
             {submission.validationErrors?.length > 0 && (
-              <CollapsibleSection title="Validation Errors">
-                <ul className="flex flex-col gap-1">
+              <CollapsibleSection title="Validation Errors" icon={AlertTriangle} iconClass="bg-red-50 text-red-500">
+                <ul className="flex flex-col divide-y divide-red-100 rounded-xl border border-red-100 bg-red-50/40 overflow-hidden">
                   {submission.validationErrors.map((v, i) => (
-                    <li key={i} className="text-sm text-red-600">{submittedLabel(v.fieldId)}: {v.message}</li>
+                    <li key={i} className="text-sm text-red-600 px-3.5 py-2.5"><span className="font-medium">{submittedLabel(v.fieldId)}</span>: {v.message}</li>
                   ))}
                 </ul>
               </CollapsibleSection>
             )}
 
             {submission.resultingRecords?.length > 0 && (
-              <CollapsibleSection title="Records Created">
+              <CollapsibleSection title="Records Created" icon={Database} iconClass="bg-emerald-50 text-emerald-600">
                 {/* The whole point of a form is the CRM record it produces, so this is the one link
                     that closes the loop. resultingRecords already carries {module, recordId}; it was
                     being rendered as dead text. */}
-                <ul className="flex flex-col gap-1.5">
+                <ul className="flex flex-col gap-2">
                   {submission.resultingRecords.map((r, i) => {
                     const href = crmRecordPath(r.module, r.recordId);
                     return (
                       <li key={i} className="text-sm">
                         {href ? (
-                          <Link to={href} className="text-blue-600 hover:underline inline-flex items-center gap-1">
-                            View {r.module} <ArrowRight className="w-3.5 h-3.5" />
+                          <Link
+                            to={href}
+                            className="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border border-gray-200 bg-gray-50/60 hover:border-blue-300 hover:bg-blue-50/40 transition-colors group"
+                          >
+                            <span className="font-medium text-gray-900">{r.module}</span>
+                            <span className="text-xs font-medium text-blue-600 inline-flex items-center gap-1">
+                              View <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                            </span>
                           </Link>
                         ) : (
                           <span className="text-gray-700">{r.module} record created</span>
@@ -594,8 +691,8 @@ function SubmissionDrawer({ formId, submissionId, onClose }) {
             )}
 
             {submission.sourceMeta && (
-              <CollapsibleSection title="Source" defaultOpen={false}>
-                <div className="flex flex-col divide-y divide-gray-100">
+              <CollapsibleSection title="Source" icon={Globe} iconClass="bg-amber-50 text-amber-600" defaultOpen={false}>
+                <div className="flex flex-col divide-y divide-gray-100 rounded-xl border border-gray-200 bg-gray-50/50 overflow-hidden">
                   {submission.sourceMeta.referrer && <LabelValueRow label="Referrer" value={submission.sourceMeta.referrer} />}
                   {submission.sourceMeta.utm?.source && <LabelValueRow label="UTM Source" value={submission.sourceMeta.utm.source} />}
                   {submission.sourceMeta.utm?.medium && <LabelValueRow label="UTM Medium" value={submission.sourceMeta.utm.medium} />}
@@ -605,7 +702,7 @@ function SubmissionDrawer({ formId, submissionId, onClose }) {
               </CollapsibleSection>
             )}
 
-            <div>
+            <div className="pt-2 border-t border-gray-100">
               <button
                 onClick={() => setShowRaw((s) => !s)}
                 className="text-xs font-medium text-gray-400 hover:text-gray-600"
@@ -620,8 +717,9 @@ function SubmissionDrawer({ formId, submissionId, onClose }) {
             </div>
           </>
         )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -715,51 +813,57 @@ function SubmissionsTab({ formId, onOpenReview }) {
         )}
       </div>
 
+      {/* Same row-card list CompanyTasksTable.jsx uses (space-y-3, bg-white rounded-lg border
+          border-gray-200 p-3, hover:border-gray-300) instead of a plain table — one consistent
+          "list of items" look across the app rather than a bespoke table on this tab. */}
       {loading ? (
-        <p className="text-sm text-gray-400">Loading…</p>
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+          ))}
+        </div>
       ) : submissions.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <p className="text-gray-500 font-medium">{hasActiveFilters ? "No submissions match these filters" : "No submissions yet"}</p>
+        <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
+          <Inbox className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+          <p className="text-sm text-gray-600">{hasActiveFilters ? "No submissions match these filters" : "No submissions yet"}</p>
         </div>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-gray-400 uppercase tracking-wider border-b border-gray-100">
-              <th className="py-2 font-medium">Submitted</th>
-              <th className="py-2 font-medium">Review status</th>
-              <th className="py-2 font-medium">Import status</th>
-              <th className="py-2 font-medium">Processing</th>
-            </tr>
-          </thead>
-          <tbody>
-            {submissions.map((s) => (
-              <tr
-                key={s._id}
-                onClick={() => setOpenId(s._id)}
-                className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer"
-              >
-                <td className="py-2.5 text-gray-700">{timeAgo(s.submittedAt)}</td>
-                <td className="py-2.5">
-                  {s.reviewStatus === "needs_review" ? (
-                    <button
-                      onClick={(e) => goToReview(e, s._id)}
-                      disabled={findingReviewFor === s._id}
-                      className="inline-flex items-center gap-1.5 hover:underline disabled:opacity-50"
-                      title="Open this submission's pending duplicate review"
-                    >
-                      <StatusPill value={s.reviewStatus} labelMap={REVIEW_STATUS_LABEL} colorMap={REVIEW_STATUS_BADGE} />
-                      <span className="text-xs font-medium text-blue-600">Review →</span>
-                    </button>
-                  ) : (
+        <div className="space-y-3">
+          {submissions.map((s) => (
+            <div
+              key={s._id}
+              onClick={() => setOpenId(s._id)}
+              className="bg-white rounded-lg border border-gray-200 p-3 hover:border-gray-300 transition-all cursor-pointer group"
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <h4 className="text-sm font-medium text-gray-900">{timeAgo(s.submittedAt)}</h4>
+                {s.reviewStatus === "needs_review" ? (
+                  <button
+                    onClick={(e) => goToReview(e, s._id)}
+                    disabled={findingReviewFor === s._id}
+                    className="inline-flex items-center gap-1.5 hover:underline disabled:opacity-50 shrink-0"
+                    title="Open this submission's pending duplicate review"
+                  >
                     <StatusPill value={s.reviewStatus} labelMap={REVIEW_STATUS_LABEL} colorMap={REVIEW_STATUS_BADGE} />
-                  )}
-                </td>
-                <td className="py-2.5"><StatusPill value={s.importStatus} labelMap={IMPORT_STATUS_LABEL} colorMap={IMPORT_STATUS_BADGE} /></td>
-                <td className="py-2.5"><StatusPill value={s.processingStatus} labelMap={PROCESSING_STATUS_LABEL} colorMap={PROCESSING_STATUS_BADGE} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    <span className="text-xs font-medium text-blue-600">Review →</span>
+                  </button>
+                ) : (
+                  <StatusPill value={s.reviewStatus} labelMap={REVIEW_STATUS_LABEL} colorMap={REVIEW_STATUS_BADGE} />
+                )}
+              </div>
+              <div className="flex items-center gap-3 text-xs text-gray-500">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-400">Import:</span>
+                  <StatusPill value={s.importStatus} labelMap={IMPORT_STATUS_LABEL} colorMap={IMPORT_STATUS_BADGE} />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-400">Processing:</span>
+                  <StatusPill value={s.processingStatus} labelMap={PROCESSING_STATUS_LABEL} colorMap={PROCESSING_STATUS_BADGE} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
       {openId && <SubmissionDrawer formId={formId} submissionId={openId} onClose={() => setOpenId(null)} />}
     </>
@@ -1223,53 +1327,72 @@ const FormDetailPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <div>
-        <Link
-          to="/settings/forms"
-          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 mb-4 transition-all w-fit text-sm font-medium"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Forms
-        </Link>
-
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-6">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{form.title}</h1>
-                <FormStatusBadge status={form.status} />
-              </div>
-              <p className="text-gray-500 text-sm mt-1">{form.module} Form</p>
-            </div>
-            {/* Persistent, always-visible entry into the Builder — reachable from every tab, not
-                just Overview, so it's never more than one click away regardless of where the user is. */}
-            <button
-              onClick={() => navigate(`/forms/${form._id}/builder`)}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shrink-0"
-            >
-              {builderCtaLabel(form, (form.layout || []).reduce((sum, section) => sum + (section.elements?.length || 0), 0))}
-            </button>
+    // The shared app layout (App.jsx's <main>) applies py-6 px-4 sm:px-6 lg:px-8 to every routed
+    // page; this page opts back out the same way Companies/Settings do, with a matching negative
+    // margin, so the fixed header strip below can run edge-to-edge under the app's own navbar.
+    <div className="min-h-screen bg-white -mt-6 -mx-4 sm:-mx-6 lg:-mx-8">
+      {/* Fixed header strip — same fixed-toolbar pattern as Companies.jsx / FormsList.jsx (Back +
+          title on the left, the page's one primary action on the right) instead of an in-flow
+          card, so it stays visible while the tab content below scrolls. */}
+      <div
+        className="fixed right-0 h-16 px-4 sm:px-6 lg:px-8 border-b border-[#E1E4EA] bg-white flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
+        style={{
+          left: "var(--sidebar-width, 0px)",
+          zIndex: 40,
+          minHeight: "64px",
+          maxHeight: "64px",
+          boxSizing: "border-box",
+        }}
+      >
+        <div className="flex items-center gap-4 w-full min-w-0">
+          <Link
+            to="/settings/forms"
+            className="flex items-center gap-1.5 text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium flex-shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </Link>
+          <div className="h-6 w-px bg-gray-200 flex-shrink-0" />
+          <div className="min-w-0 flex items-center gap-2">
+            <h1 className="m-0 leading-tight font-bold text-base sm:text-lg text-gray-900 truncate">
+              {form.title}
+            </h1>
+            <FormStatusBadge status={form.status} />
           </div>
+          <button
+            onClick={() => navigate(`/forms/${form._id}/builder`)}
+            className="ml-auto flex-shrink-0 flex items-center gap-2 px-4 py-2.5 bg-[#0085FF] text-white text-sm font-semibold rounded-full hover:bg-blue-600 transition-colors"
+          >
+            <Pencil className="w-4 h-4" />
+            {builderCtaLabel(form, (form.layout || []).reduce((sum, section) => sum + (section.elements?.length || 0), 0))}
+          </button>
         </div>
+      </div>
 
-        <div className="bg-white border border-gray-200 rounded-lg">
-          <nav className="flex items-center border-b border-gray-200 overflow-x-auto">
-            <div className="flex flex-1">
+      {/* pt matches the fixed strip's own bottom edge exactly (54px/64px top offset + its 64px
+          height), same pairing Settings.jsx uses with its equivalent -mt-6 cancellation — so
+          content starts flush against the strip instead of leaving a gap under it. */}
+      <div className="px-4 sm:px-6 lg:px-8 pt-[86px] lg:pt-[96px]">
+        <div>
+          {/* Same pill-switcher pattern as CompanyProfilePage.jsx's tab row: a border-b line above
+              and below (each -mx-canceling this page's own gutter so it spans full width, exactly
+              like Companies' -mx-6 against its card padding), and an h-10 p-1 bg-[#F1F1F5] track
+              with mb-4 spacing — not the bespoke full-bleed/fixed-height band this had before. */}
+          <div className="flex items-center justify-between mb-4 gap-3">
+            <div className="relative inline-flex items-center gap-1.5 h-10 p-1 bg-[#F1F1F5] rounded-full overflow-x-auto overflow-y-hidden no-scrollbar">
               {visibleTabs(form, activeVersion).map((tab) => {
                 // Only "Duplicate Reviews" and "Submissions" ever carry a badge — a count that
                 // means "something here needs your attention," not a generic item total.
                 const badgeCount = tab === "Duplicate Reviews" ? pendingReviewCount
                   : tab === "Submissions" ? needsReviewSubmissionCount
                   : 0;
+                const isActive = activeTab === tab;
                 return (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-3 text-sm font-medium whitespace-nowrap flex items-center gap-1.5 ${
-                      activeTab === tab
-                        ? "border-b-2 border-blue-600 text-blue-600 -mb-[1px]"
-                        : "text-gray-500 hover:text-gray-900"
+                    className={`relative z-10 flex flex-shrink-0 items-center justify-center gap-1.5 h-8 px-4 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+                      isActive ? "bg-white text-[#0085FF] shadow-sm" : "text-gray-700 hover:text-gray-900"
                     }`}
                   >
                     {tab}
@@ -1282,9 +1405,11 @@ const FormDetailPage = () => {
                 );
               })}
             </div>
-          </nav>
+          </div>
 
-          <div className="p-6 min-h-[400px]">
+          <div className="border-b border-gray-200 mb-4 -mx-4 sm:-mx-6 lg:-mx-8"></div>
+
+          <div className="min-h-[400px]">
             {activeTab === "Overview" && (
               <OverviewTab
                 form={form}

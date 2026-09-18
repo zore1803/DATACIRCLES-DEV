@@ -53,6 +53,10 @@ router.post('/cancellation/undo', requireAuth, adminMiddleware, subscriptionCont
 
 // New payment-related routes
 router.post('/verify-payment', requireAuth, adminMiddleware, subscriptionController.verifyPayment);
+// Pull-based counterpart to verify-payment/the webhook: asks Razorpay whether the pending
+// registration link was actually paid. Safe to call repeatedly (dedupes), read-only when there is
+// nothing to reconcile.
+router.post('/reconcile-payment', requireAuth, adminMiddleware, subscriptionController.reconcilePayment);
 router.get('/payments', requireAuth, adminMiddleware, subscriptionController.getPaymentHistory);
 router.get('/billing-events', requireAuth, adminMiddleware, subscriptionController.getBillingTimeline);
 router.get('/scheduled-changes', requireAuth, adminMiddleware, subscriptionController.getScheduledChanges);

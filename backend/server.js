@@ -16,6 +16,8 @@ const startReminderJob = require('./utils/reminderJob');
 require('./jobs/subscriptionLifecycleJobs');
 require('./jobs/referralLifecycleJobs');
 require('./jobs/renewalLifecycleJobs');
+// Backstop for first payments never acknowledged by the browser callback or the webhook.
+require('./jobs/paymentReconciliationJobs');
 // Turns Active Sales Subscriptions into Invoices when their billing date arrives.
 require('./jobs/salesSubscriptionBillingJob');
 const swaggerUi = require('swagger-ui-express');

@@ -1,5 +1,6 @@
 import CalendarClockIcon from "../components/common/CalendarClockIcon";
 import PdfIcon from "../components/common/PdfIcon";
+import FormIcon from "../components/common/FormIcon";
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import API from "../services/api";
@@ -109,6 +110,13 @@ const Settings = () => {
       navigate(`/settings/google-integration${location.search}`, { replace: true });
     }
   }, [location.search, params.section, navigate]);
+
+  // Opening a section keeps whatever scroll position the settings grid had, so a tile clicked
+  // from halfway down the list rendered its section already scrolled - the section's own content
+  // starting underneath the fixed header strip. Reset to the top whenever the section changes.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [params.section]);
 
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem("user"));
@@ -396,7 +404,9 @@ const Settings = () => {
     },
     {
       id: "forms",
-      icon: <PdfIcon className="w-4 h-4" />,
+      // Same glyph as the sidebar's Forms entry (Navbar's NavFormIcon is just this shared
+      // FormIcon with a padded viewBox), so the tile and the nav item read as one thing.
+      icon: <FormIcon className="w-4 h-4" />,
       label: "Forms",
       description: "Build and manage how customers enter your CRM",
       color: "text-emerald-600",
