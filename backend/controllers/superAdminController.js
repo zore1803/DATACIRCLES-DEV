@@ -22,7 +22,9 @@ const UserAuditLog = require('../models/UserAuditLog.js');
 const {
   setAppStatus,
   cancelSubscription,
+  reconcileSubscriptionPayment,
 } = require('./subscriptionController');
+const razorpay = require('../config/razorpay');
 const {
   sendTrialAdjustedByAdminEmail,
   sendTrialEndedByAdminEmail,
@@ -1322,6 +1324,127 @@ const getOrganizationPayments = async (req, res) => {
   }
 }
 
+// Admin tool for the "customer paid but never got a subscription" case —
+// same logic as scripts/repairUnacknowledgedPayment.js, exposed over HTTP so
+// support doesn't need shell/DB access. `apply: false` (default) only
+// reports what would happen; `apply: true` actually reconciles by replaying
+// the payment through reconcileSubscriptionPayment (the same path the
+// webhook and the 15-min sweep job use), so this never becomes a second,
+// drifting copy of settlement logic.
+const checkPayment = async (req, res) => {
+  try {
+    const { paymentId, apply } = req.body;
+    if (!paymentId || !paymentId.startsWith('pay_')) {
+      return res.status(400).json({ error: 'A valid Razorpay payment id (pay_...) is required.' });
+    }
+
+    let payment;
+    try {
+      payment = await razorpay.payments.fetch(paymentId);
+    } catch (fetchErr) {
+      return res.status(404).json({ error: `Razorpay has no payment with id "${paymentId}".`, details: fetchErr.message });
+    }
+
+    const paymentSummary = {
+      id: payment.id,
+      status: payment.status,
+      amount: payment.amount / 100,
+      currency: payment.currency,
+      invoiceId: payment.invoice_id,
+      organizationId: payment.notes?.organization_id,
+      createdAt: new Date(payment.created_at * 1000),
+    };
+
+    if (payment.status !== 'captured') {
+      return res.json({
+        payment: paymentSummary,
+        captured: false,
+        message: `Payment status is "${payment.status}", not "captured" — no money was taken, nothing to reconcile.`,
+      });
+    }
+
+    let subscription = payment.invoice_id
+      ? await Subscription.findOne({ registrationLinkId: payment.invoice_id })
+      : null;
+    if (!subscription && payment.notes?.organization_id) {
+      subscription = await Subscription.findOne({ organization: payment.notes.organization_id });
+    }
+
+    if (!subscription) {
+      return res.json({
+        payment: paymentSummary,
+        captured: true,
+        message: 'Payment was captured by Razorpay, but no matching subscription was found (no registrationLinkId or notes.organization_id match). This needs manual investigation.',
+      });
+    }
+
+    await subscription.populate('organization', 'name email');
+    const subscriptionSummary = {
+      _id: subscription._id,
+      organization: subscription.organization,
+      planName: subscription.planName,
+      paymentStatus: subscription.paymentStatus,
+      isPaymentConfirmed: subscription.isPaymentConfirmed,
+    };
+
+    if (subscription.isPaymentConfirmed) {
+      return res.json({
+        payment: paymentSummary,
+        captured: true,
+        subscription: subscriptionSummary,
+        alreadyReconciled: true,
+        message: 'Already reconciled — this subscription is already confirmed. Nothing to do.',
+      });
+    }
+
+    if (!apply) {
+      return res.json({
+        payment: paymentSummary,
+        captured: true,
+        subscription: subscriptionSummary,
+        alreadyReconciled: false,
+        message: 'Payment was captured but the subscription was never confirmed. Re-submit with apply: true to reconcile it.',
+      });
+    }
+
+    // Same fix the script applies before reconciling: if "Resume Payment" moved
+    // the subscription onto a newer registration link, the old link this
+    // payment was made against is otherwise unreachable by the normal path.
+    if (payment.invoice_id && subscription.registrationLinkId !== payment.invoice_id) {
+      if (!subscription.priorRegistrationLinkIds?.includes(payment.invoice_id)) {
+        subscription.priorRegistrationLinkIds = [
+          ...(subscription.priorRegistrationLinkIds || []),
+          payment.invoice_id,
+        ];
+        await subscription.save();
+      }
+    }
+
+    const result = await reconcileSubscriptionPayment(subscription);
+    const refreshed = await Subscription.findById(subscription._id).populate('organization', 'name email');
+
+    res.json({
+      payment: paymentSummary,
+      captured: true,
+      reconcileResult: result,
+      subscription: {
+        _id: refreshed._id,
+        organization: refreshed.organization,
+        planName: refreshed.planName,
+        paymentStatus: refreshed.paymentStatus,
+        isPaymentConfirmed: refreshed.isPaymentConfirmed,
+        mandateStatus: refreshed.mandateStatus,
+      },
+      message: result.reconciled
+        ? 'Reconciled — subscription is now confirmed.'
+        : `Not reconciled: ${result.reason || 'unknown reason'}.`,
+    });
+  } catch (err) {
+    console.error('Super admin payment check/repair error:', err);
+    res.status(500).json({ error: 'Failed to check/reconcile payment', details: err.message });
+  }
+};
+
 // Restarts a trial IN PLACE on the org's existing Subscription document —
 // deliberately does NOT delegate to startFreeTrial() anymore. Two reasons,
 // both found by tracing rather than assumed:
@@ -2087,6 +2210,7 @@ module.exports = {
   getOrganizationsForFilter,
   updateTicketStatus,
   getOrganizationPayments,
+  checkPayment,
   adminStartTrialForOrganization,
   adminAdjustTrial,
   adminEndTrialNow,

@@ -80,6 +80,12 @@ router.put('/tickets/:id', superAdminController.updateTicket);
 router.delete('/tickets/:id', superAdminController.deleteTicket);
 router.post('/support/:id/status', superAdminController.updateTicketStatus);
 router.get('/organizations/:orgId/payments', superAdminController.getOrganizationPayments);
+
+// "Customer paid but never got their subscription" repair tool — takes a
+// Razorpay payment id, reports whether it was captured and whether it was
+// ever applied, and (with apply: true) replays it through the normal
+// reconciliation path. Replaces scripts/repairUnacknowledgedPayment.js.
+router.post('/payments/check', superAdminAuth, superAdminController.checkPayment);
 router.post('/organizations/:organizationId/start-trial', superAdminAuth, superAdminController.adminStartTrialForOrganization);
 router.post('/subscriptions/:subscriptionId/adjust-trial', superAdminAuth, superAdminController.adminAdjustTrial);
 router.post('/subscriptions/:subscriptionId/end-trial', superAdminAuth, superAdminController.adminEndTrialNow);

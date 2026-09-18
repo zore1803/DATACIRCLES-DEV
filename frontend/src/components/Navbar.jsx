@@ -29,6 +29,7 @@ import {
   ChartColumnIncreasing,
   CreditCard,
   Tag,
+  Wrench,
   Calculator,
   Crown,
   Pin,
@@ -318,24 +319,17 @@ const Navbar = () => {
     document.documentElement.style.setProperty("--chrome-bg", tint);
   }, [branding?.colors?.primary]);
 
-  // --btn-primary is the one variable every "primary action" button's fill
-  // resolves to (index.css's blanket re-theme rule) — Brand Settings' own
-  // "Button Colour" picker saved to branding.colors.primary all along, but
-  // nothing ever read it back into this variable, so the setting had no
-  // visible effect anywhere outside its own settings-page preview. Only
-  // overridden when the org has actually picked a colour; otherwise the
-  // stylesheet's own default (#0085FF) is left alone.
+  // Brand Settings' colour is the NAVBAR/chrome tint only (--chrome-bg above) — it is deliberately
+  // NOT the button colour. A previous change also pushed it into --btn-primary, which every primary
+  // button's fill resolves to; since those buttons all paint their label white, an org whose brand
+  // colour was white shipped white-on-white — invisible buttons and text, in production, for every
+  // logged-in user. Buttons stay on the stylesheet's own --btn-primary (#0085FF).
+  //
+  // The property is actively removed rather than merely left unset: a client that loaded an older
+  // build in the same tab may still have the inline override on <html>.
   useEffect(() => {
-    const primaryColor = /^#[0-9a-f]{6}$/i.test((branding?.colors?.primary || "").trim())
-      ? branding.colors.primary.trim()
-      : null;
-    if (primaryColor) {
-      document.documentElement.style.setProperty("--btn-primary", primaryColor);
-      document.documentElement.style.setProperty("--btn-primary-hover", darken(primaryColor, 0.15));
-    } else {
-      document.documentElement.style.removeProperty("--btn-primary");
-      document.documentElement.style.removeProperty("--btn-primary-hover");
-    }
+    document.documentElement.style.removeProperty("--btn-primary");
+    document.documentElement.style.removeProperty("--btn-primary-hover");
   }, [branding?.colors?.primary]);
 
   const getInitials = (name) => {
@@ -436,6 +430,7 @@ const Navbar = () => {
     { name: "Support", href: "/super-admin/support", icon: Settings },
     { name: "Plans", href: "/super-admin/plans", icon: CreditCard },
     { name: "Promotions & Rewards", href: "/super-admin/coupons", icon: Tag },
+    { name: "Payment Repair", href: "/super-admin/payment-repair", icon: Wrench },
   ];
 
   useEffect(() => {

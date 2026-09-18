@@ -643,12 +643,13 @@ function BrandSettings() {
 
           {/* Color Scheme */}
           <div>
-            {/* Primary Color — drives every button's fill app-wide (the
-                --btn-primary CSS variable). Whatever's picked here replaces
-                the #0085FF default everywhere it's used, for this
-                organization only. */}
+            {/* Tints the navbar/sidebar chrome (the --chrome-bg CSS variable, derived in
+                Navbar.jsx as a pale wash of this colour), for this organization only.
+                Deliberately NOT the button colour: buttons paint white labels, so letting this
+                drive --btn-primary shipped white-on-white - invisible buttons and text - for any
+                org whose colour was light. Buttons stay on the app default (#0085FF). */}
             <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-              Button Colour
+              Navbar Colour
             </label>
             <div className="flex items-center gap-3">
             <div className="relative flex-shrink-0">

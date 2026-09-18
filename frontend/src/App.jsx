@@ -65,6 +65,7 @@ import PlanManagement from "./pages/PlanManagement";
 import Accounting from "./pages/Accounting";
 import PublicDocumentPage from "./pages/PublicDocumentPage";
 import PromotionsAndRewards from "./pages/PromotionsAndRewards";
+import PaymentRepair from "./pages/PaymentRepair";
 import SalesReturn from "./pages/SalesReturn";
 import SalesSubscription from "./pages/SalesSubscription";
 import EInvoicing from "./pages/EInvoicing";
@@ -792,6 +793,14 @@ function App() {
               element={
                 <SuperAdminPrivateRoute>
                   <PromotionsAndRewards />
+                </SuperAdminPrivateRoute>
+              }
+            />
+            <Route
+              path="/super-admin/payment-repair"
+              element={
+                <SuperAdminPrivateRoute>
+                  <PaymentRepair />
                 </SuperAdminPrivateRoute>
               }
             />

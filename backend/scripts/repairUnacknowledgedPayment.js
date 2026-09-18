@@ -17,6 +17,12 @@
 //   node scripts/repairUnacknowledgedPayment.js pay_XXXXXXXXXXXX            # dry run - reports only
 //   node scripts/repairUnacknowledgedPayment.js pay_XXXXXXXXXXXX --apply    # actually reconcile
 
+// This machine's default DNS resolver fails SRV lookups for the MongoDB
+// Atlas hostname (ECONNREFUSED on _mongodb._tcp...) — same workaround as
+// scripts/seed5DevOrgs.js.
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+
 require('dotenv').config();
 const mongoose = require('mongoose');
 const razorpay = require('../config/razorpay');
