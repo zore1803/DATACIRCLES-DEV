@@ -66,7 +66,6 @@ const quotationSchema = new mongoose.Schema({
   bankDetails: { type: mongoose.Schema.Types.ObjectId, ref: 'BankDetails', default: null },
   isRoundOff: { type: Boolean, default: true },
   transactionType: { type: String, enum: ['intra', 'inter'], default: 'intra' },
-  gstRate: { type: Number, min: 0, max: 100, default: 18 },
   signature: { type: String },
   signatureType: { type: String, enum: ['text', 'upload'], default: 'text' },
   receiverGSTIN: { type: String },

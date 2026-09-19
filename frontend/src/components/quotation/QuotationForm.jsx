@@ -368,6 +368,15 @@ const QuotationForm = ({
   defaultNotesFlat = "",
   defaultTermsFlat = "",
   documentTypeSettings = {},
+  // --- Optional, for callers that already imply the customer (Company/Deal pages).
+  //     Accounting passes none of these, so its behaviour is unchanged. ---
+  // A deal to select on a NEW document, applied through the same handler as a manual pick.
+  preselectDealId = null,
+  // Company preselected in "+ Create Deal", and the company this flow is scoped to: a deal
+  // created for any other company is not added to or selected on this document.
+  initialCompanyId = null,
+  // Reports a deal created here back to the caller so its own deal list stays current.
+  onDealCreated,
 }) => {
   const defaultNotesForNew = defaultNotesByType.quotation !== undefined
     ? defaultNotesByType.quotation
@@ -965,11 +974,75 @@ const QuotationForm = ({
   };
 
   const handleDealCreated = (newDeal) => {
-    setLocalDeals((prev) => [...prev, newDeal]);
+    setShowQuickDealForm(false);
+    // Scoped callers (initialCompanyId set) keep the document with that company:
+    // QuickDealForm lets the company be changed, and a deal for another company is
+    // still created but is not offered or selected here.
+    const newDealCompanyId = newDeal?.company?._id || newDeal?.company || null;
+    if (initialCompanyId && newDealCompanyId && String(newDealCompanyId) !== String(initialCompanyId)) {
+      toast("Deal created for a different company, so it isn't available on this quotation.");
+      return;
+    }
+    setLocalDeals((prev) => (prev.some((d) => d._id === newDeal._id) ? prev : [...prev, newDeal]));
     setForm((prev) => ({ ...prev, deal: newDeal._id }));
     setHasUnsavedChanges(true);
-    setShowQuickDealForm(false);
+    onDealCreated?.(newDeal);
   };
+
+  // One place that turns a chosen deal into the customer fields it implies, so the
+  // manual picker and the preselect below can never drift apart.
+  const applyDealSelection = (value, { markDirty = true } = {}) => {
+    const selectedDeal = localDeals.find((d) => d._id === value);
+    const company = selectedDeal?.company;
+    const nextBilling =
+      company && !isAddressEmpty(company.billingAddress)
+        ? { ...emptyAddress(), ...company.billingAddress }
+        : emptyAddress();
+    const nextShipping =
+      company && !isAddressEmpty(company.shippingAddresses?.[0])
+        ? { ...emptyAddress(), ...company.shippingAddresses[0] }
+        : emptyAddress();
+    const customerState = (company?.billingAddress?.state || '').trim().toLowerCase();
+    const autoType = (sellerState && customerState && sellerState !== customerState) ? 'inter' : 'intra';
+    setForm((prev) => ({
+      ...prev,
+      deal: value,
+      receiverGSTIN: company?.gstin || "",
+      billingAddress: nextBilling,
+      shippingAddress: prev.sameAsBilling ? nextBilling : nextShipping,
+      transactionType: autoType,
+    }));
+    if (markDirty) setHasUnsavedChanges(true);
+  };
+
+  // Applies `preselectDealId` to a NEW document. Never overrides a deal already on the
+  // form -- in particular one carried over from the split view via formOverride -- except
+  // when the caller hands a DIFFERENT id (a deal just created), which is fresh intent.
+  // Re-applies once the seller state has loaded, since inter/intra depends on it.
+  const preselectAppliedRef = useRef({ started: false, dealId: null, withSeller: false });
+  useEffect(() => {
+    if (!preselectAppliedRef.current.started) {
+      const handedOff = !!(formOverride || form.deal);
+      preselectAppliedRef.current = {
+        started: true,
+        dealId: handedOff ? preselectDealId : null,
+        withSeller: handedOff,
+      };
+      if (handedOff) return;
+    }
+    if (editingQuotation || !preselectDealId) return;
+    if (!localDeals.some((d) => d._id === preselectDealId)) return;
+    const last = preselectAppliedRef.current;
+    const withSeller = !!sellerState;
+    if (last.dealId === preselectDealId) {
+      if (last.withSeller || !withSeller || form.deal !== preselectDealId) return;
+    }
+    preselectAppliedRef.current = { started: true, dealId: preselectDealId, withSeller };
+    // A preselect isn't a user edit, so it doesn't trigger the unsaved-changes prompt.
+    applyDealSelection(preselectDealId, { markDirty: false });
+    // applyDealSelection is recreated each render; keyed on the inputs that matter instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselectDealId, localDeals, sellerState, editingQuotation, form.deal, formOverride]);
 
   // Hands the current form state to the parent's preview/print modal —
   // same onPreview contract Accounting.jsx wires up for the split-view panel.
@@ -1193,6 +1266,7 @@ const QuotationForm = ({
         <QuickDealForm
           companies={companies}
           contacts={contacts}
+          initialCompanyId={initialCompanyId || ""}
           onDealCreated={handleDealCreated}
           onRequestClose={() => setShowQuickDealForm(false)}
         />
@@ -1271,16 +1345,32 @@ const QuotationForm = ({
                     </h2>
                   </div>
                 
-                  <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden h-10 bg-white">
-                    <input
-                      type="text"
-                      value={form.quotationPrefix}
-                      onChange={(e) => {
-                        setForm((prev) => ({ ...prev, quotationPrefix: e.target.value }));
-                        setHasUnsavedChanges(true);
-                      }}
-                      className="w-20 px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 border-r border-gray-300 focus:outline-none focus:bg-white"
-                    />
+                  {/* Same controlled picker the Invoice screen uses: prefixes and
+                      suffixes come from Settings -> Document Numbering, so a document
+                      cannot be saved with an ad-hoc prefix. documentTypeSettings.quote
+                      is this type's own list -- never another document type's. */}
+                  <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden h-10 bg-white flex-shrink-0">
+                    <div className="relative h-full border-r border-gray-300 bg-gray-50 flex items-center">
+                      <select
+                        value={form.quotationPrefix}
+                        onChange={(e) => {
+                          setForm((prev) => ({ ...prev, quotationPrefix: e.target.value }));
+                          setHasUnsavedChanges(true);
+                        }}
+                        title="Quotation number prefix"
+                        aria-label="Quotation number prefix"
+                        className="h-full pl-3.5 pr-7 text-sm font-semibold text-gray-700 bg-transparent focus:outline-none appearance-none cursor-pointer"
+                      >
+                        {(documentTypeSettings?.quote?.prefixes || []).length > 0 ? (
+                          documentTypeSettings.quote.prefixes.map((pfx) => (
+                            <option key={pfx} value={pfx}>{pfx}</option>
+                          ))
+                        ) : (
+                          <option value={form.quotationPrefix}>{form.quotationPrefix || "None"}</option>
+                        )}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
+                    </div>
                     <input
                       type="text"
                       placeholder={nextNumberPreview ? String(nextNumberPreview) : "Auto"}
@@ -1289,20 +1379,28 @@ const QuotationForm = ({
                         setForm((prev) => ({ ...prev, quotationNumber: e.target.value }));
                         setHasUnsavedChanges(true);
                       }}
+                      title="Quotation number (leave blank to auto-generate)"
+                      aria-label="Quotation number"
                       className="w-24 px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none"
                     />
-                    <input
-                      type="text"
-                      placeholder="Suffix"
-                      value={form.quotationSuffix}
-                      onChange={(e) => {
-                        setForm((prev) => ({ ...prev, quotationSuffix: e.target.value }));
-                        setHasUnsavedChanges(true);
-                      }}
-                      title="Quotation number suffix (optional)"
-                      aria-label="Quotation number suffix"
-                      className="w-20 px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 border-l border-gray-300 focus:outline-none focus:bg-white"
-                    />
+                    <div className="relative h-full border-l border-gray-300 bg-gray-50 flex items-center">
+                      <select
+                        value={form.quotationSuffix}
+                        onChange={(e) => {
+                          setForm((prev) => ({ ...prev, quotationSuffix: e.target.value }));
+                          setHasUnsavedChanges(true);
+                        }}
+                        title="Quotation number suffix (optional)"
+                        aria-label="Quotation number suffix"
+                        className="h-full pl-2.5 pr-7 text-sm font-semibold text-gray-700 bg-transparent focus:outline-none appearance-none cursor-pointer"
+                      >
+                        <option value="">None</option>
+                        {(documentTypeSettings?.quote?.suffixes || []).map((sfx) => (
+                          <option key={sfx} value={sfx}>{sfx}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
+                    </div>
                   </div>
                   </>
                 )}
@@ -1387,27 +1485,7 @@ const QuotationForm = ({
                         // split-view Invoice panel (InvoiceForm.jsx). Clears
                         // them to empty when that company has none, rather
                         // than carrying over the previous deal's data.
-                        const selectedDeal = localDeals.find((d) => d._id === value);
-                        const company = selectedDeal?.company;
-                        const nextBilling =
-                          company && !isAddressEmpty(company.billingAddress)
-                            ? { ...emptyAddress(), ...company.billingAddress }
-                            : emptyAddress();
-                        const nextShipping =
-                          company && !isAddressEmpty(company.shippingAddresses?.[0])
-                            ? { ...emptyAddress(), ...company.shippingAddresses[0] }
-                            : emptyAddress();
-                        const customerState = (company?.billingAddress?.state || '').trim().toLowerCase();
-                        const autoType = (sellerState && customerState && sellerState !== customerState) ? 'inter' : 'intra';
-                        setForm((prev) => ({
-                          ...prev,
-                          deal: value,
-                          receiverGSTIN: company?.gstin || "",
-                          billingAddress: nextBilling,
-                          shippingAddress: prev.sameAsBilling ? nextBilling : nextShipping,
-                          transactionType: autoType,
-                        }));
-                        setHasUnsavedChanges(true);
+                        applyDealSelection(value);
                       }}
                       placeholder="Search customers by name, company, GSTIN..."
                       displayKey="title"

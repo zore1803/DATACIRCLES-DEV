@@ -8,7 +8,7 @@ const sendGridMail = require("../utils/sendGridMail");
 const { renderEmail } = require("../utils/emailLayout");
 const mongoose = require("mongoose");
 const Deal = require("../models/Deal");
-const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
+const { getDocumentSettingsForOrganization, resolveDocumentNumber, raiseInvoiceSeriesTo } = require("../utils/documentNumbering");
 const { getOwnedDealIds } = require("../utils/ownedCompanies");
 
 // A user with own-only permission may only touch delivery challans they
@@ -59,7 +59,6 @@ exports.createDeliveryChallan = async (req, res) => {
       isRoundOff,
       transactionType,
       receiverGSTIN,
-      gstRate,
       billingAddress,
       shippingAddress,
       deliveryChallanPrefix,
@@ -157,7 +156,6 @@ exports.createDeliveryChallan = async (req, res) => {
       // Tax data, same shape as an invoice (see models/deliveryChallan.js).
       transactionType: transactionType === "inter" ? "inter" : "intra",
       receiverGSTIN: receiverGSTIN || "",
-      ...(gstRate !== undefined && { gstRate: parseFloat(gstRate) || 0 }),
       billingAddress: finalBillingAddress,
       shippingAddress: finalShippingAddress,
       user: req.user.id,
@@ -245,7 +243,6 @@ exports.duplicateDeliveryChallan = async (req, res) => {
       isRoundOff: source.isRoundOff,
       transactionType: source.transactionType || "intra",
       receiverGSTIN: source.receiverGSTIN || "",
-      gstRate: source.gstRate,
       billingAddress: source.billingAddress,
       shippingAddress: source.shippingAddress,
       user: req.user.id,
@@ -483,7 +480,6 @@ exports.updateDeliveryChallan = async (req, res) => {
       isRoundOff,
       transactionType,
       receiverGSTIN,
-      gstRate,
       billingAddress,
       shippingAddress,
       reference,
@@ -560,7 +556,6 @@ exports.updateDeliveryChallan = async (req, res) => {
         // Only written when sent, so an update without tax fields leaves them unchanged.
         ...(transactionType !== undefined && { transactionType: transactionType === "inter" ? "inter" : "intra" }),
         ...(receiverGSTIN !== undefined && { receiverGSTIN: receiverGSTIN || "" }),
-        ...(gstRate !== undefined && { gstRate: parseFloat(gstRate) || 0 }),
         billingAddress: finalBillingAddress,
         shippingAddress: finalShippingAddress,
       },
@@ -722,6 +717,18 @@ exports.updateDeliveryChallanNumber = async (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: "Delivery Challan not found" });
     }
+
+    // A number set by hand still belongs to its series: move the counter past it so
+    // later auto numbers continue after it instead of colliding with it.
+    const numberSettings = await getDocumentSettingsForOrganization(req.user.organization);
+    await raiseInvoiceSeriesTo({
+      organization: req.user.organization,
+      documentTypeKey: "deliveryChallan",
+      prefix: numberSettings.documentTypeSettings?.deliveryChallan?.prefix,
+      suffix: numberSettings.documentTypeSettings?.deliveryChallan?.suffix,
+      date: updated.date,
+      number: updated.deliveryChallanNumber,
+    });
 
     res.json({
       message: "Delivery Challan number updated successfully",

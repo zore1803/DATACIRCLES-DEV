@@ -44,7 +44,6 @@ const proformaInvoiceSchema = new mongoose.Schema({
   // unrounded in their PDF, exactly as before.
   isRoundOff: { type: Boolean },
   transactionType: { type: String, enum: ['intra', 'inter'], default: 'intra' },
-  gstRate: { type: Number, min: 0, max: 100, default: 18 },
   signature: { type: String },
   signatureType: { type: String, enum: ['text', 'upload'], default: 'text' },
   receiverGSTIN: { type: String }, // Added receiverGSTIN field

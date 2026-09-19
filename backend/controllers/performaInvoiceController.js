@@ -6,7 +6,7 @@ const htmlDocumentPdf = require("../utils/htmlDocumentPdf");
 const mongoose = require("mongoose");
 const Branding = require("../models/Branding");
 const Deal = require("../models/Deal");
-const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
+const { getDocumentSettingsForOrganization, resolveDocumentNumber, raiseInvoiceSeriesTo } = require("../utils/documentNumbering");
 const sendGridMail = require("../utils/sendGridMail");
 const { renderEmail } = require("../utils/emailLayout");
 const { getOwnedDealIds } = require("../utils/ownedCompanies");
@@ -35,7 +35,6 @@ const createPerformaInvoice = async (req, res) => {
       notes,
       terms,
       transactionType,
-      gstRate,
       signature,
       signatureType,
       discount,
@@ -133,7 +132,6 @@ const createPerformaInvoice = async (req, res) => {
       terms: terms || "",
       reference: reference || "",
       transactionType: transactionType || 'intra',
-      gstRate: gstRate || 18,
       signature,
       signatureType: signatureType || "text",
       ...(digitalSignature !== undefined && { digitalSignature }),
@@ -224,7 +222,6 @@ const duplicatePerformaInvoice = async (req, res) => {
       terms: source.terms,
       reference: source.reference,
       transactionType: source.transactionType,
-      gstRate: source.gstRate,
       signature: source.signature,
       signatureType: normalizedSignatureType,
       digitalSignature: source.digitalSignature,
@@ -507,7 +504,6 @@ const updatePerformaInvoice = async (req, res) => {
       notes,
       terms,
       transactionType,
-      gstRate,
       signature,
       signatureType,
       discount,
@@ -589,7 +585,6 @@ const updatePerformaInvoice = async (req, res) => {
         terms,
         reference: reference || "",
         transactionType,
-        gstRate,
         signature,
         signatureType,
         ...(digitalSignature !== undefined && { digitalSignature }),
@@ -690,6 +685,18 @@ const updatePerformaInvoiceNumber = async (req, res) => {
     if (!updated) {
       return res.status(404).json({ message: "Performa Invoice not found" });
     }
+
+    // A number set by hand still belongs to its series: move the counter past it so
+    // later auto numbers continue after it instead of colliding with it.
+    const numberSettings = await getDocumentSettingsForOrganization(req.user.organization);
+    await raiseInvoiceSeriesTo({
+      organization: req.user.organization,
+      documentTypeKey: "proformaInvoice",
+      prefix: numberSettings.documentTypeSettings?.proformaInvoice?.prefix,
+      suffix: numberSettings.documentTypeSettings?.proformaInvoice?.suffix,
+      date: updated.date,
+      number: updated.performaInvoiceNumber,
+    });
 
     return res.json({
       message: "Performa Invoice number updated",

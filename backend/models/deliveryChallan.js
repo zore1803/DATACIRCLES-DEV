@@ -36,7 +36,6 @@ const deliveryChallanSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   transactionType: { type: String, enum: ['intra', 'inter'], default: 'intra' },
   receiverGSTIN: { type: String, default: '' },
-  gstRate: { type: Number, min: 0, max: 100, default: 18 },
   reference: { type: String, default: '' },
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },

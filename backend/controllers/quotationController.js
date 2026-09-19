@@ -8,7 +8,7 @@ const sendGridMail = require("../utils/sendGridMail");
 const { renderEmail } = require("../utils/emailLayout");
 const mongoose = require("mongoose");
 const Deal = require("../models/Deal");
-const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
+const { getDocumentSettingsForOrganization, resolveDocumentNumber, raiseInvoiceSeriesTo } = require("../utils/documentNumbering");
 const { getOwnedDealIds } = require("../utils/ownedCompanies");
 
 // A user with own-only permission may only touch quotations they own.
@@ -53,7 +53,6 @@ exports.createQuotation = async (req, res) => {
       notes,
       terms,
       transactionType,
-      gstRate,
       signature,
       signatureType,
       discount,
@@ -154,7 +153,6 @@ exports.createQuotation = async (req, res) => {
       notes: notes || "",
       terms: terms || "",
       transactionType: transactionType || "intra",
-      gstRate: gstRate || 18,
       signature,
       signatureType: signatureType || "text",
       discount: discount || { type: "fixed", value: 0 },
@@ -245,7 +243,6 @@ exports.duplicateQuotation = async (req, res) => {
       terms: source.terms,
       isRoundOff: source.isRoundOff,
       transactionType: source.transactionType,
-      gstRate: source.gstRate,
       signature: source.signature,
       signatureType: normalizedSignatureType,
       discount: source.discount,
@@ -484,7 +481,6 @@ exports.updateQuotation = async (req, res) => {
       notes,
       terms,
       transactionType,
-      gstRate,
       signature,
       signatureType,
       discount,
@@ -562,7 +558,6 @@ exports.updateQuotation = async (req, res) => {
         notes,
         terms,
         transactionType,
-        gstRate,
         signature,
         signatureType,
         discount,
@@ -744,6 +739,18 @@ exports.updateQuotationNumber = async (req, res) => {
     if (!updatedQuotation) {
       return res.status(404).json({ error: "Quotation not found" });
     }
+
+    // A number set by hand still belongs to its series: move the counter past it so
+    // later auto numbers continue after it instead of colliding with it.
+    const numberSettings = await getDocumentSettingsForOrganization(req.user.organization);
+    await raiseInvoiceSeriesTo({
+      organization: req.user.organization,
+      documentTypeKey: "quote",
+      prefix: numberSettings.documentTypeSettings?.quote?.prefix,
+      suffix: numberSettings.documentTypeSettings?.quote?.suffix,
+      date: updatedQuotation.date,
+      number: updatedQuotation.quotationNumber,
+    });
 
     return res.json({
       message: "Quotation number updated successfully",
