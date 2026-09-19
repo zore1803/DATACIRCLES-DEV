@@ -432,11 +432,10 @@ const InvoiceFormFull = ({
     discount: { type: "fixed", value: 0 },
     amount: 0,
     status: "Draft",
-    style: "Regular",
-    gstRate: 18,
     transactionType: "intra",
-    isRoundOff: false,
-    hideTotals: false,
+    // Same default as the shared split-view panel, so a document does not
+    // round differently depending on which layout created it.
+    isRoundOff: true,
     notes: defaultNotesForNew,
     terms: defaultTermsForNew,
     attachments: [],
@@ -656,9 +655,7 @@ const InvoiceFormFull = ({
         discount: sourceData.discount || { type: "fixed", value: 0 },
         amount: sourceData.amount || 0,
         status: sourceData.status || "Draft",
-        style: sourceData.style || "Regular",
-        isRoundOff: sourceData.isRoundOff !== undefined ? sourceData.isRoundOff : false,
-        hideTotals: sourceData.hideTotals || false,
+        isRoundOff: sourceData.isRoundOff !== undefined ? sourceData.isRoundOff : true,
         // Keep the saved GST on/off (a document saved with GST off must reopen with it off).
         // Only a source that never stored the flag falls back to on.
         transactionType: sourceData.transactionType || "intra",
@@ -690,8 +687,6 @@ const InvoiceFormFull = ({
         discount: { type: "fixed", value: 0 },
         amount: 0,
         status: "Draft",
-        style: "Regular",
-        gstRate: 18,
         transactionType: "intra",
         notes: defaultNotesForNew,
         terms: defaultTermsForNew,
@@ -834,17 +829,14 @@ const InvoiceFormFull = ({
     return GST_RATES.includes(itemRate) ? itemRate : 0;
   };
 
-  const calculateTotalAmount = useCallback((items, discount, gstRate = 18, transactionType = "intra") => {
-    const subtotalAfterItemDiscounts =
-      calculateSubtotalAfterItemDiscounts(items);
-    const invoiceDiscountAmount = calculateInvoiceDiscountAmount(
-      subtotalAfterItemDiscounts,
-      discount
-    );
-    const netTaxable = subtotalAfterItemDiscounts - invoiceDiscountAmount;
-    const totalTax = netTaxable * (gstRate / 100);
-    return netTaxable + totalTax;
-  }, []);
+  // Single source of truth for the document total: the same engine the live
+  // preview, the PDF and the submit payload already use. This used to hold a
+  // second formula that charged one flat document-wide rate (defaulting to
+  // 18%), which could only ever contradict the per-line GST rates.
+  const calculateTotalAmount = useCallback(
+    (nextForm) => computeDocument(nextForm, "invoice").grandTotal,
+    []
+  );
 
   const handleItemChange = (index, field, value) => {
     setForm((prev) => {
@@ -902,7 +894,7 @@ const InvoiceFormFull = ({
       return {
         ...prev,
         items: newItems,
-        amount: calculateTotalAmount(newItems, prev.discount),
+        amount: calculateTotalAmount({ ...prev, items: newItems }),
       };
     });
     setHasUnsavedChanges(true);
@@ -949,7 +941,7 @@ const InvoiceFormFull = ({
       return {
         ...prev,
         discount: newDiscount,
-        amount: calculateTotalAmount(prev.items, newDiscount),
+        amount: calculateTotalAmount({ ...prev, discount: newDiscount }),
       };
     });
     setHasUnsavedChanges(true);
@@ -970,7 +962,7 @@ const InvoiceFormFull = ({
       return {
         ...prev,
         items: newItems,
-        amount: calculateTotalAmount(newItems, prev.discount),
+        amount: calculateTotalAmount({ ...prev, items: newItems }),
       };
     });
     setHasUnsavedChanges(true);
@@ -1012,7 +1004,7 @@ const InvoiceFormFull = ({
       return {
         ...prev,
         items: newItems,
-        amount: calculateTotalAmount(newItems, prev.discount),
+        amount: calculateTotalAmount({ ...prev, items: newItems }),
       };
     });
     setHasUnsavedChanges(true);
@@ -1040,7 +1032,7 @@ const InvoiceFormFull = ({
       return {
         ...prev,
         items: newItems,
-        amount: calculateTotalAmount(newItems, prev.discount),
+        amount: calculateTotalAmount({ ...prev, items: newItems }),
       };
     });
     setQuickAddItem(null);
@@ -1054,7 +1046,7 @@ const InvoiceFormFull = ({
       return {
         ...prev,
         items: newItems,
-        amount: calculateTotalAmount(newItems, prev.discount),
+        amount: calculateTotalAmount({ ...prev, items: newItems }),
       };
     });
     setHasUnsavedChanges(true);
@@ -1277,18 +1269,14 @@ const InvoiceFormFull = ({
           parentItemId: item.parentItemId,
           discountType: item.discountType,
           discount: parseFloat(item.discount),
-          // The rate the document was actually priced at, not a blind
-          // parseFloat. computeDocument() falls back to the document-level
-          // gstRate when an item has no valid rate of its own — but
-          // `parseFloat(undefined) || 0` collapsed that "unset" into an
-          // explicit 0%, which IS a valid GST rate, so the saved invoice
-          // rendered 0% CGST/SGST while its stored amount still carried the
-          // 18% the preview had charged. Persist the effective rate so the
-          // PDF reproduces the total that was saved.
+          // The rate the line was actually priced at, resolved the same way
+          // computeDocument() resolves it: a real GST slab, otherwise 0%.
+          // A blind parseFloat here would not agree with the engine, and the
+          // saved document would render a different rate than it was totalled
+          // with. Persist the effective rate so the PDF reproduces the total.
           gstRate: effectiveGstRate(item),
           taxInclusive: !!item.taxInclusive,
         })),
-        style: form.style,
         transactionType: form.transactionType,
       };
 
@@ -1313,8 +1301,6 @@ const InvoiceFormFull = ({
         discount: { type: "fixed", value: 0 },
         amount: 0,
         status: "Draft",
-        style: "",
-        gstRate: 18,
         transactionType: "intra",
       });
       await fetchData();
@@ -1372,9 +1358,8 @@ const InvoiceFormFull = ({
     form.discount
   );
   
-  let finalTotal = subtotalAfterItemDiscounts - invoiceDiscountAmount;
   const taxDetails = computeDocument(form, "invoice");
-  finalTotal = taxDetails.grandTotal;
+  let finalTotal = taxDetails.grandTotal;
   
   let roundOffAmount = 0;
   if (form.isRoundOff) {

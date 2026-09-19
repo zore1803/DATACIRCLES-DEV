@@ -32,7 +32,6 @@ const createPerformaInvoice = async (req, res) => {
       amount,
       status,
       items,
-      style,
       notes,
       terms,
       transactionType,
@@ -130,7 +129,6 @@ const createPerformaInvoice = async (req, res) => {
       amount,
       status,
       items,
-      style: style || "",
       notes: notes || "",
       terms: terms || "",
       reference: reference || "",
@@ -222,7 +220,6 @@ const duplicatePerformaInvoice = async (req, res) => {
       amount: source.amount,
       status: "Draft",
       items: source.items,
-      style: source.style,
       notes: source.notes,
       terms: source.terms,
       reference: source.reference,
@@ -430,8 +427,7 @@ const downloadPerformaInvoice = async (req, res) => {
     const OrgDetails = await Branding.findOne({
       organization: req.user.organization,
     }).sort({ updatedAt: -1 });
-        // The template comes from the document's own `style` when it has one,
-    // otherwise from the organization's document settings — resolved inside
+        // The template is the organization's per-type choice, resolved inside
     // htmlDocumentPdf, which renders the same markup as the live preview.
     const copyType = ["original", "duplicate", "triplicate"].includes(req.query.copyType)
       ? req.query.copyType
@@ -508,7 +504,6 @@ const updatePerformaInvoice = async (req, res) => {
       amount,
       status,
       items,
-      style,
       notes,
       terms,
       transactionType,
@@ -590,7 +585,6 @@ const updatePerformaInvoice = async (req, res) => {
         amount,
         status,
         items,
-        style,
         notes,
         terms,
         reference: reference || "",

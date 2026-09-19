@@ -28,31 +28,6 @@ const calculateItemAmount = (item) => {
   return subtotal - discount;
 };
 
-const calculateTotalAmount = (
-  items,
-  discount,
-  gstRate = 18,
-  transactionType = "intra"
-) => {
-  const subtotal = items.reduce(
-    (total, item) => total + calculateItemAmount(item),
-    0
-  );
-  let netAmount = subtotal;
-  if (discount && discount.value > 0) {
-    if (discount.type === "percentage") {
-      netAmount = subtotal * (1 - discount.value / 100);
-    } else {
-      netAmount = subtotal - discount.value;
-    }
-  }
-  if (gstRate > 0) {
-    const taxRate = transactionType === "intra" ? gstRate / 2 : gstRate; // For intra, CGST + SGST = full GST
-    const totalTax = netAmount * (gstRate / 100);
-    netAmount += totalTax;
-  }
-  return netAmount;
-};
 
 const createInvoice = async (req, res) => {
   const session = await mongoose.startSession();
@@ -68,7 +43,7 @@ const createInvoice = async (req, res) => {
       isRoundOff,
       status,
       items,
-      style,
+      reference,
       notes,
       terms,
       bankDetails,
@@ -77,7 +52,6 @@ const createInvoice = async (req, res) => {
       signatureType,
       receiverGSTIN,
       transactionType,
-      gstRate,
       invoicePrefix,
       invoiceSuffix,
       invoiceNumber,
@@ -155,16 +129,8 @@ const createInvoice = async (req, res) => {
         .status(400)
         .json({ error: "Transaction type must be 'intra' or 'inter'" });
     }
-    if (gstRate !== undefined && (gstRate < 0 || gstRate > 100)) {
-      await session.abortTransaction();
-      session.endSession();
-      return res
-        .status(400)
-        .json({ error: "GST rate must be between 0 and 100" });
-    }
 
     // Verify amount calculation
-    // const calculatedAmount = calculateTotalAmount(items, discount, gstRate || 18, transactionType || 'intra');
     // if (Math.abs(calculatedAmount - amount) > 0.01) {
     //   await session.abortTransaction();
     //   session.endSession();
@@ -238,7 +204,7 @@ const createInvoice = async (req, res) => {
       discount,
       status,
       items,
-      style,
+      reference: reference || "",
       notes,
       terms,
       bankDetails: bankDetails || null,
@@ -250,7 +216,6 @@ const createInvoice = async (req, res) => {
       billingAddress: finalBillingAddress,
       shippingAddress: finalShippingAddress,
       transactionType: transactionType || "intra",
-      gstRate: gstRate || 18,
       invoiceNumber: finalInvoiceNumber,
       user: req.user.id,
       organization: req.user.organization,
@@ -348,7 +313,7 @@ const duplicateInvoice = async (req, res) => {
       isRoundOff: source.isRoundOff,
       status: "Draft",
       items: source.items,
-      style: source.style,
+      reference: source.reference,
       notes: source.notes,
       terms: source.terms,
       signature: source.signature,
@@ -357,7 +322,6 @@ const duplicateInvoice = async (req, res) => {
       billingAddress: source.billingAddress,
       shippingAddress: source.shippingAddress,
       transactionType: source.transactionType,
-      gstRate: source.gstRate,
       invoiceNumber: newInvoiceNumber,
       user: req.user.id,
       organization: req.user.organization,
@@ -388,7 +352,6 @@ const getAllInvoices = async (req, res) => {
         { invoiceNumber: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
         { receiverGSTIN: { $regex: buildFuzzySearchPattern(search), $options: "i" } }, // Added receiverGSTIN to search
         { transactionType: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { gstRate: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
       ];
     }
 
@@ -664,8 +627,7 @@ const downloadInvoice = async (req, res) => {
     const OrgDetails = await Branding.findOne({
       organization: req.user.organization,
     }).sort({ updatedAt: -1 });
-    // The template comes from the document's own `style` when it has one,
-    // otherwise from the organization's document settings — resolved inside
+    // The template is the organization's per-type choice, resolved inside
     // htmlDocumentPdf, which renders the same markup as the live preview.
     const copyType = ["original", "duplicate", "triplicate"].includes(req.query.copyType)
       ? req.query.copyType
@@ -753,7 +715,7 @@ const updateInvoice = async (req, res) => {
       isRoundOff,
       status,
       items,
-      style,
+      reference,
       notes,
       terms,
       bankDetails,
@@ -764,7 +726,6 @@ const updateInvoice = async (req, res) => {
       billingAddress,
       shippingAddress,
       transactionType,
-      gstRate,
     } = req.body;
 
     // Validate items
@@ -820,14 +781,8 @@ const updateInvoice = async (req, res) => {
         .status(400)
         .json({ error: "Transaction type must be 'intra' or 'inter'" });
     }
-    if (gstRate !== undefined && (gstRate < 0 || gstRate > 100)) {
-      return res
-        .status(400)
-        .json({ error: "GST rate must be between 0 and 100" });
-    }
 
     // Verify amount calculation
-    // const calculatedAmount = calculateTotalAmount(items, discount, gstRate || 18, transactionType || 'intra');
     // if (Math.abs(calculatedAmount - amount) > 0.01) {
     //   return res.status(400).json({ error: "Provided amount does not match calculated amount" });
     // }
@@ -883,7 +838,7 @@ const updateInvoice = async (req, res) => {
     invoice.discount = discount;
     invoice.status = status;
     invoice.items = items;
-    invoice.style = style;
+    if (reference !== undefined) invoice.reference = reference;
     invoice.notes = notes;
     invoice.terms = terms;
     invoice.bankDetails = bankDetails || null;
@@ -895,7 +850,6 @@ const updateInvoice = async (req, res) => {
     invoice.billingAddress = finalBillingAddress;
     invoice.shippingAddress = finalShippingAddress;
     invoice.transactionType = transactionType || "intra";
-    invoice.gstRate = gstRate || 18;
 
     await invoice.save({ session });
 

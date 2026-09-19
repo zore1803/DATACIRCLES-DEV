@@ -35,6 +35,11 @@ const invoiceSchema = new mongoose.Schema({
       min: 0,
     },
   },
+  // Free-text field (e.g. a customer's PO number) -- no bearing on
+  // invoiceNumber/numbering, purely informational. The other three
+  // document models already carry it; without it the form's Reference
+  // input was silently dropped on save.
+  reference: { type: String, default: '' },
   // Free-text footer blocks, printed on the document when present.
   notes: { type: String, default: '' },
   terms: { type: String, default: '' },
@@ -52,7 +57,6 @@ const invoiceSchema = new mongoose.Schema({
   signatureType: { type: String, enum: ['text', 'upload'], default: 'text' },
   receiverGSTIN: { type: String }, // Added receiverGSTIN field
   transactionType: { type: String, enum: ['intra', 'inter'], default: 'intra' },
-  gstRate: { type: Number, min: 0, max: 100, default: 18 },
   items: [{
     itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item' },
     // Set only for variant lines — itemId above is the parent Item's id

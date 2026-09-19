@@ -23,7 +23,7 @@ import { AddressFieldsGroup, emptyAddress, isAddressEmpty, SectionHeader } from 
 import QuickDealForm from "../deal/QuickDealForm";
 import SearchableDropdown from "../contact/SearchableDropdown";
 import toast from "react-hot-toast";
-import { computeDocument } from "../../../../shared/documentTemplates";
+import { computeDocument, GST_RATES } from "../../../../shared/documentTemplates";
 import { PREDEFINED_NOTES, PREDEFINED_TERMS } from "../../utils/documentDefaultText";
 
 import SearchIcon from "../common/SearchIcon";
@@ -395,9 +395,9 @@ const QuotationForm = ({
     discount: { type: "fixed", value: 0 },
     amount: 0,
     status: "Draft",
-    style: "Regular",
-    isRoundOff: false,
-    hideTotals: false,
+    // Same default as the shared split-view panel, so a document does not
+    // round differently depending on which layout created it.
+    isRoundOff: true,
     notes: defaultNotesForNew,
     terms: defaultTermsForNew,
     attachments: [],
@@ -602,9 +602,7 @@ const QuotationForm = ({
         discount: sourceData.discount || { type: "fixed", value: 0 },
         amount: sourceData.amount || 0,
         status: sourceData.status || "Draft",
-        style: sourceData.style || "Regular",
-        isRoundOff: sourceData.isRoundOff !== undefined ? sourceData.isRoundOff : false,
-        hideTotals: sourceData.hideTotals || false,
+        isRoundOff: sourceData.isRoundOff !== undefined ? sourceData.isRoundOff : true,
         transactionType: sourceData.transactionType || "intra",
         notes: sourceData.notes || "",
         terms: sourceData.terms || "",
@@ -630,7 +628,6 @@ const QuotationForm = ({
         discount: { type: "fixed", value: 0 },
         amount: 0,
         status: "Draft",
-        style: "Regular",
         transactionType: "intra",
         notes: defaultNotesForNew,
         terms: defaultTermsForNew,
@@ -735,6 +732,14 @@ const QuotationForm = ({
       return parseFloat(discount.value) || 0;
     }
     return 0;
+  };
+
+  // Mirrors computeDocument()'s own line-rate resolution: the line's own
+  // rate when it is a real GST slab, otherwise untaxed. GST is per line --
+  // there is no document-level rate.
+  const effectiveGstRate = (item) => {
+    const itemRate = Number(item.gstRate);
+    return GST_RATES.includes(itemRate) ? itemRate : 0;
   };
 
   const calculateTotalAmount = useCallback((items, discount) => {
@@ -1053,7 +1058,10 @@ const QuotationForm = ({
         reference: form.reference,
         quotationPrefix: form.quotationPrefix,
         quotationSuffix: form.quotationSuffix,
-        quotationNumber: form.quotationNumber,
+        // An existing document keeps the number it was issued: it is shown
+        // read-only while editing and never re-sent, so an update cannot
+        // renumber it.
+        ...(editingQuotation ? {} : { quotationNumber: form.quotationNumber }),
         receiverGSTIN: form.receiverGSTIN,
         billingAddress: form.billingAddress,
         shippingAddress: form.sameAsBilling ? form.billingAddress : form.shippingAddress,
@@ -1080,10 +1088,13 @@ const QuotationForm = ({
           parentItemId: item.parentItemId,
           discountType: item.discountType,
           discount: parseFloat(item.discount),
-          gstRate: parseFloat(item.gstRate) || 0,
+          // Resolved exactly the way computeDocument() resolves it -- a real
+          // GST slab, otherwise 0%. A blind parseFloat would persist a rate
+          // (say 7%) that the engine scores as 0%, so the saved rate would
+          // contradict the saved total.
+          gstRate: effectiveGstRate(item),
           taxInclusive: !!item.taxInclusive,
         })),
-        style: form.style,
         transactionType: form.transactionType,
       };
 
@@ -1108,7 +1119,6 @@ const QuotationForm = ({
         discount: { type: "fixed", value: 0 },
         amount: 0,
         status: "Draft",
-        style: "",
       });
       await fetchData();
       onClose();
@@ -1247,45 +1257,55 @@ const QuotationForm = ({
               </button>
               
               <div className="flex items-center gap-4">
-                <div className="flex flex-col">
-                  <h2 className="text-xl font-bold text-slate-900 flex items-center gap-1 cursor-pointer">
-                    Create Quotation <ChevronDown className="w-5 h-5 text-gray-400" />
-                  </h2>
-                </div>
+                {editingQuotation ? (
+                  <div className="flex flex-col">
+                    <h2 className="text-xl font-bold text-slate-900 flex items-center gap-1">
+                      {editingQuotation.quotationNumber || "Edit Quotation"}
+                    </h2>
+                  </div>
+                ) : (
+                  <>
+                  <div className="flex flex-col">
+                    <h2 className="text-xl font-bold text-slate-900 flex items-center gap-1 cursor-pointer">
+                      Create Quotation <ChevronDown className="w-5 h-5 text-gray-400" />
+                    </h2>
+                  </div>
                 
-                <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden h-10 bg-white">
-                  <input
-                    type="text"
-                    value={form.quotationPrefix}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, quotationPrefix: e.target.value }));
-                      setHasUnsavedChanges(true);
-                    }}
-                    className="w-20 px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 border-r border-gray-300 focus:outline-none focus:bg-white"
-                  />
-                  <input
-                    type="text"
-                    placeholder={nextNumberPreview ? String(nextNumberPreview) : "Auto"}
-                    value={form.quotationNumber}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, quotationNumber: e.target.value }));
-                      setHasUnsavedChanges(true);
-                    }}
-                    className="w-24 px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Suffix"
-                    value={form.quotationSuffix}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, quotationSuffix: e.target.value }));
-                      setHasUnsavedChanges(true);
-                    }}
-                    title="Quotation number suffix (optional)"
-                    aria-label="Quotation number suffix"
-                    className="w-20 px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 border-l border-gray-300 focus:outline-none focus:bg-white"
-                  />
-                </div>
+                  <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden h-10 bg-white">
+                    <input
+                      type="text"
+                      value={form.quotationPrefix}
+                      onChange={(e) => {
+                        setForm((prev) => ({ ...prev, quotationPrefix: e.target.value }));
+                        setHasUnsavedChanges(true);
+                      }}
+                      className="w-20 px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 border-r border-gray-300 focus:outline-none focus:bg-white"
+                    />
+                    <input
+                      type="text"
+                      placeholder={nextNumberPreview ? String(nextNumberPreview) : "Auto"}
+                      value={form.quotationNumber}
+                      onChange={(e) => {
+                        setForm((prev) => ({ ...prev, quotationNumber: e.target.value }));
+                        setHasUnsavedChanges(true);
+                      }}
+                      className="w-24 px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Suffix"
+                      value={form.quotationSuffix}
+                      onChange={(e) => {
+                        setForm((prev) => ({ ...prev, quotationSuffix: e.target.value }));
+                        setHasUnsavedChanges(true);
+                      }}
+                      title="Quotation number suffix (optional)"
+                      aria-label="Quotation number suffix"
+                      className="w-20 px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 border-l border-gray-300 focus:outline-none focus:bg-white"
+                    />
+                  </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -1940,16 +1960,6 @@ const QuotationForm = ({
                     <div className="flex justify-between items-center text-sm pt-1">
                       <span className="text-gray-500">Total Discount</span>
                       <span className="text-gray-600 font-medium">₹{formatNumberFixed(totalItemDiscounts + invoiceDiscountAmount - roundOffAmount)}</span>
-                    </div>
-
-                    <div className="flex justify-end gap-2 text-xs pt-1">
-                      <label className="flex items-center gap-1.5 cursor-pointer text-gray-500">
-                        Hide Totals
-                        <Checkbox checked={form.hideTotals} onChange={(e) => {
-                            setForm((p) => ({ ...p, hideTotals: e.target.checked }));
-                            setHasUnsavedChanges(true);
-                          }} />
-                      </label>
                     </div>
                     
                     <div className="text-xs text-gray-400 italic text-right mt-1">

@@ -12,7 +12,7 @@ import {
   isAddressEmpty,
 } from "./formPrimitives.jsx";
 import AddressBookDrawer from "./AddressBookDrawer";
-import { computeDocument, splitGst } from "../../../../shared/documentTemplates.js";
+import { computeDocument } from "../../../../shared/documentTemplates.js";
 
 const money = (n) =>
   `₹${(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -55,8 +55,20 @@ const FullWidthDocumentPanel = ({
   // "billing" | "shipping" | null — which field group opened the saved
   // address book (AddressBookDrawer).
   const [addressDrawer, setAddressDrawer] = useState(null);
+  // The tax columns/sections are driven by the supportsTax prop; the body
+  // has always called it taxOn.
+  const taxOn = supportsTax;
   const t = computeDocument(form, type);
   const totalTax = t.totalCGST + t.totalSGST + t.totalIGST;
+  // The GST rates actually present on this document's lines. Tax is per
+  // line, so there can be more than one -- these readouts report what the
+  // lines carry and never stand in for a document-wide rate.
+  const lineGstRates = [...new Set((t.rows || []).map((r) => Number(r.gstRate) || 0))]
+    .sort((a, b) => a - b);
+  const fmtRates = (half = false) =>
+    lineGstRates.length === 0
+      ? "--"
+      : lineGstRates.map((r) => `${+(half ? r / 2 : r).toFixed(2)}%`).join(", ");
 
   const inputClass =
     "w-full h-10 px-2.5 rounded-lg border border-[#E1E4EA] bg-white text-[13px] text-[#1F2937] placeholder:text-[#99A0AE] focus:outline-none focus:border-[#0085FF] transition-colors";
@@ -307,23 +319,23 @@ const FullWidthDocumentPanel = ({
               <div className="grid grid-cols-3 gap-4 w-full mt-2">
                 <div className="flex flex-col gap-1">
                   <FieldLabel>CGST Rate</FieldLabel>
-                  <div className={readOnlyClass}>{t.isInterState ? "0%" : `${t.gstRate / 2}%`}</div>
+                  <div className={readOnlyClass}>{t.isInterState ? "0%" : fmtRates(true)}</div>
                 </div>
                 <div className="flex flex-col gap-1">
                   <FieldLabel>SGST Rate</FieldLabel>
-                  <div className={readOnlyClass}>{t.isInterState ? "0%" : `${t.gstRate / 2}%`}</div>
+                  <div className={readOnlyClass}>{t.isInterState ? "0%" : fmtRates(true)}</div>
                 </div>
                 <div className="flex flex-col gap-1">
                   <FieldLabel>IGST Rate</FieldLabel>
-                  <div className={readOnlyClass}>{t.isInterState ? `${t.gstRate}%` : "0%"}</div>
+                  <div className={readOnlyClass}>{t.isInterState ? fmtRates() : "0%"}</div>
                 </div>
               </div>
 
               <div className="flex items-start gap-2 w-full mt-2 p-2.5 rounded-lg bg-[#F0F6FF] text-[12px] text-[#1F2937]">
                 <Info className="w-4 h-4 text-[#0085FF] flex-shrink-0 mt-0.5" />
                 {t.isInterState
-                  ? `Inter-state selected: IGST ${t.gstRate}% will be applied.`
-                  : `Intra-state selected: CGST ${t.gstRate / 2}% + SGST ${t.gstRate / 2}% (Total GST ${t.gstRate}%) will be applied.`}
+                  ? `Inter-state selected: IGST is applied per line (${fmtRates()}).`
+                  : `Intra-state selected: each line is split into CGST + SGST (${fmtRates(true)} each).`}
               </div>
             </>
           )}
@@ -505,7 +517,7 @@ const FullWidthDocumentPanel = ({
                     <td className="px-2 py-2 text-right font-medium text-[#1F2937]">
                       {money(row?.taxable ?? 0)}
                     </td>
-                    {taxOn && <td className="px-2 py-2 text-right text-[#525866]">{t.gstRate}%</td>}
+                    {taxOn && <td className="px-2 py-2 text-right text-[#525866]">{row?.gstRate ?? 0}%</td>}
                     {taxOn && (
                       <td className="px-2 py-2 text-right text-[#525866]">
                         {money((row?.cgst ?? 0) + (row?.sgst ?? 0) + (row?.igst ?? 0))}

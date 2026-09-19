@@ -35,7 +35,7 @@ import SuccessModal from "../common/SuccessModal";
 import TemplateDrawer from "./TemplateDrawer";
 import NotesTermsDrawer from "./NotesTermsDrawer";
 import AddressBookDrawer from "./AddressBookDrawer";
-import { buildDocumentHtml, computeDocument } from "../../../../shared/documentTemplates.js";
+import { buildDocumentHtml, computeDocument, GST_RATES } from "../../../../shared/documentTemplates.js";
 import {
   SectionHeader,
   FieldLabel,
@@ -254,7 +254,6 @@ const CreateInvoicePanel = ({
     const base = sourceDoc
       ? {
           deal: sourceDoc.deal?._id || sourceDoc.deal || "",
-          style: sourceDoc.style || "",
           date: sourceDoc.date ? sourceDoc.date.slice(0, 10) : "",
           dueDate: sourceDoc.dueDate ? sourceDoc.dueDate.slice(0, 10) : "",
           receiverGSTIN: sourceDoc.receiverGSTIN || "",
@@ -311,7 +310,6 @@ const CreateInvoicePanel = ({
         }
       : {
           deal: "",
-          style: "",
           date: "",
           dueDate: "",
           receiverGSTIN: "",
@@ -384,6 +382,15 @@ const CreateInvoicePanel = ({
       invoice: { prefix: "INV-", suffix: "", prefixes: ["INV-"], suffixes: [] },
     },
   });
+  // Numbering options for THIS document type. docSettings flattens the
+  // invoice ones into invoicePrefixes/invoiceSuffixes for the legacy fields,
+  // but the pickers must offer the current type's own list -- otherwise a
+  // quotation is offered INV-/TAX- and can be saved with an invoice prefix.
+  const typeNumbering =
+    docSettings.documentTypeSettings?.[SETTINGS_KEY_BY_TYPE[type]] || {};
+  const prefixOptions = typeNumbering.prefixes || [];
+  const suffixOptions = typeNumbering.suffixes || [];
+
   // Live preview of the number this document will actually get on save
   // (from the same persistent per-org, per-type counter resolveDocumentNumber
   // uses on the backend) — shown as the number box's placeholder instead of
@@ -820,8 +827,18 @@ const CreateInvoicePanel = ({
 
   // Same breakdown as InvoiceForm.jsx: line total -> per-item discount ->
   // subtotal after item discounts -> invoice-level discount -> GST -> final.
-  const lineTotal = (item) =>
-    (parseFloat(item.rate) || 0) * (parseInt(item.quantity) || 0);
+  // Mirrors computeDocument()'s own line base (shared/documentTemplates.js):
+  // a tax-inclusive rate has its GST divided out first, so this summary's
+  // Subtotal is the same taxable base the preview and the PDF print. Adding
+  // the gross rate here instead made Subtotal + GST disagree with Total on
+  // any tax-inclusive line.
+  const lineTotal = (item) => {
+    const rate = parseFloat(item.rate) || 0;
+    const qty = parseInt(item.quantity) || 0;
+    const gstRate = GST_RATES.includes(Number(item.gstRate)) ? Number(item.gstRate) : 0;
+    const unitTaxable = item.taxInclusive ? rate / (1 + gstRate / 100) : rate;
+    return unitTaxable * qty;
+  };
 
   const itemDiscountAmount = (item) => {
     const base = lineTotal(item);
@@ -898,11 +915,22 @@ const CreateInvoicePanel = ({
     // A quick draft only needs enough to identify the document; full GSTIN and
     // item validation apply once it's actually being created for real.
     if (!isDraft) {
+      // Same rule the full-width screen enforces, so a document cannot pass
+      // validation in one layout and fail it in the other: a line that carries
+      // GST must also carry an HSN/SAC, and a percentage discount cannot
+      // exceed 100%.
       const badItem = form.items.find(
-        (it) => !it.name || !it.rate || !it.quantity
+        (it) =>
+          !it.name ||
+          !it.rate ||
+          !it.quantity ||
+          (parseFloat(it.gstRate) > 0 && !it.hsn) ||
+          (it.discountType === "percentage" && it.discount > 100)
       );
       if (badItem)
-        return toast.error("Every item needs a name, rate and quantity.");
+        return toast.error(
+          "Every item needs a name, rate and quantity — plus an HSN/SAC for any item with a GST rate — and percentage discounts cannot exceed 100%."
+        );
     }
 
     try {
@@ -912,7 +940,6 @@ const CreateInvoicePanel = ({
         date: form.date,
         dueDate: form.dueDate,
         status: statusValue,
-        style: previewTemplate,
         transactionType: form.transactionType,
         discount: form.discount,
         isRoundOff: form.isRoundOff,
@@ -1351,8 +1378,8 @@ const CreateInvoicePanel = ({
                               aria-label={`${docName} number prefix`}
                               className="h-full pl-3.5 pr-7 text-sm font-semibold text-[#1F2937] bg-transparent focus:outline-none appearance-none cursor-pointer"
                             >
-                              {(docSettings.invoicePrefixes || []).length > 0 ? (
-                                docSettings.invoicePrefixes.map(pfx => (
+                              {prefixOptions.length > 0 ? (
+                                prefixOptions.map(pfx => (
                                   <option key={pfx} value={pfx}>{pfx}</option>
                                 ))
                               ) : (
@@ -1379,7 +1406,7 @@ const CreateInvoicePanel = ({
                               className="h-full pl-2.5 pr-7 text-sm font-semibold text-[#1F2937] bg-transparent focus:outline-none appearance-none cursor-pointer"
                             >
                               <option value="">None</option>
-                              {(docSettings.invoiceSuffixes || []).map(sfx => (
+                              {suffixOptions.map(sfx => (
                                 <option key={sfx} value={sfx}>{sfx}</option>
                               ))}
                             </select>
