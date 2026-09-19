@@ -6,6 +6,9 @@ const postalAddressSchema = new mongoose.Schema({
   pincode: { type: String, default: '' },
   city: { type: String, default: '' },
   state: { type: String, default: '' },
+  // GST state code for `state` ("Maharashtra" -> "27"), filled in by the form's
+  // address group. Empty for addresses outside India, where no GST code applies.
+  stateCode: { type: String, default: '' },
   country: { type: String, default: '' },
 }, { _id: false });
 
@@ -23,6 +26,13 @@ const invoiceSchema = new mongoose.Schema({
   status: { type: String, required: true },
   billingAddress: { type: postalAddressSchema, default: () => ({}) },
   shippingAddress: { type: postalAddressSchema, default: () => ({}) },
+  // Place of supply, resolved from the SHIPPING address when the invoice is
+  // saved and stored so reopening it never re-derives it from a customer
+  // address that has changed since. `placeOfSupply` is the printed label
+  // ("Maharashtra (27)") every PDF template already renders; the code is kept
+  // alongside it for the intra/inter-state comparison.
+  placeOfSupply: { type: String, default: '' },
+  placeOfSupplyStateCode: { type: String, default: '' },
   discount: {
     type: {
       type: String,

@@ -47,6 +47,7 @@ import {
   blankItem,
 } from "./formPrimitives.jsx";
 import FullWidthDocumentPanel from "./FullWidthDocumentPanel.jsx";
+import { resolveTransactionType, placeOfSupplyFields } from "../../utils/placeOfSupply";
 import EyeIcon from "../common/EyeIcon";
 import EditIcon from "../common/EditIcon";
 
@@ -941,6 +942,12 @@ const CreateInvoicePanel = ({
         dueDate: form.dueDate,
         status: statusValue,
         transactionType: form.transactionType,
+        // Resolved now and stored, so reopening never re-derives it from a
+        // customer address that has changed since. Invoice ("tax") only for now --
+        // the other three document models don't carry these fields yet.
+        ...(type === "tax"
+          ? placeOfSupplyFields(form.shippingAddress, form.billingAddress)
+          : {}),
         discount: form.discount,
         isRoundOff: form.isRoundOff,
         notes: form.notes,
@@ -1043,7 +1050,12 @@ const CreateInvoicePanel = ({
   // the live preview (and print window) shows the chosen number immediately.
   const previewDocNumber = (() => {
     if (isEditing) return docNumber;
-    const num = form.invoiceNumber?.toString().trim();
+    // On a new document the number is allocated on save, so fall back to the
+    // server's own peek at the next number in this series -- the preview should
+    // show the number the document will get, not a dash.
+    const num =
+      form.invoiceNumber?.toString().trim() ||
+      (nextNumberPreview != null ? String(nextNumberPreview) : "");
     if (!num) return docNumber || "";
     const pfx = (form.invoicePrefix?.trim() || configuredPrefix);
     const sep = pfx && !pfx.endsWith("-") ? "-" : "";
@@ -1079,6 +1091,11 @@ const CreateInvoicePanel = ({
     const html = buildDocumentHtml(
       {
         ...form,
+        // Same derivation the live preview and the save payload use, so an
+        // unsaved document prints the place of supply rather than a dash.
+        ...(type === "tax"
+          ? placeOfSupplyFields(form.shippingAddress, form.billingAddress)
+          : {}),
       },
       {
         type,
@@ -1179,17 +1196,19 @@ const CreateInvoicePanel = ({
     // full-width form uses (InvoiceFormFull.jsx) — kept here
     // instead of a manual Transaction Type dropdown so both
     // views classify a given deal identically.
-    const sellerState = (orgDetails?.state || "").trim().toLowerCase();
-    const customerState = (company?.billingAddress?.state || "").trim().toLowerCase();
-    const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
-    setForm((p) => ({
-      ...p,
-      deal: dealId,
-      receiverGSTIN: supportsGSTIN ? company?.gstin || "" : p.receiverGSTIN,
-      billingAddress: nextBilling,
-      shippingAddress: p.sameAsBilling ? nextBilling : nextShipping,
-      transactionType: supportsTax ? autoType : p.transactionType,
-    }));
+    setForm((p) => {
+      const shipping = p.sameAsBilling ? nextBilling : nextShipping;
+      // Goods: place of supply is the shipping state, so the tax type follows it.
+      const autoType = resolveTransactionType(orgDetails?.state, shipping, nextBilling);
+      return {
+        ...p,
+        deal: dealId,
+        receiverGSTIN: supportsGSTIN ? company?.gstin || "" : p.receiverGSTIN,
+        billingAddress: nextBilling,
+        shippingAddress: shipping,
+        transactionType: supportsTax && autoType ? autoType : p.transactionType,
+      };
+    });
   };
 
   // Applies `preselectDealId` to a new document. Re-runs when the org details arrive, because
@@ -1388,14 +1407,17 @@ const CreateInvoicePanel = ({
                             </select>
                             <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
                           </div>
+                          {/* Read-only while creating: the number comes from this
+                              series' counter and is allocated on save, so it can't be
+                              typed over. It stays renameable afterwards through the
+                              pencil beside the saved number. */}
                           <input
                             type="text"
-                            placeholder={nextNumberPreview ? String(nextNumberPreview) : "Auto"}
-                            value={form.invoiceNumber}
-                            onChange={(e) => setForm((prev) => ({ ...prev, invoiceNumber: e.target.value }))}
-                            title={`${docName} number (leave blank to auto-generate)`}
+                            value={nextNumberPreview != null ? String(nextNumberPreview) : "Auto"}
+                            readOnly
+                            title={`${docName} number is allocated automatically on save`}
                             aria-label={`${docName} number`}
-                            className="w-20 h-full px-2 text-sm font-semibold text-[#1F2937] border-r border-[#E1E4EA] focus:outline-none"
+                            className="w-20 h-full px-2 text-sm font-semibold text-[#1F2937] bg-[#F8F9FB] border-r border-[#E1E4EA] focus:outline-none cursor-default"
                           />
                           <div className="relative h-full bg-[#F8F9FB] flex items-center">
                             <select
@@ -1546,6 +1568,7 @@ const CreateInvoicePanel = ({
               docName={docName}
               supportsGSTIN={supportsGSTIN}
               supportsTax={supportsTax}
+              sellerState={orgDetails?.state}
               sectionNo={sectionNo}
               form={form}
               setField={setField}
@@ -1699,15 +1722,16 @@ const CreateInvoicePanel = ({
                 // picker above runs, so editing the billing state directly
                 // on this document also flips CGST/SGST vs IGST instead of
                 // freezing whatever the deal's company implied.
-                const sellerState = (orgDetails?.state || "").trim().toLowerCase();
-                const customerState = (next.state || "").trim().toLowerCase();
-                const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
-                setForm((p) => ({
-                  ...p,
-                  billingAddress: next,
-                  shippingAddress: p.sameAsBilling ? next : p.shippingAddress,
-                  transactionType: supportsTax && customerState ? autoType : p.transactionType,
-                }));
+                setForm((p) => {
+                  const shipping = p.sameAsBilling ? next : p.shippingAddress;
+                  const autoType = resolveTransactionType(orgDetails?.state, shipping, next);
+                  return {
+                    ...p,
+                    billingAddress: next,
+                    shippingAddress: shipping,
+                    transactionType: supportsTax && autoType ? autoType : p.transactionType,
+                  };
+                });
               }}
             />
             {fieldErrors.billingAddress && (
@@ -1720,10 +1744,15 @@ const CreateInvoicePanel = ({
                 onClick={() =>
                   setForm((p) => {
                     const nowSame = !p.sameAsBilling;
+                    // Shipping drives the place of supply, so mirroring (or
+                    // un-mirroring) billing can change CGST/SGST vs IGST.
+                    const shipping = nowSame ? p.billingAddress : p.shippingAddress;
+                    const autoType = resolveTransactionType(orgDetails?.state, shipping, p.billingAddress);
                     return {
                       ...p,
                       sameAsBilling: nowSame,
-                      shippingAddress: nowSame ? p.billingAddress : p.shippingAddress,
+                      shippingAddress: shipping,
+                      transactionType: supportsTax && autoType ? autoType : p.transactionType,
                     };
                   })
                 }
@@ -1748,7 +1777,16 @@ const CreateInvoicePanel = ({
               value={form.shippingAddress}
               disabled={!!form.sameAsBilling}
               onUseSaved={() => setAddressDrawer("shipping")}
-              onChange={(next) => setField("shippingAddress", next)}
+              onChange={(next) =>
+                setForm((p) => {
+                  const autoType = resolveTransactionType(orgDetails?.state, next, p.billingAddress);
+                  return {
+                    ...p,
+                    shippingAddress: next,
+                    transactionType: supportsTax && autoType ? autoType : p.transactionType,
+                  };
+                })
+              }
             />
           </div>
 
@@ -2461,19 +2499,20 @@ const CreateInvoicePanel = ({
         onClose={() => setAddressDrawer(null)}
         currentAddress={addressDrawer === "billing" ? form.billingAddress : form.shippingAddress}
         onApply={(next) => {
-          if (addressDrawer === "billing") {
-            const sellerState = (orgDetails?.state || "").trim().toLowerCase();
-            const customerState = (next.state || "").trim().toLowerCase();
-            const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
-            setForm((p) => ({
+          setForm((p) => {
+            const billing = addressDrawer === "billing" ? next : p.billingAddress;
+            const shipping =
+              addressDrawer === "billing" ? (p.sameAsBilling ? next : p.shippingAddress) : next;
+            const autoType = resolveTransactionType(orgDetails?.state, shipping, billing);
+            return {
               ...p,
-              billingAddress: next,
-              shippingAddress: p.sameAsBilling ? next : p.shippingAddress,
-              transactionType: supportsTax && customerState ? autoType : p.transactionType,
-            }));
+              billingAddress: billing,
+              shippingAddress: shipping,
+              transactionType: supportsTax && autoType ? autoType : p.transactionType,
+            };
+          });
+          if (addressDrawer === "billing") {
             setFieldErrors((prev) => ({ ...prev, billingAddress: false }));
-          } else {
-            setField("shippingAddress", next);
           }
         }}
       />

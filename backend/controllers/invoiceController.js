@@ -52,6 +52,8 @@ const createInvoice = async (req, res) => {
       signatureType,
       receiverGSTIN,
       transactionType,
+      placeOfSupply,
+      placeOfSupplyStateCode,
       invoicePrefix,
       invoiceSuffix,
       invoiceNumber,
@@ -216,6 +218,10 @@ const createInvoice = async (req, res) => {
       billingAddress: finalBillingAddress,
       shippingAddress: finalShippingAddress,
       transactionType: transactionType || "intra",
+      // Resolved on the form from the shipping address and stored as sent, so the
+      // saved invoice keeps the place of supply it was issued with.
+      placeOfSupply: placeOfSupply || '',
+      placeOfSupplyStateCode: placeOfSupplyStateCode || '',
       invoiceNumber: finalInvoiceNumber,
       user: req.user.id,
       organization: req.user.organization,
@@ -726,6 +732,8 @@ const updateInvoice = async (req, res) => {
       billingAddress,
       shippingAddress,
       transactionType,
+      placeOfSupply,
+      placeOfSupplyStateCode,
     } = req.body;
 
     // Validate items
@@ -850,6 +858,8 @@ const updateInvoice = async (req, res) => {
     invoice.billingAddress = finalBillingAddress;
     invoice.shippingAddress = finalShippingAddress;
     invoice.transactionType = transactionType || "intra";
+    if (placeOfSupply !== undefined) invoice.placeOfSupply = placeOfSupply;
+    if (placeOfSupplyStateCode !== undefined) invoice.placeOfSupplyStateCode = placeOfSupplyStateCode;
 
     await invoice.save({ session });
 

@@ -11,7 +11,8 @@ import {
   emptyAddress,
   isAddressEmpty,
 } from "./formPrimitives.jsx";
-import AddressBookDrawer from "./AddressBookDrawer";
+import AddressBookDrawer from "./AddressBookDrawer";
+import { resolveTransactionType } from "../../utils/placeOfSupply";
 import { computeDocument } from "../../../../shared/documentTemplates.js";
 
 const money = (n) =>
@@ -38,7 +39,10 @@ const FullWidthDocumentPanel = ({
   type,
   docName,
   supportsGSTIN,
-  supportsTax,
+  supportsTax,
+  // The organization's own state — the supplier side of the intra/inter
+  // comparison. Without it the tax type is left exactly as it is.
+  sellerState,
   sectionNo,
   form,
   setField,
@@ -103,13 +107,20 @@ const FullWidthDocumentPanel = ({
                   company && !isAddressEmpty(company.shippingAddresses?.[0])
                     ? { ...emptyAddress(), ...company.shippingAddresses[0] }
                     : emptyAddress();
-                setForm((p) => ({
-                  ...p,
-                  deal: o.value,
-                  receiverGSTIN: supportsGSTIN ? company?.gstin || "" : p.receiverGSTIN,
-                  billingAddress: nextBilling,
-                  shippingAddress: p.sameAsBilling ? nextBilling : nextShipping,
-                }));
+                setForm((p) => {
+                  const shipping = p.sameAsBilling ? nextBilling : nextShipping;
+                  // Goods: place of supply is the shipping state, so it decides
+                  // CGST+SGST vs IGST — same rule as the other two layouts.
+                  const autoType = resolveTransactionType(sellerState, shipping, nextBilling);
+                  return {
+                    ...p,
+                    deal: o.value,
+                    receiverGSTIN: supportsGSTIN ? company?.gstin || "" : p.receiverGSTIN,
+                    billingAddress: nextBilling,
+                    shippingAddress: shipping,
+                    transactionType: supportsTax && autoType ? autoType : p.transactionType,
+                  };
+                });
               }}
             />
             <button
@@ -206,10 +217,13 @@ const FullWidthDocumentPanel = ({
           onClick={() =>
             setForm((p) => {
               const nowSame = !p.sameAsBilling;
+              const shipping = nowSame ? p.billingAddress : p.shippingAddress;
+              const autoType = resolveTransactionType(sellerState, shipping, p.billingAddress);
               return {
                 ...p,
                 sameAsBilling: nowSame,
-                shippingAddress: nowSame ? p.billingAddress : p.shippingAddress,
+                shippingAddress: shipping,
+                transactionType: supportsTax && autoType ? autoType : p.transactionType,
               };
             })
           }
@@ -234,11 +248,16 @@ const FullWidthDocumentPanel = ({
             value={form.billingAddress}
             onUseSaved={() => setAddressDrawer("billing")}
             onChange={(next) =>
-              setForm((p) => ({
-                ...p,
-                billingAddress: next,
-                shippingAddress: p.sameAsBilling ? next : p.shippingAddress,
-              }))
+              setForm((p) => {
+                const shipping = p.sameAsBilling ? next : p.shippingAddress;
+                const autoType = resolveTransactionType(sellerState, shipping, next);
+                return {
+                  ...p,
+                  billingAddress: next,
+                  shippingAddress: shipping,
+                  transactionType: supportsTax && autoType ? autoType : p.transactionType,
+                };
+              })
             }
           />
         </div>
@@ -248,7 +267,16 @@ const FullWidthDocumentPanel = ({
             value={form.shippingAddress}
             disabled={!!form.sameAsBilling}
             onUseSaved={() => setAddressDrawer("shipping")}
-            onChange={(next) => setField("shippingAddress", next)}
+            onChange={(next) =>
+              setForm((p) => {
+                const autoType = resolveTransactionType(sellerState, next, p.billingAddress);
+                return {
+                  ...p,
+                  shippingAddress: next,
+                  transactionType: supportsTax && autoType ? autoType : p.transactionType,
+                };
+              })
+            }
           />
         </div>
       </div>

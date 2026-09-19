@@ -3,7 +3,7 @@ import { ChevronDown, MapPin } from "lucide-react";
 import { createPortal } from "react-dom";
 import { getAncestorZoom } from "../../utils/domUtils";
 import { INDIA_STATES, CITIES_BY_STATE, ALL_CITIES } from "../../constants/addressOptions";
-import { canonicalStateName } from "../../utils/gstStateCode";
+import { canonicalStateName, getStateCode } from "../../utils/gstStateCode";
 import toast from "react-hot-toast";
 
 // Module-level cache — avoids re-fetching a pincode already looked up this session.
@@ -54,6 +54,10 @@ export const emptyAddress = () => ({
   pincode: "",
   city: "",
   state: "",
+  // GST state code for `state` ("Maharashtra" -> "27"), kept in step with it by
+  // AddressFieldsGroup. Empty for anything getStateCode() can't resolve (i.e.
+  // outside India) -- a code is never invented for a non-Indian address.
+  stateCode: "",
   country: "",
 });
 
@@ -84,7 +88,12 @@ const lookupIndianPincode = async (pincode, signal) => {
       po.Name ||
       "";
 
-    const result = { country: "India", state: matchedState, city: matchedCity };
+    const result = {
+      country: "India",
+      state: matchedState,
+      stateCode: getStateCode(matchedState) || "",
+      city: matchedCity,
+    };
     pincodeCache.set(pincode, result);
     return result;
   } catch (err) {
@@ -170,6 +179,10 @@ export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, r
               onChange({
                 ...safeValue,
                 state: o.value,
+                // Never let the code drift from the state it describes: an
+                // unrecognised (non-Indian) state clears it rather than keeping
+                // the previous state's code.
+                stateCode: getStateCode(o.value) || "",
                 // A city from the previous state would be wrong under the new
                 // one, so it's cleared — unless it also exists in the new
                 // state's list (several city names repeat across states).
@@ -179,6 +192,21 @@ export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, r
               })
             }
           />
+          {/* GST state code for the state above. Read-only: it is derived from
+              the state (and from the pincode lookup), so the two can never
+              disagree. Shows "--" outside India, where no GST code applies. */}
+          <div className="relative">
+            <input
+              type="text"
+              value={safeValue.stateCode || ""}
+              readOnly
+              disabled={disabled}
+              title="GST state code (set automatically from the state)"
+              aria-label="GST state code"
+              placeholder="State code"
+              className={`${inputCls} bg-slate-50 text-slate-500 cursor-default`}
+            />
+          </div>
           <PickerSelect
             value={safeValue.city || ""}
             options={cityOptions}

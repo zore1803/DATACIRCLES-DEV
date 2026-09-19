@@ -21,7 +21,9 @@ import QuickItemDrawer from "../item/QuickItemDrawer";
 import TemplateDrawer from "./TemplateDrawer";
 import BankSelect from "./BankSelect";
 import { AddressFieldsGroup, emptyAddress, isAddressEmpty, SectionHeader } from "../invoice/formPrimitives";
-import AddressBookDrawer from "./AddressBookDrawer";
+import AddressBookDrawer from "./AddressBookDrawer";
+import EditIcon from "../common/EditIcon";
+import { resolveTransactionType, placeOfSupplyFields } from "../../utils/placeOfSupply";
 import QuickDealForm from "../deal/QuickDealForm";
 import SearchableDropdown from "../contact/SearchableDropdown";
 import InsufficientStockDialog from "../common/InsufficientStockDialog";
@@ -463,6 +465,38 @@ const InvoiceFormFull = ({
   // "billing" | "shipping" | null — which field group opened the saved
   // address book (AddressBookDrawer).
   const [addressDrawer, setAddressDrawer] = useState(null);
+  // Renaming a saved document's number, same flow as the split-view panel:
+  // the prefix stays fixed and only the numeric part is editable.
+  const [docNumber, setDocNumber] = useState(editingInvoice?.invoiceNumber || "");
+  const [numberDraft, setNumberDraft] = useState(null); // null = not renaming
+  const [savingNumber, setSavingNumber] = useState(false);
+  const numberPrefix = docNumber.includes("-")
+    ? docNumber.slice(0, docNumber.lastIndexOf("-") + 1)
+    : "";
+  const numberSuffix = docNumber.slice(numberPrefix.length);
+
+  const saveDocNumber = async () => {
+    const suffix = (numberDraft || "").trim();
+    if (!suffix) return toast.error("Invoice number cannot be empty.");
+    const next = `${numberPrefix}${suffix}`;
+    if (next === docNumber) return setNumberDraft(null);
+    try {
+      setSavingNumber(true);
+      await API.patch(`/invoices/number/${editingInvoice._id}`, { invoiceNumber: next });
+      setDocNumber(next);
+      setNumberDraft(null);
+      toast.success("Invoice number updated.");
+      fetchData?.();
+    } catch (err) {
+      toast.error(
+        err?.response?.status === 409
+          ? `${next} already exists.`
+          : err?.response?.data?.error || "Failed to update the number."
+      );
+    } finally {
+      setSavingNumber(false);
+    }
+  };
   const [companies, setCompanies] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1092,16 +1126,20 @@ const InvoiceFormFull = ({
       company && !isAddressEmpty(company.shippingAddresses?.[0])
         ? { ...emptyAddress(), ...company.shippingAddresses[0] }
         : emptyAddress();
-    const customerState = (company?.billingAddress?.state || '').trim().toLowerCase();
-    const autoType = (sellerState && customerState && sellerState !== customerState) ? 'inter' : 'intra';
-    setForm((prev) => ({
-      ...prev,
-      deal: value,
-      receiverGSTIN: company?.gstin || "",
-      billingAddress: nextBilling,
-      shippingAddress: prev.sameAsBilling ? nextBilling : nextShipping,
-      transactionType: autoType,
-    }));
+    setForm((prev) => {
+      const shipping = prev.sameAsBilling ? nextBilling : nextShipping;
+      // Goods: place of supply is where they ship to, so the tax type follows
+      // the shipping address, not billing.
+      const autoType = resolveTransactionType(sellerState, shipping, nextBilling);
+      return {
+        ...prev,
+        deal: value,
+        receiverGSTIN: company?.gstin || "",
+        billingAddress: nextBilling,
+        shippingAddress: shipping,
+        transactionType: autoType || prev.transactionType,
+      };
+    });
     if (markDirty) setHasUnsavedChanges(true);
   };
 
@@ -1278,6 +1316,9 @@ const InvoiceFormFull = ({
           taxInclusive: !!item.taxInclusive,
         })),
         transactionType: form.transactionType,
+        // Resolved now and stored, so reopening this invoice never re-derives it
+        // from a customer address that has changed since.
+        ...placeOfSupplyFields(form.shippingAddress, form.billingAddress),
       };
 
       if (editingInvoice) {
@@ -1441,9 +1482,58 @@ const InvoiceFormFull = ({
               <div className="flex items-center gap-4">
                 {editingInvoice ? (
                   <div className="flex flex-col">
-                    <h2 className="text-xl font-bold text-slate-900 flex items-center gap-1 cursor-pointer">
-                      {editingInvoice.invoiceNumber || "Edit Invoice"} <ChevronDown className="w-5 h-5 text-gray-400" />
-                    </h2>
+                    {numberDraft === null ? (
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <h2 className="text-xl font-bold text-slate-900 truncate">
+                          {docNumber || "Edit Invoice"}
+                        </h2>
+                        {docNumber && (
+                          <button
+                            type="button"
+                            onClick={() => setNumberDraft(numberSuffix)}
+                            title="Rename this invoice"
+                            aria-label="Rename this invoice"
+                            className="p-1 rounded-md text-gray-400 hover:text-[#0085FF] hover:bg-blue-50 transition-colors flex-shrink-0"
+                          >
+                            <EditIcon className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 min-w-0">
+                        <div className="flex items-center h-9 pl-2.5 pr-1 border border-gray-300 rounded-lg focus-within:border-[#0085FF] min-w-0">
+                          <span className="text-xl font-bold text-gray-400 flex-shrink-0">
+                            {numberPrefix}
+                          </span>
+                          <input
+                            autoFocus
+                            value={numberDraft}
+                            disabled={savingNumber}
+                            onChange={(e) => setNumberDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveDocNumber();
+                              if (e.key === "Escape") setNumberDraft(null);
+                            }}
+                            className="w-28 min-w-0 px-1 text-xl font-bold text-slate-900 outline-none bg-transparent"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={saveDocNumber}
+                          disabled={savingNumber}
+                          className="h-7 px-2 flex items-center justify-center rounded-full bg-[#0085FF] hover:bg-blue-600 text-white text-xs font-semibold transition-colors disabled:opacity-60 flex-shrink-0"
+                        >
+                          {savingNumber ? "..." : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNumberDraft(null)}
+                          className="h-7 px-2 text-xs font-medium text-gray-500 hover:text-gray-800 flex-shrink-0"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -1476,15 +1566,16 @@ const InvoiceFormFull = ({
                           </select>
                           <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
                         </div>
+                        {/* Read-only while creating: the number is allocated from this
+                            series' counter on save, so it cannot be typed over. It stays
+                            renameable afterwards from the saved document. */}
                         <input
                           type="text"
-                          placeholder={nextNumberPreview ? String(nextNumberPreview) : "Auto"}
-                          value={form.invoiceNumber}
-                          onChange={(e) => {
-                            setForm((prev) => ({ ...prev, invoiceNumber: e.target.value }));
-                            setHasUnsavedChanges(true);
-                          }}
-                          className="w-24 px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none"
+                          value={nextNumberPreview != null ? String(nextNumberPreview) : "Auto"}
+                          readOnly
+                          title="Invoice number is allocated automatically on save"
+                          aria-label="Invoice number"
+                          className="w-24 px-3 py-2 text-sm font-semibold text-gray-900 bg-gray-50 focus:outline-none cursor-default"
                         />
                         <div className="relative h-full border-l border-gray-300 bg-gray-50 flex items-center">
                           <select
@@ -1693,10 +1784,15 @@ const InvoiceFormFull = ({
                       setForm((prev) => {
                         const nowSame = !prev.sameAsBilling;
                         setHasUnsavedChanges(true);
+                        // Shipping drives the place of supply, so mirroring (or
+                        // un-mirroring) billing can change CGST/SGST vs IGST.
+                        const shipping = nowSame ? prev.billingAddress : prev.shippingAddress;
+                        const autoType = resolveTransactionType(sellerState, shipping, prev.billingAddress);
                         return {
                           ...prev,
                           sameAsBilling: nowSame,
-                          shippingAddress: nowSame ? prev.billingAddress : prev.shippingAddress,
+                          shippingAddress: shipping,
+                          transactionType: autoType || prev.transactionType,
                         };
                       })
                     }
@@ -1725,14 +1821,16 @@ const InvoiceFormFull = ({
                     // picker runs, so editing the billing state directly on
                     // this document also flips CGST/SGST vs IGST instead of
                     // freezing whatever the deal's company implied.
-                    const customerState = (next.state || "").trim().toLowerCase();
-                    const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
-                    setForm((prev) => ({
-                      ...prev,
-                      billingAddress: next,
-                      shippingAddress: prev.sameAsBilling ? next : prev.shippingAddress,
-                      transactionType: customerState ? autoType : prev.transactionType,
-                    }));
+                    setForm((prev) => {
+                      const shipping = prev.sameAsBilling ? next : prev.shippingAddress;
+                      const autoType = resolveTransactionType(sellerState, shipping, next);
+                      return {
+                        ...prev,
+                        billingAddress: next,
+                        shippingAddress: shipping,
+                        transactionType: autoType || prev.transactionType,
+                      };
+                    });
                     setHasUnsavedChanges(true);
                   }}
                 />
@@ -1742,7 +1840,14 @@ const InvoiceFormFull = ({
                   disabled={!!form.sameAsBilling}
                   onUseSaved={() => setAddressDrawer("shipping")}
                   onChange={(next) => {
-                    setForm((prev) => ({ ...prev, shippingAddress: next }));
+                    setForm((prev) => {
+                      const autoType = resolveTransactionType(sellerState, next, prev.billingAddress);
+                      return {
+                        ...prev,
+                        shippingAddress: next,
+                        transactionType: autoType || prev.transactionType,
+                      };
+                    });
                     setHasUnsavedChanges(true);
                   }}
                 />
@@ -1754,18 +1859,20 @@ const InvoiceFormFull = ({
               onClose={() => setAddressDrawer(null)}
               currentAddress={addressDrawer === "billing" ? form.billingAddress : form.shippingAddress}
               onApply={(next) => {
-                if (addressDrawer === "billing") {
-                  const customerState = (next.state || "").trim().toLowerCase();
-                  const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
-                  setForm((prev) => ({
+                setForm((prev) => {
+                  const billing = addressDrawer === "billing" ? next : prev.billingAddress;
+                  const shipping =
+                    addressDrawer === "billing"
+                      ? (prev.sameAsBilling ? next : prev.shippingAddress)
+                      : next;
+                  const autoType = resolveTransactionType(sellerState, shipping, billing);
+                  return {
                     ...prev,
-                    billingAddress: next,
-                    shippingAddress: prev.sameAsBilling ? next : prev.shippingAddress,
-                    transactionType: customerState ? autoType : prev.transactionType,
-                  }));
-                } else {
-                  setForm((prev) => ({ ...prev, shippingAddress: next }));
-                }
+                    billingAddress: billing,
+                    shippingAddress: shipping,
+                    transactionType: autoType || prev.transactionType,
+                  };
+                });
                 setHasUnsavedChanges(true);
               }}
             />

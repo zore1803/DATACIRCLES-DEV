@@ -19,6 +19,8 @@ import API from "../../services/api";
 import QuickItemDrawer from "../item/QuickItemDrawer";
 import TemplateDrawer from "../invoice/TemplateDrawer";
 import { AddressFieldsGroup, emptyAddress, isAddressEmpty, SectionHeader } from "../invoice/formPrimitives";
+import AddressBookDrawer from "../invoice/AddressBookDrawer";
+import EditIcon from "../common/EditIcon";
 import QuickDealForm from "../deal/QuickDealForm";
 import SearchableDropdown from "../contact/SearchableDropdown";
 import toast from "react-hot-toast";
@@ -420,6 +422,41 @@ const PerformaInvoiceFormFull = ({
   const [showQuickDealForm, setShowQuickDealForm] = useState(false);
   const [localDeals, setLocalDeals] = useState(deals);
   const [sellerState, setSellerState] = useState("");
+  // "billing" | "shipping" | null -- which field group opened the saved
+  // address book (AddressBookDrawer).
+  const [addressDrawer, setAddressDrawer] = useState(null);
+  // Renaming a saved document's number, same flow as the split-view panel:
+  // the prefix stays fixed and only the numeric part is editable.
+  const [docNumber, setDocNumber] = useState(editingPerformaInvoice?.performaInvoiceNumber || "");
+  const [numberDraft, setNumberDraft] = useState(null); // null = not renaming
+  const [savingNumber, setSavingNumber] = useState(false);
+  const numberPrefix = docNumber.includes("-")
+    ? docNumber.slice(0, docNumber.lastIndexOf("-") + 1)
+    : "";
+  const numberSuffix = docNumber.slice(numberPrefix.length);
+
+  const saveDocNumber = async () => {
+    const suffix = (numberDraft || "").trim();
+    if (!suffix) return toast.error("Performa Invoice number cannot be empty.");
+    const next = `${numberPrefix}${suffix}`;
+    if (next === docNumber) return setNumberDraft(null);
+    try {
+      setSavingNumber(true);
+      await API.patch(`/performa-invoices/number/${editingPerformaInvoice._id}`, { performaInvoiceNumber: next });
+      setDocNumber(next);
+      setNumberDraft(null);
+      toast.success("Performa Invoice number updated.");
+      fetchData?.();
+    } catch (err) {
+      toast.error(
+        err?.response?.status === 409
+          ? `${next} already exists.`
+          : err?.response?.data?.error || "Failed to update the number."
+      );
+    } finally {
+      setSavingNumber(false);
+    }
+  };
   const [companies, setCompanies] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1327,9 +1364,58 @@ const PerformaInvoiceFormFull = ({
               <div className="flex items-center gap-4">
                 {editingPerformaInvoice ? (
                   <div className="flex flex-col">
-                    <h2 className="text-xl font-bold text-slate-900 flex items-center gap-1">
-                      {editingPerformaInvoice.performaInvoiceNumber || "Edit Performa Invoice"}
-                    </h2>
+                    {numberDraft === null ? (
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <h2 className="text-xl font-bold text-slate-900 truncate">
+                          {docNumber || "Edit Performa Invoice"}
+                        </h2>
+                        {docNumber && (
+                          <button
+                            type="button"
+                            onClick={() => setNumberDraft(numberSuffix)}
+                            title="Rename this performa invoice"
+                            aria-label="Rename this performa invoice"
+                            className="p-1 rounded-md text-gray-400 hover:text-[#0085FF] hover:bg-blue-50 transition-colors flex-shrink-0"
+                          >
+                            <EditIcon className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 min-w-0">
+                        <div className="flex items-center h-9 pl-2.5 pr-1 border border-gray-300 rounded-lg focus-within:border-[#0085FF] min-w-0">
+                          <span className="text-xl font-bold text-gray-400 flex-shrink-0">
+                            {numberPrefix}
+                          </span>
+                          <input
+                            autoFocus
+                            value={numberDraft}
+                            disabled={savingNumber}
+                            onChange={(e) => setNumberDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveDocNumber();
+                              if (e.key === "Escape") setNumberDraft(null);
+                            }}
+                            className="w-28 min-w-0 px-1 text-xl font-bold text-slate-900 outline-none bg-transparent"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={saveDocNumber}
+                          disabled={savingNumber}
+                          className="h-7 px-2 flex items-center justify-center rounded-full bg-[#0085FF] hover:bg-blue-600 text-white text-xs font-semibold transition-colors disabled:opacity-60 flex-shrink-0"
+                        >
+                          {savingNumber ? "..." : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNumberDraft(null)}
+                          className="h-7 px-2 text-xs font-medium text-gray-500 hover:text-gray-800 flex-shrink-0"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -1365,17 +1451,16 @@ const PerformaInvoiceFormFull = ({
                       </select>
                       <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
                     </div>
+                    {/* Read-only while creating: the number is allocated from this
+                        series' counter on save, so it cannot be typed over. It stays
+                        renameable afterwards from the saved document. */}
                     <input
                       type="text"
-                      placeholder={nextNumberPreview ? String(nextNumberPreview) : "Auto"}
-                      value={form.performaInvoiceNumber}
-                      onChange={(e) => {
-                        setForm((prev) => ({ ...prev, performaInvoiceNumber: e.target.value }));
-                        setHasUnsavedChanges(true);
-                      }}
-                      title="Pro Forma Invoice number (leave blank to auto-generate)"
+                      value={nextNumberPreview != null ? String(nextNumberPreview) : "Auto"}
+                      readOnly
+                      title="Pro Forma Invoice number is allocated automatically on save"
                       aria-label="Pro Forma Invoice number"
-                      className="w-24 px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none"
+                      className="w-24 px-3 py-2 text-sm font-semibold text-gray-900 bg-gray-50 focus:outline-none cursor-default"
                     />
                     <div className="relative h-full border-l border-gray-300 bg-gray-50 flex items-center">
                       <select
@@ -1619,6 +1704,7 @@ const PerformaInvoiceFormFull = ({
                 <AddressFieldsGroup
                   label="Billing address"
                   value={form.billingAddress}
+                  onUseSaved={() => setAddressDrawer("billing")}
                   onChange={(next) => {
                     // Same seller-state vs. customer-state re-check the deal
                     // picker runs, so editing the billing state directly on
@@ -1639,6 +1725,7 @@ const PerformaInvoiceFormFull = ({
                   label="Shipping address"
                   value={form.shippingAddress}
                   disabled={!!form.sameAsBilling}
+                  onUseSaved={() => setAddressDrawer("shipping")}
                   onChange={(next) => {
                     setForm((prev) => ({ ...prev, shippingAddress: next }));
                     setHasUnsavedChanges(true);
@@ -1646,6 +1733,31 @@ const PerformaInvoiceFormFull = ({
                 />
               </div>
             </div>
+
+            {/* Saved billing/shipping addresses, same picker the Invoice screen and
+                the split-view panel use (AddressBookDrawer). Applying a billing
+                address re-runs the seller-state vs customer-state check so
+                CGST/SGST vs IGST follows the address that was just applied. */}
+            <AddressBookDrawer
+              isOpen={addressDrawer !== null}
+              onClose={() => setAddressDrawer(null)}
+              currentAddress={addressDrawer === "billing" ? form.billingAddress : form.shippingAddress}
+              onApply={(next) => {
+                if (addressDrawer === "billing") {
+                  const customerState = (next.state || "").trim().toLowerCase();
+                  const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
+                  setForm((prev) => ({
+                    ...prev,
+                    billingAddress: next,
+                    shippingAddress: prev.sameAsBilling ? next : prev.shippingAddress,
+                    transactionType: customerState ? autoType : prev.transactionType,
+                  }));
+                } else {
+                  setForm((prev) => ({ ...prev, shippingAddress: next }));
+                }
+                setHasUnsavedChanges(true);
+              }}
+            />
 
             {/* ── Section 3: Products & Services ── */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

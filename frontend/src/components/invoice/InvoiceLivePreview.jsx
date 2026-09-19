@@ -5,6 +5,7 @@ import {
   buildUpiUri,
   DEFAULT_TEMPLATE,
 } from "../../../../shared/documentTemplates.js";
+import { placeOfSupplyFields } from "../../utils/placeOfSupply";
 
 /*
  * Live, on-screen render of the document the user is editing.
@@ -33,7 +34,17 @@ const InvoiceLivePreview = ({
   const html = useMemo(() => {
     // Tax is line-item-driven: computeDocument() derives it from each item's
     // own gstRate, so the form object is passed straight through.
+    //
+    // Place of supply is not part of form state -- it is resolved from the
+    // shipping address when the document is saved. Derive it here too, from the
+    // same addresses, so the preview shows what the saved PDF will print
+    // instead of a dash. Invoice ("tax") only for now: the other three models
+    // don't store it, and a preview showing it would then disagree with their
+    // saved PDF.
     const doc = { ...form };
+    if (type === "tax" && !doc.placeOfSupply) {
+      Object.assign(doc, placeOfSupplyFields(form?.shippingAddress, form?.billingAddress));
+    }
 
     // Same encoder settings the PDF uses, so the preview shows the identical
     // QR the customer will scan off the printed page.
