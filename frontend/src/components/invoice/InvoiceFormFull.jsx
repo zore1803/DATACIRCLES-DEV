@@ -1880,6 +1880,8 @@ const InvoiceFormFull = ({
                 setForm((prev) => ({ ...prev, terms: v }));
                 setHasUnsavedChanges(true);
               }}
+              currentNotes={form.notes}
+              currentTerms={form.terms}
             />
 
             <AddressBookDrawer

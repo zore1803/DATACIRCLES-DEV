@@ -667,6 +667,8 @@ function DocumentSettings() {
                     docName={activeLabel}
                     onApplyNotes={(body) => setNotes(body)}
                     onApplyTerms={(body) => setTerms(body)}
+                    currentNotes={notesValue}
+                    currentTerms={termsValue}
                   />
                   <label className="flex flex-col gap-1.5">
                     <span className="font-medium text-gray-700">Default Due Date (Days)</span>

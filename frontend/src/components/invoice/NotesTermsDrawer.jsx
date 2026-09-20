@@ -59,6 +59,11 @@ const NotesTermsDrawer = ({
   docName = "Invoice",
   onApplyNotes,
   onApplyTerms,
+  // The text currently on the document. Used only to highlight which saved
+  // block is the applied one -- the drawer never writes back to the document
+  // from these.
+  currentNotes = "",
+  currentTerms = "",
 }) => {
   const [active, setActive] = useState(focus);
   const [docType, setDocType] = useState(type);
@@ -233,6 +238,12 @@ const NotesTermsDrawer = ({
       toast.error(err.response?.data?.error || "Failed to set default");
     }
   };
+
+  // Which saved block the document is currently using, matched on content:
+  // applying copies the body, so an exact match is the applied one. A block the
+  // user has since edited on the document simply stops matching, which is
+  // correct -- it is no longer that saved block.
+  const appliedBody = (active === "notes" ? currentNotes : currentTerms) || "";
 
   const handleApply = (t) => {
     (active === "notes" ? onApplyNotes : onApplyTerms)?.(t.body);
@@ -456,7 +467,22 @@ const NotesTermsDrawer = ({
                 templates.map((t) => (
                   <div
                     key={t._id}
-                    className={`rounded-xl border p-3 transition-colors ${t.isDefault ? "border-[#0085FF] bg-[#F5FAFF]" : "border-[#E1E4EA] bg-white"}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={t.body === appliedBody && !!appliedBody.trim()}
+                    onClick={() => handleApply(t)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleApply(t);
+                      }
+                    }}
+                    title={`Use this ${tab.noun.toLowerCase()} on this ${docName.toLowerCase()}`}
+                    className={`rounded-xl border p-3 transition-colors cursor-pointer ${
+                      t.body === appliedBody && !!appliedBody.trim()
+                        ? "border-[#0085FF] bg-[#F5FAFF] ring-1 ring-[#0085FF]"
+                        : "border-[#E1E4EA] bg-white hover:border-[#0085FF]/50 hover:bg-[#F8FBFF]"
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -476,7 +502,10 @@ const NotesTermsDrawer = ({
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button
                           type="button"
-                          onClick={() => setEditing(t)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditing(t);
+                          }}
                           title="Edit"
                           className="p-1.5 rounded-lg text-[#525866] hover:bg-gray-100 transition-colors"
                         >
@@ -484,7 +513,10 @@ const NotesTermsDrawer = ({
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(t)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(t);
+                          }}
                           title="Delete"
                           className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
                         >
@@ -492,24 +524,20 @@ const NotesTermsDrawer = ({
                         </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 mt-2 pt-2 border-t border-[#E1E4EA]/70">
-                      <button
-                        type="button"
-                        onClick={() => handleApply(t)}
-                        className="text-[12px] font-medium text-[#0085FF] hover:underline"
-                      >
-                        Apply to this {docName.toLowerCase()}
-                      </button>
-                      {!t.isDefault && (
+                    {!t.isDefault && (
+                      <div className="flex items-center gap-3 mt-2 pt-2 border-t border-[#E1E4EA]/70">
                         <button
                           type="button"
-                          onClick={() => handleMakeDefault(t)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMakeDefault(t);
+                          }}
                           className="text-[12px] font-medium text-[#525866] hover:underline"
                         >
                           Make default
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
@@ -517,7 +545,7 @@ const NotesTermsDrawer = ({
 
             <footer className="flex-shrink-0 px-5 py-3 border-t border-[#E1E4EA] bg-[#FAFBFC] flex items-center justify-between gap-3">
               <p className="text-[11px] text-[#99A0AE] min-w-0 truncate">
-                Applying copies the text onto this {docName.toLowerCase()}.
+                Click a {tab.noun.toLowerCase()} to use it on this {docName.toLowerCase()}.
               </p>
               <button
                 type="button"

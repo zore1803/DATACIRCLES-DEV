@@ -2497,6 +2497,8 @@ const CreateInvoicePanel = ({
         docName={docName}
         onApplyNotes={(v) => setField("notes", v)}
         onApplyTerms={(v) => setField("terms", v)}
+        currentNotes={form.notes}
+        currentTerms={form.terms}
       />
 
       <AddressBookDrawer

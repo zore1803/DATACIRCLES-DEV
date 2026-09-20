@@ -20,6 +20,8 @@ import QuickItemDrawer from "../item/QuickItemDrawer";
 import TemplateDrawer from "../invoice/TemplateDrawer";
 import { AddressFieldsGroup, emptyAddress, isAddressEmpty, SectionHeader } from "../invoice/formPrimitives";
 import AddressBookDrawer from "../invoice/AddressBookDrawer";
+import BankSelect from "../invoice/BankSelect";
+import NotesTermsDrawer from "../invoice/NotesTermsDrawer";
 import EditIcon from "../common/EditIcon";
 import QuickDealForm from "../deal/QuickDealForm";
 import SearchableDropdown from "../contact/SearchableDropdown";
@@ -425,6 +427,36 @@ const PerformaInvoiceFormFull = ({
   // "billing" | "shipping" | null -- which field group opened the saved
   // address book (AddressBookDrawer).
   const [addressDrawer, setAddressDrawer] = useState(null);
+  // Saved Notes/Terms library -- the same drawer and the same
+  // DocumentFooterTemplate store the Invoice screens and Settings use, so a
+  // block created anywhere is available everywhere (scoped to this doc type).
+  const [notesDrawer, setNotesDrawer] = useState(null); // null | "notes" | "terms"
+  // Bank accounts saved under Settings -> Bank Details. A brand-new document
+  // adopts the org's default; an edit keeps whatever account it was saved
+  // with. The chosen id rides on the payload as `bankDetails`, which the
+  // backend already stores and resolveBankDetails() already prints.
+  const [banks, setBanks] = useState([]);
+  useEffect(() => {
+    const loadBanks = async () => {
+      try {
+        const res = await API.get("/bank-details/all");
+        const list = Array.isArray(res.data) ? res.data : [];
+        setBanks(list);
+        if (!editingPerformaInvoice) {
+          const fallback = list.find((b) => b.isDefault) || list[0];
+          if (fallback) {
+            setForm((prev) =>
+              prev.bankDetails ? prev : { ...prev, bankDetails: fallback._id }
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load bank accounts", error);
+        setBanks([]);
+      }
+    };
+    loadBanks();
+  }, [editingPerformaInvoice]);
   // Renaming a saved document's number, same flow as the split-view panel:
   // the prefix stays fixed and only the numeric part is editable.
   const [docNumber, setDocNumber] = useState(editingPerformaInvoice?.performaInvoiceNumber || "");
@@ -1741,6 +1773,28 @@ const PerformaInvoiceFormFull = ({
                 the split-view panel use (AddressBookDrawer). Applying a billing
                 address re-runs the seller-state vs customer-state check so
                 CGST/SGST vs IGST follows the address that was just applied. */}
+            {/* Applying copies the chosen block's text onto this document. The
+                document keeps that snapshot: editing it here never writes back to
+                the saved template, and changing the template later never rewrites
+                a document already issued. */}
+            <NotesTermsDrawer
+              isOpen={notesDrawer !== null}
+              focus={notesDrawer || "notes"}
+              onClose={() => setNotesDrawer(null)}
+              type="performa"
+              docName="Pro Forma Invoice"
+              onApplyNotes={(v) => {
+                setForm((prev) => ({ ...prev, notes: v }));
+                setHasUnsavedChanges(true);
+              }}
+              onApplyTerms={(v) => {
+                setForm((prev) => ({ ...prev, terms: v }));
+                setHasUnsavedChanges(true);
+              }}
+              currentNotes={form.notes}
+              currentTerms={form.terms}
+            />
+
             <AddressBookDrawer
               isOpen={addressDrawer !== null}
               onClose={() => setAddressDrawer(null)}
@@ -2005,7 +2059,17 @@ const PerformaInvoiceFormFull = ({
               {/* Left Column: Notes, Terms, Attachments */}
               <div className="space-y-5">
                 <div>
-                  <SectionHeader number="04" title="Notes" />
+                  <div className="flex items-center justify-between gap-2">
+                    <SectionHeader number="04" title="Notes" />
+                    <button
+                      type="button"
+                      onClick={() => setNotesDrawer("notes")}
+                      title="Add or choose a saved note"
+                      className="inline-flex items-center gap-1 leading-none text-[12px] font-medium text-[#0085FF] hover:underline flex-shrink-0"
+                    >
+                      + Add Notes
+                    </button>
+                  </div>
                   <textarea
                     placeholder="Enter your notes, say thanks, or anything else"
                     rows={3}
@@ -2019,7 +2083,17 @@ const PerformaInvoiceFormFull = ({
                 </div>
 
                 <div>
-                  <SectionHeader number="05" title="Terms & Conditions" />
+                  <div className="flex items-center justify-between gap-2">
+                    <SectionHeader number="05" title="Terms & Conditions" />
+                    <button
+                      type="button"
+                      onClick={() => setNotesDrawer("terms")}
+                      title="Add or choose saved terms"
+                      className="inline-flex items-center gap-1 leading-none text-[12px] font-medium text-[#0085FF] hover:underline flex-shrink-0"
+                    >
+                      + Add Terms
+                    </button>
+                  </div>
                   <textarea
                     placeholder="Enter terms & conditions"
                     rows={3}
@@ -2161,9 +2235,19 @@ const PerformaInvoiceFormFull = ({
                     <label className="text-sm font-semibold text-gray-700">Select Bank</label>
                     <div className="w-3.5 h-3.5 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-[10px]">?</div>
                   </div>
-                  <button type="button" className="w-full py-3 bg-[#FAF5FF] border border-[#E9D5FF] rounded-[25px] text-[#9333EA] font-semibold text-sm hover:bg-[#F3E8FF] transition-colors flex items-center justify-center gap-2">
-                    <span className="text-lg">🏦</span> Add Bank to Invoice (Optional)
-                  </button>
+                  <BankSelect
+                    banks={banks}
+                    value={form.bankDetails || ""}
+                    onChange={(id) => {
+                      setForm((prev) => ({ ...prev, bankDetails: id }));
+                      setHasUnsavedChanges(true);
+                    }}
+                  />
+                  <p className="text-xs text-gray-400">
+                    {banks.length === 0
+                      ? "No bank accounts yet — add them in Settings → Bank Details."
+                      : "The default is applied to every performa invoice unless you pick another here."}
+                  </p>
                 </div>
 
                 {/* Signature — same functional select + preview + default-
