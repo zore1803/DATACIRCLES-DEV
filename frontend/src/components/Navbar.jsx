@@ -29,6 +29,7 @@ import {
   ChartColumnIncreasing,
   CreditCard,
   Tag,
+  Wrench,
   Calculator,
   Crown,
   Pin,
@@ -131,7 +132,7 @@ const ProductsIcon = (props) => (
   </svg>
 );
 
-const ContactsIcon = (props) => (
+export const ContactsIcon = (props) => (
   <svg viewBox="-0.89 -0.89 17.78 17.78" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
     <path d="M5.175 6.825C4.39167 6.04167 4 5.1 4 4C4 2.9 4.39167 1.95833 5.175 1.175C5.95833 0.391667 6.9 0 8 0C9.1 0 10.0417 0.391667 10.825 1.175C11.6083 1.95833 12 2.9 12 4C12 5.1 11.6083 6.04167 10.825 6.825C10.0417 7.60833 9.1 8 8 8C6.9 8 5.95833 7.60833 5.175 6.825ZM0 14V13.2C0 12.6333 0.145833 12.1125 0.4375 11.6375C0.729167 11.1625 1.11667 10.8 1.6 10.55C2.63333 10.0333 3.68333 9.64583 4.75 9.3875C5.81667 9.12917 6.9 9 8 9C9.1 9 10.1833 9.12917 11.25 9.3875C12.3167 9.64583 13.3667 10.0333 14.4 10.55C14.8833 10.8 15.2708 11.1625 15.5625 11.6375C15.8542 12.1125 16 12.6333 16 13.2V14C16 14.55 15.8042 15.0208 15.4125 15.4125C15.0208 15.8042 14.55 16 14 16H2C1.45 16 0.979167 15.8042 0.5875 15.4125C0.195833 15.0208 0 14.55 0 14ZM2 14H14V13.2C14 13.0167 13.9542 12.85 13.8625 12.7C13.7708 12.55 13.65 12.4333 13.5 12.35C12.6 11.9 11.6917 11.5625 10.775 11.3375C9.85833 11.1125 8.93333 11 8 11C7.06667 11 6.14167 11.1125 5.225 11.3375C4.30833 11.5625 3.4 11.9 2.5 12.35C2.35 12.4333 2.22917 12.55 2.1375 12.7C2.04583 12.85 2 13.0167 2 13.2V14ZM9.4125 5.4125C9.80417 5.02083 10 4.55 10 4C10 3.45 9.80417 2.97917 9.4125 2.5875C9.02083 2.19583 8.55 2 8 2C7.45 2 6.97917 2.19583 6.5875 2.5875C6.19583 2.97917 6 3.45 6 4C6 4.55 6.19583 5.02083 6.5875 5.4125C6.97917 5.80417 7.45 6 8 6C8.55 6 9.02083 5.80417 9.4125 5.4125Z" fill="currentColor" />
   </svg>
@@ -240,6 +241,17 @@ const Navbar = () => {
   const [branding, setBranding] = useState(null);
   const [isLoadingBranding, setIsLoadingBranding] = useState(false);
   const [isCompanyMenuOpen, setIsCompanyMenuOpen] = useState(false);
+
+  // The menu is anchored to the switcher button, so once the sidebar
+  // collapses (unpinned + mouse left, or mobile panel closed) it's no
+  // longer rendered next to a visible button — close it rather than leave
+  // it floating over the collapsed rail.
+  useEffect(() => {
+    if (!isHovered && !isMobileOpen) {
+      setIsCompanyMenuOpen(false);
+    }
+  }, [isHovered, isMobileOpen]);
+
   const navigate = useNavigate();
   const location = useLocation();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -307,24 +319,17 @@ const Navbar = () => {
     document.documentElement.style.setProperty("--chrome-bg", tint);
   }, [branding?.colors?.primary]);
 
-  // --btn-primary is the one variable every "primary action" button's fill
-  // resolves to (index.css's blanket re-theme rule) — Brand Settings' own
-  // "Button Colour" picker saved to branding.colors.primary all along, but
-  // nothing ever read it back into this variable, so the setting had no
-  // visible effect anywhere outside its own settings-page preview. Only
-  // overridden when the org has actually picked a colour; otherwise the
-  // stylesheet's own default (#0085FF) is left alone.
+  // Brand Settings' colour is the NAVBAR/chrome tint only (--chrome-bg above) — it is deliberately
+  // NOT the button colour. A previous change also pushed it into --btn-primary, which every primary
+  // button's fill resolves to; since those buttons all paint their label white, an org whose brand
+  // colour was white shipped white-on-white — invisible buttons and text, in production, for every
+  // logged-in user. Buttons stay on the stylesheet's own --btn-primary (#0085FF).
+  //
+  // The property is actively removed rather than merely left unset: a client that loaded an older
+  // build in the same tab may still have the inline override on <html>.
   useEffect(() => {
-    const primaryColor = /^#[0-9a-f]{6}$/i.test((branding?.colors?.primary || "").trim())
-      ? branding.colors.primary.trim()
-      : null;
-    if (primaryColor) {
-      document.documentElement.style.setProperty("--btn-primary", primaryColor);
-      document.documentElement.style.setProperty("--btn-primary-hover", darken(primaryColor, 0.15));
-    } else {
-      document.documentElement.style.removeProperty("--btn-primary");
-      document.documentElement.style.removeProperty("--btn-primary-hover");
-    }
+    document.documentElement.style.removeProperty("--btn-primary");
+    document.documentElement.style.removeProperty("--btn-primary-hover");
   }, [branding?.colors?.primary]);
 
   const getInitials = (name) => {
@@ -425,6 +430,7 @@ const Navbar = () => {
     { name: "Support", href: "/super-admin/support", icon: Settings },
     { name: "Plans", href: "/super-admin/plans", icon: CreditCard },
     { name: "Promotions & Rewards", href: "/super-admin/coupons", icon: Tag },
+    { name: "Payment Repair", href: "/super-admin/payment-repair", icon: Wrench },
   ];
 
   useEffect(() => {
@@ -804,7 +810,44 @@ const Navbar = () => {
               header strip (e.g. VendorDetailsPageNew.jsx) read this
               element's real bottom edge at runtime to line their own
               border up with it, instead of hardcoding a top offset. */}
+          {/* The company switcher is an org-scoped control: it shows the current workspace's
+              branding and links to that org's settings. A super admin is not inside any
+              organization, so it showed their initials against a company they do not belong to
+              and linked to settings they do not use. The anchor div stays (page header strips
+              measure its bottom edge at runtime) - only the control inside it is org-only. */}
           <div id="sidebar-switcher-anchor" className="relative flex items-center gap-3 min-w-0 flex-1">
+            {/* Super admin gets the product's own branding in the slot the org switcher occupies,
+                rather than leaving the top-left corner empty. Collapsed shows just the mark, so it
+                lines up with the 40px avatar the org side puts here. */}
+            {isSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => navigate("/super-admin-overview")}
+                title="Data Circles Admin"
+                className={`box-border flex flex-row items-center min-w-0 rounded-md hover:opacity-80 transition-opacity ${
+                  isHovered || isMobileOpen
+                    ? "h-10 self-stretch gap-2 px-1.5 py-1.5 flex-1"
+                    : "w-10 h-10 justify-center p-0 mx-auto"
+                }`}
+              >
+                {/* DataCircles.png is a WHITE mark, meant for dark chrome - unfiltered it was
+                    invisible against this pale sidebar. Inverting it is the same treatment the
+                    header used for this exact asset. */}
+                <img
+                  src="/DataCircles.png"
+                  alt=""
+                  className="w-8 h-8 rounded-md object-contain flex-shrink-0"
+                  style={{ filter: "invert(100%)" }}
+                />
+                {(isHovered || isMobileOpen) && (
+                  <span className="text-[14px] font-semibold leading-[120%] text-[#0A0A0A] truncate">
+                    Data Circles Admin
+                  </span>
+                )}
+              </button>
+            )}
+
+            {!isSuperAdmin && (
             <button
               type="button"
               onClick={() => setIsCompanyMenuOpen((v) => !v)}
@@ -842,13 +885,14 @@ const Navbar = () => {
                 <ChevronDown className="w-4 h-4 flex-shrink-0 text-[#0A0A0A]" />
               )}
             </button>
+            )}
 
             {/* There's no multi-organization API yet, so the menu shows the
                 current workspace and a way to edit it rather than inventing
                 companies to switch between. Anchored to the switcher button
                 itself (top-full), not the strip around it, so it always opens
                 flush below the button regardless of the strip's height. */}
-            {isCompanyMenuOpen && (isHovered || isMobileOpen) && (
+            {!isSuperAdmin && isCompanyMenuOpen && (isHovered || isMobileOpen) && (
               <>
                 <div
                   className="fixed inset-0 z-[9996]"

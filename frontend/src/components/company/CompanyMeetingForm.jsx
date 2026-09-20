@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import TeamIcon from "../common/TeamIcon";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const initialState = {
   title: "",
@@ -308,6 +309,7 @@ const CompanyMeetingForm = ({
   startInEditMode
 }) => {
   const [form, setForm] = useState(initialState);
+  useBodyScrollLock(open);
   const { meetingTypes } = useSystemSettings();
   // Which of the Duration/Meeting Type/Priority dropdowns is open, if any —
   // shared so opening one closes the others instead of them stacking.

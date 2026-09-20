@@ -34,6 +34,7 @@ import { useColumnSettings } from "../hooks/useColumnSettings";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
 import HighlightText from "../components/common/HighlightText";
 import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
+import useBodyScrollLock from "../hooks/useBodyScrollLock";
 import "react-quill/dist/quill.snow.css";
 import VideoTutorialModal from "../components/VideoTutorialModal";
 import { getVideoTutorial } from "../utils/videoTutorials";
@@ -75,6 +76,7 @@ const getAncestorZoom = (el) => {
 const ViewDetails = ({ item, onRequestClose, onEdit, onDelete }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [shouldRender, setShouldRender] = useState(true);
+  useBodyScrollLock(shouldRender);
   const [imagePreviews, setImagePreviews] = useState([]);
   const [selectedImageIndex, setSelectedImageIndex] = useState(null);
 

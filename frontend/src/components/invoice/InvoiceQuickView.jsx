@@ -4,6 +4,7 @@ import API from "../../services/api";
 import toast from "react-hot-toast";
 import EyeIcon from "../common/EyeIcon";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const STATUS_OPTIONS = ["Pending", "Sent", "Paid", "Overdue", "Cancelled"];
 
@@ -34,22 +35,15 @@ export default function InvoiceQuickView({ invoice, mode = "view", onClose, onUp
   const [status, setStatus] = useState(invoice?.status || "Pending");
   const [saving, setSaving] = useState(false);
 
+  // Lock background scroll while the panel is open. This component is
+  // mounted/unmounted by its parent (no internal open/close animation), so
+  // it's open for its entire mounted lifetime.
+  useBodyScrollLock(true);
+
   useEffect(() => {
     setEditing(mode === "edit");
     setStatus(invoice?.status || "Pending");
   }, [invoice, mode]);
-
-  // Lock background scroll while the panel is open.
-  useEffect(() => {
-    const prevBody = document.body.style.overflow;
-    const prevHtml = document.documentElement.style.overflow;
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevBody;
-      document.documentElement.style.overflow = prevHtml;
-    };
-  }, []);
 
   if (!invoice) return null;
 

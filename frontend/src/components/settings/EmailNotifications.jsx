@@ -24,6 +24,7 @@ import "react-quill-new/dist/quill.snow.css";
 import AppToaster from "../AppToaster";
 import EyeIcon from "../common/EyeIcon";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // ✅ Fixed Quill configuration
 const quillModules = {
@@ -215,6 +216,8 @@ const EmailTemplateForm = ({
   });
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(true);
+
+  useBodyScrollLock(isOpen);
 
   useEffect(() => {
     if (template) {
@@ -911,10 +914,11 @@ const EmailNotifications = () => {
             <button
               onClick={handleSave}
               disabled={saving}
+              style={saving ? undefined : { backgroundColor: "#0085FF" }}
               className={`flex items-center gap-2 px-6 py-3 text-white font-semibold rounded-xl transition-all shadow-lg ${
                 saving
                   ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+                  : "hover:opacity-90"
               }`}
             >
               {saving ? (
@@ -951,7 +955,8 @@ const EmailNotifications = () => {
           </div>
           <button
             onClick={() => handleOpenModal()}
-            className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl transition-all shadow-lg"
+            style={{ backgroundColor: "#0085FF" }}
+            className="flex items-center gap-2 px-5 py-3 hover:opacity-90 text-white font-semibold rounded-xl transition-all shadow-lg"
           >
             <PlusCircle className="w-5 h-5" />
             New Template

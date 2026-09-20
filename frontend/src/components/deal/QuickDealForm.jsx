@@ -8,6 +8,7 @@ import QuickCompanyForm from "../company/QuickCompanyForm";
 import QuickContactForm from "../contact/QuickContactForm";
 import { X } from "lucide-react";
 import toast from "react-hot-toast";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const QuickDealForm = ({
   companies,
@@ -36,6 +37,7 @@ const QuickDealForm = ({
   const [localContacts, setLocalContacts] = useState(contacts);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  useBodyScrollLock(isOpen);
   const [shouldRender, setShouldRender] = useState(true);
   const [isFormDirty, setIsFormDirty] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);

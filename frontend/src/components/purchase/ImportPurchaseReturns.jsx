@@ -6,6 +6,7 @@ import Papa from "papaparse";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import UploadIcon from "../common/UploadIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // Maps common header spellings onto the row shape bulkImportPurchaseReturns
 // expects — same "auto-match by header name" idea as ImportPurchases.jsx's
@@ -56,6 +57,7 @@ const downloadSampleCSV = () => {
  * instead of a separate mapping modal) since the column set here is small.
  */
 const ImportPurchaseReturns = ({ isOpen, onClose, onImportSuccess }) => {
+  useBodyScrollLock(isOpen);
   const [isSliding, setIsSliding] = useState(false);
   const [rows, setRows] = useState(null);
   const [fileName, setFileName] = useState("");

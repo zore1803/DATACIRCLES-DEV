@@ -6,7 +6,8 @@
 // buildReferralOverview on the backend) — this component never computes a
 // discount, eligibility, or status itself (ARCHITECTURE.md §8 rule #3/#19
 // of REFERRAL_SYSTEM_DESIGN.md — frontend never calculates referral math).
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Gift,
   Copy,
@@ -18,12 +19,83 @@ import {
   Building2,
   ChevronRight,
   Circle,
+  UserPlus,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { subscriptionAPI } from "../../services/subscriptionApi";
 import { formatPrice } from "../../utils/pricingSnapshot";
 import StatTile from "../common/StatTile";
-import TeamIcon from "../common/TeamIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import facebookLogo from "../../assets/facebook-logo.png";
+import whatsappLogo from "../../assets/whatsapp-logo.png";
+import telegramLogo from "../../assets/telegram-logo.png";
+import emailLogo from "../../assets/email-logo.png";
+import twitterLogo from "../../assets/twitter-logo.png";
+
+// Each PNG's mark fills a different fraction of its own transparent canvas
+// (measured directly: facebook ~70%, telegram ~83%, whatsapp ~97%, email
+// ~75%, instagram ~60%, twitter ~55% of the canvas' longest side), so
+// rendering all of them at the same image size makes the mark itself look
+// like a different size per icon.
+// `zoom` scales each one (about its own center, clipped by the row's
+// overflow-hidden box) so the visible marks read as the same size.
+const SHARE_TARGETS = [
+  {
+    id: "facebook",
+    label: "Share on Facebook",
+    image: facebookLogo,
+    zoom: 1.2,
+    urlFor: (link) => `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}`,
+  },
+  {
+    id: "telegram",
+    label: "Share on Telegram",
+    image: telegramLogo,
+    zoom: 1.03,
+    urlFor: (link, text) => `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`,
+  },
+  {
+    id: "whatsapp",
+    label: "Share on WhatsApp",
+    image: whatsappLogo,
+    zoom: 0.88,
+    urlFor: (link, text) => `https://wa.me/?text=${encodeURIComponent(`${text} ${link}`)}`,
+  },
+  {
+    id: "email",
+    label: "Share on E-Mail",
+    image: emailLogo,
+    zoom: 1.13,
+    urlFor: (link, text) => `mailto:?subject=${encodeURIComponent(text)}&body=${encodeURIComponent(link)}`,
+  },
+  {
+    id: "twitter",
+    label: "Share on X (Twitter)",
+    image: twitterLogo,
+    zoom: 1.56,
+    urlFor: (link, text) => `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(link)}`,
+  },
+];
+
+const HOW_IT_WORKS = [
+  {
+    icon: Share2,
+    title: "Share your code",
+    body: () => "Copy your referral code or send an invite by email to anyone who could use DataCircles.",
+  },
+  {
+    icon: UserPlus,
+    title: "Your friend subscribes",
+    body: () => "They sign up with your code and activate any paid plan.",
+  },
+  {
+    icon: Gift,
+    title: "Both of you win",
+    body: (rewardLabel) =>
+      `You earn ${rewardLabel} as a reward, and they get a discount on their first payment.`,
+  },
+];
 
 const formatDate = (d) => {
   if (!d) return "—";
@@ -60,10 +132,24 @@ const Referrals = () => {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  useBodyScrollLock(shareOpen);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteEmailError, setInviteEmailError] = useState("");
   const [inviteMessage, setInviteMessage] = useState("");
   const [sendingInvite, setSendingInvite] = useState(false);
+  // Sent invites come from the server (ReferralInvite log) so they survive
+  // a reload. They are still NOT referrals — a Referral only exists once
+  // the recipient registers with the code — so they're tracked and rendered
+  // separately from referralsSent.
+  const [sentInvites, setSentInvites] = useState([]);
+  // The green confirmation is a transient acknowledgement, not a record —
+  // it clears itself after 3s (the row in "People you've referred" is what
+  // sticks around). Held in a ref so a second send restarts the timer
+  // instead of letting the first one hide the new message.
+  const [inviteNotice, setInviteNotice] = useState(null);
+  const noticeTimer = useRef(null);
+  useEffect(() => () => clearTimeout(noticeTimer.current), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +163,7 @@ const Referrals = () => {
         if (cancelled) return;
         setCode(codeRes.data.code);
         setOverview(overviewRes.data);
+        setSentInvites(overviewRes.data.invitesSent || []);
       } catch (err) {
         console.error("Failed to load referral overview:", err);
         if (!cancelled) toast.error("Couldn't load your referral info. Try refreshing.");
@@ -114,8 +201,13 @@ const Referrals = () => {
     setInviteEmailError("");
     try {
       setSendingInvite(true);
-      await subscriptionAPI.sendReferralEmail(trimmedEmail, inviteMessage.trim());
+      const res = await subscriptionAPI.sendReferralEmail(trimmedEmail, inviteMessage.trim());
       toast.success(`Invite sent to ${trimmedEmail}`);
+      const invite = res?.data?.invite || { _id: trimmedEmail, email: trimmedEmail, lastSentAt: new Date().toISOString() };
+      setSentInvites((prev) => [invite, ...prev.filter((i) => i.email !== invite.email)]);
+      setInviteNotice(trimmedEmail);
+      clearTimeout(noticeTimer.current);
+      noticeTimer.current = setTimeout(() => setInviteNotice(null), 3000);
       setInviteEmail("");
       setInviteMessage("");
     } catch (err) {
@@ -135,10 +227,16 @@ const Referrals = () => {
   }
 
   const summary = overview?.summary || {};
+  const program = overview?.program;
   const rewards = overview?.rewards || [];
   const referralsSent = overview?.referralsSent || [];
   const referredBy = overview?.referredBy;
   const topReward = rewards.find((r) => r.status === "available") || rewards[0];
+  const rewardLabel = program
+    ? program.rewardType === "fixed"
+      ? formatPrice(program.rewardValue)
+      : `${program.rewardValue}%`
+    : "a reward";
 
   return (
     <div className="space-y-5">
@@ -220,19 +318,23 @@ const Referrals = () => {
         </div>
       )}
 
-      {/* Two-column: invite / referred people */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-        {/* Invite a friend + email */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-blue-50 text-[#0085FF]">
-              <TeamIcon className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-gray-900">Invite a friend</h2>
-              <p className="text-xs text-gray-500">Share your code — when they become a paying customer, you both earn a reward.</p>
-            </div>
-          </div>
+      {/* Invite a friend + email */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+          {program && (
+            <>
+              <p className="text-3xl font-bold text-gray-900 mb-2">
+                Invite friends, earn{" "}
+                <span className="text-[#0085FF]">
+                  {program.rewardType === "fixed" ? formatPrice(program.rewardValue) : `${program.rewardValue}%`}
+                </span>{" "}
+                <span role="img" aria-label="excited">🤩</span>
+              </p>
+              <p className="text-sm text-gray-500 mb-4">
+                Share DataCircles with your network and earn rewards for every friend who joins.
+              </p>
+            </>
+          )}
 
           <div className="flex items-center gap-2 mb-3">
             <div className="flex-1 flex items-center h-[38px] bg-gray-50 border border-gray-200 rounded-full px-4">
@@ -246,11 +348,11 @@ const Referrals = () => {
               {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
             </button>
             <button
-              onClick={() => handleCopy(shareLink)}
+              onClick={() => setShareOpen(true)}
               className="inline-flex items-center justify-center gap-1.5 h-[38px] bg-[#0085FF] hover:bg-blue-600 text-white text-sm font-semibold px-4 rounded-full transition-colors whitespace-nowrap"
             >
               <Share2 className="w-3.5 h-3.5" />
-              Copy share link
+              Share
             </button>
           </div>
 
@@ -306,6 +408,17 @@ const Referrals = () => {
                 rows={2}
                 className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-3.5 py-2.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-purple-500"
               />
+              {inviteNotice && (
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3.5 py-2.5">
+                  <p className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5" />
+                    Invite sent to {inviteNotice}
+                  </p>
+                  <p className="text-xs text-emerald-700 mt-0.5">
+                    They'll show up under “People you've referred” once they sign up with your code.
+                  </p>
+                </div>
+              )}
               <button
                 onClick={handleSendInvite}
                 disabled={sendingInvite}
@@ -318,48 +431,90 @@ const Referrals = () => {
           </div>
         </div>
 
-        {/* People you've referred */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-6 pt-5 pb-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-50 text-[#0085FF]">
-              <TeamIcon className="w-4 h-4" />
-            </div>
-            <h2 className="text-base font-bold text-gray-900">People you've referred</h2>
+        {/* Right rail — the list of people who used your code, next to the
+            form that creates them. The card is height-matched to the invite
+            card (items-stretch + min-h-0 flex column) and the rows scroll
+            inside it, so a long list never stretches the row. */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col min-h-0 overflow-hidden">
+          <div className="px-5 pt-5 pb-3 shrink-0">
+            <h3 className="text-base font-bold text-gray-900">People you've referred</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {referralsSent.length > 0
+                ? `${summary.referralsQualified ?? 0} qualified · ${summary.referralsPending ?? 0} pending`
+                : sentInvites.length > 0
+                ? `${sentInvites.length} invite${sentInvites.length > 1 ? "s" : ""} sent · waiting for sign-up`
+                : "Nobody has used your code yet."}
+            </p>
           </div>
 
-          {referralsSent.length === 0 ? (
-            <p className="px-6 pb-6 text-sm text-gray-500">Nobody has used your code yet — share it to start earning rewards.</p>
+          {referralsSent.length === 0 && sentInvites.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center px-5 pb-6 text-center">
+              <div className="p-2.5 rounded-xl bg-purple-50 text-purple-600 mb-2.5">
+                <Gift className="w-4 h-4" />
+              </div>
+              <p className="text-sm text-gray-500">
+                Share your code to start earning {rewardLabel} per friend who subscribes.
+              </p>
+            </div>
           ) : (
-            <>
-              <div className="hidden sm:grid grid-cols-[1fr_auto_auto] gap-4 px-6 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100">
-                <span>Company</span>
-                <span>Joined</span>
-                <span className="text-right">Status</span>
-              </div>
-              <div className="divide-y divide-gray-100">
-                {referralsSent.map((r) => (
-                  <div key={r._id} className="px-6 py-3.5 grid grid-cols-[1fr_auto_auto] items-center gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600 shrink-0">
-                        <Building2 className="w-3.5 h-3.5" />
-                      </div>
-                      <p className="text-sm font-semibold text-gray-900 truncate">{r.referredOrganization?.name || "Organization"}</p>
-                    </div>
-                    <div className="text-xs text-gray-400 whitespace-nowrap">
-                      {formatDate(r.createdAt)}
-                      {r.qualifiedAt && <div>Qualified {formatDate(r.qualifiedAt)}</div>}
-                    </div>
-                    <div className="justify-self-end">
-                      <StatusPill status={r.status} styles={REFERRAL_STATUS_STYLES} />
-                    </div>
+            <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-gray-100 lg:max-h-none max-h-[320px]">
+              {/* Invitation emails from the ReferralInvite log. They are NOT
+                  referrals — nobody has signed up yet — so they carry an
+                  "Invited" chip rather than a referral status pill. */}
+              {sentInvites.map((invite) => (
+                <div key={`invite-${invite._id}`} className="px-5 py-3 flex items-center gap-3">
+                  <div className="p-1.5 rounded-lg bg-gray-100 text-gray-500 shrink-0">
+                    <Mail className="w-3.5 h-3.5" />
                   </div>
-                ))}
-              </div>
-              <button className="w-full flex items-center justify-center gap-1 px-6 py-3.5 text-sm font-semibold text-purple-600 hover:bg-purple-50 transition-colors border-t border-gray-100">
-                View all referrals <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{invite.email}</p>
+                    <p className="text-xs text-gray-400">
+                      Invited {formatDate(invite.lastSentAt)}
+                      {invite.sendCount > 1 ? ` · ${invite.sendCount} invites` : ""}
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold border bg-gray-100 text-gray-500 border-gray-200">
+                    Invited
+                  </span>
+                </div>
+              ))}
+              {referralsSent.map((r) => (
+                <div key={r._id} className="px-5 py-3 flex items-center gap-3">
+                  <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600 shrink-0">
+                    <Building2 className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-gray-900 truncate">
+                      {r.referredOrganization?.name || "Organization"}
+                    </p>
+                    <p className="text-xs text-gray-400">{formatDate(r.createdAt)}</p>
+                  </div>
+                  <StatusPill status={r.status} styles={REFERRAL_STATUS_STYLES} />
+                </div>
+              ))}
+            </div>
           )}
+        </div>
+      </div>
+
+      {/* How it works — the program explained once, under the tools that
+          use it. */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-6 py-5">
+        <h2 className="text-xl font-bold text-gray-900 text-center mb-5">How it works</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {HOW_IT_WORKS.map((step, i) => (
+            <div
+              key={step.title}
+              className="rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-5 text-center"
+            >
+              <p className="text-xs font-bold text-[#0085FF] mb-2">0{i + 1}</p>
+              <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-white border border-gray-200 text-gray-500 mb-2.5">
+                <step.icon className="w-4 h-4" />
+              </span>
+              <p className="text-sm font-semibold text-gray-900">{step.title}</p>
+              <p className="text-xs text-gray-500 mt-1 leading-relaxed">{step.body(rewardLabel)}</p>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -421,6 +576,78 @@ const Referrals = () => {
             })}
           </div>
         </div>
+      )}
+
+      {shareOpen && createPortal(
+        <div
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/20 backdrop-blur-sm p-4"
+          onClick={() => setShareOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900">Refer &amp; Earn</h3>
+              <button
+                type="button"
+                onClick={() => setShareOpen(false)}
+                className="p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="py-2">
+              {SHARE_TARGETS.map((target) => {
+                return (
+                  <button
+                    key={target.id}
+                    type="button"
+                    onClick={() => {
+                      if (target.copyFirst) {
+                        handleCopy(shareLink);
+                      }
+                      window.open(
+                        target.urlFor(shareLink, "Invite friends, earn rewards with DataCircles!"),
+                        "_blank",
+                        "noopener,noreferrer"
+                      );
+                      setShareOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="flex items-center justify-center w-9 h-9 flex-shrink-0 overflow-hidden">
+                      <img
+                        src={target.image}
+                        alt=""
+                        className="w-7 h-7 object-contain"
+                        style={target.zoom ? { transform: `scale(${target.zoom})` } : undefined}
+                      />
+                    </span>
+                    <span className="flex-1 text-left text-sm font-semibold text-gray-900">{target.label}</span>
+                    <ChevronRight className="w-4 h-4 text-gray-300" />
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="px-5 pb-5">
+              <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5">
+                <p className="flex-1 text-xs text-gray-600 break-all">{shareLink}</p>
+                <button
+                  type="button"
+                  onClick={() => handleCopy(shareLink)}
+                  title="Copy link"
+                  className="flex-shrink-0 text-gray-400 hover:text-gray-700 transition-colors"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

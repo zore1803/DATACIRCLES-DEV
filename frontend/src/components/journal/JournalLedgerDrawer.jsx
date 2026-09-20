@@ -10,6 +10,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import ConfirmDialog from "../common/ConfirmDialog";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const money = (n) =>
   `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -55,6 +56,7 @@ const formatLedgerWhen = (row) => {
 // straight from here (via onOpenPayIn/onOpenPayOut, opened by the caller so
 // there's a single PayInOutModal instance instead of one per drawer).
 const JournalLedgerDrawer = ({ isOpen, journalId, refreshKey, onClose, onOpenPayIn, onOpenPayOut, onJournalClosed, onJournalReopened }) => {
+  useBodyScrollLock(isOpen);
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [loading, setLoading] = useState(false);

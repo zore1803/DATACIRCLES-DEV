@@ -39,6 +39,7 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Super admin login error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -79,6 +80,15 @@ router.put('/tickets/:id', superAdminController.updateTicket);
 router.delete('/tickets/:id', superAdminController.deleteTicket);
 router.post('/support/:id/status', superAdminController.updateTicketStatus);
 router.get('/organizations/:orgId/payments', superAdminController.getOrganizationPayments);
+
+// "Customer paid but never got their subscription" repair tool — takes a
+// Razorpay payment id, reports whether it was captured and whether it was
+// ever applied, and (with apply: true) replays it through the normal
+// reconciliation path. Replaces scripts/repairUnacknowledgedPayment.js.
+router.post('/payments/check', superAdminAuth, superAdminController.checkPayment);
+// The other half of the activation gate: asks Razorpay for the mandate token's
+// real state and syncs it if a token.confirmed webhook was missed.
+router.post('/payments/check-mandate', superAdminAuth, superAdminController.checkMandate);
 router.post('/organizations/:organizationId/start-trial', superAdminAuth, superAdminController.adminStartTrialForOrganization);
 router.post('/subscriptions/:subscriptionId/adjust-trial', superAdminAuth, superAdminController.adminAdjustTrial);
 router.post('/subscriptions/:subscriptionId/end-trial', superAdminAuth, superAdminController.adminEndTrialNow);

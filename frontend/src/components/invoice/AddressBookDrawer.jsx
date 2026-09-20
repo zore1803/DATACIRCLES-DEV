@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import API from "../../services/api";
 import EditIcon from "../common/EditIcon";
 import { AddressFieldsGroup, emptyAddress } from "./formPrimitives";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 /*
  * Right-hand drawer for saved addresses — same idea as NotesTermsDrawer, but
@@ -44,6 +45,7 @@ const AddressBookDrawer = ({
   currentAddress = null,
   onApply,
 }) => {
+  useBodyScrollLock(isOpen);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [addresses, setAddresses] = useState([]);
@@ -172,7 +174,7 @@ const AddressBookDrawer = ({
               className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-[#0085FF] hover:bg-blue-600 text-white text-[13px] font-medium transition-colors flex-shrink-0"
             >
               <PlusIcon className="w-4 h-4" />
-              Save New Address
+              Add New Address
             </button>
           )}
         </header>

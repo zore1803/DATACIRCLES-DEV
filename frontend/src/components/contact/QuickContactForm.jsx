@@ -8,7 +8,12 @@ import SearchableDropdown from "./SearchableDropdown";
 import CustomDropdown from "../common/CustomDropdown";
 import QuickCompanyForm from "../company/QuickCompanyForm";
 import { X, Paperclip } from "lucide-react";
+import instagramLogo from "../../assets/insta-logo.png";
+import twitterLogo from "../../assets/twitter-logo.png";
+import linkedinLogo from "../../assets/linkedin-logo.png";
+import facebookLogo from "../../assets/facebook-logo.png";
 import toast from "react-hot-toast";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, onRequestClose, initialCompanyId = "", editContact = null }) => {
   const isEditing = !!editContact;
@@ -18,6 +23,12 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
     phone: "",
     company: initialCompanyId,
     leadSource: "",
+    socialMedia: {
+      twitter: "",
+      linkedin: "",
+      instagram: "",
+      facebook: "",
+    },
   });
   const [additionalFields, setAdditionalFields] = useState({});
   const [fieldDefinitions, setFieldDefinitions] = useState([]);
@@ -55,6 +66,8 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
   // Add validation state
   const [validationErrors, setValidationErrors] = useState({});
 
+  useBodyScrollLock(isOpen);
+
   useEffect(() => {
     setShouldRender(true);
     setTimeout(() => setIsOpen(true), 10);
@@ -81,6 +94,13 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
       phone: editContact.phone || "",
       company: editContact.company?._id || editContact.company || "",
       leadSource: editContact.leadSource || "",
+      socialMedia: {
+        twitter: "",
+        linkedin: "",
+        instagram: "",
+        facebook: "",
+        ...(editContact.socialMedia || {}),
+      },
     });
     const pf = {};
     (editContact.additionalFields || []).forEach((f) => {
@@ -342,6 +362,14 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
     }
   };
 
+  const handleSocialMediaChange = (platform, value) => {
+    setForm((prev) => ({
+      ...prev,
+      socialMedia: { ...prev.socialMedia, [platform]: value },
+    }));
+    setIsFormDirty(true);
+  };
+
   const handleSubmit = async (e, isSaveAndExit = false) => {
     e.preventDefault();
 
@@ -384,6 +412,10 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
       payload.append("company", form.company);
     }
     payload.append("leadSource", form.leadSource);
+    payload.append("socialMedia[twitter]", form.socialMedia.twitter || "");
+    payload.append("socialMedia[linkedin]", form.socialMedia.linkedin || "");
+    payload.append("socialMedia[instagram]", form.socialMedia.instagram || "");
+    payload.append("socialMedia[facebook]", form.socialMedia.facebook || "");
 
     const processedAdditionalFields = fieldDefinitions
       .map((fieldDef) => {
@@ -732,6 +764,99 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
                 </div>
               </div>
             )}
+
+            {/* Social Media Links — same layout as QuickCompanyForm's. */}
+            <div>
+              <div className="flex items-center gap-3 mb-3">
+                <span className="flex-1 h-px bg-[#D9D9D9]" />
+                <h3 className="flex-shrink-0 text-[14px] font-medium leading-[120%] text-[#1F2937]">
+                  Social Media Links
+                </h3>
+                <span className="flex-1 h-px bg-[#D9D9D9]" />
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
+                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
+                      <img
+                        src={twitterLogo}
+                        alt=""
+                        className="w-[18px] h-[18px] object-contain"
+                        style={{ transform: "scale(1.56)" }}
+                      />
+                    </span>
+                    X (Twitter)
+                  </label>
+                  <input
+                    type="url"
+                    value={form.socialMedia.twitter}
+                    onChange={(e) => handleSocialMediaChange("twitter", e.target.value)}
+                    className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
+                    placeholder="https://x.com/username"
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
+                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
+                      <img
+                        src={linkedinLogo}
+                        alt=""
+                        className="w-[18px] h-[18px] object-contain"
+                        style={{ transform: "scale(1.5)" }}
+                      />
+                    </span>
+                    LinkedIn
+                  </label>
+                  <input
+                    type="url"
+                    value={form.socialMedia.linkedin}
+                    onChange={(e) => handleSocialMediaChange("linkedin", e.target.value)}
+                    className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
+                    placeholder="https://linkedin.com/in/username"
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
+                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
+                      <img
+                        src={instagramLogo}
+                        alt=""
+                        className="w-[18px] h-[18px] object-contain"
+                        style={{ transform: "scale(1.4)" }}
+                      />
+                    </span>
+                    Instagram
+                  </label>
+                  <input
+                    type="url"
+                    value={form.socialMedia.instagram}
+                    onChange={(e) => handleSocialMediaChange("instagram", e.target.value)}
+                    className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
+                    placeholder="https://instagram.com/username"
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
+                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
+                      <img
+                        src={facebookLogo}
+                        alt=""
+                        className="w-[18px] h-[18px] object-contain"
+                        style={{ transform: "scale(1.21)" }}
+                      />
+                    </span>
+                    Facebook
+                  </label>
+                  <input
+                    type="url"
+                    value={form.socialMedia.facebook}
+                    onChange={(e) => handleSocialMediaChange("facebook", e.target.value)}
+                    className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
+                    placeholder="https://facebook.com/username"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">

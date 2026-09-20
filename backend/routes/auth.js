@@ -152,6 +152,72 @@ router.post(
   authController.verifyProfilePhoneOtp,
 );
 
+// Changing to a new (not-yet-saved) phone number — verified before it's written
+router.post(
+  "/send-phone-change-otp",
+  requireAuth,
+  globalOtpLimiter,
+  sendOtpLimiter,
+  phoneOtpLimiter,
+  authController.sendPhoneChangeOtp,
+);
+router.post(
+  "/verify-phone-change-otp",
+  requireAuth,
+  globalOtpLimiter,
+  verifyOtpLimiter,
+  authController.verifyPhoneChangeOtp,
+);
+
+// Changing to a new (not-yet-saved) email address — verified before it's written
+router.post(
+  "/send-email-change-otp",
+  requireAuth,
+  globalOtpLimiter,
+  sendOtpLimiter,
+  authController.sendEmailChangeOtp,
+);
+router.post(
+  "/verify-email-change-otp",
+  requireAuth,
+  globalOtpLimiter,
+  verifyOtpLimiter,
+  authController.verifyEmailChangeOtp,
+);
+
+// Step-up verification for changing the LOGIN credential field itself
+// (email for an email/Google/password account, phone for a phone-OTP one):
+// verified via the account's other, already-linked contact method instead
+// of an OTP to the new value.
+router.post(
+  "/send-credential-change-verification",
+  requireAuth,
+  globalOtpLimiter,
+  sendOtpLimiter,
+  phoneOtpLimiter,
+  authController.sendCredentialChangeVerification,
+);
+router.post(
+  "/confirm-credential-change-verification",
+  requireAuth,
+  globalOtpLimiter,
+  verifyOtpLimiter,
+  authController.confirmCredentialChangeVerification,
+);
+
+// Danger Zone — files a reset/delete request for the org's admins (and
+// support, if configured) to actually act on; never performed automatically.
+router.post(
+  "/account-request",
+  requireAuth,
+  globalOtpLimiter,
+  authController.submitAccountRequest,
+);
+
+// Connect/disconnect a Google identity on the already-logged-in account
+router.post("/link-google", requireAuth, authController.linkGoogleAccount);
+router.delete("/link-google", requireAuth, authController.unlinkGoogleAccount);
+
 // Complete registration
 router.post("/complete-registration", authMiddleware, authController.completeRegistration);
 

@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const PAYMENT_TYPES = ["UPI", "Cash", "Card", "Net Banking", "Cheque", "EMI"];
 
@@ -126,6 +127,7 @@ const PartySearchInput = ({ value, onChange, partyType, placeholder, fieldClass 
  */
 const PayInOutModal = ({ isOpen, onClose, journal, type, onSuccess }) => {
   const isIn = type === "payin";
+  useBodyScrollLock(isOpen);
 
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
@@ -542,8 +544,9 @@ const PayInOutModal = ({ isOpen, onClose, journal, type, onSuccess }) => {
                     <div className="mt-2">
                       <input
                         type="tel"
+                        inputMode="numeric"
                         value={customerPhone}
-                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        onChange={(e) => setCustomerPhone(e.target.value.replace(/[^0-9]/g, "").slice(0, 10))}
                         placeholder="Customer mobile number (10 digits)"
                         maxLength={10}
                         className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-green-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"

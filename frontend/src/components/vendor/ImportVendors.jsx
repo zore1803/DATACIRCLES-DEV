@@ -9,6 +9,7 @@ import Papa from "papaparse";
 import API from "../../services/api";
 import VendorFieldMappingModal from "./VendorFieldMappingModal";
 import UploadIcon from "../common/UploadIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 function ImportVendors({
   isOpen: propIsOpen,
@@ -25,6 +26,8 @@ function ImportVendors({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [dragActive, setDragActive] = useState(false);
+
+  useBodyScrollLock(propIsOpen);
 
   useEffect(() => {
     if (propIsOpen) {

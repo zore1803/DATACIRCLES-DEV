@@ -35,7 +35,11 @@ const CustomDropdown = ({ options, value, onChange, placeholder, className = "",
             bottom: openUp ? viewportH - rect.top / zoom : undefined,
             left: Math.min(rect.left / zoom, viewportW - rect.width / zoom - MARGIN),
             width: rect.width / zoom,
-            maxHeight: Math.max(120, (openUp ? rect.top / zoom : spaceBelow) - MARGIN),
+            // Cap at MAX_MENU_H (~4 rows) instead of filling all remaining
+            // viewport space below/above the trigger — a dropdown that grows
+            // to match whatever room happens to be available looks broken
+            // next to every other picker in the app, which all cap short.
+            maxHeight: Math.min(MAX_MENU_H, Math.max(120, (openUp ? rect.top / zoom : spaceBelow) - MARGIN)),
         });
     };
 

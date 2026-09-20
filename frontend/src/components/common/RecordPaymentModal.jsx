@@ -8,6 +8,7 @@ import {
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import { formatNumberToIndian } from "../../utils/numberFormatter";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const PAYMENT_TYPES = ["UPI", "Cash", "Card", "Net Banking", "Cheque", "EMI", "TDS"];
 
@@ -32,6 +33,7 @@ const RecordPaymentModal = ({ isOpen, onClose, invoice, onSuccess }) => {
   const [signatures, setSignatures] = useState([]); // [{label, value, url}]
   const [selectedSignature, setSelectedSignature] = useState("");
   const drawerRef = useRef(null);
+  useBodyScrollLock(isOpen);
 
   useEffect(() => { setLocalInvoice(invoice); }, [invoice]);
 
@@ -521,8 +523,9 @@ const RecordPaymentModal = ({ isOpen, onClose, invoice, onSuccess }) => {
                     <div className="mt-2">
                       <input
                         type="tel"
+                        inputMode="numeric"
                         value={customerPhone}
-                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        onChange={(e) => setCustomerPhone(e.target.value.replace(/[^0-9]/g, "").slice(0, 10))}
                         placeholder="Customer mobile number (10 digits)"
                         maxLength={10}
                         className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-green-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"

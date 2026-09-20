@@ -63,8 +63,50 @@ async function listForms(req, res) {
     if (req.query.module) query.module = req.query.module;
     if (req.query.search) query.title = { $regex: req.query.search, $options: "i" };
 
+    // Advanced filters — same wire shape the Companies list uses
+    // ([{ column, operator, value }] as a JSON query param), so the shared
+    // AdvancedFilterPanel works here unchanged. Only whitelisted top-level
+    // form fields are filterable: forms have no additionalFields array, and
+    // letting an arbitrary `column` through would expose nested internals
+    // (publishState, schemaHash) to query injection.
+    const FILTERABLE_FIELDS = ["title", "module", "status", "description"];
+    if (req.query.advancedFilters) {
+      let parsedFilters = [];
+      try {
+        parsedFilters = JSON.parse(req.query.advancedFilters);
+      } catch {
+        return res.status(400).json({ error: "Invalid advancedFilters" });
+      }
+
+      const andConditions = [];
+      for (const { column, operator, value } of parsedFilters) {
+        if (!column || !operator || !FILTERABLE_FIELDS.includes(column)) continue;
+        let clause;
+        switch (operator) {
+          case "is": clause = value; break;
+          case "is_not": clause = { $ne: value }; break;
+          case "contains": clause = { $regex: value, $options: "i" }; break;
+          case "not_contains": clause = { $not: { $regex: value, $options: "i" } }; break;
+          case "in": clause = { $in: Array.isArray(value) ? value : String(value).split(",").map((v) => v.trim()) }; break;
+          case "not_in": clause = { $nin: Array.isArray(value) ? value : String(value).split(",").map((v) => v.trim()) }; break;
+          case "is_empty": clause = { $in: [null, ""] }; break;
+          case "is_not_empty": clause = { $nin: [null, ""] }; break;
+          default: clause = value;
+        }
+        andConditions.push({ [column]: clause });
+      }
+      if (andConditions.length) query.$and = [...(query.$and || []), ...andConditions];
+    }
+
+    // Sorting. submissionCount is computed per page below (it isn't stored on
+    // the document), so it is deliberately NOT sortable server-side — offering
+    // it would sort only the current page and silently lie about the rest.
+    const SORTABLE_FIELDS = ["title", "module", "status", "updatedAt", "createdAt"];
+    const sortBy = SORTABLE_FIELDS.includes(req.query.sortBy) ? req.query.sortBy : "updatedAt";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+
     const [forms, totalCount] = await Promise.all([
-      FormDefinition.find(query).sort({ updatedAt: -1 }).skip(skip).limit(limit),
+      FormDefinition.find(query).sort({ [sortBy]: sortOrder }).skip(skip).limit(limit),
       FormDefinition.countDocuments(query),
     ]);
 
@@ -233,6 +275,18 @@ async function archiveForm(req, res) {
     res.json({ form });
   } catch (err) {
     handleServiceError(res, err, "Failed to archive form");
+  }
+}
+
+/**
+ * POST /api/forms/:id/unarchive — brings an archived form back as a draft (offline, editable).
+ */
+async function unarchiveForm(req, res) {
+  try {
+    const form = await formPublishService.unarchiveForm(req.params.id, req.user.organization);
+    res.json({ form });
+  } catch (err) {
+    handleServiceError(res, err, "Failed to unarchive form");
   }
 }
 
@@ -499,6 +553,59 @@ async function deleteForm(req, res) {
 }
 
 /**
+ * POST /api/forms/export-selected
+ * Body: { selectedIds, columns: [{ key, label }] }
+ * Mirrors companyController.exportSelectedCompanies exactly (same request
+ * shape, same CSV assembly) so the shared ExportModal works here unchanged.
+ * Org-scoped in the query, so a foreign _id in selectedIds simply matches
+ * nothing rather than leaking another org's form.
+ */
+async function exportSelectedForms(req, res) {
+  try {
+    const { selectedIds, columns } = req.body;
+    if (!Array.isArray(selectedIds) || selectedIds.length === 0) {
+      return res.status(400).json({ error: "No forms selected for export" });
+    }
+    if (!Array.isArray(columns) || columns.length === 0) {
+      return res.status(400).json({ error: "No columns selected for export" });
+    }
+
+    const query = { _id: { $in: selectedIds }, organization: req.user.organization };
+    if (req.ownOnly) query.$or = [{ owner: req.user._id }, { createdBy: req.user._id }];
+
+    const forms = await FormDefinition.find(query).lean();
+
+    const counts = forms.length
+      ? await FormSubmission.aggregate([
+          { $match: { formDefinition: { $in: forms.map((f) => f._id) } } },
+          { $group: { _id: "$formDefinition", count: { $sum: 1 } } },
+        ])
+      : [];
+    const countByFormId = new Map(counts.map((c) => [String(c._id), c.count]));
+
+    const headerRow = columns.map((c) => `"${c.label}"`).join(",");
+    const dataRows = forms.map((form) =>
+      columns
+        .map((c) => {
+          let val = c.key === "submissionCount" ? countByFormId.get(String(form._id)) || 0 : form[c.key];
+          if (val == null) val = "";
+          if (val instanceof Date) val = val.toISOString();
+          else if (typeof val === "object") val = JSON.stringify(val);
+          return `"${String(val).replace(/"/g, '""')}"`;
+        })
+        .join(",")
+    );
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", 'attachment; filename="Exported_Forms.csv"');
+    res.status(200).send([headerRow, ...dataRows].join("\n"));
+  } catch (err) {
+    console.error("formController.exportSelectedForms error:", err);
+    res.status(500).json({ error: "Failed to export forms" });
+  }
+}
+
+/**
  * POST /api/forms/:id/image — receives an image the owner is placing on the form (logo, banner...).
  * Runs after uploadMiddlewareS3().single("image"), which has already streamed the file to the org's
  * S3 folder and set req.fileLocation. Deliberately does NOT persist the URL onto the form itself:
@@ -514,12 +621,14 @@ async function uploadFormImage(req, res) {
 
 module.exports = {
   listForms,
+  exportSelectedForms,
   createForm,
   getForm,
   updateForm,
   uploadFormImage,
   publishForm,
   archiveForm,
+  unarchiveForm,
   pauseForm,
   resumeForm,
   listSubmissions,

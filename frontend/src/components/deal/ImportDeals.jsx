@@ -9,6 +9,7 @@ import Papa from "papaparse";
 import API from "../../services/api";
 import DealFieldMappingModal from "./DealFieldMappingModal";
 import UploadIcon from "../common/UploadIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 function ImportDeals({
   isOpen: propIsOpen,
@@ -16,6 +17,7 @@ function ImportDeals({
   dealFieldNames,
   onImportSuccess,
 }) {
+  useBodyScrollLock(propIsOpen);
   const [file, setFile] = useState(null);
   const [csvData, setCsvData] = useState([]);
   const [csvHeaders, setCsvHeaders] = useState([]);

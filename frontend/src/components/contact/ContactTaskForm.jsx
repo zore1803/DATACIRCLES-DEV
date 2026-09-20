@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import TeamIcon from "../common/TeamIcon";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const initialState = {
   title: "",
@@ -103,6 +104,8 @@ const ContactTaskForm = ({
   const [showUserSelector, setShowUserSelector] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditMode, setIsEditMode] = useState(mode === "create");
+
+  useBodyScrollLock(open);
 
   useEffect(() => {
     if (open) {

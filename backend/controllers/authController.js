@@ -82,6 +82,11 @@ const TempOTP = mongoose.model(
     phone: { type: String, required: true },
     otp: { type: String, required: true },
     expires: { type: Date, required: true },
+    // Set once verifyPhoneChangeOtp confirms the code — the record is kept
+    // (not deleted) so a later, separate "Save and Update" click can commit
+    // the number without asking for the OTP again, as long as it's done
+    // before `expires`.
+    verified: { type: Boolean, default: false },
   }),
 );
 
@@ -178,14 +183,35 @@ exports.getCurrentUser = async (req, res) => {
     // getAccessEntitlementEnd() returns currentPeriodEnd unchanged for
     // monthly (byte-for-byte identical response) and the real
     // anchor-relative entitlement window end for yearly.
+    // Which credential this session actually authenticated with — a
+    // "phone|..." JWT sub means phone is the login identity (see
+    // userSyncMiddleware), everything else (Auth0 email/Google/Facebook,
+    // local "password|...") logs in by email. Profile.jsx uses this to
+    // decide which of email/phone is locked as the login credential and
+    // which can be changed.
+    const authProvider = req.auth?.sub ? req.auth.sub.split("|")[0] : null;
+    const loginMethod = authProvider === "phone" || authProvider === "temp-phone" ? "phone" : "email";
+
+    // Fetched here purely for display, e.g. the Danger Zone "type your
+    // organization name to confirm" prompt — that has to match what the
+    // user actually SEES as their org name (Settings > Organization
+    // Details' Company Name, stored on Branding), not Organization.name,
+    // which is only ever the name typed once at signup and is never shown
+    // or editable anywhere in the app afterward.
+    const branding = await Branding.findOne({ organization: user.organization })
+      .sort({ updatedAt: -1 })
+      .select("companyName");
+
     res.status(200).json({
       user,
+      organizationName: branding?.companyName || "",
       isTrialActive,
       trialEnd,
       trialUsed,
       isPaymentConfirmed,
       appStatus: subscription?.appStatus || null,
       currentPeriodEnd: subscription ? getAccessEntitlementEnd(subscription) : null,
+      loginMethod,
     });
   } catch (err) {
     res.status(500).json({ error: "Server error" });
@@ -245,10 +271,29 @@ exports.updateProfile = async (req, res) => {
     // missing, without touching signup/auth. Only ever fills a blank email;
     // never overwrites an existing one. Phone, unlike email, can be edited
     // from the Profile settings page even when already set.
-    const { email, phone, name } = req.body;
+    const { email, phone, name, changeToken } = req.body;
     if (name && name.trim()) {
       user.name = name.trim();
     }
+
+    // A valid changeToken (from confirmCredentialChangeVerification) proves
+    // this request already passed step-up verification via the OTHER,
+    // linked field — used for the credential field itself (the one this
+    // account actually logs in with), which is never unlocked for editing
+    // without that step first. Checked once, reused for whichever of
+    // email/phone it was issued for.
+    let verifiedChangeField = null;
+    if (changeToken) {
+      try {
+        const decoded = jwt.verify(changeToken, process.env.JWT_SECRET);
+        if (decoded.purpose === "credential-change" && decoded.userId === user._id.toString()) {
+          verifiedChangeField = decoded.field;
+        }
+      } catch (tokenErr) {
+        return res.status(400).json({ error: "Your verification has expired. Please verify again." });
+      }
+    }
+
     if (email && !user.email) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
@@ -260,13 +305,63 @@ exports.updateProfile = async (req, res) => {
       }
       user.email = email;
       user.isEmailVerified = false;
+    } else if (email && email.toLowerCase() !== (user.email || "").toLowerCase()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: "Please enter a valid email address" });
+      }
+      const existing = await User.findOne({ email: email.toLowerCase() });
+      if (existing) {
+        return res.status(400).json({ error: "This email is already in use." });
+      }
+      if (verifiedChangeField === "email") {
+        // Step-up verified via the linked phone — no per-new-value OTP needed.
+        user.email = email.toLowerCase();
+        user.isEmailVerified = true;
+      } else {
+        // Already has an email and is changing it — unlike the first-set path
+        // above, this requires the OTP sent to the new address to have been
+        // confirmed first (see sendEmailChangeOtp/verifyEmailChangeOtp).
+        const verifiedEmailOtp = await TempEmailOTP.findOne({
+          email: email.toLowerCase(),
+          verified: true,
+          expires: { $gt: new Date() },
+        });
+        if (!verifiedEmailOtp) {
+          return res.status(400).json({ error: "Please verify your new email before saving" });
+        }
+        await verifiedEmailOtp.deleteOne();
+        user.email = email.toLowerCase();
+        user.isEmailVerified = true;
+      }
     }
+
     if (phone && phone !== user.phone) {
       if (!/^\d{10}$/.test(phone)) {
         return res.status(400).json({ error: "Please enter a valid 10-digit phone number" });
       }
-      user.phone = phone;
-      user.isPhoneVerified = false;
+      if (verifiedChangeField === "phone") {
+        // Step-up verified via the linked email — no per-new-value OTP needed.
+        user.phone = phone;
+        user.isPhoneVerified = true;
+      } else {
+        // A changed phone number is only ever written here once its OTP has
+        // been confirmed via verifyPhoneChangeOtp (which marks the TempOTP
+        // record `verified`, but doesn't touch the user) — so "Save and
+        // Update" can't silently persist a number that was typed but never
+        // verified.
+        const verifiedOtp = await TempOTP.findOne({
+          phone,
+          verified: true,
+          expires: { $gt: new Date() },
+        });
+        if (!verifiedOtp) {
+          return res.status(400).json({ error: "Please verify your new phone number before saving" });
+        }
+        await verifiedOtp.deleteOne();
+        user.phone = phone;
+        user.isPhoneVerified = true;
+      }
     }
 
     // If a file was uploaded via multer-s3
@@ -863,6 +958,427 @@ exports.verifyProfileEmailOtp = async (req, res) => {
   }
 };
 
+// Changing to a NEW email from the Profile page (mirrors
+// sendPhoneChangeOtp/verifyPhoneChangeOtp below): the address is only ever
+// written to the user record once its OTP is confirmed. Mainly for
+// phone-login accounts adding/changing an email that isn't their login
+// credential — email/password and Auth0 accounts log in BY email, so
+// changing it there is handled by updateProfile's own "!user.email" first-set
+// path instead (never lets an account overwrite its own login identity
+// without going through this verified flow once one is already set).
+exports.sendEmailChangeOtp = async (req, res) => {
+  try {
+    const user = req.user;
+    const { email } = req.body;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      return res.status(400).json({ error: "Please enter a valid email address" });
+    }
+    const normalizedEmail = email.toLowerCase();
+    if (normalizedEmail === (user.email || "").toLowerCase()) {
+      return res.status(400).json({ error: "This is already your current email" });
+    }
+    const existing = await User.findOne({ email: normalizedEmail });
+    if (existing) {
+      return res.status(400).json({ error: "This email is already in use." });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await TempEmailOTP.deleteMany({ email: normalizedEmail });
+    await new TempEmailOTP({
+      email: normalizedEmail,
+      otp,
+      verified: false,
+      expires: new Date(Date.now() + 10 * 60 * 1000),
+    }).save();
+
+    const emailHtml = renderEmail({
+      greetingName: user.name,
+      intro: "Use this code to verify your new email address on your DataCircles account:",
+      blocks: [
+        {
+          html: `<div style="margin:20px 0;text-align:center;">
+            <div style="display:inline-block;padding:16px 28px;background:#f4f6f8;border:1px solid #e5e7eb;border-radius:6px;font-size:32px;font-weight:700;letter-spacing:8px;font-family:'Courier New',monospace;color:#111111;">${otp}</div>
+          </div>`,
+        },
+      ],
+      closingHtml: '<p style="margin:8px 0 0;font-size:14px;line-height:1.6;color:#333333;">This code expires in <strong>10 minutes</strong>. If you didn\'t request it, you can ignore this email.</p>',
+      preheader: "Your DataCircles email verification code.",
+    });
+
+    await sendGridMail({
+      to: email,
+      subject: "Your DataCircles verification code",
+      html: emailHtml,
+    });
+
+    res.json({ success: true, message: "OTP sent to your new email" });
+  } catch (error) {
+    console.error("Error sending email change OTP:", error);
+    res.status(500).json({ error: "Error sending OTP. Please try again." });
+  }
+};
+
+// Confirms the OTP only — like verifyPhoneChangeOtp, does NOT write the
+// email. That happens when "Save and Update" is clicked (updateProfile),
+// which requires this verified TempEmailOTP to still exist and be unexpired.
+exports.verifyEmailChangeOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ error: "Email and OTP are required" });
+    }
+    const normalizedEmail = email.toLowerCase();
+
+    const tempEmailOtp = await TempEmailOTP.findOne({
+      email: normalizedEmail,
+      otp: otp.toString(),
+      expires: { $gt: new Date() },
+    });
+    if (!tempEmailOtp) {
+      return res.status(400).json({ error: "Invalid or expired OTP. Please request a new one." });
+    }
+    tempEmailOtp.verified = true;
+    await tempEmailOtp.save();
+
+    res.json({ success: true, message: "Email verified" });
+  } catch (error) {
+    console.error("Error verifying email change OTP:", error);
+    res.status(500).json({ error: "Error verifying OTP. Please try again." });
+  }
+};
+
+// ============ CREDENTIAL CHANGE STEP-UP VERIFICATION ============
+// Changing the field an account actually LOGS IN WITH (email for an
+// email/Google/password account, phone for a phone-OTP account) is guarded
+// differently than the other, freely-editable field above: instead of an
+// OTP to the new value, we verify the request via the account's OTHER,
+// already-linked contact method first — mirrors "don't have access to your
+// old number? verify by email instead" patterns elsewhere, except here the
+// linked channel IS the verification path, always. On success this issues a
+// short-lived signed token (no DB row — nothing to clean up/expire-index)
+// that updateProfile accepts in place of a per-new-value OTP when writing
+// that one credential field.
+exports.sendCredentialChangeVerification = async (req, res) => {
+  try {
+    const user = req.user;
+    const { field } = req.body;
+    if (field !== "email" && field !== "phone") {
+      return res.status(400).json({ error: "Invalid field" });
+    }
+    let via = field === "phone" ? "email" : "phone";
+    let destination = via === "email" ? (user.email || user.profileEmail) : user.phone;
+    if (!destination) {
+      // No linked field to verify through (e.g. an email-login account that
+      // never added a phone) — fall back to verifying via the CURRENT value
+      // of the field being changed instead (prove you own the old email/
+      // phone before typing in a new one), rather than dead-ending here.
+      via = field;
+      destination = field === "email" ? (user.email || user.profileEmail) : user.phone;
+      if (!destination) {
+        return res.status(400).json({
+          error: `No ${field} on file to verify this request with. Please contact support.`,
+        });
+      }
+    }
+
+    if (via === "email") {
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      await TempEmailOTP.deleteMany({ email: destination.toLowerCase() });
+      await new TempEmailOTP({
+        email: destination.toLowerCase(),
+        otp,
+        verified: false,
+        expires: new Date(Date.now() + 10 * 60 * 1000),
+      }).save();
+
+      const emailHtml = renderEmail({
+        greetingName: user.name,
+        intro: `Use this code to confirm your request to change your ${field} on your DataCircles account:`,
+        blocks: [
+          {
+            html: `<div style="margin:20px 0;text-align:center;">
+              <div style="display:inline-block;padding:16px 28px;background:#f4f6f8;border:1px solid #e5e7eb;border-radius:6px;font-size:32px;font-weight:700;letter-spacing:8px;font-family:'Courier New',monospace;color:#111111;">${otp}</div>
+            </div>`,
+          },
+        ],
+        closingHtml: '<p style="margin:8px 0 0;font-size:14px;line-height:1.6;color:#333333;">This code expires in <strong>10 minutes</strong>. If you didn\'t request it, you can ignore this email.</p>',
+        preheader: "Your DataCircles verification code.",
+      });
+
+      await sendGridMail({
+        to: destination,
+        subject: "Your DataCircles verification code",
+        html: emailHtml,
+      });
+    } else {
+      const otp = Math.floor(1000 + Math.random() * 9000).toString();
+      await TempOTP.deleteMany({ phone: destination });
+      await new TempOTP({
+        phone: destination,
+        otp,
+        expires: new Date(Date.now() + 10 * 60 * 1000),
+      }).save();
+
+      const url = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_KEY}&route=dlt&sender_id=DTACRL&message=204838&variables_values=${otp}&flash=0&numbers=${destination}&schedule_time=`;
+      const response = await axios.get(url);
+      if (!response.data?.return) {
+        return res.status(500).json({ error: "Failed to send OTP" });
+      }
+    }
+
+    const masked =
+      via === "email"
+        ? destination.replace(/^(.{2}).*(@.*)$/, "$1***$2")
+        : destination.replace(/^(\d{2})\d+(\d{2})$/, "$1******$2");
+
+    res.json({ success: true, via, maskedDestination: masked, message: `OTP sent to your ${via}` });
+  } catch (error) {
+    console.error("Error sending credential change verification:", error);
+    res.status(500).json({ error: "Error sending OTP. Please try again." });
+  }
+};
+
+exports.confirmCredentialChangeVerification = async (req, res) => {
+  try {
+    const user = req.user;
+    const { field, otp } = req.body;
+    if (field !== "email" && field !== "phone") {
+      return res.status(400).json({ error: "Invalid field" });
+    }
+    if (!otp) {
+      return res.status(400).json({ error: "OTP is required" });
+    }
+    let via = field === "phone" ? "email" : "phone";
+    let destination = via === "email" ? (user.email || user.profileEmail) : user.phone;
+    if (!destination) {
+      // Mirrors the same fallback sendCredentialChangeVerification took.
+      via = field;
+      destination = field === "email" ? (user.email || user.profileEmail) : user.phone;
+      if (!destination) {
+        return res.status(400).json({ error: `No ${field} on file to verify this request with.` });
+      }
+    }
+
+    let tempOtp;
+    if (via === "email") {
+      tempOtp = await TempEmailOTP.findOne({
+        email: destination.toLowerCase(),
+        otp: otp.toString(),
+        expires: { $gt: new Date() },
+      });
+    } else {
+      tempOtp = await TempOTP.findOne({
+        phone: destination,
+        otp: otp.toString(),
+        expires: { $gt: new Date() },
+      });
+    }
+    if (!tempOtp) {
+      return res.status(400).json({ error: "Invalid or expired OTP. Please request a new one." });
+    }
+    await tempOtp.deleteOne();
+
+    // Stateless approval: no DB row to track, just a signed claim that this
+    // user verified via `via` to change `field`, good for 10 minutes —
+    // updateProfile checks it instead of a per-new-value OTP when writing
+    // that field.
+    const changeToken = jwt.sign(
+      { userId: user._id.toString(), field, purpose: "credential-change" },
+      process.env.JWT_SECRET,
+      { expiresIn: "10m" }
+    );
+
+    res.json({ success: true, changeToken });
+  } catch (error) {
+    console.error("Error confirming credential change verification:", error);
+    res.status(500).json({ error: "Error verifying OTP. Please try again." });
+  }
+};
+
+// ============ DANGER ZONE — ACCOUNT DATA REQUESTS ============
+// "Reset account data" and "Delete account permanently" are NOT performed
+// automatically here — both are irreversible, org-wide actions ("reset"
+// wipes every company/deal/contact/etc. for the organization, "delete"
+// removes the org and every user in it), so a click on the Profile page
+// only ever files the request: it notifies the org's admins in-app and by
+// email (mirrors notifyAdminsOfNewStaff above), and, if SUPPORT_EMAIL is
+// configured, DataCircles support too. An actual admin has to act on it —
+// matching the "processed within 5-7 business days" copy in the UI.
+exports.submitAccountRequest = async (req, res) => {
+  try {
+    const user = req.user;
+    const { type } = req.body;
+    if (type !== "reset-data" && type !== "delete-account") {
+      return res.status(400).json({ error: "Invalid request type" });
+    }
+
+    const [org, admins] = await Promise.all([
+      Organization.findById(user.organization).select("name"),
+      User.find({ organization: user.organization, role: "admin" }).select("email name"),
+    ]);
+    if (!org) {
+      return res.status(404).json({ error: "Organization not found" });
+    }
+
+    const requesterName = user.name || user.email || user.phone || "A user";
+    const requesterContact = user.email || user.profileEmail || user.phone || "";
+    const label =
+      type === "reset-data"
+        ? "reset all account data"
+        : "permanently delete their account";
+    const isDelete = type === "delete-account";
+
+    await Notification.create({
+      organization: user.organization,
+      actorName: requesterName,
+      // Notification.action only accepts created/updated/deleted (it's
+      // meant for the change-notifier plugin's model diffs) — "created"
+      // is the closest fit for a one-off request like this, same choice
+      // notifyAdminsOfNewStaff makes above for a "joined" event.
+      action: "created",
+      entityType: "AccountRequest",
+      entityId: user._id,
+      entityLabel: requesterName,
+      message: `${requesterName} requested to ${label} for ${org.name}`,
+    });
+
+    const adminEmails = admins.map((a) => a.email).filter(Boolean);
+    const recipients = [...adminEmails];
+    if (process.env.SUPPORT_EMAIL) recipients.push(process.env.SUPPORT_EMAIL);
+
+    if (recipients.length > 0) {
+      const html = renderEmail({
+        intro: `<strong>${requesterName}</strong>${requesterContact ? ` (${requesterContact})` : ""} has requested to <strong>${label}</strong> for <strong>${org.name}</strong> on DataCircles.`,
+        blocks: [
+          {
+            rows: [
+              { label: "Requested by", value: requesterName },
+              requesterContact ? { label: "Contact", value: requesterContact } : null,
+              { label: "Organisation", value: org.name },
+              { label: "Request type", value: isDelete ? "Delete account permanently" : "Reset account data" },
+            ],
+          },
+        ],
+        closingHtml: isDelete
+          ? '<p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:#333333;">This is irreversible — please verify the request with the organisation before acting on it. Requests are processed within 5-7 business days.</p>'
+          : '<p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:#333333;">This wipes all companies, deals, contacts and other records for the organisation — please verify the request before acting on it. Requests are processed within 5-7 business days.</p>',
+        preheader: `${requesterName} requested to ${label} for ${org.name}.`,
+      });
+
+      await sendGridMail({
+        to: recipients,
+        subject: `${isDelete ? "Account deletion" : "Data reset"} request — ${org.name}`,
+        html,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Your request has been submitted. Our team will process it within 5-7 business days.",
+    });
+  } catch (error) {
+    console.error("Error submitting account request:", error);
+    res.status(500).json({ error: "Failed to submit request. Please try again." });
+  }
+};
+
+// ============ CONNECT WITH GOOGLE (Profile page) ============
+// Links a Google identity to the already-logged-in account, so the SAME
+// account can afterwards be signed into either with its original
+// credential (password/phone) OR that Google account — this is distinct
+// from Auth0 login itself, which only ever resolves ONE identity per
+// request. The frontend authenticates against Auth0's google-oauth2
+// connection via an isolated auth0-spa-js client (kept separate from the
+// app's own Auth0Provider so it never disturbs the caller's real session),
+// then hands the resulting access token here. We never trust a client-sent
+// sub/email — Auth0's own /userinfo endpoint is the source of truth.
+exports.linkGoogleAccount = async (req, res) => {
+  try {
+    const user = req.user;
+    const { accessToken } = req.body;
+    if (!accessToken) {
+      return res.status(400).json({ error: "Missing Google authentication token" });
+    }
+
+    let profile;
+    try {
+      const userinfoRes = await axios.get(`https://${process.env.AUTH0_DOMAIN}/userinfo`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      profile = userinfoRes.data;
+    } catch (verifyErr) {
+      console.error("Failed to verify Google token via Auth0 userinfo:", verifyErr.message);
+      return res.status(401).json({ error: "Could not verify your Google account. Please try again." });
+    }
+
+    const { sub, email } = profile || {};
+    if (!sub || !sub.startsWith("google-oauth2|")) {
+      return res.status(400).json({ error: "That doesn't look like a Google account." });
+    }
+
+    const existingByGoogle = await User.findOne({ auth0Id: sub, _id: { $ne: user._id } });
+    if (existingByGoogle) {
+      return res.status(400).json({ error: "This Google account is already linked to a different DataCircles account." });
+    }
+    if (email) {
+      const existingByEmail = await User.findOne({ email: email.toLowerCase(), _id: { $ne: user._id } });
+      if (existingByEmail) {
+        return res.status(400).json({ error: "This Google account's email is already used by a different DataCircles account." });
+      }
+    }
+    // The whole point of connecting Google is a second, password-free way
+    // to prove you own THIS account's existing email — so if the account
+    // already has one, the Google account must match it. Without this check
+    // someone could link an unrelated Gmail and it'd silently become a
+    // second front door into an account it has nothing to do with.
+    if (user.email && email && user.email.toLowerCase() !== email.toLowerCase()) {
+      return res.status(400).json({
+        error: `Please connect the Google account for ${user.email}, not ${email}.`,
+      });
+    }
+
+    user.auth0Id = sub;
+    // Only fills a blank email — mirrors updateProfile's own first-set path,
+    // never overwrites an email this account already has.
+    if (email && !user.email) {
+      user.email = email.toLowerCase();
+      user.isEmailVerified = true;
+    }
+    await user.save();
+
+    res.json({ success: true, user, message: "Google account connected. You can now sign in with it too." });
+  } catch (error) {
+    console.error("Error linking Google account:", error);
+    res.status(500).json({ error: "Failed to connect Google account. Please try again." });
+  }
+};
+
+// Only ever clears the Google link, never the account itself — and refuses
+// if Google is this account's only way to sign in (no password, no phone),
+// so nobody can lock themselves out from the Profile page.
+exports.unlinkGoogleAccount = async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user.auth0Id || !user.auth0Id.startsWith("google-oauth2|")) {
+      return res.status(400).json({ error: "No Google account is linked" });
+    }
+    if (!user.password && !user.phone) {
+      return res.status(400).json({
+        error: "Add a phone number or set a password before disconnecting Google, so you can still sign in.",
+      });
+    }
+
+    user.auth0Id = undefined;
+    await user.save();
+
+    res.json({ success: true, user, message: "Google account disconnected." });
+  } catch (error) {
+    console.error("Error unlinking Google account:", error);
+    res.status(500).json({ error: "Failed to disconnect Google account. Please try again." });
+  }
+};
+
 exports.sendProfilePhoneOtp = async (req, res) => {
   try {
     const user = req.user;
@@ -923,6 +1439,80 @@ exports.verifyProfilePhoneOtp = async (req, res) => {
     res.json({ success: true, message: "Phone number verified successfully", user });
   } catch (error) {
     console.error("Error verifying profile phone OTP:", error);
+    res.status(500).json({ error: "Error verifying OTP. Please try again." });
+  }
+};
+
+// Changing to a NEW phone number from the Profile page: the number is only
+// ever written to the user record once the OTP sent to it is confirmed —
+// sendProfilePhoneOtp/verifyProfilePhoneOtp above verify a number already on
+// file, they don't gate writing a new one.
+exports.sendPhoneChangeOtp = async (req, res) => {
+  try {
+    const user = req.user;
+    const { phone } = req.body;
+    if (!phone || !/^\d{10}$/.test(phone)) {
+      return res.status(400).json({ error: "Please enter a valid 10-digit phone number" });
+    }
+    if (phone === user.phone) {
+      return res.status(400).json({ error: "This is already your current phone number" });
+    }
+    // Phone is intentionally NOT unique across accounts (see models/User.js —
+    // a shared family/office number, or one person's separate personal and
+    // staff accounts, can register the same number), so no uniqueness check
+    // here — only that the OTP sent to it is confirmed.
+
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    await TempOTP.deleteMany({ phone });
+    await new TempOTP({
+      phone,
+      otp,
+      expires: new Date(Date.now() + 10 * 60 * 1000),
+    }).save();
+
+    const url = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_KEY}&route=dlt&sender_id=DTACRL&message=204838&variables_values=${otp}&flash=0&numbers=${phone}&schedule_time=`;
+
+    try {
+      const response = await axios.get(url);
+      if (response.data?.return) {
+        return res.json({ success: true, message: "OTP sent to your new phone number" });
+      }
+      return res.status(500).json({ error: "Failed to send OTP" });
+    } catch (smsError) {
+      console.error("Error sending phone change OTP:", smsError);
+      return res.status(500).json({ error: "Error sending OTP" });
+    }
+  } catch (error) {
+    console.error("Error sending phone change OTP:", error);
+    res.status(500).json({ error: "Error sending OTP. Please try again." });
+  }
+};
+
+// Confirms the OTP only — it does NOT write the phone number to the user
+// record. That happens separately when "Save and Update" is clicked (see
+// updateProfile below), which requires this verified TempOTP to still exist
+// and be unexpired.
+exports.verifyPhoneChangeOtp = async (req, res) => {
+  try {
+    const { phone, otp } = req.body;
+    if (!phone || !otp) {
+      return res.status(400).json({ error: "Phone number and OTP are required" });
+    }
+
+    const tempOtp = await TempOTP.findOne({
+      phone,
+      otp: otp.toString(),
+      expires: { $gt: new Date() },
+    });
+    if (!tempOtp) {
+      return res.status(400).json({ error: "Invalid or expired OTP. Please request a new one." });
+    }
+    tempOtp.verified = true;
+    await tempOtp.save();
+
+    res.json({ success: true, message: "Phone number verified" });
+  } catch (error) {
+    console.error("Error verifying phone change OTP:", error);
     res.status(500).json({ error: "Error verifying OTP. Please try again." });
   }
 };

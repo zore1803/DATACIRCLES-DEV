@@ -22,6 +22,7 @@ import { formatNumberToIndian } from "../../utils/numberFormatter";
 import { Link } from "react-router-dom";
 import EyeIcon from "../common/EyeIcon";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // Reused from your DealDetail
 const StatusBadge = ({ status }) => {
@@ -144,6 +145,7 @@ const DealQuickView = ({ dealId, onClose, onEdit }) => {
   // Drives the slide-in/out transform independently of `deal` so a real
   // close can animate the panel out before the parent unmounts it.
   const [isOpen, setIsOpen] = useState(false);
+  useBodyScrollLock(isOpen);
 
   const loadDeal = async (id) => {
     setLoading(true);

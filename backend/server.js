@@ -16,6 +16,8 @@ const startReminderJob = require('./utils/reminderJob');
 require('./jobs/subscriptionLifecycleJobs');
 require('./jobs/referralLifecycleJobs');
 require('./jobs/renewalLifecycleJobs');
+// Backstop for first payments never acknowledged by the browser callback or the webhook.
+require('./jobs/paymentReconciliationJobs');
 // Turns Active Sales Subscriptions into Invoices when their billing date arrives.
 require('./jobs/salesSubscriptionBillingJob');
 const swaggerUi = require('swagger-ui-express');
@@ -328,7 +330,16 @@ app.use((err, req, res, next) => {
   if (err.code === "LIMIT_FILE_SIZE") {
     return res.status(413).json({ error: "File is too large." });
   }
-  res.status(err.status || 500).json({ error: err.message || "Something went wrong" });
+  // Raw err.message used to be sent straight to the client — fine for the
+  // upload-failure cases this handler was added for (a real, readable
+  // reason), but any *unexpected* exception (a TypeError from a bug, a
+  // driver error) leaked its raw JS message as if it were a user-facing
+  // reason, e.g. "Cannot read properties of undefined (reading 'phone')"
+  // showing up as a toast. Known/expected errors set `err.status`; anything
+  // without one is treated as a bug and gets a generic message instead,
+  // with the real detail still logged above for debugging.
+  const message = err.status ? err.message : "Something went wrong. Please try again.";
+  res.status(err.status || 500).json({ error: message });
 });
 
 // MongoDB connect

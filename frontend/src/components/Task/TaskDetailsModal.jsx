@@ -3,6 +3,7 @@ import React from "react";
 import { X, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const DealIcon = (props) => (
   <svg width="17" height="16" viewBox="0 0 17 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
@@ -20,6 +21,7 @@ const TaskDetailsModal = ({ open, taskData, users, onDelete, onClose, onEdit, on
   const [isSliding, setIsSliding] = React.useState(false);
   const [shouldRender, setShouldRender] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  useBodyScrollLock(open);
 
   React.useEffect(() => {
     if (open) {

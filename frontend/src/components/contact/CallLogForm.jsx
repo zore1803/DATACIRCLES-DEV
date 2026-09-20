@@ -7,6 +7,7 @@ import SearchableDropdown from "./SearchableDropdown";
 import toast from 'react-hot-toast';
 import ReactQuill from 'react-quill-new';
 import AppToaster from "../AppToaster";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const initialFormState = {
   callType: "Outbound",
@@ -87,6 +88,8 @@ const CallLogForm = ({
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(true);
   const [contacts, setContacts] = useState([]);
+
+  useBodyScrollLock(isOpen);
 
   // Add validation errors state
   const [validationErrors, setValidationErrors] = useState({});

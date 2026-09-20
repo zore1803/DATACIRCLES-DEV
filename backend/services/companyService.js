@@ -5,9 +5,32 @@ function normalizeSocialMedia(socialMedia) {
   return {
     twitter: socialMedia.twitter || "",
     linkedin: socialMedia.linkedin || "",
+    instagram: socialMedia.instagram || "",
     facebook: socialMedia.facebook || "",
     whatsapp: socialMedia.whatsapp || "",
   };
+}
+
+// The edit form is multipart/form-data (it also carries a profile picture
+// file), which can't send a nested object — it sends "socialMedia[twitter]",
+// "socialMedia[instagram]", etc. as flat top-level fields. multer doesn't
+// reconstruct those into rawData.socialMedia the way a JSON body would, so
+// without this every social link silently failed to save (rawData.socialMedia
+// was always undefined and the whole update was skipped).
+function extractSocialMediaInput(rawData) {
+  if (rawData.socialMedia && typeof rawData.socialMedia === "object") {
+    return rawData.socialMedia;
+  }
+  const extracted = {};
+  let found = false;
+  Object.keys(rawData).forEach((key) => {
+    const match = key.match(/^socialMedia\[(.+)\]$/);
+    if (match) {
+      extracted[match[1]] = rawData[key];
+      found = true;
+    }
+  });
+  return found ? extracted : rawData.socialMedia;
 }
 
 // billingAddress (object) and shippingAddresses (array) arrive as JSON strings
@@ -56,8 +79,9 @@ async function createCompany(
     companyData.profilePicture = profilePictureUrl;
   }
 
-  if (rawData.socialMedia) {
-    companyData.socialMedia = normalizeSocialMedia(rawData.socialMedia);
+  const socialMediaInput = extractSocialMediaInput(rawData);
+  if (socialMediaInput) {
+    companyData.socialMedia = normalizeSocialMedia(socialMediaInput);
   }
 
   normalizeAddresses(companyData);
@@ -113,8 +137,9 @@ async function updateCompany(
     updateData.profilePicture = profilePictureUrl;
   }
 
-  if (rawData.socialMedia) {
-    updateData.socialMedia = normalizeSocialMedia(rawData.socialMedia);
+  const socialMediaInput = extractSocialMediaInput(rawData);
+  if (socialMediaInput) {
+    updateData.socialMedia = normalizeSocialMedia(socialMediaInput);
   }
 
   normalizeAddresses(updateData);

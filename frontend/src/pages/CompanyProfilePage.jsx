@@ -22,11 +22,11 @@ import ProfilePicture from "../components/contact/ProfilePicture";
 import toast from "react-hot-toast";
 import AppToaster from "../components/AppToaster";
 import logo from "/DataCircles.png";
+import instagramLogo from "../assets/insta-logo.png";
+import twitterLogo from "../assets/twitter-logo.png";
+import linkedinLogo from "../assets/linkedin-logo.png";
 import {
   MapPin,
-  Twitter,
-  Linkedin,
-  Instagram,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -956,9 +956,9 @@ const CompanyProfilePage = () => {
             {/* Twitter/X */}
             <button
               disabled={!hasSocialLink("twitter")}
-              className={`hidden lg:flex w-8 h-8 items-center justify-center rounded-full border transition-colors ${hasSocialLink("twitter")
-                ? "border-gray-200 text-gray-800 hover:bg-gray-50 cursor-pointer"
-                : "border-gray-200 text-gray-300 cursor-not-allowed"
+              className={`hidden lg:flex w-8 h-8 items-center justify-center rounded-full overflow-hidden transition-opacity ${hasSocialLink("twitter")
+                ? "cursor-pointer"
+                : "opacity-40 cursor-not-allowed"
                 }`}
               onClick={() => openSocialLink("twitter")}
               title={
@@ -967,15 +967,20 @@ const CompanyProfilePage = () => {
                   : "No Twitter/X link available"
               }
             >
-              <Twitter size={16} strokeWidth={2} />
+              <img
+                src={twitterLogo}
+                alt=""
+                className="w-8 h-8 object-contain"
+                style={{ transform: "scale(1.56)" }}
+              />
             </button>
 
             {/* LinkedIn */}
             <button
               disabled={!hasSocialLink("linkedin")}
-              className={`hidden lg:flex w-8 h-8 items-center justify-center rounded-full border transition-colors ${hasSocialLink("linkedin")
-                ? "border-gray-200 text-gray-800 hover:bg-gray-50 cursor-pointer"
-                : "border-gray-200 text-gray-300 cursor-not-allowed"
+              className={`hidden lg:flex w-8 h-8 items-center justify-center rounded-full overflow-hidden transition-opacity ${hasSocialLink("linkedin")
+                ? "cursor-pointer"
+                : "opacity-40 cursor-not-allowed"
                 }`}
               onClick={() => openSocialLink("linkedin")}
               title={
@@ -984,25 +989,34 @@ const CompanyProfilePage = () => {
                   : "No LinkedIn link available"
               }
             >
-              <Linkedin size={16} strokeWidth={2} />
+              <img
+                src={linkedinLogo}
+                alt=""
+                className="w-8 h-8 object-contain"
+                style={{ transform: "scale(1.5)" }}
+              />
             </button>
 
-            {/* Instagram — maps to the company's "facebook" social field (no dedicated
-                instagram field exists in the schema yet) */}
+            {/* Instagram */}
             <button
-              disabled={!hasSocialLink("facebook")}
-              className={`hidden lg:flex w-8 h-8 items-center justify-center rounded-full border transition-colors ${hasSocialLink("facebook")
-                ? "border-gray-200 text-gray-800 hover:bg-gray-50 cursor-pointer"
-                : "border-gray-200 text-gray-300 cursor-not-allowed"
+              disabled={!hasSocialLink("instagram")}
+              className={`hidden lg:flex w-8 h-8 items-center justify-center rounded-full overflow-hidden transition-opacity ${hasSocialLink("instagram")
+                ? "cursor-pointer"
+                : "opacity-40 cursor-not-allowed"
                 }`}
-              onClick={() => openSocialLink("facebook")}
+              onClick={() => openSocialLink("instagram")}
               title={
-                hasSocialLink("facebook")
+                hasSocialLink("instagram")
                   ? "View Instagram profile"
                   : "No Instagram link available"
               }
             >
-              <Instagram size={16} strokeWidth={2} />
+              <img
+                src={instagramLogo}
+                alt=""
+                className="w-8 h-8 object-contain"
+                style={{ transform: "scale(1.5)" }}
+              />
             </button>
 
             {/* Actions Menu */}
@@ -1133,9 +1147,9 @@ const CompanyProfilePage = () => {
         <div className="flex lg:hidden items-center gap-1.5 mb-3 ml-12">
           <button
             disabled={!hasSocialLink("twitter")}
-            className={`w-6 h-6 flex items-center justify-center rounded-full border transition-colors ${hasSocialLink("twitter")
-              ? "border-gray-200 text-gray-800 hover:bg-gray-50 cursor-pointer"
-              : "border-gray-200 text-gray-300 cursor-not-allowed"
+            className={`w-6 h-6 flex items-center justify-center rounded-full overflow-hidden transition-opacity ${hasSocialLink("twitter")
+              ? "cursor-pointer"
+              : "opacity-40 cursor-not-allowed"
               }`}
             onClick={() => openSocialLink("twitter")}
             title={
@@ -1144,13 +1158,18 @@ const CompanyProfilePage = () => {
                 : "No Twitter/X link available"
             }
           >
-            <Twitter size={12} strokeWidth={2} />
+            <img
+              src={twitterLogo}
+              alt=""
+              className="w-6 h-6 object-contain"
+              style={{ transform: "scale(1.56)" }}
+            />
           </button>
           <button
             disabled={!hasSocialLink("linkedin")}
-            className={`w-6 h-6 flex items-center justify-center rounded-full border transition-colors ${hasSocialLink("linkedin")
-              ? "border-gray-200 text-gray-800 hover:bg-gray-50 cursor-pointer"
-              : "border-gray-200 text-gray-300 cursor-not-allowed"
+            className={`w-6 h-6 flex items-center justify-center rounded-full overflow-hidden transition-opacity ${hasSocialLink("linkedin")
+              ? "cursor-pointer"
+              : "opacity-40 cursor-not-allowed"
               }`}
             onClick={() => openSocialLink("linkedin")}
             title={
@@ -1159,22 +1178,32 @@ const CompanyProfilePage = () => {
                 : "No LinkedIn link available"
             }
           >
-            <Linkedin size={12} strokeWidth={2} />
+            <img
+              src={linkedinLogo}
+              alt=""
+              className="w-6 h-6 object-contain"
+              style={{ transform: "scale(1.5)" }}
+            />
           </button>
           <button
-            disabled={!hasSocialLink("facebook")}
-            className={`w-6 h-6 flex items-center justify-center rounded-full border transition-colors ${hasSocialLink("facebook")
-              ? "border-gray-200 text-gray-800 hover:bg-gray-50 cursor-pointer"
-              : "border-gray-200 text-gray-300 cursor-not-allowed"
+            disabled={!hasSocialLink("instagram")}
+            className={`w-6 h-6 flex items-center justify-center rounded-full overflow-hidden transition-opacity ${hasSocialLink("instagram")
+              ? "cursor-pointer"
+              : "opacity-40 cursor-not-allowed"
               }`}
-            onClick={() => openSocialLink("facebook")}
+            onClick={() => openSocialLink("instagram")}
             title={
-              hasSocialLink("facebook")
+              hasSocialLink("instagram")
                 ? "View Instagram profile"
                 : "No Instagram link available"
             }
           >
-            <Instagram size={12} strokeWidth={2} />
+            <img
+              src={instagramLogo}
+              alt=""
+              className="w-6 h-6 object-contain"
+              style={{ transform: "scale(1.5)" }}
+            />
           </button>
         </div>
 

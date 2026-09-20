@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import AppToaster from "../AppToaster";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const Emails = ({ contactId, contactEmail }) => {
   const [logs, setLogs] = useState([]);
@@ -16,6 +17,8 @@ const Emails = ({ contactId, contactEmail }) => {
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
   const user = JSON.parse(localStorage.getItem('user'));
+
+  useBodyScrollLock(showCompose);
 
   useEffect(() => {
     const fetchLogs = async () => {

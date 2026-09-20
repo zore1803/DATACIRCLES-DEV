@@ -8,6 +8,7 @@ import { Country, State } from "country-state-city";
 import CustomDropdown from "../common/CustomDropdown";
 import { getStateCode, canonicalStateName } from "../../utils/gstStateCode";
 import { loadCityModule, useLazyCity } from "../../utils/lazyCityData";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // India first (GST is India-driven), then every other country alphabetically —
 // full list/state data from country-state-city instead of a hand-maintained one.
@@ -121,6 +122,7 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
   const [isOpen, setIsOpen] = useState(false);
   const [shouldRender, setShouldRender] = useState(true);
   const [isFormDirty, setIsFormDirty] = useState(false);
+  useBodyScrollLock(isOpen);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const fileInputRef = useRef(null);
   const nameInputRef = useRef(null);

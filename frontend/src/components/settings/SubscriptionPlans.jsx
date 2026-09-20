@@ -413,8 +413,12 @@ const SubscriptionPlans = () => {
       if (e.type === 'pageshow' && !e.persisted) return; // Only care about BFCache restores
       if (e.type === 'visibilitychange' && document.visibilityState !== 'visible') return;
 
-      // Always refetch to get latest webhook-updated state
-      fetchSubscription();
+      // Reconcile first, then refetch: coming back to this tab is exactly when a
+      // payment completed in the (now closed) checkout tab needs picking up, and
+      // the webhook may never have arrived. No-ops when nothing is pending.
+      subscriptionAPI.reconcilePayment()
+        .catch(() => {})
+        .finally(() => fetchSubscription());
       
       // Clear the "Setting up" state so it can transition to "Confirming mandate" or normal UI
       setCheckoutJourneyState((prev) => prev === 'setting_up_recurring' ? null : prev);
@@ -441,8 +445,22 @@ const SubscriptionPlans = () => {
     if (deriveSubscriptionUIState(subscription?.subscription) !== SUBSCRIPTION_UI_STATES.PENDING_MANDATE) return;
 
     let cancelled = false;
+    // Ask Razorpay directly on each tick, then read our own state. Polling
+    // fetchSubscription alone only ever re-read what the webhook had written -
+    // so if the webhook never arrived (or the customer closed the checkout tab
+    // before verifyPayment could post back), a payment that HAD gone through
+    // stayed "pending" here forever, and Resume Payment offered to charge again.
+    const reconcileThenFetch = async () => {
+      try {
+        await subscriptionAPI.reconcilePayment();
+      } catch {
+        // Reconciliation is best-effort - fall through to the plain read.
+      }
+      return fetchSubscription();
+    };
+
     waitForSettlement({
-      fetchLatest: fetchSubscription,
+      fetchLatest: reconcileThenFetch,
       isSettled: (data) => !!data?.subscription?.isPaymentConfirmed,
       intervalMs: 5000,
       timeoutMs: 120000, // longer than the post-checkout poll — the customer may take a while on Razorpay's page before this effect even mounts
@@ -1725,6 +1743,24 @@ const SubscriptionPlans = () => {
     setProcessing(true);
     setMessage("");
     try {
+      // Ask Razorpay before opening a second checkout. Without this, a payment that DID go through
+      // but was never acknowledged locally (tab closed before verifyPayment could post back, or no
+      // webhook) looked unpaid here - and this button cheerfully charged for it again.
+      try {
+        const recon = await subscriptionAPI.reconcilePayment();
+        if (recon?.data?.reconciled || recon?.data?.alreadyConfirmed) {
+          if (preopenedPopup && !preopenedPopup.closed) preopenedPopup.close();
+          await fetchSubscription();
+          setCheckoutJourneyState('success');
+          setMessage({ type: "success", text: "Payment received - your subscription is active." });
+          setProcessing(false);
+          setTimeout(() => window.location.reload(), 2000);
+          return;
+        }
+      } catch {
+        // Best-effort: a reconcile failure must not block a genuine retry.
+      }
+
       const planData = {
         planId: sub.planName,
         billingCycle: sub.billingCycle,

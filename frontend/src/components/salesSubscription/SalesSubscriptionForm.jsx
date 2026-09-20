@@ -7,6 +7,7 @@ import { X } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import SearchableDropdown from "../contact/SearchableDropdown";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 import NotesTermsDrawer from "../invoice/NotesTermsDrawer";
 
 const UNITS = [
@@ -74,6 +75,8 @@ const OpenNotesTermsButton = ({ label, onClick }) => (
 const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess, onError }) => {
   const isEditing = !!editingSubscription;
   const [isSliding, setIsSliding] = useState(false);
+
+  useBodyScrollLock(isSliding);
 
   const [deals, setDeals] = useState([]);
   const [dealId, setDealId] = useState("");

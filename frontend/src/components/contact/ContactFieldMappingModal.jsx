@@ -2,6 +2,7 @@ import FieldMappingHelp from "../common/FieldMappingHelp";
 import Checkbox from "../common/Checkbox";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { X } from "lucide-react";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const ContactFieldMappingModal = ({
   isOpen: propIsOpen,
@@ -15,6 +16,8 @@ const ContactFieldMappingModal = ({
   const [includeFirstRow, setIncludeFirstRow] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
+
+  useBodyScrollLock(propIsOpen);
 
   // Standard CRM fields for contacts - memoize to prevent recreating
   const standardFields = useMemo(() => [

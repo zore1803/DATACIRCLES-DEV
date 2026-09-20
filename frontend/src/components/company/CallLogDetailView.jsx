@@ -5,6 +5,7 @@ import { X, Clock, User } from "lucide-react";
 import IncomingCallIcon from "../common/IncomingCallIcon";
 import OutgoingCallIcon from "../common/OutgoingCallIcon";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // Matches the "View Task" quick-drawer style (TaskDetailsModal): a
 // right-anchored slide-in panel with a compact ID-style header, info card,
@@ -12,6 +13,7 @@ import EditIcon from "../common/EditIcon";
 const CallLogDetailView = ({ open, log, onClose, onEdit, onDelete }) => {
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
+  useBodyScrollLock(open);
 
   useEffect(() => {
     if (open) {

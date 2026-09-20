@@ -7,6 +7,7 @@ import OutgoingCallIcon from "../common/OutgoingCallIcon";
 import toast from "react-hot-toast";
 import ReactQuill from "react-quill-new";
 import '../../QuickCallLogForm.css';
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const callTypeOptions = [
   { value: "Outbound", label: "Outbound", icon: OutgoingCallIcon },
@@ -57,6 +58,8 @@ const QuickCallLogForm = ({ contacts, onCallLogCreated, onRequestClose }) => {
 
   // Add validation errors state
   const [validationErrors, setValidationErrors] = useState({});
+
+  useBodyScrollLock(isOpen);
 
   const currentStatusConfig = statusOptions.find(
     (s) => s.value === form.status

@@ -5,6 +5,7 @@ import { Pencil, CheckCircle, X } from "lucide-react";
 import PlusIcon from "./common/PlusIcon";
 import BellIcon from "./common/BellIcon";
 import API from "../services/api";
+import useBodyScrollLock from "../hooks/useBodyScrollLock";
 
 /*
  * Notification bell + activity feed dropdown.
@@ -47,6 +48,7 @@ const NotificationBell = ({ variant = "desktop" }) => {
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState("unread"); // "unread" | "all" — opens on Unread
   const wrapRef = useRef(null);
+  useBodyScrollLock(isOpen);
 
   const fetchUnread = useCallback(async () => {
     try {

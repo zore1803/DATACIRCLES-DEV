@@ -10,6 +10,7 @@ import QuickVendorForm from "../vendor/QuickVendorForm";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import { formatNumberFixed } from "../../utils/numberFormatter";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 import SearchIcon from "../common/SearchIcon";
 import FilterIcon from "../common/FilterIcon";
@@ -196,6 +197,7 @@ const PurchaseForm = ({
   initialPurchaseOrderId = null,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  useBodyScrollLock(isOpen);
   const [loading, setLoading] = useState(false);
   const [showQuickVendorForm, setShowQuickVendorForm] = useState(false);
   const [localVendors, setLocalVendors] = useState(vendors || []);

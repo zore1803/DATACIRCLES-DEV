@@ -3,6 +3,7 @@ import { X, ChevronDown } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import SearchableDropdown from "../contact/SearchableDropdown";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const MODES = ["Cash", "UPI", "Bank Transfer", "Cheque", "Card", "Credit Note", "Other"];
 const STATUS_OPTIONS = ["Draft", "Pending", "Confirmed", "Refunded", "Cancelled"];
@@ -36,6 +37,8 @@ const lineKey = (itemId, variantId) => `${itemId || ""}|${variantId || "none"}`;
 const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) => {
   const isEditing = !!editingReturn;
   const [isSliding, setIsSliding] = useState(false);
+
+  useBodyScrollLock(isSliding);
 
   const [invoices, setInvoices] = useState([]);
   const [invoiceId, setInvoiceId] = useState("");

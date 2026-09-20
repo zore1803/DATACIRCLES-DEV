@@ -16,56 +16,38 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  GripVertical,
-  Save,
-  X,
-  Layout,
-  AlertCircle,
-  CheckCircle2,
-  Layers,
-  Move,
-} from "lucide-react";
+import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
+import { GripVertical, X, Check, Layers, Lock } from "lucide-react";
 import toast from "react-hot-toast";
 import AppToaster from "../AppToaster";
 import EditIcon from "../common/EditIcon";
 
-const SortableItem = ({ id, children, isDragging }) => {
-  const { attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({ id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+// A stage row. This is a <tr> rather than the old standalone bordered card, so the list reads as
+// the same table SystemDefaultsSettings.jsx uses for task/note/meeting types; dnd-kit's transform
+// still applies cleanly to a row.
+const SortableRow = ({ id, children }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
 
   return (
-    <div
+    <tr
       ref={setNodeRef}
-      style={style}
-      className={`bg-white border-2 rounded-xl overflow-hidden transition-all ${
-        isDragging
-          ? "border-blue-400 shadow-2xl opacity-90"
-          : "border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300"
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`group hover:bg-[#F5F7FA] transition-colors border-b border-[#E1E4EA] last:border-b-0 ${
+        isDragging ? "relative z-10 bg-white shadow-lg" : ""
       }`}
     >
-      <div className="flex flex-col sm:flex-row items-start sm:items-center p-4 gap-2">
-        {/* Drag Handle */}
+      <td className="pl-4 pr-1 py-3 w-8">
         <button
           {...attributes}
           {...listeners}
-          className="flex-shrink-0 mb-2 sm:mb-0 sm:mr-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg cursor-grab active:cursor-grabbing transition-all"
+          className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing transition-colors"
           title="Drag to reorder"
         >
-          <GripVertical className="w-5 h-5" />
+          <GripVertical className="w-4 h-4" />
         </button>
-
-        {/* Content */}
-        <div className="flex-1 flex flex-col sm:flex-row justify-between items-start sm:items-center w-full gap-2">
-          {children}
-        </div>
-      </div>
-    </div>
+      </td>
+      {children}
+    </tr>
   );
 };
 
@@ -232,220 +214,145 @@ export default function KanbanSettings() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 -mt-8">
       <AppToaster />
 
-      {/* Add New Status */}
-      <div className="bg-white rounded-2xl border-2 border-gray-200 p-4 sm:p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="bg-green-100 p-2 rounded-lg">
-            <PlusIcon className="w-4 h-4 text-green-600" />
-          </div>
-          <h3 className="text-lg font-bold text-gray-900">Add New Stage</h3>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-3 w-full">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        {/* Add form + table, same shapes as SystemDefaultsSettings.jsx: one pill input paired with
+            a pill Add button, then the #F5F7FA-headed table below it. */}
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleAdd(); }}
+          className="flex gap-2 mb-5"
+        >
           <input
             type="text"
-            placeholder="Enter stage name (e.g., Qualified, Proposal Sent)"
             value={newStatus}
             onChange={(e) => setNewStatus(e.target.value)}
-            onKeyPress={(e) => e.key === "Enter" && handleAdd()}
-            className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+            placeholder="Add pipeline stage (e.g. Qualified, Proposal Sent)"
+            className="flex-1 min-w-0 px-4 py-2 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
           />
           <button
-            onClick={handleAdd}
-            className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg w-full sm:w-auto"
+            type="submit"
+            disabled={!newStatus.trim()}
+            className="flex-shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-full disabled:opacity-50 transition-colors flex items-center gap-1.5"
           >
-            <PlusIcon className="w-4 h-4" />
-            <span className="hidden sm:inline">Add Stage</span>
-            <span className="sm:hidden">Add</span>
+            <PlusIcon className="w-4 h-4" /> Add
           </button>
-        </div>
-      </div>
+        </form>
 
-      {/* Stages List */}
-      <div className="bg-white rounded-2xl border-2 border-gray-200 p-4 sm:p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="bg-purple-100 p-2 rounded-lg">
-            <Move className="w-5 h-5 text-purple-600" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">Pipeline Stages</h3>
-            <p className="text-sm text-gray-600">
-              Drag to reorder &bull; Click to edit or delete
-            </p>
-          </div>
-        </div>
         {statuses.length === 0 ? (
-          <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-xl">
-            <Layers className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium mb-2">No stages yet</p>
-            <p className="text-sm text-gray-400">
-              Add your first stage to get started
-            </p>
+          <div className="text-center py-12 rounded-xl border border-[#E1E4EA]">
+            <Layers className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+            <p className="text-sm text-gray-600">No stages yet</p>
+            <p className="text-xs text-gray-400 mt-0.5">Add your first stage to get started</p>
           </div>
         ) : (
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
+            modifiers={[restrictToVerticalAxis, restrictToParentElement]}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            <SortableContext
-              items={statuses}
-              strategy={verticalListSortingStrategy}
-            >
-              <div className="space-y-3">
-                {statuses.map((status, index) => (
-                  <SortableItem
-                    key={status}
-                    id={status}
-                    isDragging={isDragging}
-                  >
-                    {editIndex === index ? (
-                      <>
-                        <input
-                          type="text"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onKeyPress={(e) => e.key === "Enter" && handleUpdate()}
-                          className="flex-1 px-4 py-2 border-2 border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mr-3 text-sm"
-                          autoFocus
-                        />
-                        <div className="flex gap-2 mt-2 sm:mt-0">
-                          <button
-                            onClick={handleUpdate}
-                            className="flex items-center gap-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors text-sm"
-                          >
-                            <CheckCircle2 className="w-4 h-4" />
-                            Save
-                          </button>
-                          <button
-                            onClick={handleCancel}
-                            className="flex items-center gap-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-semibold transition-colors text-sm"
-                          >
-                            <X className="w-4 h-4" />
-                            Cancel
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-1">
-                          <div className="w-2 h-2 rounded-full bg-blue-500 mt-1 sm:mt-0"></div>
-                          <span className="font-semibold text-gray-900">
-                            {status}
-                          </span>
-                          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-                            Stage {index + 1}
-                          </span>
-                        </div>
-                        <div className="flex gap-2 mt-2 sm:mt-0">
-                          <button
-                            onClick={() => handleEdit(index)}
-                            disabled={status === "Won" || status === "Lost"}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg font-semibold transition-colors text-sm border ${
-                              status === "Won" || status === "Lost"
-                                ? "text-gray-400 border-gray-200 cursor-not-allowed"
-                                : "text-blue-600 hover:bg-blue-50 border-blue-200"
-                            }`}
-                            title={
-                              status === "Won" || status === "Lost"
-                                ? "This status cannot be edited"
-                                : "Edit status"
-                            }
-                          >
-                            <EditIcon className="w-4 h-4" />
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(index)}
-                            disabled={status === "Won" || status === "Lost"}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg font-semibold transition-colors text-sm border ${
-                              status === "Won" || status === "Lost"
-                                ? "text-gray-400 border-gray-200 cursor-not-allowed"
-                                : "text-red-600 hover:bg-red-50 border-red-200"
-                            }`}
-                            title={
-                              status === "Won" || status === "Lost"
-                                ? "This status cannot be deleted"
-                                : "Delete status"
-                            }
-                          >
-                            <DeleteIcon className="w-4 h-4" />
-                            Delete
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </SortableItem>
-                ))}
-              </div>
-            </SortableContext>
+            <div className="overflow-x-auto rounded-xl border border-[#E1E4EA]">
+              <table className="min-w-full border-collapse text-sm text-left">
+                <thead className="bg-[#F5F7FA] border-b border-[#E1E4EA]">
+                  <tr>
+                    <th className="w-8" />
+                    <th className="px-4 py-3 text-sm font-bold text-[#525866]">Stage</th>
+                    <th className="px-4 py-3 text-sm font-bold text-[#525866]">Type</th>
+                    <th className="px-4 py-3 text-sm font-bold text-[#525866] text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white">
+                  <SortableContext items={statuses} strategy={verticalListSortingStrategy}>
+                    {statuses.map((status, index) => {
+                      // Won/Lost are the pipeline's terminal stages and cannot be renamed or
+                      // removed - the same "system default" idea SystemDefaults marks with a lock.
+                      const isLocked = status === "Won" || status === "Lost";
+                      const isEditing = editIndex === index;
+                      return (
+                        <SortableRow key={status} id={status}>
+                          <td className="px-4 py-3">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyPress={(e) => e.key === "Enter" && handleUpdate()}
+                                className="w-full max-w-xs px-3 py-1.5 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+                                autoFocus
+                              />
+                            ) : (
+                              <div className="flex items-center gap-2.5">
+                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isLocked ? "bg-gray-300" : "bg-blue-500"}`} />
+                                <span className="text-sm font-semibold text-gray-900">{status}</span>
+                                <span className="text-xs text-gray-400">Stage {index + 1}</span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            {isLocked ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-gray-900">
+                                <Lock className="w-3 h-3" /> System default
+                              </span>
+                            ) : (
+                              <span className="text-xs text-blue-500">Custom</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {isEditing ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={handleUpdate}
+                                  className="flex items-center justify-center w-7 h-7 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                                  title="Save"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={handleCancel}
+                                  className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 transition-colors"
+                                  title="Cancel"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : !isLocked ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEdit(index)}
+                                  className="flex items-center justify-center w-7 h-7 rounded-full text-blue-600 hover:bg-blue-50 transition-colors"
+                                  title="Edit"
+                                >
+                                  <EditIcon className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(index)}
+                                  className="flex items-center justify-center w-7 h-7 rounded-full text-red-600 hover:bg-red-50 transition-colors"
+                                  title="Delete"
+                                >
+                                  <DeleteIcon className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : null}
+                          </td>
+                        </SortableRow>
+                      );
+                    })}
+                  </SortableContext>
+                </tbody>
+              </table>
+            </div>
           </DndContext>
         )}
-      </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-100 p-2 rounded-lg">
-              <Layers className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-600">Total Stages</p>
-              <p className="text-xl font-bold text-gray-900">
-                {statuses.length}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="bg-green-100 p-2 rounded-lg">
-              <CheckCircle2 className="w-5 h-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-600">Pipeline Status</p>
-              <p className="text-sm font-bold text-green-600">Active</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="bg-purple-100 p-2 rounded-lg">
-              <Move className="w-5 h-5 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-600">Last Updated</p>
-              <p className="text-sm font-bold text-gray-900">Just now</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Info Card */}
-      <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-5">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <h3 className="font-semibold text-blue-900 mb-1">
-              How to use Kanban stages
-            </h3>
-            <div className="flex flex-col md:flex-row md:space-x-6 space-y-1 md:space-y-0">
-              <ul className="text-sm text-blue-700 leading-relaxed">
-                <li>• Drag and drop stages to reorder them in your pipeline</li>
-                <li>• Add new stages to customize your workflow</li>
-              </ul>
-              <ul className="text-sm text-blue-700 leading-relaxed">
-                <li>• Edit or delete existing stages as needed (except "Won" and "Lost")</li>
-                <li>• Changes are saved automatically and apply to all deals</li>
-              </ul>
-            </div>
-          </div>
-        </div>
+        <p className="text-xs text-gray-400 mt-3">
+          Drag a row to reorder the pipeline. Changes save automatically and apply to all deals.
+          Won and Lost cannot be renamed or removed.
+        </p>
       </div>
     </div>
   );

@@ -1,7 +1,9 @@
 import CalendarClockIcon from "../components/common/CalendarClockIcon";
 import PdfIcon from "../components/common/PdfIcon";
+import FormIcon from "../components/common/FormIcon";
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
+import API from "../services/api";
 import {
   Building,
   User,
@@ -27,6 +29,13 @@ import {
   ListChecks,
 } from "lucide-react";
 import SettingsIcon from "../components/common/SettingsIcon";
+
+const OrgIcon = ({ className }) => (
+  <svg viewBox="-2.22 -3.22 24.44 24.44" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <path d="M2 18C1.45 18 0.979167 17.8042 0.5875 17.4125C0.195833 17.0208 0 16.55 0 16V2C0 1.45 0.195833 0.979167 0.5875 0.5875C0.979167 0.195833 1.45 0 2 0H8C8.55 0 9.02083 0.195833 9.4125 0.5875C9.80417 0.979167 10 1.45 10 2V4H18C18.55 4 19.0208 4.19583 19.4125 4.5875C19.8042 4.97917 20 5.45 20 6V16C20 16.55 19.8042 17.0208 19.4125 17.4125C19.0208 17.8042 18.55 18 18 18H2ZM2 16H8V14H2V16ZM2 12H8V10H2V12ZM2 8H8V6H2V8ZM2 4H8V2H2V4ZM10 16H18V6H10V16ZM13 10C12.7167 10 12.4792 9.90417 12.2875 9.7125C12.0958 9.52083 12 9.28333 12 9C12 8.71667 12.0958 8.47917 12.2875 8.2875C12.4792 8.09583 12.7167 8 13 8H15C15.2833 8 15.5208 8.09583 15.7125 8.2875C15.9042 8.47917 16 8.71667 16 9C16 9.28333 15.9042 9.52083 15.7125 9.7125C15.5208 9.90417 15.2833 10 15 10H13ZM13 14C12.7167 14 12.4792 13.9042 12.2875 13.7125C12.0958 13.5208 12 13.2833 12 13C12 12.7167 12.0958 12.4792 12.2875 12.2875C12.4792 12.0958 12.7167 12 13 12H15C15.2833 12 15.5208 12.0958 15.7125 12.2875C15.9042 12.4792 16 12.7167 16 13C16 13.2833 15.9042 13.5208 15.7125 13.7125C15.5208 13.9042 15.2833 14 15 14H13Z" fill="currentColor" />
+  </svg>
+);
+import { ContactsIcon } from "../components/Navbar";
 import BankDetails from "../components/settings/BankDetails";
 import Profile from "./Profile";
 import BrandSettings from "../components/settings/BrandSettings";
@@ -101,6 +110,13 @@ const Settings = () => {
       navigate(`/settings/google-integration${location.search}`, { replace: true });
     }
   }, [location.search, params.section, navigate]);
+
+  // Opening a section keeps whatever scroll position the settings grid had, so a tile clicked
+  // from halfway down the list rendered its section already scrolled - the section's own content
+  // starting underneath the fixed header strip. Reset to the top whenever the section changes.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [params.section]);
 
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem("user"));
@@ -204,19 +220,19 @@ const Settings = () => {
       borderColor: "border-purple-200",
       hoverBg: "hover:bg-purple-50",
       component: <Referrals />,
-      category: "Billing",
+      category: "Other",
     },
     {
       id: "profile",
-      icon: <User className="w-5 h-5" />,
-      label: "Profile",
+      icon: <ContactsIcon className="w-5 h-5" />,
+      label: "User Profile",
       description: "Your account details, photo, and active sessions",
       color: "text-blue-600",
       bgColor: "bg-blue-50",
       borderColor: "border-blue-200",
       hoverBg: "hover:bg-blue-50",
       component: <Profile />,
-      category: "General",
+      category: "Profile",
     },
     {
       id: "users",
@@ -228,19 +244,19 @@ const Settings = () => {
       borderColor: "border-green-200",
       hoverBg: "hover:bg-green-50",
       component: <UserManagement />,
-      category: "General",
+      category: "Profile",
     },
     {
       id: "brand",
-      icon: <Building className="w-5 h-5" />,
-      label: "Brand Settings",
+      icon: <OrgIcon className="w-5 h-5" />,
+      label: "Organization Details",
       description: "Configure brand and account settings",
       color: "text-blue-600",
       bgColor: "bg-blue-50",
       borderColor: "border-blue-200",
       hoverBg: "hover:bg-blue-50",
       component: <BrandSettings />,
-      category: "General",
+      category: "Profile",
     },
     {
       id: "custom-domain",
@@ -388,7 +404,9 @@ const Settings = () => {
     },
     {
       id: "forms",
-      icon: <PdfIcon className="w-4 h-4" />,
+      // Same glyph as the sidebar's Forms entry (Navbar's NavFormIcon is just this shared
+      // FormIcon with a padded viewBox), so the tile and the nav item read as one thing.
+      icon: <FormIcon className="w-4 h-4" />,
       label: "Forms",
       description: "Build and manage how customers enter your CRM",
       color: "text-emerald-600",
@@ -425,14 +443,14 @@ const Settings = () => {
     {
       id: "help-center",
       icon: <HelpCircle className="w-5 h-5" />,
-      label: "Help Center",
+      label: "Support",
       description: "Browse help articles and FAQs",
       color: "text-cyan-600",
       bgColor: "bg-cyan-50",
       borderColor: "border-cyan-200",
       hoverBg: "hover:bg-cyan-50",
       component: <HelpCenter />,
-      category: "General",
+      category: "Other",
     },
   ];
 
@@ -467,15 +485,18 @@ const Settings = () => {
   }, {});
 
   const categoryOrder = [
+    "Profile",
     "Billing",
     "General",
     "Team",
     "Customization",
     "Automation",
     "Support",
+    "Other",
   ];
 
   const categoryIcons = {
+    Profile: <ContactsIcon className="w-5 h-5" />,
     Billing: <CreditCard className="w-5 h-5" />,
     General: <SettingsIcon className="w-4 h-4" />,
     Team: <TeamIcon className="w-5 h-5" />,

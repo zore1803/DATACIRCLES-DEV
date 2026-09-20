@@ -11,9 +11,32 @@ function normalizeSocialMedia(socialMedia) {
   return {
     twitter: socialMedia.twitter || "",
     linkedin: socialMedia.linkedin || "",
+    instagram: socialMedia.instagram || "",
     facebook: socialMedia.facebook || "",
     whatsapp: socialMedia.whatsapp || "",
   };
+}
+
+// The edit form is multipart/form-data (it also carries an avatar file),
+// which can't send a nested object — it sends "socialMedia[twitter]",
+// "socialMedia[instagram]", etc. as flat top-level fields. multer doesn't
+// reconstruct those into rawData.socialMedia the way a JSON body would, so
+// without this every social link would silently fail to save (same bug
+// companyService.js had — see extractSocialMediaInput there).
+function extractSocialMediaInput(rawData) {
+  if (rawData.socialMedia && typeof rawData.socialMedia === "object") {
+    return rawData.socialMedia;
+  }
+  const extracted = {};
+  let found = false;
+  Object.keys(rawData).forEach((key) => {
+    const match = key.match(/^socialMedia\[(.+)\]$/);
+    if (match) {
+      extracted[match[1]] = rawData[key];
+      found = true;
+    }
+  });
+  return found ? extracted : rawData.socialMedia;
 }
 
 /**
@@ -54,8 +77,9 @@ async function createContact(
     contactData.avatar = avatarUrl;
   }
 
-  if (rawData.socialMedia) {
-    contactData.socialMedia = normalizeSocialMedia(rawData.socialMedia);
+  const socialMediaInput = extractSocialMediaInput(rawData);
+  if (socialMediaInput) {
+    contactData.socialMedia = normalizeSocialMedia(socialMediaInput);
   }
 
   if (!contactData.lifecycleStage) {
@@ -128,8 +152,9 @@ async function updateContact(
     updateData.avatar = avatarUrl;
   }
 
-  if (rawData.socialMedia) {
-    updateData.socialMedia = normalizeSocialMedia(rawData.socialMedia);
+  const socialMediaInput = extractSocialMediaInput(rawData);
+  if (socialMediaInput) {
+    updateData.socialMedia = normalizeSocialMedia(socialMediaInput);
   }
 
   // Lifecycle pair integrity. findOneAndUpdate below does NOT run the model's

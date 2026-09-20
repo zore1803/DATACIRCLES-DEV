@@ -8,6 +8,9 @@ import API from "../../services/api";
 import {
   Save,
   X,
+  Check,
+  Lock,
+  FolderMinus,
   Database,
   AlertCircle,
   CheckCircle2,
@@ -25,6 +28,24 @@ import {
   Award,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  closestCorners,
+  PointerSensor,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import CompanyIndustrySettings from "./CompanyIndustrySettings";
 import AppToaster from "../AppToaster";
 import ConfirmDialog from "../common/ConfirmDialog";
@@ -32,17 +53,63 @@ import UploadIcon from "../common/UploadIcon";
 import ListIcon from "../common/ListIcon";
 import EditIcon from "../common/EditIcon";
 
-const defaultIndustries = [
-  "Information Technology & Services",
-  "Finance & Banking",
-  "Healthcare & Pharmaceuticals",
-  "Education & EdTech",
-  "Retail & E-Commerce",
-  "Manufacturing",
-  "Real Estate",
-  "Marketing & Advertising",
-  "Travel & Hospitality",
-  "Nonprofit / Government / Public Sector"
+// The six fields every company form ships with. Hardcoded because they live on the Company model
+// itself, not in the custom-fields collection - they exist whether or not an org configures
+// anything. Previously written out as six near-identical cards in the render.
+// Draggable field row, same pattern as KanbanSettings' stage rows: dnd-kit sortable applied to a
+// <tr>, with a grip handle in its own narrow leading column. Field order is what the company form
+// renders in, so reordering here changes the order people fill the form in.
+const SortableFieldRow = ({ id, children }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+
+  // While dragging, the row itself just dims - the thing that follows the cursor is the
+  // DragOverlay. A transformed <tr> cannot escape the table's own overflow-x-auto box, so without
+  // an overlay a field dragged towards another section was clipped inside its own card.
+  return (
+    <tr
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`group hover:bg-[#F5F7FA] transition-colors border-b border-[#E1E4EA] last:border-b-0 ${
+        isDragging ? "opacity-40" : ""
+      }`}
+    >
+      <td className="pl-4 pr-1 py-3 w-8">
+        <button
+          {...attributes}
+          {...listeners}
+          type="button"
+          className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing transition-colors"
+          title="Drag to reorder"
+        >
+          <GripVertical className="w-4 h-4" />
+        </button>
+      </td>
+      {children}
+    </tr>
+  );
+};
+
+// Wraps a section so a field can be dropped onto it even when it has no rows to drop between -
+// without this an empty section could never receive anything.
+const DroppableSection = ({ category, children }) => {
+  const { setNodeRef, isOver } = useDroppable({ id: `section:${category}` });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`rounded-xl transition-colors ${isOver ? "bg-blue-50/60 ring-2 ring-[#0085FF]/30" : ""}`}
+    >
+      {children}
+    </div>
+  );
+};
+
+const BUILT_IN_FIELDS = [
+  { name: "Company Name", type: "String (Single-line)", required: true },
+  { name: "Industry", type: "Dropdown", required: true },
+  { name: "GSTIN", type: "String (Single-line)", required: false },
+  { name: "Address", type: "String (Single-line)", required: false },
+  { name: "Website", type: "URL", required: false },
+  { name: "Profile Picture", type: "Image Upload", required: false },
 ];
 
 const CompanyFieldSettings = () => {
@@ -74,6 +141,61 @@ const CompanyFieldSettings = () => {
   const [pendingDeleteIndex, setPendingDeleteIndex] = useState(null);
   const [pendingDeleteCategory, setPendingDeleteCategory] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Which table the card shows. Same pill switcher SystemDefaultsSettings.jsx uses for its
+  // Task/Note/Meeting tabs - the two field lists are the same kind of thing, so they share one
+  // card rather than stacking two.
+  const [activeFieldTab, setActiveFieldTab] = useState("custom");
+
+  const [activeDragId, setActiveDragId] = useState(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
+  // Sections tab: a drag can both move a field to another section and reposition it. The drop
+  // target is either another field (use its category) or a section's own droppable area (used for
+  // empty sections, which have no row to aim at).
+  const handleSectionDragEnd = (event) => {
+    const { active, over } = event;
+    setActiveDragId(null);
+    if (!over) return;
+
+    const keyOf = (f) => f._id || f.name;
+    const activeIndex = fields.findIndex((f) => keyOf(f) === active.id);
+    if (activeIndex === -1) return;
+
+    const overId = String(over.id);
+    const targetCategory = overId.startsWith("section:")
+      ? overId.slice("section:".length)
+      : (fields.find((f) => keyOf(f) === overId)?.category || "Uncategorized");
+
+    const movedCategory = fields[activeIndex].category || "Uncategorized";
+    const overIndex = overId.startsWith("section:")
+      ? -1
+      : fields.findIndex((f) => keyOf(f) === overId);
+
+    if (movedCategory === targetCategory && (overIndex === -1 || overIndex === activeIndex)) return;
+
+    let updated = fields.map((f, i) =>
+      i === activeIndex ? { ...f, category: targetCategory } : f
+    );
+    if (overIndex !== -1) updated = arrayMove(updated, activeIndex, overIndex);
+
+    saveFields(updated);
+    if (movedCategory !== targetCategory) toast.success(`Moved to ${targetCategory}`);
+  };
+
+  // Reorder within the flat custom-field list. Persisted straight away (saveFields), the same way
+  // KanbanSettings saves a stage reorder - there is no explicit save button on this page.
+  const handleFieldReorder = (event) => {
+    const { active, over } = event;
+    setActiveDragId(null);
+    if (!over || active.id === over.id) return;
+    const oldIndex = fields.findIndex((f) => (f._id || f.name) === active.id);
+    const newIndex = fields.findIndex((f) => (f._id || f.name) === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    saveFields(arrayMove(fields, oldIndex, newIndex));
+  };
 
   const fieldTypes = [
     {
@@ -660,511 +782,561 @@ const CompanyFieldSettings = () => {
         onCancel={() => setPendingDeleteCategory(null)}
       />
 
-      {/* Built-in Mandatory Fields */}
-      <div className="bg-white rounded-2xl border-2 border-gray-200 shadow-lg p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
-          <div className="bg-amber-100 p-2 rounded-lg">
-            <Database className="w-5 h-5 text-amber-600" />
-          </div>
-          <h3 className="text-xl font-bold text-gray-900">Built-in Mandatory Fields</h3>
+      {/* ------------------------------------------------------------------ *
+       * NEW UI (System Defaults style). Built above the existing sections so
+       * the old ones can be removed piece by piece; nothing below this block
+       * has been changed. Shares the same state/handlers as the old UI, so
+       * adding/editing/deleting here writes through the same code paths.
+       * ------------------------------------------------------------------ */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        <div className="relative inline-flex items-center bg-gray-100 rounded-full p-1 mb-5">
+          {/* w-36, not the w-24 SystemDefaults uses - "Custom Section" does not fit 96px. */}
+          <span
+            className="absolute top-1 bottom-1 w-36 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
+            style={{ left: 4 + ["custom", "sections", "builtin"].indexOf(activeFieldTab) * 144 }}
+          />
+          {[
+            { id: "custom", label: "Custom Field" },
+            { id: "sections", label: "Custom Section" },
+            { id: "builtin", label: "Built-in" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveFieldTab(tab.id)}
+              className={`relative z-10 w-36 py-2 text-sm font-semibold rounded-full transition-colors ${
+                activeFieldTab === tab.id ? "text-[#0085FF]" : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        <div className="space-y-3">
-          {/* Each field card */}
-          <div className="border-2 border-gray-200 rounded-xl p-4 sm:p-5 bg-gray-50">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <div className="flex-1">
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-                  <div className="bg-blue-100 p-1.5 rounded-lg">
-                    <Type className="w-4 h-4" />
-                  </div>
-                  <span className="font-bold text-gray-900">Company Name</span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full border border-blue-200">
-                    String (Single-line)
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded-full border border-red-200">
-                    <AlertCircle className="w-3 h-3" />
-                    Required
-                  </span>
-                </div>
-              </div>
-              <span className="text-xs text-gray-500 bg-gray-200 px-3 py-1 rounded-full font-medium whitespace-nowrap mt-2 sm:mt-0">
-                System Field
-              </span>
-            </div>
-          </div>
+        {activeFieldTab === "custom" && (
+        <>
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleAdd(); }}
+          className="flex flex-wrap gap-2 mb-5"
+        >
+          <input
+            type="text"
+            value={newField.name}
+            onChange={(e) => setNewField({ ...newField, name: e.target.value })}
+            placeholder="Add custom field (e.g. Annual Revenue)"
+            className="flex-1 min-w-[200px] px-4 py-2 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
+          />
+          <select
+            value={newField.type}
+            onChange={(e) => setNewField({ ...newField, type: e.target.value, options: [] })}
+            className="px-4 py-2 text-sm rounded-full border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
+          >
+            {fieldTypes.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+          <select
+            value={newField.category}
+            onChange={(e) => setNewField({ ...newField, category: e.target.value })}
+            className="px-4 py-2 text-sm rounded-full border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
+          >
+            <option value="Uncategorized">Uncategorized</option>
+            {availableCategories.filter((c) => c !== "Uncategorized").map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+          <label className="flex items-center gap-2 px-3 text-sm text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={newField.required}
+              onChange={(e) => setNewField({ ...newField, required: e.target.checked })}
+              className="w-4 h-4 rounded border-gray-300 text-[#0085FF] focus:ring-[#0085FF]/30"
+            />
+            Required
+          </label>
+          <button
+            type="submit"
+            disabled={!newField.name.trim()}
+            className="flex-shrink-0 px-4 py-2 bg-[#0085FF] hover:bg-blue-600 text-white text-sm font-semibold rounded-full disabled:opacity-50 transition-colors flex items-center gap-1.5"
+          >
+            <PlusIcon className="w-4 h-4" /> Add
+          </button>
+        </form>
 
-          <div className="border-2 border-gray-200 rounded-xl p-4 sm:p-5 bg-gray-50">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <div className="flex-1">
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-                  <div className="bg-blue-100 p-1.5 rounded-lg">
-                    <ChevronDown className="w-4 h-4" />
-                  </div>
-                  <span className="font-bold text-gray-900">Industry</span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full border border-blue-200">
-                    Dropdown
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded-full border border-red-200">
-                    <AlertCircle className="w-3 h-3" />
-                    Required
-                  </span>
-                </div>
-              </div>
-              <span className="text-xs text-gray-500 bg-gray-200 px-3 py-1 rounded-full font-medium whitespace-nowrap mt-2 sm:mt-0">
-                System Field
-              </span>
-            </div>
-          </div>
-
-          <div className="border-2 border-gray-200 rounded-xl p-4 sm:p-5 bg-gray-50">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <div className="flex-1">
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-                  <div className="bg-blue-100 p-1.5 rounded-lg">
-                    <Type className="w-4 h-4" />
-                  </div>
-                  <span className="font-bold text-gray-900">GSTIN</span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full border border-blue-200">
-                    String (Single-line)
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-gray-100 text-gray-700 text-xs font-semibold rounded-full border border-gray-200">
-                    Optional
-                  </span>
-                </div>
-              </div>
-              <span className="text-xs text-gray-500 bg-gray-200 px-3 py-1 rounded-full font-medium whitespace-nowrap mt-2 sm:mt-0">
-                System Field
-              </span>
-            </div>
-          </div>
-
-          <div className="border-2 border-gray-200 rounded-xl p-4 sm:p-5 bg-gray-50">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <div className="flex-1">
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-                  <div className="bg-blue-100 p-1.5 rounded-lg">
-                    <Type className="w-4 h-4" />
-                  </div>
-                  <span className="font-bold text-gray-900">Address</span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full border border-blue-200">
-                    String (Single-line)
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-gray-100 text-gray-700 text-xs font-semibold rounded-full border border-gray-200">
-                    Optional
-                  </span>
-                </div>
-              </div>
-              <span className="text-xs text-gray-500 bg-gray-200 px-3 py-1 rounded-full font-medium whitespace-nowrap mt-2 sm:mt-0">
-                System Field
-              </span>
-            </div>
-          </div>
-
-          <div className="border-2 border-gray-200 rounded-xl p-4 sm:p-5 bg-gray-50">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <div className="flex-1">
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-                  <div className="bg-blue-100 p-1.5 rounded-lg">
-                    <Type className="w-4 h-4" />
-                  </div>
-                  <span className="font-bold text-gray-900">Website</span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full border border-blue-200">
-                    URL
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-gray-100 text-gray-700 text-xs font-semibold rounded-full border border-gray-200">
-                    Optional
-                  </span>
-                </div>
-              </div>
-              <span className="text-xs text-gray-500 bg-gray-200 px-3 py-1 rounded-full font-medium whitespace-nowrap mt-2 sm:mt-0">
-                System Field
-              </span>
-            </div>
-          </div>
-
-          <div className="border-2 border-gray-200 rounded-xl p-4 sm:p-5 bg-gray-50">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <div className="flex-1">
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-                  <div className="bg-blue-100 p-1.5 rounded-lg">
-                    <UploadIcon className="w-4 h-4" />
-                  </div>
-                  <span className="font-bold text-gray-900">Profile Picture</span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full border border-blue-200">
-                    Image Upload
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-gray-100 text-gray-700 text-xs font-semibold rounded-full border border-gray-200">
-                    Optional
-                  </span>
-                </div>
-              </div>
-              <span className="text-xs text-gray-500 bg-gray-200 px-3 py-1 rounded-full font-medium whitespace-nowrap mt-2 sm:mt-0">
-                System Field
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
-          <div className="flex flex-col sm:flex-row items-start gap-3">
-            <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-blue-700">
-              These are built-in system fields that appear by default in every company form. You cannot edit or remove these fields, but you can add custom fields below.
-            </p>
-          </div>
-        </div>
-      </div>
-
-
-      {/* Add New Field */}
-      <div className="bg-white rounded-2xl border-2 border-gray-200 shadow-lg p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="bg-green-100 p-2 rounded-lg">
-            <PlusIcon className="w-4 h-4 text-green-600" />
-          </div>
-          <h3 className="text-xl font-bold text-gray-900">Add New Field</h3>
-        </div>
-
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Field Name(s)
-                <span className="text-xs font-normal text-gray-500 ml-2">
-                  (Comma-separated for multiple)
-                </span>
-              </label>
+        {/* Dropdown/multi-select need their options before the field can be saved, so the option
+            editor only appears for those two types rather than sitting there permanently. */}
+        {(newField.type === "dropdown" || newField.type === "multiselect") && (
+          <div className="mb-5 rounded-xl border border-[#E1E4EA] p-3.5">
+            <div className="flex gap-2">
               <input
                 type="text"
-                placeholder="e.g., Annual Revenue, Employee Count, Due Date"
-                value={newField.name || ""}
-                onChange={(e) =>
-                  setNewField((prev) => ({ ...prev, name: e.target.value }))
-                }
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                value={newDropdownOption}
+                onChange={(e) => setNewDropdownOption(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDropdownOption(false); } }}
+                placeholder="Add option (comma-separate for several)"
+                className="flex-1 min-w-0 px-4 py-1.5 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
               />
-              <p className="text-xs text-gray-500 mt-1">
-                💡 Tip: Enter multiple field names separated by commas to create
-                them all at once
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Field Type
-              </label>
-              <select
-                value={newField.type}
-                onChange={(e) =>
-                  setNewField((prev) => ({
-                    ...prev,
-                    type: e.target.value,
-                    options:
-                      e.target.value === "dropdown" ||
-                        e.target.value === "multiselect"
-                        ? prev.options
-                        : [],
-                  }))
-                }
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+              <button
+                type="button"
+                onClick={() => addDropdownOption(false)}
+                className="flex-shrink-0 px-3.5 py-1.5 text-sm font-semibold rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                {fieldTypes.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
+                Add option
+              </button>
             </div>
-          </div>
-
-          <div className="flex items-center">
-            <Checkbox checked={newField.required || false} onChange={(e) =>
-                setNewField((prev) => ({ ...prev, required: e.target.checked }))
-              } id="newRequired" />
-            <label
-              htmlFor="newRequired"
-              className="ml-2 text-sm font-medium text-gray-700"
-            >
-              Mark as required field
-            </label>
-          </div>
-
-          {/* Dropdown/Multiselect Options */}
-          {(newField.type === "dropdown" || newField.type === "multiselect") && (
-            <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <ChevronDown className="w-5 h-5 text-purple-600" />
-                <h4 className="font-semibold text-purple-900">
-                  {newField.type === "dropdown"
-                    ? "Dropdown Options"
-                    : "Multi-Select Options"}
-                </h4>
-              </div>
-              <div className="flex gap-2 mb-3">
-                <input
-                  type="text"
-                  placeholder="Add option(s) - comma-separated (e.g., Small, Medium, Large)"
-                  value={newDropdownOption}
-                  onChange={(e) => setNewDropdownOption(e.target.value)}
-                  className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  onKeyPress={(e) => e.key === "Enter" && addDropdownOption()}
-                />
-                <button
-                  onClick={() => addDropdownOption()}
-                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
-                >
-                  <PlusIcon className="w-4 h-4" />
-                  Add
-                </button>
-              </div>
-              <p className="text-xs text-purple-600 mb-3">
-                💡 Tip: Enter multiple options separated by commas to add them all
-                at once
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {newField.options.map((option, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center gap-2 bg-white border border-purple-300 text-purple-900 px-3 py-1.5 rounded-lg text-sm font-medium"
-                  >
-                    {option}
+            {newField.options?.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2.5">
+                {newField.options.map((opt, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gray-100 text-xs text-gray-700">
+                    {opt}
                     <button
-                      onClick={() => removeDropdownOption(index)}
-                      className="text-purple-600 hover:text-purple-800"
+                      type="button"
+                      onClick={() => setNewField({ ...newField, options: newField.options.filter((_, oi) => oi !== i) })}
+                      className="text-gray-400 hover:text-red-500"
+                      title="Remove option"
                     >
                       <X className="w-3 h-3" />
                     </button>
                   </span>
                 ))}
               </div>
-              {newField.options.length === 0 && (
-                <p className="text-sm text-purple-700 mt-2">
-                  No options added yet. Add at least one option.
-                </p>
-              )}
-            </div>
-          )}
-
-          <button
-            onClick={handleAdd}
-            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg"
-          >
-            <PlusIcon className="w-4 h-4" />
-            Add Field(s)
-          </button>
-        </div>
-      </div>
-
-      {/* Standalone Category Creator */}
-      <div className="bg-purple-50 rounded-2xl border-2 border-purple-200 shadow-sm p-4 sm:p-6 mb-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-purple-100 p-2 rounded-lg">
-              <FolderPlus className="w-5 h-5 text-purple-600" />
-            </div>
-            <div>
-              <h3 className="font-bold text-purple-900">Create Empty Section</h3>
-              <p className="text-xs text-purple-700">Create a new section to organize future fields</p>
-            </div>
+            )}
           </div>
-          <div className="flex w-full sm:w-auto gap-2">
-            <input
-              type="text"
-              placeholder="e.g., Financial Information"
-              value={newStandaloneCategory}
-              onChange={(e) => setNewStandaloneCategory(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleCreateStandaloneCategory()}
-              className="flex-1 sm:w-64 px-4 py-2 border-2 border-purple-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-            />
-            <button
-              onClick={handleCreateStandaloneCategory}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl font-semibold transition-colors flex items-center gap-2 whitespace-nowrap"
-            >
-              <PlusIcon className="w-4 h-4" /> Create
-            </button>
-          </div>
-        </div>
-      </div>
+        )}
 
-      {/* Configured Fields grouped by Categories */}
-      <div className="bg-white rounded-2xl border-2 border-gray-200 shadow-lg p-4 sm:p-6 mb-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-100 p-2 rounded-lg">
-              <ListIcon className="w-5 h-5 text-blue-600" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900">Custom Sections & Fields</h3>
-          </div>
-        </div>
-
-        {fields.length === 0 && availableCategories.length === 0 ? (
-          <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-xl">
-            <Database className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium mb-2">No custom fields or categories configured yet</p>
+        {fields.length === 0 ? (
+          <div className="text-center py-12 rounded-xl border border-[#E1E4EA]">
+            <Database className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+            <p className="text-sm text-gray-600">No custom fields yet</p>
+            <p className="text-xs text-gray-400 mt-0.5">Add your first field to get started</p>
           </div>
         ) : (
-          <div className="space-y-6">
-
-            <div className="space-y-6">
-
-              {/* 1. Categorized Fields */}
-              {availableCategories.map((categoryName, catIndex) => {
-                const categoryFields = fields.filter(f => f.category === categoryName);
-
-                return (
-                  <div
-                    key={catIndex}
-                    onDragOver={(e) => e.preventDefault()} // 👉 MUST HAVE THIS to allow dropping
-                    onDrop={(e) => handleDrop(e, categoryName)} // 👉 Triggers the save
-                    className={`border-2 border-purple-200 rounded-xl overflow-hidden bg-white shadow-sm transition-colors ${draggedFieldIndex !== null ? 'border-dashed border-purple-400 bg-purple-50/30 pb-4' : ''}`}
-                  >
-                    <div className="bg-purple-50 px-5 py-4 border-b-2 border-purple-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                      {editingCategory === categoryName ? (
-                        // --- EDIT MODE ---
-                        <div className="flex flex-1 items-center gap-3 w-full">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+            onDragStart={(e) => setActiveDragId(e.active.id)}
+            onDragCancel={() => setActiveDragId(null)}
+            onDragEnd={handleFieldReorder}
+          >
+          <div className="overflow-x-auto rounded-xl border border-[#E1E4EA]">
+            <table className="min-w-full border-collapse text-sm text-left">
+              <thead className="bg-[#F5F7FA] border-b border-[#E1E4EA]">
+                <tr>
+                  <th className="w-8" />
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Field</th>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Type</th>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Category</th>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Required</th>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866] text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white">
+                <SortableContext
+                  items={fields.map((f) => f._id || f.name)}
+                  strategy={verticalListSortingStrategy}
+                >
+                {fields.map((field, index) => {
+                  const isEditing = editIndex === index;
+                  return (
+                    <SortableFieldRow key={field._id || field.name} id={field._id || field.name}>
+                      <td className="px-4 py-3">
+                        {isEditing ? (
                           <input
                             type="text"
-                            value={editCategoryName}
-                            onChange={(e) => setEditCategoryName(e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && handleUpdateCategory(categoryName)}
-                            className="flex-1 px-3 py-1.5 border-2 border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm font-semibold text-purple-900"
+                            value={editValue.name}
+                            onChange={(e) => setEditValue({ ...editValue, name: e.target.value })}
+                            className="w-full max-w-xs px-3 py-1.5 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
                             autoFocus
                           />
-                          <div className="flex gap-2">
-                            <button onClick={() => handleUpdateCategory(categoryName)} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" /> Save
+                        ) : (
+                          <div className="flex items-center gap-2.5">
+                            <span className="w-2 h-2 rounded-full flex-shrink-0 bg-[#0085FF]" />
+                            <span className="text-sm font-semibold text-gray-900">{field.name}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs text-gray-600">
+                          {fieldTypes.find((t) => t.value === field.type)?.label || field.type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs text-gray-600">{field.category || "Uncategorized"}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {field.required ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#FCEAEA] text-[#EA4B4B]">
+                            Required
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#EEF2F9] text-[#56698A]">
+                            Optional
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {isEditing ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={handleUpdate}
+                              className="flex items-center justify-center w-7 h-7 rounded-full bg-[#0085FF] hover:bg-blue-600 text-white transition-colors"
+                              title="Save"
+                            >
+                              <Check className="w-3.5 h-3.5" />
                             </button>
-                            <button onClick={() => setEditingCategory(null)} className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1">
-                              <X className="w-3 h-3" /> Cancel
+                            <button
+                              type="button"
+                              onClick={() => setEditIndex(null)}
+                              className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 transition-colors"
+                              title="Cancel"
+                            >
+                              <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                        </div>
-                      ) : (
-                        // --- VIEW MODE ---
-                        <>
-                          <div>
-                            <h4 className="font-bold text-purple-900 text-lg flex items-center gap-2">
-                              {categoryName}
-                              <span className="bg-purple-200 text-purple-800 text-xs px-2 py-0.5 rounded-full font-medium">
-                                {categoryFields.length} Fields
+                        ) : (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(index)}
+                              className="flex items-center justify-center w-7 h-7 rounded-full text-blue-600 hover:bg-blue-50 transition-colors"
+                              title="Edit"
+                            >
+                              <EditIcon className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(index)}
+                              className="flex items-center justify-center w-7 h-7 rounded-full text-red-600 hover:bg-red-50 transition-colors"
+                              title="Delete"
+                            >
+                              <DeleteIcon className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </SortableFieldRow>
+                  );
+                })}
+                </SortableContext>
+              </tbody>
+            </table>
+          </div>
+          <DragOverlay>
+            {activeDragId ? (
+              <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-[#E1E4EA] bg-white shadow-xl">
+                <GripVertical className="w-4 h-4 text-gray-300" />
+                <span className="w-2 h-2 rounded-full flex-shrink-0 bg-[#0085FF]" />
+                <span className="text-sm font-semibold text-gray-900">
+                  {fields.find((f) => (f._id || f.name) === activeDragId)?.name}
+                </span>
+              </div>
+            ) : null}
+          </DragOverlay>
+          </DndContext>
+        )}
+        </>
+        )}
+
+        {activeFieldTab === "sections" && (
+        <>
+        {/* Same add-row shape as the Custom tab, creating a section instead of a field. Uses the
+            existing handleCreateStandaloneCategory, so this and the old card write the same way. */}
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleCreateStandaloneCategory(); }}
+          className="flex gap-2 mb-5"
+        >
+          <input
+            type="text"
+            value={newStandaloneCategory}
+            onChange={(e) => setNewStandaloneCategory(e.target.value)}
+            placeholder="Add section (e.g. Financial Information)"
+            className="flex-1 min-w-0 px-4 py-2 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
+          />
+          <button
+            type="submit"
+            disabled={!newStandaloneCategory.trim()}
+            className="flex-shrink-0 px-4 py-2 bg-[#0085FF] hover:bg-blue-600 text-white text-sm font-semibold rounded-full disabled:opacity-50 transition-colors flex items-center gap-1.5"
+          >
+            <PlusIcon className="w-4 h-4" /> Add
+          </button>
+        </form>
+
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          modifiers={[restrictToVerticalAxis]}
+          onDragStart={(e) => setActiveDragId(e.active.id)}
+          onDragCancel={() => setActiveDragId(null)}
+          onDragEnd={handleSectionDragEnd}
+        >
+        {/* One table per section, Uncategorized last - the same grouping the company form and the
+            company detail view use. Section-level rename/delete sit in the group's header row;
+            field rename/delete work exactly as on the Custom tab (shared handlers). */}
+        {Object.entries(
+          fields.reduce((acc, field) => {
+            const cat = field.category || "Uncategorized";
+            (acc[cat] = acc[cat] || []).push(field);
+            return acc;
+          }, availableCategories.reduce((acc, c) => ({ ...acc, [c]: [] }), {}))
+        )
+          .sort(([a], [b]) => {
+            if (a === "Uncategorized") return 1;
+            if (b === "Uncategorized") return -1;
+            return a.localeCompare(b);
+          })
+          .map(([category, catFields]) => (
+            <DroppableSection key={category} category={category}>
+            <div className="mb-5 last:mb-0">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                {editingCategory === category ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={editCategoryName}
+                      onChange={(e) => setEditCategoryName(e.target.value)}
+                      className="px-3 py-1.5 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateCategory(category)}
+                      className="flex items-center justify-center w-7 h-7 rounded-full bg-[#0085FF] hover:bg-blue-600 text-white transition-colors"
+                      title="Save"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingCategory(null)}
+                      className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 transition-colors"
+                      title="Cancel"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-gray-900">{category}</h4>
+                    <span className="text-xs text-gray-400">
+                      {catFields.length} {catFields.length === 1 ? "field" : "fields"}
+                    </span>
+                  </div>
+                )}
+
+                {/* Uncategorized is not a real section - it is the absence of one - so it has no
+                    rename/delete. */}
+                {category !== "Uncategorized" && editingCategory !== category && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleEditCategoryStart(category)}
+                      className="flex items-center justify-center w-7 h-7 rounded-full text-blue-600 hover:bg-blue-50 transition-colors"
+                      title="Rename section"
+                    >
+                      <EditIcon className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCategory(category)}
+                      className="flex items-center justify-center w-7 h-7 rounded-full text-red-600 hover:bg-red-50 transition-colors"
+                      title="Delete section"
+                    >
+                      <DeleteIcon className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {catFields.length === 0 ? (
+                <div className="text-center py-8 rounded-xl border border-dashed border-[#E1E4EA] text-xs text-gray-400">
+                  No fields yet - drag one here
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-[#E1E4EA]">
+                  <table className="min-w-full border-collapse text-sm text-left">
+                    <thead className="bg-[#F5F7FA] border-b border-[#E1E4EA]">
+                      <tr>
+                        <th className="w-8" />
+                        <th className="px-4 py-3 text-sm font-bold text-[#525866]">Field</th>
+                        <th className="px-4 py-3 text-sm font-bold text-[#525866]">Type</th>
+                        <th className="px-4 py-3 text-sm font-bold text-[#525866]">Required</th>
+                        <th className="px-4 py-3 text-sm font-bold text-[#525866] text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white">
+                      <SortableContext
+                        items={catFields.map((f) => f._id || f.name)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                      {catFields.map((field) => {
+                        const index = fields.indexOf(field);
+                        const isEditing = editIndex === index;
+                        return (
+                          <SortableFieldRow key={field._id || field.name} id={field._id || field.name}>
+                            <td className="px-4 py-3">
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={editValue.name}
+                                  onChange={(e) => setEditValue({ ...editValue, name: e.target.value })}
+                                  className="w-full max-w-xs px-3 py-1.5 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
+                                  autoFocus
+                                />
+                              ) : (
+                                <div className="flex items-center gap-2.5">
+                                  <span className="w-2 h-2 rounded-full flex-shrink-0 bg-[#0085FF]" />
+                                  <span className="text-sm font-semibold text-gray-900">{field.name}</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-xs text-gray-600">
+                                {fieldTypes.find((t) => t.value === field.type)?.label || field.type}
                               </span>
-                            </h4>
-                          </div>
-                          <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-                            <button
-                              type="button"
-                              onClick={() => handleQuickAddToCategory(categoryName)}
-                              className="text-xs font-semibold text-purple-700 hover:text-purple-900 hover:bg-purple-100 flex items-center gap-1 bg-white px-2.5 py-1.5 rounded-lg border border-purple-300 shadow-sm transition-colors whitespace-nowrap"
-                            >
-                              <PlusIcon className="w-4 h-4" /> Add Field
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleEditCategoryStart(categoryName)}
-                              className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-50 flex items-center gap-1 bg-white px-2.5 py-1.5 rounded-lg border border-blue-200 shadow-sm transition-colors"
-                              title="Rename Section"
-                            >
-                              <EditIcon className="w-3 h-3" /> Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteCategory(categoryName)}
-                              className="text-xs font-semibold text-red-600 hover:text-red-800 hover:bg-red-50 flex items-center gap-1 bg-white px-2.5 py-1.5 rounded-lg border border-red-200 shadow-sm transition-colors"
-                              title="Delete Section"
-                            >
-                              <DeleteIcon className="w-4 h-4" /> Delete
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Add min-h so you can drop into empty categories easily */}
-                    <div className="p-4 bg-gray-50/50 space-y-3 min-h-[60px]">
-                      {categoryFields.length === 0 ? (
-                        <p className="text-sm text-gray-500 text-center py-4 italic pointer-events-none">No fields. Drag and drop a field here.</p>
-                      ) : (
-                        categoryFields.map((field) => renderFieldItem(field, fields.findIndex(f => f.name === field.name), true))
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* 2. Uncategorized Fields */}
-              {fields.filter(f => !f.category || f.category === 'Uncategorized').length > 0 && (
-                <div
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => handleDrop(e, "Uncategorized")}
-                  className={`border-2 border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm mt-8 transition-colors ${draggedFieldIndex !== null ? 'border-dashed border-gray-400 bg-gray-50 pb-4' : ''}`}
-                >
-                  <div className="bg-gray-100 px-5 py-4 border-b-2 border-gray-200">
-                    <h4 className="font-bold text-gray-700 text-lg flex items-center gap-2">
-                      Uncategorized Fields
-                    </h4>
-                  </div>
-                  <div className="p-4 bg-gray-50/50 space-y-3 min-h-[60px]">
-                    {fields.filter(f => !f.category || f.category === 'Uncategorized').map((field) =>
-                      renderFieldItem(field, fields.findIndex(f => f.name === field.name), false)
-                    )}
-                  </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {field.required ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#FCEAEA] text-[#EA4B4B]">
+                                  Required
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#EEF2F9] text-[#56698A]">
+                                  Optional
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {isEditing ? (
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={handleUpdate}
+                                    className="flex items-center justify-center w-7 h-7 rounded-full bg-[#0085FF] hover:bg-blue-600 text-white transition-colors"
+                                    title="Save"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditIndex(null)}
+                                    className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 transition-colors"
+                                    title="Cancel"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-end gap-1">
+                                  {category !== "Uncategorized" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveFromCategory(index)}
+                                      className="flex items-center justify-center w-7 h-7 rounded-full text-orange-600 hover:bg-orange-50 transition-colors"
+                                      title="Remove from section"
+                                    >
+                                      <FolderMinus className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEdit(index)}
+                                    className="flex items-center justify-center w-7 h-7 rounded-full text-blue-600 hover:bg-blue-50 transition-colors"
+                                    title="Edit"
+                                  >
+                                    <EditIcon className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDelete(index)}
+                                    className="flex items-center justify-center w-7 h-7 rounded-full text-red-600 hover:bg-red-50 transition-colors"
+                                    title="Delete"
+                                  >
+                                    <DeleteIcon className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </SortableFieldRow>
+                        );
+                      })}
+                      </SortableContext>
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
-          </div>
+            </DroppableSection>
+          ))}
+          <DragOverlay>
+            {activeDragId ? (
+              <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-[#E1E4EA] bg-white shadow-xl">
+                <GripVertical className="w-4 h-4 text-gray-300" />
+                <span className="w-2 h-2 rounded-full flex-shrink-0 bg-[#0085FF]" />
+                <span className="text-sm font-semibold text-gray-900">
+                  {fields.find((f) => (f._id || f.name) === activeDragId)?.name}
+                </span>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+        </>
+        )}
+
+        {activeFieldTab === "builtin" && (
+        <>
+        <div className="overflow-x-auto rounded-xl border border-[#E1E4EA]">
+          <table className="min-w-full border-collapse text-sm text-left">
+            <thead className="bg-[#F5F7FA] border-b border-[#E1E4EA]">
+              <tr>
+                <th className="px-4 py-3 text-sm font-bold text-[#525866]">Field</th>
+                <th className="px-4 py-3 text-sm font-bold text-[#525866]">Type</th>
+                <th className="px-4 py-3 text-sm font-bold text-[#525866]">Required</th>
+                <th className="px-4 py-3 text-sm font-bold text-[#525866] text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white">
+              {BUILT_IN_FIELDS.map((field) => (
+                <tr key={field.name} className="group hover:bg-[#F5F7FA] transition-colors border-b border-[#E1E4EA] last:border-b-0">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-2 h-2 rounded-full flex-shrink-0 bg-gray-300" />
+                      <span className="text-sm font-semibold text-gray-900">{field.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs text-gray-600">{field.type}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {field.required ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#FCEAEA] text-[#EA4B4B]">
+                        Required
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#EEF2F9] text-[#56698A]">
+                        Optional
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="inline-flex items-center gap-1 text-xs text-gray-900">
+                      <Lock className="w-3 h-3" /> System field
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-gray-400 mt-3">
+          These ship with every company form and cannot be edited or removed. Add your own under
+          the Custom tab.
+        </p>
+        </>
         )}
       </div>
 
-      {/* Place this helper function right here, before the Default System Industries block */}
-      {(() => {
-        // This is a neat trick to render a helper function inside JSX!
-        // We do this to avoid having to place it outside the return block.
-        return null;
-      })()}
-
-
-      {/* Default System Industries */}
-      <div className="bg-white rounded-2xl border-2 border-gray-200 shadow-lg p-6 mb-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="bg-amber-100 p-2 rounded-lg">
-            <Tag className="w-5 h-5 text-amber-600" />
-          </div>
-          <h3 className="text-xl font-bold text-gray-900">
-            Default System Industries
-          </h3>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {defaultIndustries.map((industry, index) => (
-            <div
-              key={index}
-              className="border-2 border-gray-200 rounded-xl p-4 bg-gray-50 flex items-center justify-between hover:border-gray-300 transition-all"
-            >
-              <div className="flex items-center gap-3">
-                <div className="bg-blue-100 p-2 rounded-lg">
-                  <Tag className="w-4 h-4 text-blue-600" />
-                </div>
-                <span className="font-semibold text-gray-900">{industry}</span>
-              </div>
-              <span className="text-xs text-gray-500 bg-gray-200 px-3 py-1 rounded-full font-medium">
-                System
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-5 bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-blue-700">
-              These are default system industries available in all company forms.
-              You cannot edit or remove these industries, but you can add custom
-              industries below.
-            </p>
-          </div>
-        </div>
-      </div>
 
       <CompanyIndustrySettings />
 

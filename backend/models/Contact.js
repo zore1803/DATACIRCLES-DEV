@@ -34,6 +34,7 @@ const socialMediaSchema = new mongoose.Schema(
   {
     twitter: { type: String, default: "" },
     linkedin: { type: String, default: "" },
+    instagram: { type: String, default: "" },
     facebook: { type: String, default: "" },
     whatsapp: { type: String, default: "" },
   },

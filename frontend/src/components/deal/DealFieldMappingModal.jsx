@@ -2,6 +2,7 @@ import FieldMappingHelp from "../common/FieldMappingHelp";
 import Checkbox from "../common/Checkbox";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { X } from "lucide-react";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const DealFieldMappingModal = ({
   isOpen: propIsOpen,
@@ -11,6 +12,7 @@ const DealFieldMappingModal = ({
   onImport,
   loading,
 }) => {
+  useBodyScrollLock(propIsOpen);
   const [fieldMapping, setFieldMapping] = useState({});
   const [includeFirstRow, setIncludeFirstRow] = useState(false);
   const [isOpen, setIsOpen] = useState(false);

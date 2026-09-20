@@ -15,6 +15,16 @@ const walletSchema = new mongoose.Schema(
     // Denominated in credits, not rupees. Fractional credits are allowed
     // (usage pricing like 0.20 credits/message).
     balance: { type: Number, required: true, default: 0, min: 0 },
+
+    // Optional low-balance email reminder, set from the Wallet page. Null
+    // threshold means the reminder is off.
+    reminderThreshold: { type: Number, default: null, min: 0 },
+    reminderEmail: { type: String, default: null },
+    // True once the alert has fired for the current dip below threshold, so
+    // it doesn't re-send on every subsequent debit. Reset back to false when
+    // the balance recovers above the threshold (a top-up) so the next dip
+    // alerts again.
+    reminderAlertSent: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

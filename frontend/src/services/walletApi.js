@@ -12,6 +12,9 @@ export const walletAPI = {
   createOrder: (credits) => API.post('/wallet/order', { credits }),
 
   verifyPayment: (data) => API.post('/wallet/verify', data),
+
+  // threshold: number|null (null clears the reminder). email: string.
+  setReminder: (threshold, email) => API.post('/wallet/reminder', { threshold, email }),
 };
 
 export default walletAPI;

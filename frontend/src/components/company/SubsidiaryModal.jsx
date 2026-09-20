@@ -9,6 +9,7 @@ import ConfirmDialog from "../common/ConfirmDialog";
 import Skeleton from "../common/Skeleton";
 
 import SearchIcon from "../common/SearchIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // Same right-slide-in panel chrome as QuickCompanyForm/QuickVendorForm/etc.
 // (dc-panel-card + dc-panel-w, translate-x transition, the uppercase grey
@@ -30,6 +31,8 @@ const SubsidiaryModal = ({ companyId, isOpen, onClose, onSuccess }) => {
   const [panelOpen, setPanelOpen] = useState(false);
 
   const dropdownRef = useRef(null);
+
+  useBodyScrollLock(isOpen);
 
   // Mount immediately but animate the slide-in on the next tick, same
   // pattern every other panel in this app uses (see QuickCompanyForm).
@@ -130,7 +133,7 @@ const SubsidiaryModal = ({ companyId, isOpen, onClose, onSuccess }) => {
       );
 
       setSelectedSubsidiaryId("");
-      setSearchTerm("");
+      setQuery("");
       toast.success("Subsidiary added successfully");
 
       if (onSuccess) onSuccess();

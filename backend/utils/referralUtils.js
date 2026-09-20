@@ -11,6 +11,7 @@ const ReferralCode = require('../models/ReferralCode');
 const Referral = require('../models/Referral');
 const Reward = require('../models/Reward');
 const RewardUsage = require('../models/RewardUsage');
+const ReferralInvite = require('../models/ReferralInvite');
 
 async function generateUniqueReferralCode() {
   let code;
@@ -148,7 +149,7 @@ async function recordReferralIntent(organizationId, code) {
 // Shared by the org-facing "my referrals" endpoint and the Super Admin
 // per-org overview — one query shape, not two copies of the same logic.
 async function buildReferralOverview(organizationId) {
-  const [codes, referralsSent, referredBy, rewards] = await Promise.all([
+  const [codes, referralsSent, referredBy, rewards, program, invitesSent] = await Promise.all([
     ReferralCode.find({ organization: organizationId }).sort({ createdAt: -1 }),
     Referral.find({ referrerOrganization: organizationId })
       .sort({ createdAt: -1 })
@@ -156,6 +157,10 @@ async function buildReferralOverview(organizationId) {
     Referral.findOne({ referredOrganization: organizationId })
       .populate('referrerOrganization', 'name'),
     Reward.find({ organization: organizationId }).sort({ createdAt: -1 }),
+    getOrCreateReferralProgram(organizationId),
+    // Invitation emails sent. Kept separate from referralsSent everywhere —
+    // an invite is not a referral and must never be counted as one.
+    ReferralInvite.find({ organization: organizationId }).sort({ lastSentAt: -1 }),
   ]);
 
   const rewardIds = rewards.map((r) => r._id);
@@ -193,10 +198,22 @@ async function buildReferralOverview(organizationId) {
   return {
     codes,
     referralsSent,
+    invitesSent: invitesSent.map((i) => ({
+      _id: i._id,
+      email: i.email,
+      invitedByName: i.invitedByName,
+      lastSentAt: i.lastSentAt,
+      sendCount: i.sendCount,
+    })),
     referredBy,
     rewards: rewardsWithStatus,
+    program: {
+      rewardType: program.rewardType,
+      rewardValue: program.rewardValue,
+    },
     summary: {
       referralsSent: referralsSent.length,
+      invitesSent: invitesSent.length,
       referralsQualified: referralsSent.filter((r) => r.status === 'qualified').length,
       referralsPending: referralsSent.filter((r) => r.status === 'pending').length,
       rewardsAvailable: rewardsWithStatus.filter((r) => r.status === 'available').length,

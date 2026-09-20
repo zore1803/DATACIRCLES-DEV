@@ -9,6 +9,7 @@ import Papa from "papaparse";
 import API from "../../services/api";
 import PurchaseFieldMappingModal from "./PurchaseFieldMappingModal";
 import UploadIcon from "../common/UploadIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // Same shape/flow as ImportItems.jsx (Products & Services),
 // ImportClients.jsx (Companies) and ImportPurchaseOrders.jsx: drag/drop or
@@ -16,6 +17,7 @@ import UploadIcon from "../common/UploadIcon";
 // columns in a follow-up modal, then POST the mapped rows to the
 // bulk-import endpoint.
 function ImportPurchases({ isOpen: propIsOpen, onClose, onImportSuccess }) {
+  useBodyScrollLock(propIsOpen);
   const [file, setFile] = useState(null);
   const [csvData, setCsvData] = useState([]);
   const [csvHeaders, setCsvHeaders] = useState([]);

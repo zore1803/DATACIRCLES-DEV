@@ -1,5 +1,6 @@
 import Checkbox from "./common/Checkbox";
 import React, { useState, useEffect } from "react";
+import useBodyScrollLock from "../hooks/useBodyScrollLock";
 import {
   X,
   GripVertical,
@@ -125,6 +126,7 @@ const ColumnSettingsPanel = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [localColumns, setLocalColumns] = useState([]);
   const [activeId, setActiveId] = useState(null);
+  useBodyScrollLock(isOpen);
 
   // Configure sensors for drag and drop
   const sensors = useSensors(

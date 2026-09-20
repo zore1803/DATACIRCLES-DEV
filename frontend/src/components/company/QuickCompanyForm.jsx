@@ -1,7 +1,11 @@
 import Checkbox from "../common/Checkbox";
 import React, { useEffect, useState, useRef } from "react";
 import { COUNTRY_DIAL_CODES, DEFAULT_DIAL_CODE } from "../../utils/countryDialCodes";
-import { X, Paperclip, Twitter, Linkedin, Instagram, Facebook } from "lucide-react";
+import { X, Paperclip } from "lucide-react";
+import instagramLogo from "../../assets/insta-logo.png";
+import twitterLogo from "../../assets/twitter-logo.png";
+import linkedinLogo from "../../assets/linkedin-logo.png";
+import facebookLogo from "../../assets/facebook-logo.png";
 import { FaWhatsapp } from "react-icons/fa";
 
 import API from "../../services/api";
@@ -10,6 +14,7 @@ import { lookupIndianPincode } from "../../utils/pincodeUtils";
 import toast from "react-hot-toast";
 import { Country, State } from "country-state-city";
 import { loadCityModule, useLazyCity } from "../../utils/lazyCityData";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // India first (GST is India-driven), then every other country alphabetically —
 // full list/state data from country-state-city instead of a hand-maintained one.
@@ -97,6 +102,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
   // show the actual image instead of just its filename. Revoked whenever the
   // selection changes or the form unmounts, since object URLs otherwise leak.
   const [profilePicturePreview, setProfilePicturePreview] = useState(null);
+  useBodyScrollLock(isOpen);
   useEffect(() => {
     if (!form.profilePicture) {
       setProfilePicturePreview(null);
@@ -926,9 +932,10 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                   onChange={(e) =>
                     handleFormChange("whatsappNumber", {
                       countryCode: form.whatsappNumber?.countryCode || DEFAULT_DIAL_CODE,
-                      number: e.target.value.replace(/[^0-9]/g, ""),
+                      number: e.target.value.replace(/[^0-9]/g, "").slice(0, 10),
                     })
                   }
+                  maxLength={10}
                   className="flex-1 min-w-0 border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
                   placeholder="1234567890"
                 />
@@ -1004,29 +1011,50 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
               + Add another shipping address
             </button>
 
+            {/* Grouped by the field's category, so a section created in Settings > Company Fields
+                actually appears as its own headed group here. Previously every custom field was
+                rendered in one flat "Custom Fields" block and `category` was ignored, so sections
+                only ever showed on the company detail view (CompanyDetails.jsx), never on this
+                form. Same ordering rule as there: named sections A-Z, Uncategorized last. */}
             {fieldDefinitions.length > 0 && (
               <div className="pt-4 space-y-4">
-                <div className="flex items-center gap-3">
-                  <span className="flex-1 h-px bg-[#D9D9D9]" />
-                  <h3 className="flex-shrink-0 text-[14px] font-medium leading-[120%] text-[#1F2937]">
-                    Custom Fields
-                  </h3>
-                  <span className="flex-1 h-px bg-[#D9D9D9]" />
-                </div>
-                {fieldDefinitions.map((fieldDef) => (
-                  <div key={fieldDef.name} ref={(el) => (customFieldRefs.current[fieldDef.name] = el)}>
-                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                      {fieldDef.name} {fieldDef.required && <span className="text-[#FF4935]">*</span>}
-                    </label>
-                    {renderFieldInput(
-                      fieldDef,
-                      additionalFields[fieldDef.name]
-                    )}
-                    {additionalFieldErrors[fieldDef.name] && (
-                      <p className="mt-1 text-xs text-red-600">{additionalFieldErrors[fieldDef.name]}</p>
-                    )}
-                  </div>
-                ))}
+                {Object.entries(
+                  fieldDefinitions.reduce((acc, fieldDef) => {
+                    const cat = fieldDef.category || "Uncategorized";
+                    (acc[cat] = acc[cat] || []).push(fieldDef);
+                    return acc;
+                  }, {})
+                )
+                  .sort(([a], [b]) => {
+                    if (a === "Uncategorized") return 1;
+                    if (b === "Uncategorized") return -1;
+                    return a.localeCompare(b);
+                  })
+                  .map(([category, catFields]) => (
+                    <div key={category} className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <span className="flex-1 h-px bg-[#D9D9D9]" />
+                        <h3 className="flex-shrink-0 text-[14px] font-medium leading-[120%] text-[#1F2937]">
+                          {category === "Uncategorized" ? "Custom Fields" : category}
+                        </h3>
+                        <span className="flex-1 h-px bg-[#D9D9D9]" />
+                      </div>
+                      {catFields.map((fieldDef) => (
+                        <div key={fieldDef.name} ref={(el) => (customFieldRefs.current[fieldDef.name] = el)}>
+                          <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
+                            {fieldDef.name} {fieldDef.required && <span className="text-[#FF4935]">*</span>}
+                          </label>
+                          {renderFieldInput(
+                            fieldDef,
+                            additionalFields[fieldDef.name]
+                          )}
+                          {additionalFieldErrors[fieldDef.name] && (
+                            <p className="mt-1 text-xs text-red-600">{additionalFieldErrors[fieldDef.name]}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
               </div>
             )}
 
@@ -1095,8 +1123,13 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
               <div className="space-y-3">
                 <div>
                   <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center">
-                      <Twitter className="w-[18px] h-[18px]" strokeWidth={2} />
+                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
+                      <img
+                        src={twitterLogo}
+                        alt=""
+                        className="w-[18px] h-[18px] object-contain"
+                        style={{ transform: "scale(1.56)" }}
+                      />
                     </span>
                     X (Twitter)
                   </label>
@@ -1110,8 +1143,13 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                 </div>
                 <div>
                   <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center">
-                      <Linkedin className="w-[18px] h-[18px]" strokeWidth={2} />
+                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
+                      <img
+                        src={linkedinLogo}
+                        alt=""
+                        className="w-[18px] h-[18px] object-contain"
+                        style={{ transform: "scale(1.5)" }}
+                      />
                     </span>
                     LinkedIn
                   </label>
@@ -1125,8 +1163,13 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                 </div>
                 <div>
                   <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center">
-                      <Instagram className="w-[18px] h-[18px]" strokeWidth={2} />
+                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
+                      <img
+                        src={instagramLogo}
+                        alt=""
+                        className="w-[18px] h-[18px] object-contain"
+                        style={{ transform: "scale(1.4)" }}
+                      />
                     </span>
                     Instagram
                   </label>
@@ -1140,8 +1183,13 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                 </div>
                 <div>
                   <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center">
-                      <Facebook className="w-[18px] h-[18px]" strokeWidth={2} />
+                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
+                      <img
+                        src={facebookLogo}
+                        alt=""
+                        className="w-[18px] h-[18px] object-contain"
+                        style={{ transform: "scale(1.21)" }}
+                      />
                     </span>
                     Facebook
                   </label>

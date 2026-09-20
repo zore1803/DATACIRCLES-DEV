@@ -2334,6 +2334,14 @@ exports.updateSubscription = async (req, res) => {
       // old link may already be expired, cancelled, or (rarely) mid-payment
       // on Razorpay's side, none of which should block this attempt.
       if (subscription.registrationLinkId && subscription.mandateStatus === 'pending') {
+        // Keep the id before it is overwritten below - cancelling a link does not undo a payment
+        // already made against it, and reconcilePayment needs somewhere to look for that money.
+        if (!subscription.priorRegistrationLinkIds?.includes(subscription.registrationLinkId)) {
+          subscription.priorRegistrationLinkIds = [
+            ...(subscription.priorRegistrationLinkIds || []),
+            subscription.registrationLinkId,
+          ];
+        }
         try {
           await razorpay.invoices.cancel(subscription.registrationLinkId);
         } catch (cancelErr) {
@@ -5635,6 +5643,107 @@ exports.getPaymentDetails = async (req, res) => {
 };
 
 // Client-side payment verification endpoint
+/**
+ * Asks Razorpay what actually happened to a pending first payment, instead of waiting to be told.
+ *
+ * Until now a first payment was only ever recognised two ways: the browser posting back to
+ * verifyPayment, or the webhook arriving. Both can be missed - closing the checkout tab kills the
+ * first (observed live: payment captured at Razorpay, app still "pending"), and a webhook can be
+ * undelivered, delayed, or not configured for the environment at all. With neither, the app showed
+ * the subscription as unpaid and "Resume Payment" would open a SECOND checkout for money already
+ * taken.
+ *
+ * Any captured payment found is replayed through the SAME handler the webhook uses
+ * (handleCAWPaymentCaptured), so settlement, activation, invoices and billing events all run
+ * through one code path rather than a second near-copy that can drift. recordWebhookEventOnce
+ * dedupes on a synthetic event id, so this is safe to call repeatedly and safe whether the real
+ * webhook lands before, during or after it.
+ *
+ * Read-only when there is nothing to reconcile. Shared by the HTTP endpoint below and the
+ * pendingPaymentSweep job (jobs/paymentReconciliationJobs.js).
+ *
+ * @returns {Promise<{reconciled: boolean, reason?: string, paymentId?: string, status?: string,
+ *   isPaymentConfirmed?: boolean, linkStatus?: string|null}>}
+ */
+async function reconcileSubscriptionPayment(subscription) {
+  if (!subscription) return { reconciled: false, reason: "no_subscription" };
+
+  if (subscription.isPaymentConfirmed) {
+    return { reconciled: false, reason: "already_confirmed", status: subscription.paymentStatus, isPaymentConfirmed: true };
+  }
+
+  // Newest attempt first, then any superseded ones: a customer who paid, closed the tab and hit
+  // Resume has their money sitting against a link that is no longer subscription.registrationLinkId.
+  const linkIds = [
+    subscription.registrationLinkId,
+    ...[...(subscription.priorRegistrationLinkIds || [])].reverse(),
+  ].filter(Boolean);
+
+  if (!linkIds.length) {
+    return { reconciled: false, reason: "no_pending_attempt", status: subscription.paymentStatus };
+  }
+
+  // A registration link IS a Razorpay invoice: once paid it carries the payment's id, so this is
+  // two direct fetches by id rather than listing and filtering every payment on the account.
+  let captured = null;
+  let lastLinkStatus = null;
+
+  for (const candidateId of linkIds) {
+    const invoice = await razorpay.invoices.fetch(candidateId).catch((err) => {
+      console.error("reconcileSubscriptionPayment: could not fetch registration link", candidateId, err?.message);
+      return null;
+    });
+    lastLinkStatus = invoice?.status || lastLinkStatus;
+    if (!invoice?.payment_id) continue;
+
+    const payment = await razorpay.payments.fetch(invoice.payment_id).catch((err) => {
+      console.error("reconcileSubscriptionPayment: could not fetch payment", invoice.payment_id, err?.message);
+      return null;
+    });
+
+    // Only a captured payment is money actually taken - "authorized" is not.
+    if (payment?.status === "captured") {
+      captured = payment;
+      break;
+    }
+  }
+
+  if (!captured) {
+    return { reconciled: false, reason: "not_paid_yet", linkStatus: lastLinkStatus, status: subscription.paymentStatus };
+  }
+
+  // Synthetic event id, namespaced so it can never collide with a real Razorpay event id and so
+  // the dedupe index makes replays idempotent.
+  await handleCAWPaymentCaptured(captured, `recon_${captured.id}`);
+
+  const refreshed = await Subscription.findById(subscription._id);
+  return {
+    reconciled: true,
+    paymentId: captured.id,
+    status: refreshed?.paymentStatus,
+    isPaymentConfirmed: !!refreshed?.isPaymentConfirmed,
+  };
+}
+exports.reconcileSubscriptionPayment = reconcileSubscriptionPayment;
+
+/**
+ * POST /api/subscription/reconcile-payment - HTTP wrapper around the helper above.
+ */
+exports.reconcilePayment = async (req, res) => {
+  try {
+    const subscription = await Subscription.findOne({ organization: req.user.organization });
+    if (!subscription) {
+      return res.status(404).json({ error: "Subscription not found", success: false });
+    }
+
+    const result = await reconcileSubscriptionPayment(subscription);
+    res.json({ success: true, ...result, alreadyConfirmed: result.reason === "already_confirmed" });
+  } catch (error) {
+    console.error("reconcilePayment error:", error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+};
+
 exports.verifyPayment = async (req, res) => {
   try {
     const { razorpay_payment_id, razorpay_subscription_id, razorpay_signature } = req.body;
@@ -6121,7 +6230,26 @@ exports.sendReferralEmail = async (req, res) => {
     const html = generateReferralEmailHTML(referralLink, org?.name || '', senderName, message?.trim() || '');
     await sendGridMail({ to: email.trim(), subject: `${senderName} thinks DataCircles could help your team`, html });
 
-    res.json({ success: true });
+    // Logged only AFTER the mail actually went out, so the list never
+    // claims an invite SendGrid rejected. Still not a Referral — see
+    // models/ReferralInvite.js.
+    const ReferralInvite = require('../models/ReferralInvite');
+    const invite = await ReferralInvite.findOneAndUpdate(
+      { organization: req.user.organization, email: email.trim().toLowerCase() },
+      {
+        $set: {
+          invitedBy: req.user._id || req.user.id,
+          invitedByName: senderName,
+          referralCode: referralCode._id,
+          lastSentAt: new Date(),
+        },
+        $inc: { sendCount: 1 },
+        $setOnInsert: { organization: req.user.organization, email: email.trim().toLowerCase() },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: false }
+    );
+
+    res.json({ success: true, invite: { _id: invite._id, email: invite.email, lastSentAt: invite.lastSentAt, sendCount: invite.sendCount } });
   } catch (error) {
     console.error('sendReferralEmail error:', error);
     res.status(500).json({ error: error.message });

@@ -23,6 +23,7 @@ import TableSkeletonRows from "../components/common/TableSkeletonRows";
 import { useTopLoadingSignal } from "../components/common/TopLoadingBar";
 import { getAncestorZoom } from "../utils/domUtils";
 import { useColumnSettings } from "../hooks/useColumnSettings";
+import useBodyScrollLock from "../hooks/useBodyScrollLock";
 import ColumnSettingsPanel from "../components/ColumnSettingsPanel";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
 import PageSkeleton from "../components/common/PageSkeleton";
@@ -250,6 +251,7 @@ export default function Inventory() {
   // this drawer is how the variant detail is reached.
   const [breakdownItem, setBreakdownItem] = useState(null);
   const [historyFor, setHistoryFor] = useState(null);
+  useBodyScrollLock(!!historyFor);
   const [movements, setMovements] = useState([]);
   const [movementsLoading, setMovementsLoading] = useState(false);
 

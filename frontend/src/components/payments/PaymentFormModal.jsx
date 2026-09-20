@@ -4,8 +4,10 @@ import API from "../../services/api";
 import toast from "react-hot-toast";
 import BankLogo from "../BankLogo";
 import PaymentAllocationPanel from "./PaymentAllocationPanel";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
+  useBodyScrollLock(isOpen);
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [banks, setBanks] = useState([]);

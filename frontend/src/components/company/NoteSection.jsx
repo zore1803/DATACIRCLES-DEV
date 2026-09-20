@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import AppToaster from "../AppToaster";
 import { useSystemSettings } from "../../hooks/useSystemSettings";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 
 import SearchIcon from "../common/SearchIcon";
@@ -447,6 +448,8 @@ const quillFormats = [
 export const NoteViewer = ({ isOpen, onClose, note, onEdit, onDelete }) => {
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
+
+  useBodyScrollLock(isOpen);
 
   useEffect(() => {
     if (isOpen) {
@@ -1198,6 +1201,8 @@ export const NoteEditor = ({
   const handleDropdownOpenChange = useCallback((open) => {
     setOpenDropdowns((n) => Math.max(0, n + (open ? 1 : -1)));
   }, []);
+
+  useBodyScrollLock(isOpen);
 
   useEffect(() => {
     if (isOpen) {

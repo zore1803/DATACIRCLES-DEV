@@ -20,6 +20,7 @@ import {
 } from "../../../../shared/documentTemplates.js";
 import SignatureModal from "../settings/SignatureModal";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 /*
  * Right-hand drawer that gathers everything that governs how a document type
@@ -148,6 +149,7 @@ const TemplatePreviewCard = ({
 };
 
 const TemplateDrawer = ({ isOpen, onClose, type = "tax", docLabel = "Invoice" }) => {
+  useBodyScrollLock(isOpen);
   const [tab, setTab] = useState("template");
   const [templates, setTemplates] = useState(null);
   const [orgDetails, setOrgDetails] = useState(null);

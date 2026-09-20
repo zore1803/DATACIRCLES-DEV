@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import ReactQuill from "react-quill-new";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // Standard Indian GST slabs, matching the per-item select used on
 // document forms (e.g. InvoiceForm.jsx).
@@ -28,6 +29,7 @@ const ItemForm = ({
   onRequestClose,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  useBodyScrollLock(isOpen);
   const [variants, setVariants] = useState(form.variants || []);
   const [showVariantForm, setShowVariantForm] = useState(false);
   // Blank variant. The override fields (barcode/description/discount/maxDiscountPercent/

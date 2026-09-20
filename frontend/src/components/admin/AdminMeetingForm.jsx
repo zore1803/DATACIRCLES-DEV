@@ -46,6 +46,7 @@ import {
 import TeamIcon from "../common/TeamIcon";
 import ListIcon from "../common/ListIcon";
 import EditIcon from "../common/EditIcon";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // Same toolbar/editor system used by the Notes feature (NoteSection.jsx),
 // reused here so the meeting Description field gets the same rich-text
@@ -582,6 +583,7 @@ const AdminMeetingForm = ({
   dealName = "",
 }) => {
   const [form, setForm] = useState(initialState);
+  useBodyScrollLock(open);
   // Org's MeetingFields definitions — drives the Custom Fields section below.
   const [meetingFieldDefs, setMeetingFieldDefs] = useState([]);
   const { meetingTypes } = useSystemSettings();

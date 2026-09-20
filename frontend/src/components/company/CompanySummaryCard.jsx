@@ -47,6 +47,7 @@ export default function CompanySummaryCard({ company }) {
         { label: "WhatsApp Number", value: formatWhatsapp(company.whatsappNumber) },
         { label: "LinkedIn", value: company.socialMedia?.linkedin },
         { label: "Twitter / X", value: company.socialMedia?.twitter },
+        { label: "Instagram", value: company.socialMedia?.instagram },
         { label: "Facebook", value: company.socialMedia?.facebook },
         { label: "Billing Address", value: formatAddress(company.billingAddress) || company.address },
         ...customFields.map((f) => ({ label: f.key, value: f.value != null ? String(f.value) : "" })),

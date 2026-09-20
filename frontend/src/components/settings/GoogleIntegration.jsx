@@ -142,7 +142,8 @@ function GoogleIntegration() {
                 <button
                   onClick={handleConnect}
                   disabled={connecting}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors flex items-center gap-2 shadow-sm"
+                  style={{ backgroundColor: "#0085FF" }}
+                  className="hover:opacity-90 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors flex items-center gap-2 shadow-sm"
                 >
                   <GoogleGIcon className="w-4 h-4" />
                   {connecting ? "Redirecting…" : "Connect Google Account"}
