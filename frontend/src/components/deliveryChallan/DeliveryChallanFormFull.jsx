@@ -22,6 +22,7 @@ import { AddressFieldsGroup, emptyAddress, isAddressEmpty, SectionHeader } from 
 import AddressBookDrawer from "../invoice/AddressBookDrawer";
 import BankSelect from "../invoice/BankSelect";
 import NotesTermsDrawer from "../invoice/NotesTermsDrawer";
+import { resolveTransactionType, placeOfSupplyFields } from "../../utils/placeOfSupply";
 import EditIcon from "../common/EditIcon";
 import QuickDealForm from "../deal/QuickDealForm";
 import SearchableDropdown from "../contact/SearchableDropdown";
@@ -1065,16 +1066,20 @@ const DeliveryChallanFormFull = ({
       company && !isAddressEmpty(company.shippingAddresses?.[0])
         ? { ...emptyAddress(), ...company.shippingAddresses[0] }
         : emptyAddress();
-    const customerState = (company?.billingAddress?.state || '').trim().toLowerCase();
-    const autoType = (sellerState && customerState && sellerState !== customerState) ? 'inter' : 'intra';
-    setForm((prev) => ({
-      ...prev,
-      deal: value,
-      receiverGSTIN: company?.gstin || "",
-      billingAddress: nextBilling,
-      shippingAddress: prev.sameAsBilling ? nextBilling : nextShipping,
-      transactionType: autoType,
-    }));
+    setForm((prev) => {
+      const shipping = prev.sameAsBilling ? nextBilling : nextShipping;
+      // Goods: place of supply is where they ship to, so the tax type follows
+      // the shipping address, not billing.
+      const autoType = resolveTransactionType(sellerState, shipping, nextBilling);
+      return {
+        ...prev,
+        deal: value,
+        receiverGSTIN: company?.gstin || "",
+        billingAddress: nextBilling,
+        shippingAddress: shipping,
+        transactionType: autoType || prev.transactionType,
+      };
+    });
     if (markDirty) setHasUnsavedChanges(true);
   };
 
@@ -1232,6 +1237,9 @@ const DeliveryChallanFormFull = ({
           taxInclusive: !!item.taxInclusive,
         })),
         transactionType: form.transactionType,
+        // Resolved now and stored, so reopening never re-derives it from a
+        // customer address that has changed since.
+        ...placeOfSupplyFields(form.shippingAddress, form.billingAddress),
       };
 
       if (editingDeliveryChallan) {
@@ -1713,10 +1721,15 @@ const DeliveryChallanFormFull = ({
                       setForm((prev) => {
                         const nowSame = !prev.sameAsBilling;
                         setHasUnsavedChanges(true);
+                        // Shipping drives the place of supply, so mirroring (or
+                        // un-mirroring) billing can change CGST/SGST vs IGST.
+                        const shipping = nowSame ? prev.billingAddress : prev.shippingAddress;
+                        const autoType = resolveTransactionType(sellerState, shipping, prev.billingAddress);
                         return {
                           ...prev,
                           sameAsBilling: nowSame,
-                          shippingAddress: nowSame ? prev.billingAddress : prev.shippingAddress,
+                          shippingAddress: shipping,
+                          transactionType: autoType || prev.transactionType,
                         };
                       })
                     }
@@ -1742,14 +1755,16 @@ const DeliveryChallanFormFull = ({
                   onUseSaved={() => setAddressDrawer("billing")}
                   onChange={(next) => {
                     // Editing the billing state re-checks same-state vs other-state too.
-                    const customerState = (next.state || "").trim().toLowerCase();
-                    const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
-                    setForm((prev) => ({
-                      ...prev,
-                      billingAddress: next,
-                      shippingAddress: prev.sameAsBilling ? next : prev.shippingAddress,
-                      transactionType: customerState ? autoType : prev.transactionType,
-                    }));
+                    setForm((prev) => {
+                      const shipping = prev.sameAsBilling ? next : prev.shippingAddress;
+                      const autoType = resolveTransactionType(sellerState, shipping, next);
+                      return {
+                        ...prev,
+                        billingAddress: next,
+                        shippingAddress: shipping,
+                        transactionType: autoType || prev.transactionType,
+                      };
+                    });
                     setHasUnsavedChanges(true);
                   }}
                 />
@@ -1759,7 +1774,14 @@ const DeliveryChallanFormFull = ({
                   disabled={!!form.sameAsBilling}
                   onUseSaved={() => setAddressDrawer("shipping")}
                   onChange={(next) => {
-                    setForm((prev) => ({ ...prev, shippingAddress: next }));
+                    setForm((prev) => {
+                      const autoType = resolveTransactionType(sellerState, next, prev.billingAddress);
+                      return {
+                        ...prev,
+                        shippingAddress: next,
+                        transactionType: autoType || prev.transactionType,
+                      };
+                    });
                     setHasUnsavedChanges(true);
                   }}
                 />
@@ -1797,18 +1819,20 @@ const DeliveryChallanFormFull = ({
               onClose={() => setAddressDrawer(null)}
               currentAddress={addressDrawer === "billing" ? form.billingAddress : form.shippingAddress}
               onApply={(next) => {
-                if (addressDrawer === "billing") {
-                  const customerState = (next.state || "").trim().toLowerCase();
-                  const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
-                  setForm((prev) => ({
+                setForm((prev) => {
+                  const billing = addressDrawer === "billing" ? next : prev.billingAddress;
+                  const shipping =
+                    addressDrawer === "billing"
+                      ? (prev.sameAsBilling ? next : prev.shippingAddress)
+                      : next;
+                  const autoType = resolveTransactionType(sellerState, shipping, billing);
+                  return {
                     ...prev,
-                    billingAddress: next,
-                    shippingAddress: prev.sameAsBilling ? next : prev.shippingAddress,
-                    transactionType: customerState ? autoType : prev.transactionType,
-                  }));
-                } else {
-                  setForm((prev) => ({ ...prev, shippingAddress: next }));
-                }
+                    billingAddress: billing,
+                    shippingAddress: shipping,
+                    transactionType: autoType || prev.transactionType,
+                  };
+                });
                 setHasUnsavedChanges(true);
               }}
             />

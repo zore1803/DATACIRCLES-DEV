@@ -58,6 +58,8 @@ exports.createDeliveryChallan = async (req, res) => {
       bankDetails,
       isRoundOff,
       transactionType,
+      placeOfSupply,
+      placeOfSupplyStateCode,
       receiverGSTIN,
       billingAddress,
       shippingAddress,
@@ -155,6 +157,10 @@ exports.createDeliveryChallan = async (req, res) => {
       ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
       // Tax data, same shape as an invoice (see models/deliveryChallan.js).
       transactionType: transactionType === "inter" ? "inter" : "intra",
+      // Resolved on the form from the shipping address and stored as sent, so the
+      // saved document keeps the place of supply it was issued with.
+      placeOfSupply: placeOfSupply || '',
+      placeOfSupplyStateCode: placeOfSupplyStateCode || '',
       receiverGSTIN: receiverGSTIN || "",
       billingAddress: finalBillingAddress,
       shippingAddress: finalShippingAddress,
@@ -241,6 +247,8 @@ exports.duplicateDeliveryChallan = async (req, res) => {
       discount: source.discount,
       bankDetails: source.bankDetails || null,
       isRoundOff: source.isRoundOff,
+      placeOfSupply: source.placeOfSupply,
+      placeOfSupplyStateCode: source.placeOfSupplyStateCode,
       transactionType: source.transactionType || "intra",
       receiverGSTIN: source.receiverGSTIN || "",
       billingAddress: source.billingAddress,
@@ -479,6 +487,8 @@ exports.updateDeliveryChallan = async (req, res) => {
       bankDetails,
       isRoundOff,
       transactionType,
+      placeOfSupply,
+      placeOfSupplyStateCode,
       receiverGSTIN,
       billingAddress,
       shippingAddress,
@@ -555,6 +565,8 @@ exports.updateDeliveryChallan = async (req, res) => {
         ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
         // Only written when sent, so an update without tax fields leaves them unchanged.
         ...(transactionType !== undefined && { transactionType: transactionType === "inter" ? "inter" : "intra" }),
+        ...(placeOfSupply !== undefined && { placeOfSupply }),
+        ...(placeOfSupplyStateCode !== undefined && { placeOfSupplyStateCode }),
         ...(receiverGSTIN !== undefined && { receiverGSTIN: receiverGSTIN || "" }),
         billingAddress: finalBillingAddress,
         shippingAddress: finalShippingAddress,

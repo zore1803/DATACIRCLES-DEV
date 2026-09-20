@@ -38,11 +38,9 @@ const InvoiceLivePreview = ({
     // Place of supply is not part of form state -- it is resolved from the
     // shipping address when the document is saved. Derive it here too, from the
     // same addresses, so the preview shows what the saved PDF will print
-    // instead of a dash. Invoice ("tax") only for now: the other three models
-    // don't store it, and a preview showing it would then disagree with their
-    // saved PDF.
+    // instead of a dash. All four document types store it.
     const doc = { ...form };
-    if (type === "tax" && !doc.placeOfSupply) {
+    if (!doc.placeOfSupply) {
       Object.assign(doc, placeOfSupplyFields(form?.shippingAddress, form?.billingAddress));
     }
 

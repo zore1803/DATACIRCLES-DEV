@@ -327,6 +327,10 @@ const duplicateInvoice = async (req, res) => {
       receiverGSTIN: source.receiverGSTIN,
       billingAddress: source.billingAddress,
       shippingAddress: source.shippingAddress,
+      // A converted invoice inherits the source document's place of supply;
+      // the form re-resolves it from the addresses if the user changes them.
+      placeOfSupply: source.placeOfSupply,
+      placeOfSupplyStateCode: source.placeOfSupplyStateCode,
       transactionType: source.transactionType,
       invoiceNumber: newInvoiceNumber,
       user: req.user.id,

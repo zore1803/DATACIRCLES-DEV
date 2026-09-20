@@ -943,11 +943,9 @@ const CreateInvoicePanel = ({
         status: statusValue,
         transactionType: form.transactionType,
         // Resolved now and stored, so reopening never re-derives it from a
-        // customer address that has changed since. Invoice ("tax") only for now --
-        // the other three document models don't carry these fields yet.
-        ...(type === "tax"
-          ? placeOfSupplyFields(form.shippingAddress, form.billingAddress)
-          : {}),
+        // customer address that has changed since. All four document models
+        // carry these fields.
+        ...placeOfSupplyFields(form.shippingAddress, form.billingAddress),
         discount: form.discount,
         isRoundOff: form.isRoundOff,
         notes: form.notes,
@@ -1093,9 +1091,7 @@ const CreateInvoicePanel = ({
         ...form,
         // Same derivation the live preview and the save payload use, so an
         // unsaved document prints the place of supply rather than a dash.
-        ...(type === "tax"
-          ? placeOfSupplyFields(form.shippingAddress, form.billingAddress)
-          : {}),
+        ...placeOfSupplyFields(form.shippingAddress, form.billingAddress),
       },
       {
         type,
