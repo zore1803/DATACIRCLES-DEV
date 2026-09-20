@@ -1844,6 +1844,11 @@ const CreateInvoicePanel = ({
               </div>
             </div>
 
+            {/* The items section owns sectionNo.items; without this header that
+                number was allocated but never shown, leaving a gap in the
+                sidebar's 01..09 sequence. */}
+            <SectionHeader number={sectionNo.items} title={`${docName} Items`} />
+
             {/* Quick-add bar */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-3 mb-4 bg-blue-50/60 border border-blue-100 rounded-xl">
               {/* Inline search — no dropdown component, just a plain input */}

@@ -21,7 +21,8 @@ import QuickItemDrawer from "../item/QuickItemDrawer";
 import TemplateDrawer from "./TemplateDrawer";
 import BankSelect from "./BankSelect";
 import { AddressFieldsGroup, emptyAddress, isAddressEmpty, SectionHeader } from "../invoice/formPrimitives";
-import AddressBookDrawer from "./AddressBookDrawer";
+import AddressBookDrawer from "./AddressBookDrawer";
+import NotesTermsDrawer from "./NotesTermsDrawer";
 import EditIcon from "../common/EditIcon";
 import { resolveTransactionType, placeOfSupplyFields } from "../../utils/placeOfSupply";
 import QuickDealForm from "../deal/QuickDealForm";
@@ -465,6 +466,10 @@ const InvoiceFormFull = ({
   // "billing" | "shipping" | null — which field group opened the saved
   // address book (AddressBookDrawer).
   const [addressDrawer, setAddressDrawer] = useState(null);
+  // Saved Notes/Terms library — the same drawer, the same DocumentFooterTemplate
+  // store the split view and Settings use, so a block created in any of the three
+  // is immediately available in the other two.
+  const [notesDrawer, setNotesDrawer] = useState(null); // null | "notes" | "terms"
   // Renaming a saved document's number, same flow as the split-view panel:
   // the prefix stays fixed and only the numeric part is editable.
   const [docNumber, setDocNumber] = useState(editingInvoice?.invoiceNumber || "");
@@ -1466,7 +1471,7 @@ const InvoiceFormFull = ({
           isSliding ? "translate-y-0" : "translate-y-full"
         }`}
       >
-        <form onSubmit={handleSubmit} noValidate className="h-full flex flex-col bg-[#F8F9FA] w-full min-h-screen">
+        <form onSubmit={handleSubmit} noValidate className="h-full flex flex-col bg-white w-full min-h-screen font-inter">
           {/* Section 1: Header */}
           <div className="flex justify-between items-center px-6 py-4 bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
             <div className="flex items-center gap-6">
@@ -1484,7 +1489,7 @@ const InvoiceFormFull = ({
                   <div className="flex flex-col">
                     {numberDraft === null ? (
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <h2 className="text-xl font-bold text-slate-900 truncate">
+                        <h2 className="text-xl font-medium text-[#1F2937] truncate">
                           {docNumber || "Edit Invoice"}
                         </h2>
                         {docNumber && (
@@ -1502,7 +1507,7 @@ const InvoiceFormFull = ({
                     ) : (
                       <div className="flex items-center gap-1 min-w-0">
                         <div className="flex items-center h-9 pl-2.5 pr-1 border border-gray-300 rounded-lg focus-within:border-[#0085FF] min-w-0">
-                          <span className="text-xl font-bold text-gray-400 flex-shrink-0">
+                          <span className="text-xl font-medium text-[#99A0AE] flex-shrink-0">
                             {numberPrefix}
                           </span>
                           <input
@@ -1514,7 +1519,7 @@ const InvoiceFormFull = ({
                               if (e.key === "Enter") saveDocNumber();
                               if (e.key === "Escape") setNumberDraft(null);
                             }}
-                            className="w-28 min-w-0 px-1 text-xl font-bold text-slate-900 outline-none bg-transparent"
+                            className="w-28 min-w-0 px-1 text-xl font-medium text-[#1F2937] outline-none bg-transparent"
                           />
                         </div>
                         <button
@@ -1538,7 +1543,7 @@ const InvoiceFormFull = ({
                 ) : (
                   <>
                     <div className="flex flex-col">
-                      <h2 className="text-xl font-bold text-slate-900 flex items-center gap-1 cursor-pointer">
+                      <h2 className="text-xl font-medium text-[#1F2937] flex items-center gap-1 cursor-pointer">
                         Create Invoice <ChevronDown className="w-5 h-5 text-gray-400" />
                       </h2>
                     </div>
@@ -1648,15 +1653,18 @@ const InvoiceFormFull = ({
             </div>
           </div>
 
-          <div className="p-6 space-y-6 flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto">
             {/* Section 2: Customer Details Card */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white px-8 py-6 border-b border-[#E9E9EC]">
+              <div className="mb-5">
+                <SectionHeader number="01" title="Invoice Details" />
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                 
                 {/* Select Customer */}
                 <div className="md:col-span-4 space-y-2">
                   <div className="flex justify-between items-center">
-                    <label className="text-sm font-semibold text-gray-700">Select Deal</label>
+                    <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Select Deal</label>
                     <button
                       type="button"
                       onClick={() => setShowQuickDealForm(true)}
@@ -1685,7 +1693,7 @@ const InvoiceFormFull = ({
 
                 {/* Invoice Date */}
                 <div className="md:col-span-2 space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Document Date</label>
+                  <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Document Date</label>
                   <div className="relative">
                     <input
                       ref={dateInputRef}
@@ -1716,7 +1724,7 @@ const InvoiceFormFull = ({
                 {/* Validity */}
                 <div className="md:col-span-3 space-y-2">
                   <div className="flex items-center gap-1">
-                    <label className="text-sm font-semibold text-gray-700">Due Date</label>
+                    <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Due Date</label>
                   </div>
                   <div className="relative">
                     <input
@@ -1753,7 +1761,7 @@ const InvoiceFormFull = ({
                 {/* Reference */}
                 <div className="md:col-span-3 space-y-2">
                   <div className="flex items-center gap-1">
-                    <label className="text-sm font-semibold text-gray-700">Reference</label>
+                    <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Reference</label>
                   </div>
                   <input
                     type="text"
@@ -1774,9 +1782,9 @@ const InvoiceFormFull = ({
                 split-view Invoice panel's address section (AddressFieldsGroup
                 from formPrimitives.jsx), so invoices round-trip these the
                 same way invoices do. ── */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white px-8 py-6 border-b border-[#E9E9EC]">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-slate-800">Billing & Shipping Address</h3>
+                <SectionHeader number="02" title="Billing & Shipping Address" />
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -1854,6 +1862,26 @@ const InvoiceFormFull = ({
               </div>
             </div>
 
+            {/* Applying copies the chosen block's text into this invoice. The
+                invoice keeps that snapshot: editing it here never writes back to
+                the saved template, and a later change to the template never
+                rewrites an invoice already issued. */}
+            <NotesTermsDrawer
+              isOpen={notesDrawer !== null}
+              focus={notesDrawer || "notes"}
+              onClose={() => setNotesDrawer(null)}
+              type="tax"
+              docName="Invoice"
+              onApplyNotes={(v) => {
+                setForm((prev) => ({ ...prev, notes: v }));
+                setHasUnsavedChanges(true);
+              }}
+              onApplyTerms={(v) => {
+                setForm((prev) => ({ ...prev, terms: v }));
+                setHasUnsavedChanges(true);
+              }}
+            />
+
             <AddressBookDrawer
               isOpen={addressDrawer !== null}
               onClose={() => setAddressDrawer(null)}
@@ -1878,10 +1906,10 @@ const InvoiceFormFull = ({
             />
 
             {/* ── Section 3: Products & Services ── */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white px-8 py-6 border-b border-[#E9E9EC]">
               <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-slate-800">Products & Services</h3>
+                  <SectionHeader number="03" title="Products & Services" />
                   <button
                     type="button"
                     onClick={handleOpenItemForm}
@@ -2134,12 +2162,22 @@ const InvoiceFormFull = ({
                 (InvoiceForm.jsx's CreateInvoicePanel) instead of the old
                 collapsible accordions with a decorative, non-functional
                 "AI" button and dead Signature button. ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="bg-white px-8 py-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
 
               {/* Left Column: Notes, Terms, Attachments */}
               <div className="space-y-5">
                 <div>
-                  <SectionHeader number="05" title="Notes" />
+                  <div className="flex items-center justify-between gap-2">
+                    <SectionHeader number="04" title="Notes" />
+                    <button
+                      type="button"
+                      onClick={() => setNotesDrawer("notes")}
+                      title="Add or choose a saved note"
+                      className="inline-flex items-center gap-1 leading-none text-[12px] font-medium text-[#0085FF] hover:underline flex-shrink-0"
+                    >
+                      + Add Notes
+                    </button>
+                  </div>
                   <textarea
                     placeholder="Enter your notes, say thanks, or anything else"
                     rows={3}
@@ -2148,12 +2186,22 @@ const InvoiceFormFull = ({
                       setForm((prev) => ({ ...prev, notes: e.target.value }));
                       setHasUnsavedChanges(true);
                     }}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 resize-y"
+                    className="w-full px-3 py-2.5 rounded-2xl border border-[#1F2937]/10 text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-y"
                   />
                 </div>
 
                 <div>
-                  <SectionHeader number="06" title="Terms & Conditions" />
+                  <div className="flex items-center justify-between gap-2">
+                    <SectionHeader number="05" title="Terms & Conditions" />
+                    <button
+                      type="button"
+                      onClick={() => setNotesDrawer("terms")}
+                      title="Add or choose saved terms"
+                      className="inline-flex items-center gap-1 leading-none text-[12px] font-medium text-[#0085FF] hover:underline flex-shrink-0"
+                    >
+                      + Add Terms
+                    </button>
+                  </div>
                   <textarea
                     placeholder="Enter terms & conditions"
                     rows={3}
@@ -2162,7 +2210,7 @@ const InvoiceFormFull = ({
                       setForm((prev) => ({ ...prev, terms: e.target.value }));
                       setHasUnsavedChanges(true);
                     }}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 resize-y"
+                    className="w-full px-3 py-2.5 rounded-2xl border border-[#1F2937]/10 text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-y"
                   />
                 </div>
 
@@ -2267,7 +2315,7 @@ const InvoiceFormFull = ({
                     left unset, PDF generation falls back to the org's
                     default bank. */}
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Select Bank</label>
+                  <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Select Bank</label>
                   <BankSelect
                     banks={banks}
                     value={form.bankDetails || ""}
@@ -2288,7 +2336,7 @@ const InvoiceFormFull = ({
                     when left blank (see buildUpiUri in
                     shared/documentTemplates.js), but is fully editable. */}
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Payment Note (QR)</label>
+                  <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Payment Note (QR)</label>
                   <input
                     type="text"
                     value={form.qrNote}
@@ -2297,7 +2345,7 @@ const InvoiceFormFull = ({
                       setHasUnsavedChanges(true);
                     }}
                     placeholder={`Invoice ${form.invoiceNumber || "..."}`}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full h-[38px] px-3 border border-[#1F2937]/10 rounded-full bg-white text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
                     maxLength={50}
                   />
                   <p className="text-xs text-gray-400">
@@ -2310,7 +2358,7 @@ const InvoiceFormFull = ({
                     replacing the old decorative button that didn't actually
                     do anything. */}
                 <div>
-                  <SectionHeader number="07" title="Signature" />
+                  <SectionHeader number="06" title="Signature" />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1">
                       <div className="relative flex items-center h-10 rounded-lg border border-gray-200 focus-within:border-blue-500 overflow-hidden">
@@ -2361,7 +2409,7 @@ const InvoiceFormFull = ({
             {/* Running total + primary actions, as a floating pill pinned to
                 the bottom of the form — matched to the split-view Invoice
                 panel's sticky bar (InvoiceForm.jsx's CreateInvoicePanel). */}
-            <div className="sticky bottom-0 z-20 w-full pt-3 pb-1 -mx-6 mt-12 flex justify-center pointer-events-none">
+            <div className="sticky bottom-0 z-20 w-full pt-3 pb-1 mt-12 flex justify-center pointer-events-none">
               <div className="pointer-events-auto flex w-full max-w-2xl items-center justify-between gap-5 rounded-2xl border border-[#E1E4EA] bg-white/95 backdrop-blur-sm pl-6 pr-2.5 py-2.5 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.22)]">
                 <div className="min-w-0">
                   <p className="text-[10px] font-semibold tracking-wide text-[#99A0AE] uppercase leading-none">

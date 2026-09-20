@@ -1545,6 +1545,9 @@ const QuotationForm = ({
           <div className="p-6 space-y-6 flex-1 overflow-y-auto">
             {/* Section 2: Customer Details Card */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="mb-5">
+                <SectionHeader number="01" title="Quotation Details" />
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                 
                 {/* Select Customer */}
@@ -1675,7 +1678,7 @@ const QuotationForm = ({
                 same way invoices do. ── */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-slate-800">Billing & Shipping Address</h3>
+                <SectionHeader number="02" title="Billing & Shipping Address" />
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -1768,7 +1771,7 @@ const QuotationForm = ({
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-slate-800">Products & Services</h3>
+                  <SectionHeader number="03" title="Products & Services" />
                   <div className="group relative">
                     <div className="w-4 h-4 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-[10px] cursor-help">?</div>
                   </div>
@@ -2008,7 +2011,7 @@ const QuotationForm = ({
               {/* Left Column: Notes, Terms, Attachments */}
               <div className="space-y-5">
                 <div>
-                  <SectionHeader number="05" title="Notes" />
+                  <SectionHeader number="04" title="Notes" />
                   <textarea
                     placeholder="Enter your notes, say thanks, or anything else"
                     rows={3}
@@ -2022,7 +2025,7 @@ const QuotationForm = ({
                 </div>
 
                 <div>
-                  <SectionHeader number="06" title="Terms & Conditions" />
+                  <SectionHeader number="05" title="Terms & Conditions" />
                   <textarea
                     placeholder="Enter terms & conditions"
                     rows={3}
@@ -2174,7 +2177,7 @@ const QuotationForm = ({
                     replacing the old decorative button that didn't actually
                     do anything. */}
                 <div>
-                  <SectionHeader number="07" title="Signature" />
+                  <SectionHeader number="06" title="Signature" />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1">
                       <div className="relative flex items-center h-10 rounded-[25px] border border-gray-200 focus-within:border-blue-500 overflow-hidden">
