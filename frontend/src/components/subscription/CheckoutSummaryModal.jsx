@@ -3,6 +3,7 @@ import React from "react";
 import { X, ShoppingCart, AlertTriangle, CheckCircle2 } from "lucide-react";
 import OrderSummary from "./OrderSummary";
 import TransitionConfirmationCard from "./TransitionConfirmationCard";
+import MandateMethodPicker from "./MandateMethodPicker";
 
 // Coupons are applied/removed on the plans page (outside checkout) so the
 // customer sees the discount ripple across every plan/add-on card before
@@ -966,21 +967,7 @@ const CheckoutSummaryModal = ({
         {/* Actions — fixed, never scrolls, always reachable */}
         <div className="space-y-3 p-8 pt-6 flex-shrink-0">
           {mandateMethod && !isPlanDowngrade && !isAddonRemoval && (
-            <div>
-              <p className="text-xs font-semibold text-gray-700 mb-2">Pay & autopay with</p>
-              <div className="grid grid-cols-3 gap-2">
-                {[["upi", "UPI AutoPay"], ["card", "Card"], ["emandate", "Netbanking"]].map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => onMandateMethodChange?.(value)}
-                    className={`py-2 px-2 rounded-lg border text-xs font-medium transition-colors ${mandateMethod === value ? "border-blue-600 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <MandateMethodPicker value={mandateMethod} onChange={onMandateMethodChange} />
           )}
           <button
             onClick={onConfirm}

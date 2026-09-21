@@ -1,6 +1,7 @@
 // components/subscription/PaymentStatusAlert.jsx
 import React from 'react';
 import { AlertCircle, CreditCard, XCircle, Clock } from 'lucide-react';
+import MandateMethodPicker from './MandateMethodPicker';
 import { hasValidPendingUpdate, deriveSubscriptionUIState, SUBSCRIPTION_UI_STATES } from '../../utils/subscriptionHelpers';
 
 // B2 fix (found via live QA): this is the recovery banner for a PERSISTED
@@ -13,7 +14,7 @@ import { hasValidPendingUpdate, deriveSubscriptionUIState, SUBSCRIPTION_UI_STATE
 // full-screen fallback incorrectly did.
 const RECENT_MANDATE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
-const PaymentStatusAlert = ({ subscription, onRetryPayment, onResumePayment, onChangePlan, processing }) => {
+const PaymentStatusAlert = ({ subscription, onRetryPayment, onResumePayment, onChangePlan, processing, mandateMethod, onMandateMethodChange }) => {
   // Don't show if no subscription exists
   if (!subscription) return null;
 
@@ -225,6 +226,9 @@ const PaymentStatusAlert = ({ subscription, onRetryPayment, onResumePayment, onC
                 )}
               </button>
             </div>
+          )}
+          {alertContent.showResume && mandateMethod && (
+            <MandateMethodPicker value={mandateMethod} onChange={onMandateMethodChange} className="mt-3 max-w-sm" />
           )}
           {(alertContent.showResume || alertContent.showChangePlan) && (
             <div className="mt-3 flex flex-wrap gap-2">

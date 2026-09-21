@@ -2132,6 +2132,8 @@ const SubscriptionPlans = () => {
           subscription={subscription?.subscription}
           onRetryPayment={handleRetryPayment}
           onResumePayment={handleResumePayment}
+          mandateMethod={mandateMethod}
+          onMandateMethodChange={setMandateMethod}
           onChangePlan={() => document.getElementById('plan-cards-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
           processing={processing || paymentInProgress}
         />
