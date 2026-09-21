@@ -163,7 +163,7 @@ export default function Register() {
             LEFT SECTION
             ================================================== */}
 
-        <div className="relative h-full w-full lg:w-[clamp(360px,33vw,540px)] shrink-0 overflow-hidden rounded-[18px] bg-white hidden lg:block">
+        <div className="relative h-full w-full lg:w-[clamp(360px,33vw,540px)] shrink-0 overflow-hidden rounded-[18px] bg-[#EAEAEA] hidden lg:block">
 
           {/* TOP TRANSPARENT IMAGE */}
           <img
