@@ -45,7 +45,8 @@ import {
   Line,
   CartesianGrid,
   AreaChart,
-  Area
+  Area,
+  LabelList
 } from "recharts";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -271,13 +272,21 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
     });
     
     let runningInv = 0, runningCol = 0;
-    return Object.values(groups)
+    const finalData = Object.values(groups)
       .sort((a,b) => a.timestamp - b.timestamp)
       .map(g => {
          runningInv += g.Invoiced;
          runningCol += g.Collected;
          return { name: g.name, Invoiced: runningInv, Collected: runningCol };
       });
+      
+    // If there's only one data point, a line chart will just draw a single dot.
+    // Prepend a starting zero point so a line is actually drawn.
+    if (finalData.length === 1) {
+       finalData.unshift({ name: "Start", Invoiced: 0, Collected: 0 });
+    }
+    
+    return finalData;
   }, [invoices]);
 
   // Invoice Aging Logic
@@ -363,7 +372,16 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
   // (matching the original Open-then-Lost behavior, just with custom stages kept
   // in between).
   const configuredStages = pipelineStatuses.length ? pipelineStatuses : ["Open", "Won", "Lost"];
-  const forwardStages = configuredStages.filter((s) => s !== "Lost");
+  // Settings always appends a newly-added custom stage to the end of the raw
+  // array (see KanbanSettings.jsx handleAdd), which lands it AFTER "Won" unless
+  // someone manually drags it earlier. "Won" is the pipeline's completion state
+  // though, so it belongs last in the forward path regardless of where it sits
+  // in storage -- everything else (including any custom stage) keeps its
+  // configured relative order in front of it.
+  const nonTerminalStages = configuredStages.filter((s) => s !== "Lost" && s !== "Won");
+  const forwardStages = configuredStages.includes("Won")
+    ? [...nonTerminalStages, "Won"]
+    : nonTerminalStages;
   const visualStages = currentStatus === "Lost"
     ? [...forwardStages.filter((s) => s !== "Won"), "Lost"]
     : forwardStages;
@@ -374,15 +392,15 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
 
   // ── render ───────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-4 pb-8 relative z-0">
+    <div className="space-y-3 pb-8 relative z-0">
       <AppToaster />
 
       {/* ═══════════════════════════════════════════════════════════════════
           1. DEAL INFORMATION (Compact Strip)
       ════════════════════════════════════════════════════════════════════ */}
       <div className="bg-white rounded-xl border border-[#E7E4E3] relative z-50 overflow-visible shadow-sm">
-        <div className="grid grid-cols-2 md:grid-cols-6 divide-y md:divide-y-0 divide-gray-100 md:divide-x border-gray-100 bg-white rounded-xl">
-          <div className="px-4 py-3 flex flex-col justify-center group hover:bg-gray-50 transition-colors col-span-2 md:col-span-1 rounded-tl-xl md:rounded-bl-xl text-left">
+        <div className="flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-gray-100 bg-white rounded-xl">
+          <div className="px-4 py-3 flex flex-col justify-center lg:w-[22%] min-w-0 group hover:bg-gray-50 transition-colors rounded-tl-xl lg:rounded-bl-xl text-left">
             <p className="text-[11px] font-medium text-gray-500 mb-0.5">Company</p>
             {deal.company ? (
               <Link to={`/companies/${deal.company._id}`} className="text-sm font-semibold text-gray-900 hover:text-blue-600 flex items-center gap-1.5 group-hover:underline min-w-0">
@@ -394,7 +412,8 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
               <p className="text-sm font-semibold text-gray-800">—</p>
             )}
           </div>
-          <div className="px-4 py-3 flex flex-col justify-center group hover:bg-gray-50 transition-colors col-span-2 md:col-span-1 text-left">
+          
+          <div className="px-4 py-3 flex flex-col justify-center lg:w-[22%] min-w-0 group hover:bg-gray-50 transition-colors text-left">
             <p className="text-[11px] font-medium text-gray-500 mb-0.5">Contact</p>
             {deal.contact ? (
               <p className="text-sm font-semibold text-gray-900 flex items-center gap-1.5 min-w-0">
@@ -405,7 +424,8 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
               <p className="text-sm font-semibold text-gray-800">—</p>
             )}
           </div>
-          <div className="px-4 py-3 flex flex-col justify-center relative text-left">
+          
+          <div className="px-4 py-3 flex flex-col justify-center lg:w-[16%] min-w-0 relative text-left">
             <p className="text-[11px] font-medium text-gray-500 mb-0.5">Owner</p>
             <button
               onClick={() => canEdit && setIsOwnerDropdownOpen(v => !v)}
@@ -415,7 +435,7 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
               <div className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[9px] shadow-sm flex-shrink-0">
                 {deal.user?.name?.[0]?.toUpperCase() || "U"}
               </div>
-              <span className="truncate">{deal.user?.name || "Unassigned"}</span>
+              <span className="truncate max-w-[100px] xl:max-w-none">{deal.user?.name || "Unassigned"}</span>
               {canEdit && <ChevronDown className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />}
             </button>
             {isOwnerDropdownOpen && canEdit && (
@@ -446,23 +466,28 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
               </div>
             )}
           </div>
-          <div className="px-4 py-3 flex flex-col justify-center text-left">
+          
+          <div className="px-4 py-3 flex flex-col justify-center lg:w-[12%] min-w-0 text-left">
             <p className="text-[11px] font-medium text-gray-500 mb-0.5">Stage</p>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
               <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: statusColor(deal.status) }} />
-              <span className="text-sm font-semibold text-gray-800">{deal.status || "Open"}</span>
+              <span className="text-sm font-semibold text-gray-800 truncate">{deal.status || "Open"}</span>
             </div>
           </div>
-          <div className="px-4 py-3 flex flex-col justify-center text-left">
-            <p className="text-[11px] font-medium text-gray-500 mb-0.5">Created Date</p>
-            <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-               <Calendar className="w-3.5 h-3.5 text-gray-400" /> {fmtDate(deal.createdAt)}
+          
+          <div className="px-4 py-3 flex flex-col justify-center lg:w-[14%] min-w-0 text-left">
+            <p className="text-[11px] font-medium text-gray-500 mb-0.5 whitespace-nowrap">Created Date</p>
+            <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5 min-w-0">
+               <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" /> 
+               <span className="truncate">{fmtDate(deal.createdAt)}</span>
             </p>
           </div>
-          <div className="px-4 py-3 flex flex-col justify-center group/audit cursor-default relative rounded-tr-xl md:rounded-br-xl text-left">
-            <p className="text-[11px] font-medium text-gray-500 mb-0.5">Last Updated</p>
-            <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-               <Clock className="w-3.5 h-3.5 text-gray-400" /> {fmtDate(deal.updatedAt)}
+          
+          <div className="px-4 py-3 flex flex-col justify-center lg:w-[14%] min-w-0 group/audit cursor-default relative rounded-tr-xl lg:rounded-br-xl text-left">
+            <p className="text-[11px] font-medium text-gray-500 mb-0.5 whitespace-nowrap">Last Updated</p>
+            <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5 min-w-0">
+               <Clock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" /> 
+               <span className="truncate">{fmtDate(deal.updatedAt)}</span>
             </p>
             <div className="absolute top-full right-4 mt-2 bg-white border border-gray-200 p-3 rounded-xl shadow-xl opacity-0 group-hover/audit:opacity-100 transition-opacity pointer-events-none z-40 min-w-[200px] text-left">
               <div className="mb-2">
@@ -534,54 +559,55 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
       />
 
       {/* ═══════════════════════════════════════════════════════════════════
-          2. DEAL JOURNEY
+          2. DEAL JOURNEY -- driven entirely by the configured pipeline order
+          (visualStages, derived above from /kanban), so a stage added in
+          Settings shows up here with no further change. No horizontal
+          scroll: stages share the row width equally instead of each
+          claiming a fixed min-width, so any stage count fits.
       ════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm relative z-10 text-left">
-        <div className="flex justify-between items-center mb-5">
+      <div className="bg-white px-5 py-4 rounded-xl border border-[#E7E4E3] shadow-sm relative z-10 text-left">
+        <div className="flex justify-between items-center mb-4">
           <h3 className="text-sm font-semibold text-[#0E121B]">Deal Journey</h3>
+          {visualStages.includes(currentStatus) && (
+            <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap
+              ${currentStatus === "Lost" ? "bg-red-50 text-[#EF4444]" : "bg-blue-50 text-[#0085FF]"}`}>
+              Current: {currentStatus}
+            </span>
+          )}
         </div>
-        <div className="w-full pb-10 pt-2 overflow-x-auto custom-scrollbar">
-          <div className="min-w-[300px] max-w-2xl mx-auto relative flex items-center justify-between px-4 sm:px-8">
-            <div className="absolute left-4 sm:left-8 right-4 sm:right-8 top-1/2 h-[3px] bg-gray-100 -translate-y-1/2 z-0 rounded-full" />
-            <div 
-              className={`absolute left-4 sm:left-8 top-1/2 h-[3px] -translate-y-1/2 z-0 transition-all duration-700 ease-in-out rounded-full ${currentStatus === "Lost" ? "bg-[#EF4444]" : "bg-[#0085FF]"}`}
-              style={{ width: `calc(${progressPct}% - ${progressPct === 100 ? "4rem" : "0px"})` }} 
-            />
-            
-            {visualStages.map((step, idx) => {
-              const isActive = currentStatus === step;
-              const isPast = visualStages.indexOf(currentStatus) > idx;
-              const isLost = step === "Lost";
-              
-              return (
-                <div key={step} className="relative z-10 flex flex-col items-center group min-w-[100px]">
-                  <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all duration-300 border-[3px] shadow-sm bg-white
-                    ${isActive && !isLost ? "border-[#0085FF] ring-4 ring-blue-50 scale-110" : 
-                      isActive && isLost ? "border-[#EF4444] ring-4 ring-red-50 scale-110" : 
-                      isPast ? "border-[#0085FF] bg-[#0085FF] text-white" : 
-                      "border-gray-200 text-gray-300"}`}>
-                    {isPast ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" /> : 
-                     (isActive ? <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${isLost ? "bg-[#EF4444]" : "bg-[#0085FF]"}`} /> : 
-                                <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-gray-200 group-hover:bg-gray-300 transition-colors" />)}
-                  </div>
-                  <div className="absolute top-full mt-3 flex flex-col items-center">
-                    <span className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-wider whitespace-nowrap
-                      ${isActive && !isLost ? "text-gray-900" : 
-                        isActive && isLost ? "text-[#EF4444]" : 
-                        isPast ? "text-gray-700" : 
-                        "text-gray-400"}`}>
-                      {step}
-                    </span>
-                    {isActive && (
-                      <span className="text-[9px] text-[#0085FF] font-semibold mt-0.5 whitespace-nowrap">
-                        Current Stage
-                      </span>
-                    )}
-                  </div>
+        <div className="relative flex items-center justify-between px-1">
+          <div className="absolute left-4 right-4 top-4 sm:top-[18px] h-[3px] bg-gray-100 -translate-y-1/2 z-0 rounded-full" />
+          <div
+            className={`absolute left-4 top-4 sm:top-[18px] h-[3px] -translate-y-1/2 z-0 transition-all duration-700 ease-in-out rounded-full ${currentStatus === "Lost" ? "bg-[#EF4444]" : "bg-[#0085FF]"}`}
+            style={{ width: `calc((100% - 2rem) * ${progressPct / 100})` }}
+          />
+
+          {visualStages.map((step, idx) => {
+            const isActive = currentStatus === step;
+            const isPast = visualStages.indexOf(currentStatus) > idx;
+            const isLost = step === "Lost";
+
+            return (
+              <div key={step} className="relative z-10 flex flex-col items-center group flex-1 px-0.5 min-w-0">
+                <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all duration-300 border-[3px] shadow-sm bg-white
+                  ${isActive && !isLost ? "border-[#0085FF] ring-4 ring-blue-50 scale-110" :
+                    isActive && isLost ? "border-[#EF4444] ring-4 ring-red-50 scale-110" :
+                    isPast ? "border-[#0085FF] bg-[#0085FF] text-white" :
+                    "border-gray-200 text-gray-300"}`}>
+                  {isPast ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" /> :
+                   (isActive ? <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${isLost ? "bg-[#EF4444]" : "bg-[#0085FF]"}`} /> :
+                              <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-gray-200 group-hover:bg-gray-300 transition-colors" />)}
                 </div>
-              );
-            })}
-          </div>
+                <span className={`mt-2 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-center truncate w-full px-0.5
+                  ${isActive && !isLost ? "text-gray-900" :
+                    isActive && isLost ? "text-[#EF4444]" :
+                    isPast ? "text-gray-700" :
+                    "text-gray-400"}`} title={step}>
+                  {step}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -590,39 +616,45 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
       ════════════════════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 relative z-10">
         
-        {/* REVENUE GRAPH */}
-        <div className="lg:col-span-3 bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col h-[300px] text-left">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-sm font-semibold text-[#0E121B]">Revenue Trend</h3>
-            {revenueChartData.length > 0 && (
-              <div className="flex gap-4">
-                 <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-blue-500 rounded-full" /> <span className="text-[11px] font-medium text-gray-500">Invoiced</span></div>
-                 <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-[#00C950] rounded-full" /> <span className="text-[11px] font-medium text-gray-500">Collected</span></div>
-              </div>
-            )}
-          </div>
+        {/* REVENUE & COLLECTION TREND */}
+        <div className="lg:col-span-3 bg-white p-6 sm:p-8 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col h-[300px] text-left">
+          <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-8">
+            Revenue & Collection Trend
+          </h3>
 
-          <div className="flex-1 flex flex-col justify-center min-h-[160px]">
-            {revenueChartData.length === 0 ? (
-               <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 border border-dashed border-gray-200 rounded-xl bg-gray-50/50">
-                 <TrendingUp className="w-6 h-6 mb-2 text-gray-300" />
-                 <span className="text-[11px] font-medium text-gray-500">No invoice history to plot</span>
-               </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={revenueChartData} margin={{ top: 5, right: 10, left: -25, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
-                  <XAxis dataKey="name" tick={{ fontSize: 9, fill: "#9CA3AF" }} axisLine={false} tickLine={false} dy={8} />
-                  <YAxis tickFormatter={(val) => `₹${val >= 1000 ? val/1000 + 'k' : val}`} tick={{ fontSize: 9, fill: "#9CA3AF" }} axisLine={false} tickLine={false} dx={-8} />
-                  <Tooltip 
-                    formatter={(val) => [fmt(val), ""]} 
-                    contentStyle={{ fontSize: 11, borderRadius: 6, border: "1px solid #E5E7EB", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} 
-                  />
-                  <Line type="monotone" dataKey="Total Invoiced" stroke="#0085FF" strokeWidth={2} dot={{ r: 3, fill: "#0085FF", strokeWidth: 0 }} activeDot={{ r: 5, strokeWidth: 0 }} />
-                  <Line type="monotone" dataKey="Total Collected" stroke="#00C950" strokeWidth={2} dot={{ r: 3, fill: "#00C950", strokeWidth: 0 }} activeDot={{ r: 5, strokeWidth: 0 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
+          <div className="flex-1 flex flex-col justify-center space-y-7">
+            {/* Invoiced */}
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <span className="text-[13px] font-semibold text-gray-600">Invoiced</span>
+                <span className="text-[13px] font-bold text-gray-900">{fmt(totalInvoiced)}</span>
+              </div>
+              <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-[#0085FF] rounded-full transition-all duration-1000" style={{ width: '100%' }} />
+              </div>
+            </div>
+
+            {/* Collected */}
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <span className="text-[13px] font-semibold text-gray-600">Collected</span>
+                <span className="text-[13px] font-bold text-[#00C950]">{fmt(totalPaid)}</span>
+              </div>
+              <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-[#00C950] rounded-full transition-all duration-1000" style={{ width: `${totalInvoiced > 0 ? (totalPaid / totalInvoiced) * 100 : 0}%` }} />
+              </div>
+            </div>
+
+            {/* Remaining */}
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <span className="text-[13px] font-semibold text-gray-600">Remaining</span>
+                <span className="text-[13px] font-bold text-[#F59E0B]">{fmt(totalOutstanding)}</span>
+              </div>
+              <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-[#F59E0B] rounded-full transition-all duration-1000" style={{ width: `${totalInvoiced > 0 ? (totalOutstanding / totalInvoiced) * 100 : 0}%` }} />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -702,13 +734,13 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
       {/* ═══════════════════════════════════════════════════════════════════
           4. FINANCIAL VISUALS
       ════════════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 relative z-0">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 relative z-0 items-stretch">
         
         {/* INVOICE STATUS (PIE CHART) */}
-        <div className="bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col text-left">
+        <div className="bg-white p-6 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col text-left min-h-[300px]">
           <h3 className="text-sm font-semibold text-[#0E121B] mb-4">Invoice Status</h3>
-          <div className="flex items-center justify-center gap-6 flex-1 py-2">
-            <div className="w-[100px] h-[100px] relative flex-shrink-0">
+          <div className="flex items-center justify-center gap-8 flex-1 py-2">
+            <div className="w-[150px] h-[150px] relative flex-shrink-0">
               {invoices.length === 0 ? (
                  <div className="absolute inset-0 flex items-center justify-center text-gray-300 border border-dashed border-gray-200 rounded-full bg-gray-50/50">
                    <Receipt className="w-5 h-5 opacity-40" />
@@ -722,67 +754,93 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
                       nameKey="name" 
                       cx="50%" 
                       cy="50%" 
-                      innerRadius={36} 
-                      outerRadius={50} 
+                      innerRadius={52} 
+                      outerRadius={72} 
                       paddingAngle={4} 
                       stroke="none"
                     >
                       {invoiceDonutData.map((e, i) => <Cell key={i} fill={e.fill} stroke="transparent" strokeWidth={0} />)}
                     </Pie>
                     <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle">
-                      <tspan x="50%" dy="-2" fontSize={22} fontWeight={700} fill="#111827">{invoices.length}</tspan>
-                      <tspan x="50%" dy={16} fontSize={10} fontWeight={500} fill="#6B7280">Total</tspan>
+                      <tspan x="50%" dy="-4" fontSize={30} fontWeight={700} fill="#111827">{invoices.length}</tspan>
+                      <tspan x="50%" dy={22} fontSize={12} fontWeight={500} fill="#6B7280">Total</tspan>
                     </text>
                     <Tooltip formatter={v => [v, "Invoices"]} contentStyle={{ fontSize: 11, borderRadius: 6, border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} />
                   </PieChart>
                 </ResponsiveContainer>
               )}
             </div>
-            <div className="flex flex-col gap-2 flex-1 max-w-[90px]">
-              <div className="bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-100 flex flex-col">
-                <div className="flex items-center gap-1.5 text-[10px] font-medium text-gray-500 mb-0.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#00C950]" /> Paid
+            <div className="flex flex-col gap-3 flex-1 max-w-[140px]">
+              <div className="bg-gray-50 px-4 py-3 rounded-lg border border-gray-100 flex flex-col">
+                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
+                  <div className="w-2 h-2 rounded-full bg-[#00C950]" /> Paid
                 </div>
-                <div className="text-[13px] font-semibold text-gray-900">{paidCount}</div>
+                <div className="text-lg font-semibold text-gray-900">{paidCount}</div>
               </div>
-              <div className="bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-100 flex flex-col">
-                <div className="flex items-center gap-1.5 text-[10px] font-medium text-gray-500 mb-0.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#EF4444]" /> Unpaid
+              <div className="bg-gray-50 px-4 py-3 rounded-lg border border-gray-100 flex flex-col">
+                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-1">
+                  <div className="w-2 h-2 rounded-full bg-[#EF4444]" /> Unpaid
                 </div>
-                <div className="text-[13px] font-semibold text-gray-900">{unpaidCount}</div>
+                <div className="text-lg font-semibold text-gray-900">{unpaidCount}</div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* INVOICE AGING MATRIX (WITH PROGRESS BARS) */}
-        <div className="bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col text-left">
-          <h3 className="text-sm font-semibold text-[#0E121B] mb-4">Invoice Aging Matrix</h3>
-          <div className="flex-1 flex flex-col justify-center gap-3.5">
+        {/* INVOICE AGING MATRIX (BAR CHART) */}
+        <div className="bg-white p-6 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col text-left" style={{ minHeight: 300 }}>
+          <h3 className="text-sm font-semibold text-[#0E121B] mb-3">Invoice Aging Matrix</h3>
+          <div className="flex-1" style={{ minHeight: 220 }}>
             {invoiceAging ? (
-              [
-                { label: "Paid", count: invoiceAging.paid, color: "bg-[#00C950]" },
-                { label: "Not Due", count: invoiceAging.notDue, color: "bg-blue-500" },
-                { label: "Due Soon", count: invoiceAging.dueSoon, color: "bg-amber-500" },
-                { label: "Overdue", count: invoiceAging.overdue, color: "bg-[#EF4444]" },
-              ].map(item => {
-                const total = invoices.length || 1;
-                const pct = (item.count / total) * 100;
-                return (
-                  <div key={item.label} className="group">
-                    <div className="flex justify-between items-center mb-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <div className={`w-1.5 h-1.5 rounded-full ${item.color}`} />
-                        <span className="text-[11px] font-medium text-gray-500">{item.label}</span>
-                      </div>
-                      <span className="text-sm font-semibold text-gray-900">{item.count}</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-[3px] overflow-hidden flex">
-                       <div className={`${item.color} h-full rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                );
-              })
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart 
+                  data={[
+                    { name: "Paid",     count: invoiceAging.paid },
+                    { name: "Not Due",  count: invoiceAging.notDue },
+                    { name: "Due Soon", count: invoiceAging.dueSoon },
+                    { name: "Overdue",  count: invoiceAging.overdue },
+                  ]} 
+                  layout="vertical"
+                  margin={{ top: 8, right: 40, left: 8, bottom: 8 }}
+                  barCategoryGap="20%"
+                >
+                  <CartesianGrid strokeDasharray="4 4" horizontal={false} vertical={true} stroke="#F0F0F0" />
+                  <XAxis
+                    type="number"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10, fill: "#9CA3AF" }}
+                    tickFormatter={(v) => v === 0 ? "0" : v}
+                    dy={4}
+                    allowDecimals={false}
+                    domain={[0, "auto"]}
+                  />
+                  <YAxis
+                    dataKey="name"
+                    type="category"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: "#6B7280", fontWeight: 500 }}
+                    width={64}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "#F9FAFB", rx: 4 }}
+                    formatter={(value) => [value, "Invoices"]}
+                    contentStyle={{ fontSize: 11, borderRadius: 6, border: "1px solid #E5E7EB", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
+                  />
+                  <Bar dataKey="count" radius={[0, 5, 5, 0]} maxBarSize={22}>
+                    <LabelList dataKey="count" position="right" style={{ fontSize: "12px", fontWeight: 700, fill: "#374151" }} />
+                    {[
+                      { fill: "#00C950" },
+                      { fill: "#0085FF" },
+                      { fill: "#F59E0B" },
+                      { fill: "#EF4444" },
+                    ].map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} fillOpacity={0.9} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             ) : (
                <div className="flex items-center justify-center h-full text-[11px] font-medium text-gray-500">No invoices found</div>
             )}
@@ -790,44 +848,44 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
         </div>
 
         {/* FINANCIAL SUMMARY */}
-        <div className="bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col text-left">
+        <div className="bg-white p-6 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col text-left min-h-[300px]">
            <h3 className="text-sm font-semibold text-[#0E121B] mb-4">Financial Overview</h3>
            <div className="flex-1 flex flex-col justify-center">
-             <div className="grid grid-cols-1 gap-2.5">
-               <div className="flex items-center gap-3 px-3 py-2 bg-white border border-gray-100 rounded-xl shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
-                  <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 text-gray-400 flex items-center justify-center flex-shrink-0 shadow-sm">
-                    <Receipt className="w-3.5 h-3.5" />
+             <div className="grid grid-cols-1 gap-3">
+               <div className="flex items-center gap-3.5 px-4 py-3 bg-white border border-gray-100 rounded-xl shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+                  <div className="w-11 h-11 rounded-lg bg-gray-50 border border-gray-200 text-gray-400 flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <Receipt className="w-[18px] h-[18px]" />
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate w-full text-[10px] font-medium text-gray-500 leading-tight">Total Invoiced</p>
-                    <p className="truncate w-full text-[13px] font-semibold text-gray-900 leading-tight">{fmt(totalInvoiced)}</p>
+                    <p className="truncate w-full text-xs font-medium text-gray-500 leading-tight">Total Invoiced</p>
+                    <p className="truncate w-full text-base font-semibold text-gray-900 leading-tight">{fmt(totalInvoiced)}</p>
                   </div>
                </div>
-               <div className="flex items-center gap-3 px-3 py-2 bg-white border border-gray-100 rounded-xl shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
-                  <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 text-gray-400 flex items-center justify-center flex-shrink-0 shadow-sm">
-                    <AlertCircle className="w-3.5 h-3.5" />
+               <div className="flex items-center gap-3.5 px-4 py-3 bg-white border border-gray-100 rounded-xl shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+                  <div className="w-11 h-11 rounded-lg bg-gray-50 border border-gray-200 text-gray-400 flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <AlertCircle className="w-[18px] h-[18px]" />
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate w-full text-[10px] font-medium text-gray-500 leading-tight">Pending</p>
-                    <p className="truncate w-full text-[13px] font-semibold text-gray-900 leading-tight">{fmt(totalInvoiced)}</p>
+                    <p className="truncate w-full text-xs font-medium text-gray-500 leading-tight">Pending</p>
+                    <p className="truncate w-full text-base font-semibold text-gray-900 leading-tight">{fmt(totalInvoiced)}</p>
                   </div>
                </div>
-               <div className="flex items-center gap-3 px-3 py-2 bg-white border border-gray-100 rounded-xl shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
-                  <div className="w-8 h-8 rounded-lg bg-red-50 border border-red-100 text-[#EF4444] flex items-center justify-center flex-shrink-0 shadow-sm">
-                    <Clock className="w-3.5 h-3.5" />
+               <div className="flex items-center gap-3.5 px-4 py-3 bg-white border border-gray-100 rounded-xl shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+                  <div className="w-11 h-11 rounded-lg bg-red-50 border border-red-100 text-[#EF4444] flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <Clock className="w-[18px] h-[18px]" />
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate w-full text-[10px] font-medium text-gray-500 leading-tight">Overdue</p>
-                    <p className="truncate w-full text-[13px] font-semibold text-[#EF4444] leading-tight">{fmt(totalOutstanding)}</p>
+                    <p className="truncate w-full text-xs font-medium text-gray-500 leading-tight">Overdue</p>
+                    <p className="truncate w-full text-base font-semibold text-[#EF4444] leading-tight">{fmt(totalOutstanding)}</p>
                   </div>
                </div>
-               <div className="flex items-center gap-3 px-3 py-2 bg-white border border-gray-100 rounded-xl shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
-                  <div className="w-8 h-8 rounded-lg bg-green-50 border border-green-100 text-[#00C950] flex items-center justify-center flex-shrink-0 shadow-sm">
-                    <CheckSquare className="w-3.5 h-3.5" />
+               <div className="flex items-center gap-3.5 px-4 py-3 bg-white border border-gray-100 rounded-xl shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+                  <div className="w-11 h-11 rounded-lg bg-green-50 border border-green-100 text-[#00C950] flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <CheckSquare className="w-[18px] h-[18px]" />
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate w-full text-[10px] font-medium text-gray-500 leading-tight">Collected</p>
-                    <p className="truncate w-full text-[13px] font-semibold text-[#00C950] leading-tight">{fmt(totalPaid)}</p>
+                    <p className="truncate w-full text-xs font-medium text-gray-500 leading-tight">Collected</p>
+                    <p className="truncate w-full text-base font-semibold text-[#00C950] leading-tight">{fmt(totalPaid)}</p>
                   </div>
                </div>
              </div>

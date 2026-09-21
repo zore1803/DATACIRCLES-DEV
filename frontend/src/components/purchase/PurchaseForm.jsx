@@ -11,6 +11,7 @@ import API from "../../services/api";
 import toast from "react-hot-toast";
 import { formatNumberFixed } from "../../utils/numberFormatter";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { resolveTransactionType } from "../../utils/placeOfSupply";
 
 import SearchIcon from "../common/SearchIcon";
 import FilterIcon from "../common/FilterIcon";
@@ -23,6 +24,23 @@ const GST_RATES = [0, 5, 12, 18, 28];
 // InvoiceForm.jsx's own stripHtml) — strip the markup before it lands in a
 // plain <input>, which was showing the raw tags.
 const stripHtml = (html) => String(html || "").replace(/<[^>]*>/g, "").trim();
+
+// Draft -> Pending -> Confirmed -> (Partial/Paid | Cancelled). Confirmed is
+// the physical "goods received" event (stock-in fires there — see
+// purchaseController.js's syncPurchaseStock); once reached, status can't go
+// back to Draft/Pending, and once Paid it can't become Cancelled. Mirrors
+// isValidPurchaseStatusTransition on the backend so the dropdown never
+// offers an option the server would reject.
+const PURCHASE_STATUS_FLOW = {
+  Draft: ["Draft", "Pending", "Confirmed", "Cancelled"],
+  Pending: ["Pending", "Confirmed", "Cancelled"],
+  Confirmed: ["Confirmed", "Partial", "Paid", "Cancelled"],
+  Partial: ["Partial", "Paid", "Cancelled"],
+  Paid: ["Paid"],
+  Cancelled: ["Cancelled"],
+};
+const getPurchaseStatusOptions = (currentStatus) =>
+  PURCHASE_STATUS_FLOW[currentStatus] || PURCHASE_STATUS_FLOW.Draft;
 
 const ItemSearchSelect = ({ value, onSelect, onAddNew, error = null }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -254,8 +272,13 @@ const PurchaseForm = ({
   ]);
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState("Draft");
+  // Auto-derived from vendor state vs. the org's own state (see the effect
+  // below) — never a manual selection, same as Purchase Order.
   const [transactionType, setTransactionType] = useState("intra");
   const [gstRate, setGstRate] = useState(0);
+  // The org's own GST state, fetched once — same /branding call
+  // InvoiceFormFull.jsx/PurchaseOrderForm.jsx use to resolve intra vs inter.
+  const [sellerState, setSellerState] = useState("");
 
   // Fetch POs
   useEffect(() => {
@@ -308,6 +331,11 @@ const PurchaseForm = ({
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           sku: item.sku || null,
+          // Was missing here — reopening any existing purchase for editing
+          // silently reset every line's GST%/Tax Inclusive back to 0/off
+          // regardless of what it was actually saved with.
+          gstRate: item.gstRate || 0,
+          taxInclusive: item.taxInclusive || false,
         })) || [],
       );
       setNotes(editingPurchase.notes || "");
@@ -315,7 +343,21 @@ const PurchaseForm = ({
       setTransactionType(editingPurchase.transactionType || "intra");
       setGstRate(editingPurchase.gstRate || 0);
     }
+    API.get("/branding").then((r) => setSellerState((r.data?.state || "").trim())).catch(() => {});
   }, [editingPurchase, vendors]);
+
+  // Vendor state vs. the org's own state decides CGST+SGST (same state) or
+  // IGST (different state) — the user never picks this manually. Skipped
+  // while a PO is linked (loadPurchaseOrder above already inherits that PO's
+  // own transactionType directly), and re-runs whenever the vendor selection
+  // or vendor list itself changes.
+  useEffect(() => {
+    if (!vendorId || selectedPO) return;
+    const vendor = localVendors.find((v) => v._id === vendorId);
+    const vendorState = vendor?.address?.state || "";
+    const resolved = resolveTransactionType(sellerState, { state: vendorState }, { state: vendorState });
+    if (resolved) setTransactionType(resolved);
+  }, [vendorId, localVendors, sellerState, selectedPO]);
 
   const handleClose = () => {
     setIsOpen(false);
@@ -714,7 +756,7 @@ const PurchaseForm = ({
             />
           </div>
 
-          {/* Status, Transaction Type, GST Rate */}
+          {/* Status */}
           <div className="space-y-4">
             <div>
               <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
@@ -734,40 +776,35 @@ const PurchaseForm = ({
                   }
                   className="w-full appearance-none px-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <option value="Draft">Draft</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Paid">Paid</option>
-                  <option value="Cancelled">Cancelled</option>
+                  {/* Draft -> Pending -> Confirmed (stock-in happens here) ->
+                      Partial/Paid, or Cancelled. Once Confirmed, can't go
+                      back to Draft/Pending; once Paid, can't be Cancelled —
+                      enforced server-side too (purchaseController.js's
+                      isValidPurchaseStatusTransition). Only offering the
+                      options that are actually reachable from here avoids
+                      the user picking one the server will just reject. */}
+                  {getPurchaseStatusOptions(editingPurchase?.status).map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
                 </select>
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
                   <ChevronDown className="w-4 h-4" />
                 </div>
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3">
-              <div>
-                <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                  Transaction Type
-                </label>
-                <div className="relative">
-                  <select
-                    value={transactionType}
-                    onChange={(e) => setTransactionType(e.target.value)}
-                    className="w-full appearance-none px-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all cursor-pointer"
-                  >
-                    <option value="intra">Intra State</option>
-                    <option value="inter">Inter State</option>
-                  </select>
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
-                    <ChevronDown className="w-4 h-4" />
-                  </div>
-                </div>
-              </div>
+              {status === "Confirmed" && editingPurchase?.status !== "Confirmed" && (
+                <p className="mt-1.5 text-[11px] text-gray-400">
+                  Marks these goods as received — increases stock for every item above.
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Total Amount Banner */}
+          {/* Total Amount Banner — CGST+SGST for a same-state vendor, IGST
+              for a different-state one (see the transactionType effect
+              above); the user never picks this manually. CGST/SGST is
+              exactly half of totalTax each: that split holds regardless of
+              how GST rates vary line to line, since every line's own tax is
+              already halved the same way before being summed into totalTax. */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 flex flex-col gap-1.5">
             <div className="flex justify-between items-center text-slate-700">
               <span className="text-sm">Subtotal</span>
@@ -775,10 +812,23 @@ const PurchaseForm = ({
             </div>
 
             {totalTax > 0 && (
-              <div className="flex justify-between items-center text-slate-700">
-                <span className="text-sm">Total Tax</span>
-                <span className="font-semibold">₹{formatNumberFixed(totalTax)}</span>
-              </div>
+              transactionType === "inter" ? (
+                <div className="flex justify-between items-center text-slate-700">
+                  <span className="text-sm">IGST</span>
+                  <span className="font-semibold">₹{formatNumberFixed(totalTax)}</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between items-center text-slate-700">
+                    <span className="text-sm">CGST</span>
+                    <span className="font-semibold">₹{formatNumberFixed(totalTax / 2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-slate-700">
+                    <span className="text-sm">SGST</span>
+                    <span className="font-semibold">₹{formatNumberFixed(totalTax / 2)}</span>
+                  </div>
+                </>
+              )
             )}
 
             <div className="flex justify-between items-center pt-3 border-t border-slate-200">

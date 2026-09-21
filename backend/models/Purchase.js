@@ -45,11 +45,16 @@ const purchaseSchema = new mongoose.Schema(
     grandTotal: { type: Number, default: 0, min: 0 },
     status: {
       type: String,
-      // "Paid" was "Received" — renamed to match the frontend's terminology
-      // (PurchasePage.jsx's status dropdown/badges have always said "Paid";
-      // sending that value 400'd against this enum, which is the root cause
-      // of "Failed to update status" / net::ERR on the status dropdown).
-      enum: ["Draft", "Pending", "Paid", "Partial", "Cancelled"],
+      // Draft -> Pending -> Confirmed -> (Partial/Paid | Cancelled). Confirmed
+      // is the physical "goods received" event — the single point stock-in
+      // fires from (see purchaseController's syncPurchaseStock), mirroring
+      // Purchase Order's "Delivered" and Purchase Return's "Confirmed".
+      // Partial/Paid are payment-tracking states reached only from Confirmed
+      // onward (statusForPaidAmount never returns them before that). Once
+      // Confirmed, status can't go back to Draft/Pending; once Paid, it can't
+      // be Cancelled (that would need an explicit refund/reversal workflow,
+      // not a status flip) — enforced in purchaseController.
+      enum: ["Draft", "Pending", "Confirmed", "Paid", "Partial", "Cancelled"],
       default: "Draft",
     },
     notes: { type: String, default: "" },
@@ -76,7 +81,12 @@ const purchaseSchema = new mongoose.Schema(
       ref: "Organization",
       required: true,
     },
-    stockMovementStatus: { type: String, enum: ['pending', 'applied', 'reversed'], default: 'pending' },
+    // 'skipped' — Confirmed, but stock wasn't moved by this Purchase because
+    // its linked Purchase Order already applied it on Delivered (prevents
+    // double-counting the same goods). Cancelling a 'skipped' Purchase must
+    // not reverse anything — the PO's own stock movement is a separate
+    // event this record never owns.
+    stockMovementStatus: { type: String, enum: ['pending', 'applied', 'skipped', 'reversed'], default: 'pending' },
   },
   { timestamps: true }
 );

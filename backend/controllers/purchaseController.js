@@ -85,6 +85,106 @@ async function generatePurchaseNumber(organizationId) {
   return `PUR-${(count + 1).toString().padStart(5, "0")}`;
 }
 
+// Once Confirmed (or later), status can never go back to Draft/Pending — and
+// once Paid, it can never become Cancelled (that needs an explicit refund/
+// reversal workflow, not a status flip).
+function isValidPurchaseStatusTransition(oldStatus, newStatus) {
+  if (!newStatus || oldStatus === newStatus) return true;
+  const pastConfirmed = ["Confirmed", "Partial", "Paid", "Cancelled"].includes(oldStatus);
+  if (pastConfirmed && ["Draft", "Pending"].includes(newStatus)) return false;
+  if (oldStatus === "Paid" && newStatus !== "Paid") return false;
+  return true;
+}
+
+// Applies/reverses the stock-in for a Purchase transitioning into or out of
+// "Confirmed" (or a status implying it was already reached, e.g. Partial/Paid
+// via statusForPaidAmount jumping straight there) — the single inventory-
+// triggering event for a Purchase, mirroring purchaseOrderController's
+// syncPurchaseOrderDeliveryStock (Delivered) and purchaseReturnController's
+// syncPurchaseReturnStock (Confirmed) exactly.
+//
+// Two goods sources must never double-count the same stock: a Purchase
+// linked to a Purchase Order whose own Delivered transition already applied
+// it. In that case this Purchase's own Confirmed transition is a no-op for
+// stock — recorded as stockMovementStatus 'skipped' rather than 'applied',
+// so cancelling this Purchase later correctly does NOT reverse anything (the
+// PO's movement is a separate event this record never owned).
+async function syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, userId, previousItems = null) {
+  const newStatus = purchase.status;
+  const reachedStockPhase = ["Confirmed", "Partial", "Paid"].includes(newStatus);
+  const wasInStockPhase = ["Confirmed", "Partial", "Paid"].includes(oldStatus);
+
+  // Already Confirmed (stock previously applied by this Purchase, not
+  // skipped in favor of its PO) and its items just changed: apply only the
+  // delta between what was previously on the document and what's on it now
+  // — same technique purchaseReturnController's syncPurchaseReturnStock
+  // uses, so editing a received quantity from 4 -> 6 only moves 2 more
+  // units, never re-applies all 6.
+  if (oldStockMovementStatus === "applied" && previousItems) {
+    await syncDocumentStock({
+      organization: purchase.organization,
+      documentId: purchase._id,
+      documentModel: "Purchase",
+      documentNumber: purchase.purchaseNumber,
+      items: purchase.items,
+      previousItems,
+      baseDirection: "in",
+      userId,
+      reason: "purchase_received",
+      isReversal: false,
+    });
+    return;
+  }
+
+  if (reachedStockPhase && !wasInStockPhase && oldStockMovementStatus === "pending") {
+    let sourcePoApplied = false;
+    if (purchase.purchaseOrder) {
+      const sourcePo = await PurchaseOrder.findById(purchase.purchaseOrder).select("stockMovementStatus");
+      sourcePoApplied = sourcePo?.stockMovementStatus === "applied";
+    }
+
+    if (sourcePoApplied) {
+      purchase.stockMovementStatus = "skipped";
+    } else {
+      await syncDocumentStock({
+        organization: purchase.organization,
+        documentId: purchase._id,
+        documentModel: "Purchase",
+        documentNumber: purchase.purchaseNumber,
+        items: purchase.items,
+        previousItems: [],
+        baseDirection: "in",
+        userId,
+        reason: "purchase_received",
+        isReversal: false,
+      });
+      purchase.stockMovementStatus = "applied";
+    }
+    await purchase.save({ validateModifiedOnly: true });
+    return;
+  }
+
+  if (newStatus === "Cancelled" && oldStockMovementStatus === "applied") {
+    // Only a Purchase that itself applied the movement reverses it — a
+    // 'skipped' one (stock came from the linked PO) has nothing of its own
+    // to undo.
+    await syncDocumentStock({
+      organization: purchase.organization,
+      documentId: purchase._id,
+      documentModel: "Purchase",
+      documentNumber: purchase.purchaseNumber,
+      items: purchase.items,
+      previousItems: [],
+      baseDirection: "in",
+      userId,
+      reason: "adjustment",
+      isReversal: true,
+    });
+    purchase.stockMovementStatus = "reversed";
+    await purchase.save({ validateModifiedOnly: true });
+  }
+}
+
 // Create Purchase
 exports.createPurchase = async (req, res) => {
   try {
@@ -106,11 +206,13 @@ exports.createPurchase = async (req, res) => {
       if (!poExists) return res.status(404).json({ message: "Purchase Order not found" });
 
       // An Approved or Delivered PO can become a Purchase — Pending/Rejected
-      // can't, since neither represents a confirmed order yet. Stock itself
-      // only ever moves on the PO's own Delivered transition (see
-      // purchaseOrderController's syncPurchaseOrderDeliveryStock), never here,
-      // so converting from Approved (before delivery) is safe. Enforced here
-      // (not just hidden in the UI) since this endpoint can be hit directly.
+      // can't, since neither represents a confirmed order yet. If the PO was
+      // already Delivered (stock already applied there), this Purchase's own
+      // later Confirmed transition is a no-op for stock (see syncPurchaseStock's
+      // 'skipped' path) — converting from Approved (before delivery) is
+      // equally safe, since then this Purchase's own Confirmed is what
+      // actually applies it. Enforced here (not just hidden in the UI) since
+      // this endpoint can be hit directly.
       if (poExists.status !== "Approved" && poExists.status !== "Delivered") {
         return res.status(400).json({
           message: `Only an Approved or Delivered Purchase Order can be converted to a Purchase (this one is "${poExists.status}").`,
@@ -154,15 +256,20 @@ exports.createPurchase = async (req, res) => {
       grandTotal,
       notes,
       // A Purchase created from a PO always starts as Pending, regardless of
-      // what the caller sends — it's a real order awaiting payment, not a
-      // draft. (Converting never moves stock either way — that only happens
-      // on the PO's own Delivered transition.)
+      // what the caller sends — it's a real order awaiting payment, not
+      // already-confirmed receipt of goods.
       status: purchaseOrder ? "Pending" : (status || "Draft"),
       user: req.user.id,
       organization: req.user.organization
     });
 
     await purchase.save();
+
+    // Covers creating a standalone Purchase directly at Confirmed (or
+    // later) — skips the PO-linked case above since that always starts at
+    // Pending, but stays correct either way (syncPurchaseStock no-ops when
+    // the status isn't actually past Confirmed).
+    await syncPurchaseStock(purchase, null, "pending", req.user.id);
 
     // Explicit user choice on this purchase — carry it back to the product master.
     await syncItemMasterPricing(purchase.items, req.user.organization);
@@ -368,11 +475,28 @@ exports.updatePurchase = async (req, res) => {
       return res.status(403).json({ message: "You can only edit purchases you own" });
     }
 
-    // Paid is terminal — same rule as updatePurchaseStatus, applied here too
-    // since this endpoint is also how the edit form changes status.
-    if (purchase.status === "Paid" && status && status !== "Paid") {
-      return res.status(400).json({ message: "A Paid purchase can't be changed to another status." });
+    // Captured before any field changes below, so the stock sync (after
+    // save) can tell what actually transitioned.
+    const oldStatus = purchase.status;
+    const oldStockMovementStatus = purchase.stockMovementStatus;
+
+    // Same rule as updatePurchaseStatus, applied here too since this
+    // endpoint is also how the edit form changes status.
+    if (!isValidPurchaseStatusTransition(oldStatus, status)) {
+      const message = oldStatus === "Paid"
+        ? "A Paid purchase can't be changed to another status."
+        : `A ${oldStatus} purchase can't be moved back to ${status}.`;
+      return res.status(400).json({ message });
     }
+
+    // Snapshot before any overwrite below — only meaningful (passed on) when
+    // stock was already applied for this purchase, so an item-quantity edit
+    // after Confirmed moves just the delta instead of re-applying everything.
+    const previousItemsSnapshot = purchase.items.map((it) => ({
+      itemId: it.itemId,
+      variantId: it.variantId,
+      quantity: it.quantity,
+    }));
 
     // If items updated, recalc subtotal and item totals
     if (items) {
@@ -430,12 +554,15 @@ exports.updatePurchase = async (req, res) => {
       await syncItemMasterPricing(purchase.items, req.user.organization);
     }
 
-    // No inventory sync here: stock is moved exactly once, when the source
-    // Purchase Order becomes Delivered (see purchaseOrderController's
-    // syncPurchaseOrderDeliveryStock). This Purchase document is an
-    // accounting/payment record only — its status (Draft/Pending/Paid/
-    // Partial/Cancelled) must never touch stock, or the Delivered increase
-    // would get counted twice.
+    // Applies/reverses the Confirmed stock-in, or — if stock was already
+    // applied and items were part of this update — moves just the delta
+    // between the old and new quantities. Covers both the edit form (which
+    // sends items+status together) and bulk status updates from the list
+    // page, which PUT here rather than the /status endpoint below.
+    // syncPurchaseStock itself skips the movement (stockMovementStatus:
+    // 'skipped') when this Purchase's linked PO already applied it on
+    // Delivered, so the same goods are never counted twice.
+    await syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, req.user.id, items ? previousItemsSnapshot : null);
 
     // Populate references
     await purchase.populate([
@@ -455,35 +582,41 @@ exports.updatePurchase = async (req, res) => {
 exports.updatePurchaseStatus = async (req, res) => {
   try {
     const { status } = req.body;
-    const validStatuses = ["Draft", "Pending", "Paid", "Partial", "Cancelled"];
+    const validStatuses = ["Draft", "Pending", "Confirmed", "Paid", "Partial", "Cancelled"];
 
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    const oldPurchase = await Purchase.findOne({ _id: req.params.id, organization: req.user.organization });
-    if (!oldPurchase) return res.status(404).json({ message: "Purchase not found" });
+    const purchase = await Purchase.findOne({ _id: req.params.id, organization: req.user.organization });
+    if (!purchase) return res.status(404).json({ message: "Purchase not found" });
 
-    // Paid is terminal — a fully paid purchase can't be walked back through
-    // the status dropdown. (Deleting/editing an individual payment via
-    // Record Payment still recomputes status automatically — see
-    // statusForPaidAmount — that's a payment-driven correction, not this
-    // manual override.)
-    if (oldPurchase.status === "Paid" && status !== "Paid") {
-      return res.status(400).json({ message: "A Paid purchase can't be changed to another status." });
+    // Once Confirmed (or later), status can't go back to Draft/Pending —
+    // and once Paid, it can't become Cancelled (that needs an explicit
+    // refund/reversal workflow, not a status flip via this dropdown).
+    // (Deleting/editing an individual payment via Record Payment still
+    // recomputes status automatically — see statusForPaidAmount — that's a
+    // payment-driven correction, not this manual override.)
+    const oldStatus = purchase.status;
+    if (!isValidPurchaseStatusTransition(oldStatus, status)) {
+      const message = oldStatus === "Paid"
+        ? "A Paid purchase can't be changed to another status."
+        : `A ${oldStatus} purchase can't be moved back to ${status}.`;
+      return res.status(400).json({ message });
     }
+    const oldStockMovementStatus = purchase.stockMovementStatus;
 
     // When a purchase is marked Paid via the status dropdown, record the exact
     // remaining unpaid balance as a payment entry so the Payment Timeline
     // reflects the actual cash movement. Method is "Other" because the
     // status-only UI has no payment-method field — neutral label is more
     // honest than silently inventing a method. Skipped if already fully paid.
-    if (status === "Paid" && oldPurchase.status !== "Paid") {
-      const alreadyPaid = (oldPurchase.payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-      const totalAmount = Number(oldPurchase.grandTotal || oldPurchase.subtotal) || 0;
+    if (status === "Paid" && oldStatus !== "Paid") {
+      const alreadyPaid = (purchase.payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+      const totalAmount = Number(purchase.grandTotal || purchase.subtotal) || 0;
       const remaining = totalAmount - alreadyPaid;
       if (remaining > 0) {
-        oldPurchase.payments.push({
+        purchase.payments.push({
           amount: remaining,
           paymentDate: new Date(),
           paymentMethod: 'Other',
@@ -493,63 +626,22 @@ exports.updatePurchaseStatus = async (req, res) => {
           recordedAt: new Date(),
         });
       }
-      oldPurchase.status = status;
-      await oldPurchase.save({ validateModifiedOnly: true });
-
-      const purchase = await Purchase.findById(oldPurchase._id)
-        .populate('vendor', 'name email phone')
-        .populate('purchaseOrder', 'poNumber vendor')
-        .populate('items.itemId', 'name description purchasePrice hsnSac gstRate');
-
-      return res.json(purchase);
     }
 
-    const purchase = await Purchase.findOneAndUpdate(
-      {
-        _id: req.params.id,
-        organization: req.user.organization
-      },
-      { status },
-      { new: true }
-    )
-      .populate('vendor', 'name email phone')
-      .populate('purchaseOrder', 'poNumber vendor')
-      .populate('items.itemId', 'name description purchasePrice hsnSac gstRate');
+    purchase.status = status;
+    await purchase.save({ validateModifiedOnly: true });
 
-    if (!purchase) {
-      return res.status(404).json({ message: "Purchase not found" });
-    }
+    // Applies/reverses the Confirmed stock-in — see syncPurchaseStock. Runs
+    // for every transition (not just Paid), since Confirmed itself — or a
+    // payment-driven jump straight to Partial/Paid — is what actually moves
+    // stock now.
+    await syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, req.user.id);
 
-    // No forward inventory sync on Paid: stock moves exactly once, when the
-    // source Purchase Order becomes Delivered — see purchaseOrderController's
-    // syncPurchaseOrderDeliveryStock. Marking a Purchase Paid is payment/
-    // accounting status only.
-    //
-    // Existing records from before this change may still carry
-    // stockMovementStatus 'applied' (stock was increased under the old
-    // Paid-triggers-stock behavior). Moving such a purchase off Paid still
-    // reverses that earlier increase, so its ledger stays accurate — this is
-    // the last remaining site that can flip 'applied' -> 'reversed'; nothing
-    // sets it to 'applied' going forward.
-    const oldStockMovementStatus = oldPurchase.stockMovementStatus;
-    const wasReceived = oldPurchase.status === "Paid";
-    const isNowReceived = status === "Paid";
-    if (!isNowReceived && wasReceived && oldStockMovementStatus === 'applied') {
-      await syncDocumentStock({
-        organization: req.user.organization,
-        documentId: purchase._id,
-        documentModel: "Purchase",
-        documentNumber: purchase.purchaseNumber,
-        items: purchase.items,
-        previousItems: [],
-        baseDirection: "in",
-        userId: req.user.id,
-        reason: "adjustment",
-        isReversal: true,
-      });
-      purchase.stockMovementStatus = 'reversed';
-      await purchase.save({ validateModifiedOnly: true });
-    }
+    await purchase.populate([
+      { path: 'vendor', select: 'name email phone' },
+      { path: 'purchaseOrder', select: 'poNumber vendor' },
+      { path: 'items.itemId', select: 'name description purchasePrice hsnSac gstRate' },
+    ]);
 
     res.json(purchase);
   } catch (err) {
@@ -598,26 +690,24 @@ exports.deletePurchase = async (req, res) => {
   }
 };
 
-// Derives the payment-tracking status (Pending/Partial/Paid) from how much of
-// grandTotal has actually been paid. Never touches Draft/Cancelled — those
-// are set explicitly via the status dropdown/endpoint, not by paying.
+// Derives the payment-tracking status (Confirmed/Partial/Paid) from how much
+// of grandTotal has actually been paid. Payment-driven promotion only
+// applies once Confirmed has already been reached explicitly (via the status
+// dropdown/endpoint) — a payment recorded on a Draft/Pending purchase must
+// never silently skip past Confirmed, since that's also the physical-receipt
+// event that triggers stock-in (see syncPurchaseStock). Never touches
+// Draft/Pending/Cancelled for that reason.
 function statusForPaidAmount(purchase, totalPaid) {
-  // Cancelled is terminal — recording/removing a payment against a
-  // cancelled Purchase (the UI blocks this, but the API doesn't) must not
-  // resurrect it into Pending/Partial/Paid.
-  if (purchase.status === "Cancelled") {
+  if (!["Confirmed", "Partial", "Paid"].includes(purchase.status)) {
     return purchase.status;
   }
-  // Draft becomes a real payment-tracked status the moment a payment is
-  // actually recorded against it — staying "Draft" while carrying a full
-  // payment would be misleading.
   if (totalPaid >= purchase.grandTotal - 0.01 && purchase.grandTotal > 0) {
     return "Paid";
   }
   if (totalPaid > 0) {
     return "Partial";
   }
-  return purchase.status === "Draft" ? "Draft" : "Pending";
+  return "Confirmed";
 }
 
 // GET Purchase Payments
@@ -658,6 +748,9 @@ exports.addPurchasePayment = async (req, res) => {
       return res.status(400).json({ error: `Payment cannot exceed the remaining balance of ₹${amountDue.toFixed(2)}.` });
     }
 
+    const oldStatus = purchase.status;
+    const oldStockMovementStatus = purchase.stockMovementStatus;
+
     purchase.payments.push({
       amount: parsedAmount,
       paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
@@ -676,6 +769,11 @@ exports.addPurchasePayment = async (req, res) => {
     // invoiceController.addInvoicePayment (don't re-validate unrelated
     // legacy fields on an older purchase).
     await purchase.save({ validateModifiedOnly: true });
+    // Normally a no-op here (statusForPaidAmount only promotes once already
+    // Confirmed, which already applied stock) — kept for legacy purchases
+    // that reached Paid under an older flow without ever setting
+    // stockMovementStatus.
+    await syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, req.user.id);
     await purchase.populate([
       { path: "vendor", select: "name email phone" },
       { path: "purchaseOrder", select: "poNumber vendor" },
@@ -721,9 +819,12 @@ exports.updatePurchasePayment = async (req, res) => {
     payment.notes = notes ?? payment.notes;
     payment.internalNotes = internalNotes ?? payment.internalNotes;
 
+    const oldStatus = purchase.status;
+    const oldStockMovementStatus = purchase.stockMovementStatus;
     purchase.status = statusForPaidAmount(purchase, otherPaid + parsedAmount);
 
     await purchase.save({ validateModifiedOnly: true });
+    await syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, req.user.id);
     res.json({ message: "Payment updated successfully", purchase });
   } catch (err) {
     res.status(500).json({ error: `Failed to update payment: ${err.message}` });
@@ -744,10 +845,13 @@ exports.deletePurchasePayment = async (req, res) => {
 
     payment.deleteOne();
 
+    const oldStatus = purchase.status;
+    const oldStockMovementStatus = purchase.stockMovementStatus;
     const totalPaid = (purchase.payments || []).reduce((sum, p) => sum + p.amount, 0);
     purchase.status = statusForPaidAmount(purchase, totalPaid);
 
     await purchase.save({ validateModifiedOnly: true });
+    await syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, req.user.id);
     res.json({ message: "Payment deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: `Failed to delete payment: ${err.message}` });

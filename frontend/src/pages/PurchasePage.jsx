@@ -289,13 +289,13 @@ const PurchasePage = () => {
     direction: null,
   });
 
-  const statusOptions = ["Draft", "Pending", "Paid", "Cancelled"];
+  const statusOptions = ["Draft", "Pending", "Confirmed", "Partial", "Paid", "Cancelled"];
 
   // Columns available in the rule-builder filter panel (mirrors Companies.jsx pattern).
   const purchaseFilterColumns = [
     { key: "purchaseNumber", label: "Purchase Number" },
     { key: "vendor", label: "Vendor" },
-    { key: "status", label: "Status", options: ["Draft", "Pending", "Paid", "Cancelled"] },
+    { key: "status", label: "Status", options: statusOptions },
     { key: "grandTotal", label: "Grand Total" },
     { key: "notes", label: "Notes" },
   ];
