@@ -1002,15 +1002,25 @@ const CreateInvoicePanel = ({
       }
 
       const path = apiPathFor(type);
+      const savedMessage = isDraft
+        ? "Saved as draft!"
+        : `${docName} ${isEditing ? "updated" : "created"} successfully!`;
       if (isEditing) {
         await API.put(`/${path}/${initialDoc._id}`, payload);
-        setSuccessMessage(isDraft ? "Saved as draft!" : `${docName} updated successfully!`);
       } else {
         await API.post(`/${path}`, payload);
-        setSuccessMessage(isDraft ? "Saved as draft!" : `${docName} created successfully!`);
       }
       onCreated();
-      setShowSuccessModal(true);
+      // The confetti confirmation is an Invoice-only treatment. This panel is
+      // shared by all four document types, so the other three confirm with a
+      // toast and close straight away, as they did before.
+      if (type === "tax") {
+        setSuccessMessage(savedMessage);
+        setShowSuccessModal(true);
+      } else {
+        toast.success(savedMessage);
+        onClose();
+      }
     } catch (err) {
       const serverMessage = err.response?.data?.error || "";
       if (/insufficient stock/i.test(serverMessage)) {
@@ -2002,10 +2012,14 @@ const CreateInvoicePanel = ({
                           </div>
                           {/* GST % */}
                           <div className="col-span-1">
+                            {/* appearance-none + our own chevron: the native
+                                select arrow is ~20px wide and clipped "18%" to
+                                "18" in this one-column cell. */}
+                            <div className="relative">
                             <select
                               value={item.gstRate ?? 0}
                               onChange={(e) => updateItem(realIndex, { gstRate: parseFloat(e.target.value) })}
-                              className="w-full text-center text-[13px] border border-[#E1E4EA] rounded-lg py-1.5 bg-[#F8F9FB] focus:bg-white focus:outline-none focus:border-[#0085FF] cursor-pointer"
+                              className="w-full appearance-none text-center text-[13px] border border-[#E1E4EA] rounded-lg pl-1.5 pr-4 py-1.5 bg-[#F8F9FB] focus:bg-white focus:outline-none focus:border-[#0085FF] cursor-pointer"
                             >
                               <option value={0}>0%</option>
                               <option value={5}>5%</option>
@@ -2013,6 +2027,8 @@ const CreateInvoicePanel = ({
                               <option value={18}>18%</option>
                               <option value={28}>28%</option>
                             </select>
+                            <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-[#99A0AE]" />
+                            </div>
                           </div>
                           {/* Discount */}
                           <div className="col-span-2">

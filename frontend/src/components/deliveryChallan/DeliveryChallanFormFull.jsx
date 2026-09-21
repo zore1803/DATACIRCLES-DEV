@@ -625,9 +625,16 @@ const DeliveryChallanFormFull = ({
       // generic keys shared by every document type — this screen's own form
       // uses deliveryChallan-specific ones, so they're remapped on the way in.
       const { invoicePrefix, invoiceSuffix, invoiceNumber, ...rest } = formOverride;
+      // The split panel always keeps one blank editable row so there is
+      // something to type into; this screen shows an empty state instead, so a
+      // handed-over blank row would look like a product had already been added.
+      const handedItems = (formOverride.items || []).filter(
+        (it) => it && (it.name || it._id)
+      );
       setForm((prev) => ({
         ...prev,
         ...rest,
+        items: handedItems,
         deliveryChallanPrefix: invoicePrefix ?? prev.deliveryChallanPrefix,
         deliveryChallanSuffix: invoiceSuffix ?? prev.deliveryChallanSuffix,
         deliveryChallanNumber: invoiceNumber ?? prev.deliveryChallanNumber,
@@ -1927,9 +1934,10 @@ const DeliveryChallanFormFull = ({
                 <>
               {/* Column Headers */}
               <div className="grid grid-cols-12 gap-4 pb-2 border-b border-gray-100 text-xs font-semibold text-gray-500">
-                <div className="col-span-4">Product Name</div>
+                <div className="col-span-3">Product Name</div>
                 <div className="col-span-2 text-center">Quantity</div>
                 <div className="col-span-2 text-right">Unit Price</div>
+                <div className="col-span-1 text-center">GST %</div>
                 <div className="col-span-2 text-center">Discount</div>
                 <div className="col-span-2 text-right">Total</div>
               </div>
@@ -1946,7 +1954,7 @@ const DeliveryChallanFormFull = ({
 
                       <div className="grid grid-cols-12 gap-4 items-start">
                         {/* Product Name (Plain Input instead of Search) */}
-                        <div className="col-span-4">
+                        <div className="col-span-3">
                           <input
                             type="text"
                             value={item.name || ""}
@@ -1991,6 +1999,28 @@ const DeliveryChallanFormFull = ({
                             className="w-full text-right text-sm border border-gray-200 rounded-lg px-2 py-2.5 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
                             required
                           />
+                        </div>
+
+                        {/* GST % — per line, from the product/variant. The
+                            engine reads this rate and nothing document-wide. */}
+                        <div className="col-span-1">
+                          <div className="relative">
+                            <select
+                              value={item.gstRate ?? 0}
+                              onChange={(e) => {
+                                handleItemChange(index, "gstRate", parseFloat(e.target.value));
+                                setHasUnsavedChanges(true);
+                              }}
+                              className="w-full appearance-none text-center text-[13px] text-[#1F2937] border border-[#1F2937]/10 rounded-full pl-2 pr-5 py-2.5 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                            >
+                              <option value={0}>0%</option>
+                              <option value={5}>5%</option>
+                              <option value={12}>12%</option>
+                              <option value={18}>18%</option>
+                              <option value={28}>28%</option>
+                            </select>
+                            <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                          </div>
                         </div>
 
                         {/* Discount */}

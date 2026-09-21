@@ -647,7 +647,13 @@ const InvoiceFormFull = ({
     // below — and takes priority since it reflects edits made after the
     // document was loaded, which editingInvoice/conversionData don't know about.
     if (formOverride) {
-      setForm((prev) => ({ ...prev, ...formOverride }));
+      // The split panel always keeps one blank editable row so there is
+      // something to type into; this screen shows an empty state instead, so a
+      // handed-over blank row would look like a product had already been added.
+      const handedItems = (formOverride.items || []).filter(
+        (it) => it && (it.name || it._id)
+      );
+      setForm((prev) => ({ ...prev, ...formOverride, items: handedItems }));
       setHasUnsavedChanges(false);
       return;
     }
