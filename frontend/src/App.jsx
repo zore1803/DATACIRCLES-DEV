@@ -74,6 +74,10 @@ import Journals from "./pages/Journals";
 import Expenses from "./pages/Expenses";
 import IndirectIncome from "./pages/IndirectIncome";
 import TeamIcon from "./components/common/TeamIcon";
+import UserLogin from "./pages/UserLogin";
+import UserRegister from "./pages/UserRegister";
+import ForgotPass from "./components/login/ForgotPass";
+import Verification from "./components/login/Verification";
 
 function ChecklistModal({ showChecklist, setShowChecklist }) {
   const location = useLocation();
@@ -429,7 +433,11 @@ function App() {
         >
           <Routes>
             <Route path="/login" element={<Login />} />
+             <Route path="/userlogin" element={<UserLogin />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/userregister" element={<Register />} />
+            <Route path="/userforgotpassword" element={<ForgotPass />} />
+            <Route path="/userverification" element={<Verification />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/super-admin/login" element={<SuperAdminLogin />} />
