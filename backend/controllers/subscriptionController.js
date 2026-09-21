@@ -32,7 +32,7 @@ const { validateAndPriceCoupon, recordRedemption, buildCouponModifierForLineItem
 // "redeemed" condition is always already true at these call sites too;
 // reusing this exact function needs no modification, just a second caller.
 const { isCouponStillEligibleForRenewal } = require('../utils/couponRenewalEligibility');
-const { createRegistrationLinkForOrg, formatContactForRazorpay } = require('../utils/cawAcquisition');
+const { createRegistrationLinkForOrg, formatContactForRazorpay, resolveMandateMethod } = require('../utils/cawAcquisition');
 const { calculateInvoice, toPricingBreakdown, calculateCommercialAdjustments } = require('../utils/invoiceEngine');
 const BillingInvoice = require('../models/BillingInvoice');
 const CommercialTransaction = require('../models/CommercialTransaction');
@@ -541,12 +541,10 @@ exports.createSubscription = async (req, res) => {
     // per the Razorpay SDK's own type definitions (RazorpaySubscriptionRegistrationUpi
     // extends the base request body with nothing extra — confirmed by reading
     // node_modules/razorpay/dist/types/subscriptions.d.ts, not assumed):
-    //   - method: omitted here entirely, on purpose. The backend must not
-    //     decide the payment instrument — Razorpay's hosted Registration Link
-    //     page presents every method enabled on the account (UPI Autopay,
-    //     card, etc.) and the customer picks. If a specific frontend flow ever
-    //     needs to pre-constrain this, pass req.body.mandateMethod through
-    //     explicitly rather than defaulting/guessing here.
+    //   - method: ALWAYS sent — see resolveMandateMethod (cawAcquisition.js).
+    //     Omitting it made Razorpay's hosted page show Cards only, not every
+    //     enabled method. The customer picks it at checkout (mandateMethod);
+    //     anything missing/unknown falls back to UPI Autopay.
     //   - expire_at: also omitted — no documented default exists to override,
     //     and there is no product requirement yet for a specific mandate
     //     validity horizon. Only max_amount has a documented Razorpay default
@@ -577,7 +575,7 @@ exports.createSubscription = async (req, res) => {
       description: `${planId.charAt(0).toUpperCase() + planId.slice(1)} Plan - ${billingCycle}`,
       subscription_registration: {
         max_amount: mandateMaxAmountPaise,
-        ...(req.body.mandateMethod ? { method: req.body.mandateMethod } : {}),
+        method: resolveMandateMethod(req.body.mandateMethod),
       },
       // Razorpay caps `receipt` at 40 chars (confirmed live: "The receipt may
       // not be greater than 40 characters."). A full org ObjectId (24 chars)
@@ -2354,6 +2352,7 @@ exports.updateSubscription = async (req, res) => {
         planId,
         billingCycle,
         firstInvoiceRupees: snapshot.total,
+        mandateMethod: req.body.mandateMethod,
       });
 
       // Pending-mandate fields, mirroring createSubscription's own write

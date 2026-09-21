@@ -92,6 +92,9 @@ const SubscriptionPlans = () => {
   // converted. Reset each time the transition confirmation is (re)opened.
   const [transitionAddonChoices, setTransitionAddonChoices] = useState({});
   const [checkoutData, setCheckoutData] = useState(null); // modal data, null = closed
+  // Autopay instrument for a NEW mandate (Razorpay shows only this one on its
+  // page — omitting it showed Cards only). 'upi' | 'card' | 'emandate'.
+  const [mandateMethod, setMandateMethod] = useState("upi");
 
   // Coupon applied on this page (before checkout). Holds { code, name, rules }.
   // Discounts ripple onto every plan/add-on card via the coupon's per-product
@@ -1661,6 +1664,7 @@ const SubscriptionPlans = () => {
         billingCycle: checkoutData.billingCycle,
         addons: addonsPayload,
         ...(checkoutData.appliedCoupon ? { couponCode: checkoutData.appliedCoupon.code } : {}),
+        mandateMethod,
         // Referral code is NOT sent here — it's applied immediately via its
         // own Apply button (handleApplyReferral), not folded into checkout
         // submission. See the state declaration above for why.
@@ -1766,6 +1770,7 @@ const SubscriptionPlans = () => {
         billingCycle: sub.billingCycle,
         addons: (sub.activeAddons || []).map((a) => ({ addonKey: a.addonKey, quantity: a.quantity })),
         ...(sub.appliedCoupon?.code ? { couponCode: sub.appliedCoupon.code } : {}),
+        mandateMethod,
       };
       const response = await updateSubscription(planData);
       if (response.registrationLink?.shortUrl) {
@@ -2057,6 +2062,9 @@ const SubscriptionPlans = () => {
         // through as that argument instead.
         onConfirm={() => handleConfirmCheckout()}
         onCancel={() => setCheckoutData(null)}
+        // Only a first payment creates a mandate; paying orgs already have one.
+        mandateMethod={subscription?.subscription?.isPaymentConfirmed ? null : mandateMethod}
+        onMandateMethodChange={setMandateMethod}
         onCarryForwardChange={checkoutData?.type === "plan_downgrade" ? handleDowngradeCarryForwardChange : handleCarryForwardChange}
         onDowngradeResolutionChange={handleDowngradeResolutionChange}
         transitionAddonChoices={transitionAddonChoices}

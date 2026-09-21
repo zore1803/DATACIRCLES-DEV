@@ -40,6 +40,16 @@ function computeMandateMaxAmountRupees(_firstInvoiceRupees) {
   return MANDATE_CEILING_RUPEES;
 }
 
+// Found via live QA: with `method` omitted, Razorpay's hosted Registration
+// Link page offered ONLY Cards (desktop and phone) even though UPI Autopay is
+// activated on the account — it does not fall back to "every enabled method".
+// So a method is always sent: the customer's pick from checkout, else UPI
+// Autopay (what most Indian customers expect; ₹15,000 ceiling fits UPI's cap).
+const MANDATE_METHODS = ['upi', 'card', 'emandate'];
+function resolveMandateMethod(requested) {
+  return MANDATE_METHODS.includes(requested) ? requested : 'upi';
+}
+
 // Fix (found via live QA): the stored phone is always a bare 10-digit
 // string (authController.js's updateProfile validates only /^\d{10}$/,
 // never storing a country code) — but this app is India-only today (per
@@ -99,7 +109,7 @@ async function createRegistrationLinkForOrg({
     description: `${planId.charAt(0).toUpperCase() + planId.slice(1)} Plan - ${billingCycle}`,
     subscription_registration: {
       max_amount: mandateMaxAmountPaise,
-      ...(mandateMethod ? { method: mandateMethod } : {}),
+      method: resolveMandateMethod(mandateMethod),
     },
     // Razorpay caps `receipt` at 40 chars — same constraint as
     // createSubscription's identical receipt construction.
@@ -125,4 +135,5 @@ module.exports = {
   createRegistrationLinkForOrg,
   computeMandateMaxAmountRupees,
   formatContactForRazorpay,
+  resolveMandateMethod,
 };
