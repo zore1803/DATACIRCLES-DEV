@@ -37,6 +37,10 @@ const subscriptionSchema = new mongoose.Schema({
   // ============================================================
   razorpayCustomerId: { type: String }, // cust_… (the mandate's customer)
   mandateTokenId: { type: String }, // token_… the reusable authorization CAW charges against
+  // Why the mandate is unusable, in the bank's own words (Razorpay's error_description, e.g.
+  // "Failed to tokenise the card"). Surfaced to the customer so a rejected auto-pay setup
+  // explains itself instead of leaving them on a silent trial after being charged.
+  mandateFailureReason: { type: String },
   // Added in Phase 2 (onboarding) — needed to correlate the incoming
   // token.confirmed/payment.captured webhooks back to the subscription that
   // requested them, since the Registration Link's invoice/order ids aren't

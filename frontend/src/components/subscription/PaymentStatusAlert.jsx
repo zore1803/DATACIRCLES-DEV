@@ -19,6 +19,14 @@ const PaymentStatusAlert = ({ subscription, onRetryPayment, onResumePayment, onC
 
   const uiState = deriveSubscriptionUIState(subscription);
 
+  // Checked before every early return below, because an honoured-but-unrenewable subscription trips
+  // all of them: it IS payment-confirmed, and it carries cancelAtPeriodEnd (that is how the paid
+  // term is made to lapse instead of renew). Falling through those guards would silence the one
+  // message this customer actually needs - that their auto-pay never got set up and the plan stops
+  // at period end.
+  const mandateUnusable =
+    subscription.mandateStatus === 'rejected' || subscription.mandateStatus === 'cancelled';
+
   // Hide during a genuine, not-yet-attempted trial. PENDING_MANDATE (a CAW
   // conversion attempt already in flight) is intentionally NOT trial here —
   // that state gets its own "Complete Payment"/mandate-pending message below,
@@ -40,17 +48,57 @@ const PaymentStatusAlert = ({ subscription, onRetryPayment, onResumePayment, onC
   // deliberately NOT exempted here — those states are always reached from a
   // real paid subscription, where a genuine payment-status alert can be
   // legitimate.
-  if (uiState === SUBSCRIPTION_UI_STATES.TRIAL || uiState === SUBSCRIPTION_UI_STATES.EXPIRED) return null;
+  if (!mandateUnusable && (uiState === SUBSCRIPTION_UI_STATES.TRIAL || uiState === SUBSCRIPTION_UI_STATES.EXPIRED)) return null;
 
   // Hide if payment is already confirmed
-  if (subscription.isPaymentConfirmed) return null;
+  if (!mandateUnusable && subscription.isPaymentConfirmed) return null;
 
   // Hide if a downgrade or cancellation is scheduled — but only a REAL one;
   // a stale/partial pendingUpdate object must not suppress the payment alert
   // for what's actually just an incomplete new-subscription checkout.
-  if (hasValidPendingUpdate(subscription) || subscription.cancelAtPeriodEnd) return null;
+  if (!mandateUnusable && (hasValidPendingUpdate(subscription) || subscription.cancelAtPeriodEnd)) return null;
 
+  // Ordinary guards, skipped entirely for an unusable mandate (see above).
   const getAlertContent = () => {
+    // A mandate the bank actually refused is NOT the same as one the customer never finished, and
+    // it must not be described as "authorization wasn't completed" — nothing the customer does
+    // differently on the same card will fix it. Until now nothing in the UI read mandateStatus at
+    // all, so this case rendered as an ordinary "resume your payment" nudge: the customer had been
+    // charged, could not be activated, and was told to go finish something that had in fact failed.
+    if (mandateUnusable) {
+      // Two very different situations share mandateStatus 'rejected': the paid period is running
+      // (we honoured the purchase, auto-renew is simply off) or the payment was refunded and there
+      // is nothing active at all. Saying "could not be activated" in the first case would be a
+      // plain lie to a paying, active customer.
+      const wasRefunded = subscription.paymentStatus === 'payment_failed';
+      const reason = subscription.mandateFailureReason
+        || 'Your bank or card issuer rejected the recurring-payment mandate';
+
+      if (!wasRefunded) {
+        return {
+          icon: <AlertCircle className="w-5 h-5" />,
+          bgColor: 'bg-amber-50',
+          borderColor: 'border-amber-200',
+          textColor: 'text-amber-800',
+          title: 'Auto-renew is off — your plan is active',
+          message: `${reason}. Your subscription is active for the period you paid for, but it will not renew automatically and will end when that period does. Set up auto-pay with a different card, bank account or UPI to keep it running.`,
+          showResume: true,
+          showChangePlan: true,
+        };
+      }
+
+      return {
+        icon: <XCircle className="w-5 h-5" />,
+        bgColor: 'bg-red-50',
+        borderColor: 'border-red-200',
+        textColor: 'text-red-800',
+        title: 'Your bank declined the auto-pay setup',
+        message: `${reason}. A subscription needs that permission to renew, so it could not be activated, and the amount charged has been refunded — it can take 5–7 working days to appear. Try again with a different card, or use a bank account/UPI mandate instead.`,
+        showResume: true,
+        showChangePlan: true,
+      };
+    }
+
     if (uiState === SUBSCRIPTION_UI_STATES.PENDING_MANDATE) {
       // Never the legacy retryPayment endpoint here — that's Order/classic-
       // Subscriptions-only and not CAW-aware (confirmed by trace: it reads/

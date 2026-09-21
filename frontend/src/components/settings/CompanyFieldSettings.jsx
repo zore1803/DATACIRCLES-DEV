@@ -46,7 +46,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
-import CompanyIndustrySettings from "./CompanyIndustrySettings";
+import CompanyIndustrySettings, { IndustryManagementGuide } from "./CompanyIndustrySettings";
 import AppToaster from "../AppToaster";
 import ConfirmDialog from "../common/ConfirmDialog";
 import UploadIcon from "../common/UploadIcon";
@@ -102,6 +102,8 @@ const DroppableSection = ({ category, children }) => {
     </div>
   );
 };
+
+const FIELD_TABS = ["custom", "sections", "builtin", "industryCustom", "industryBuiltin"];
 
 const BUILT_IN_FIELDS = [
   { name: "Company Name", type: "String (Single-line)", required: true },
@@ -789,22 +791,25 @@ const CompanyFieldSettings = () => {
        * adding/editing/deleting here writes through the same code paths.
        * ------------------------------------------------------------------ */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-        <div className="relative inline-flex items-center bg-gray-100 rounded-full p-1 mb-5">
-          {/* w-36, not the w-24 SystemDefaults uses - "Custom Section" does not fit 96px. */}
+        {/* Merged with CompanyIndustrySettings' own former switcher - one bar, five tabs, so
+            fields and industries live under a single card instead of two stacked ones. */}
+        <div className="relative inline-flex items-center bg-gray-100 rounded-full p-1 mb-5 max-w-full overflow-x-auto no-scrollbar">
           <span
             className="absolute top-1 bottom-1 w-36 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
-            style={{ left: 4 + ["custom", "sections", "builtin"].indexOf(activeFieldTab) * 144 }}
+            style={{ left: 4 + FIELD_TABS.indexOf(activeFieldTab) * 144 }}
           />
           {[
             { id: "custom", label: "Custom Field" },
             { id: "sections", label: "Custom Section" },
             { id: "builtin", label: "Built-in" },
+            { id: "industryCustom", label: "Custom Industry" },
+            { id: "industryBuiltin", label: "Built-in Industry" },
           ].map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveFieldTab(tab.id)}
-              className={`relative z-10 w-36 py-2 text-sm font-semibold rounded-full transition-colors ${
+              className={`relative z-10 w-36 flex-shrink-0 py-2 text-sm font-semibold rounded-full transition-colors ${
                 activeFieldTab === tab.id ? "text-[#0085FF]" : "text-gray-500 hover:text-gray-700"
               }`}
             >
@@ -826,25 +831,31 @@ const CompanyFieldSettings = () => {
             placeholder="Add custom field (e.g. Annual Revenue)"
             className="flex-1 min-w-[200px] px-4 py-2 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
           />
-          <select
-            value={newField.type}
-            onChange={(e) => setNewField({ ...newField, type: e.target.value, options: [] })}
-            className="px-4 py-2 text-sm rounded-full border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
-          >
-            {fieldTypes.map((t) => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
-          <select
-            value={newField.category}
-            onChange={(e) => setNewField({ ...newField, category: e.target.value })}
-            className="px-4 py-2 text-sm rounded-full border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
-          >
-            <option value="Uncategorized">Uncategorized</option>
-            {availableCategories.filter((c) => c !== "Uncategorized").map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+          <div className="relative">
+            <select
+              value={newField.type}
+              onChange={(e) => setNewField({ ...newField, type: e.target.value, options: [] })}
+              className="appearance-none pl-4 pr-10 py-2 text-sm rounded-full border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
+            >
+              {fieldTypes.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+            <ChevronDown className="w-4 h-4 text-gray-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+          <div className="relative">
+            <select
+              value={newField.category}
+              onChange={(e) => setNewField({ ...newField, category: e.target.value })}
+              className="appearance-none pl-4 pr-10 py-2 text-sm rounded-full border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0085FF]/30 focus:border-[#0085FF]"
+            >
+              <option value="Uncategorized">Uncategorized</option>
+              {availableCategories.filter((c) => c !== "Uncategorized").map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            <ChevronDown className="w-4 h-4 text-gray-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
           <label className="flex items-center gap-2 px-3 text-sm text-gray-600 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -960,6 +971,15 @@ const CompanyFieldSettings = () => {
                         <span className="text-xs text-gray-600">
                           {fieldTypes.find((t) => t.value === field.type)?.label || field.type}
                         </span>
+                        {(field.type === "dropdown" || field.type === "multiselect") && field.options?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {field.options.map((opt, i) => (
+                              <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-[10px] text-gray-600">
+                                {opt}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-xs text-gray-600">{field.category || "Uncategorized"}</span>
@@ -1195,6 +1215,15 @@ const CompanyFieldSettings = () => {
                               <span className="text-xs text-gray-600">
                                 {fieldTypes.find((t) => t.value === field.type)?.label || field.type}
                               </span>
+                              {(field.type === "dropdown" || field.type === "multiselect") && field.options?.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {field.options.map((opt, i) => (
+                                    <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-[10px] text-gray-600">
+                                      {opt}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </td>
                             <td className="px-4 py-3">
                               {field.required ? (
@@ -1335,40 +1364,9 @@ const CompanyFieldSettings = () => {
         </p>
         </>
         )}
-      </div>
 
-
-      <CompanyIndustrySettings />
-
-      {/* Info Card */}
-      <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-5">
-        <div className="flex items-start gap-3">
-          <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <h3 className="font-semibold text-blue-900 mb-1">
-              Field Type Guide
-            </h3>
-            <ul className="text-sm text-blue-700 space-y-1 leading-relaxed flex justify-between md:justify-start md:space-x-6 md:space-y-0">
-              <div>
-                <li>
-                  • <strong>Text:</strong> Multi-line text area for long
-                  descriptions
-                </li>
-                <li>
-                  • <strong>String:</strong> Single-line input for short text
-                </li>
-              </div>
-              <div>
-                <li>
-                  • <strong>Number:</strong> Numeric values only
-                </li>
-                <li>
-                  • <strong>Dropdown:</strong> Select from predefined options
-                </li>
-              </div>
-            </ul>
-          </div>
-        </div>
+        {activeFieldTab === "industryCustom" && <CompanyIndustrySettings activeTab="custom" />}
+        {activeFieldTab === "industryBuiltin" && <CompanyIndustrySettings activeTab="system" />}
       </div>
     </div>
   );

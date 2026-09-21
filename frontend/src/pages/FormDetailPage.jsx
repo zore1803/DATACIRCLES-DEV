@@ -1372,7 +1372,7 @@ const FormDetailPage = () => {
       {/* pt matches the fixed strip's own bottom edge exactly (54px/64px top offset + its 64px
           height), same pairing Settings.jsx uses with its equivalent -mt-6 cancellation — so
           content starts flush against the strip instead of leaving a gap under it. */}
-      <div className="px-4 sm:px-6 lg:px-8 pt-[86px] lg:pt-[96px]">
+      <div className="px-4 sm:px-6 lg:px-8 pt-[78px] lg:pt-[88px]">
         <div>
           {/* Same pill-switcher pattern as CompanyProfilePage.jsx's tab row: a border-b line above
               and below (each -mx-canceling this page's own gutter so it spans full width, exactly

@@ -3276,7 +3276,33 @@ async function reconcileMandate(subscription) {
   // both already idempotent (no-op on repeat) — this is safe to call every
   // time reconcileMandate runs, from either handler, any number of times.
   const wasAlreadyActive = subscription.appStatus === 'active';
-  if (subscription.paymentStatus === 'payment_completed' && subscription.mandateStatus === 'confirmed') {
+
+  // A paid period is delivered even when the mandate is unusable.
+  //
+  // The gate below used to require BOTH a completed payment and a confirmed mandate, so a customer
+  // whose card failed tokenisation stayed on 'trial' despite having paid in full - we held the
+  // money and delivered nothing (found live: Rs.295, mandate 'rejected'). The mandate only
+  // authorises the NEXT charge; it is not what the customer bought. So a captured first payment
+  // with a failed mandate now activates the subscription for exactly the period it paid for, with
+  // auto-renew off.
+  //
+  // Nothing else has to change for that to be safe, because both halves already exist:
+  //   - billingOrchestration.js's renewal query selects mandateTokenId: { $ne: null }, so a
+  //     mandate-less subscription can never be auto-charged, and
+  //   - subscriptionLifecycleJobs.js already finalises anything with cancelAtPeriodEnd at the end
+  //     of its entitlement window,
+  // which together give exactly the intended behaviour: runs to period end, then lapses unless the
+  // customer sets up a working mandate first.
+  const mandateUnusable = subscription.mandateStatus === 'rejected' || subscription.mandateStatus === 'cancelled';
+  const paidWithoutMandate = subscription.paymentStatus === 'payment_completed' && mandateUnusable;
+
+  if (paidWithoutMandate && !subscription.cancelAtPeriodEnd) {
+    // Not a cancellation the customer asked for - it is 'this term is prepaid and will not renew
+    // itself', which is the same end state and is already handled by the period-end job.
+    subscription.cancelAtPeriodEnd = true;
+  }
+
+  if (subscription.paymentStatus === 'payment_completed' && (subscription.mandateStatus === 'confirmed' || paidWithoutMandate)) {
     subscription.isPaymentConfirmed = true;
     // Regression fix (found via live QA — real money-affecting bug): this
     // AND-gate is THE activation moment for every CAW (Registration-Link)
@@ -3759,6 +3785,119 @@ async function handleCAWTokenEvent(tokenEntity, mandateStatus, razorpayEventId, 
     if (tokenEntity.expired_at) subscription.mandateExpiresAt = new Date(tokenEntity.expired_at * 1000);
   }
   await reconcileMandate(subscription);
+
+  // A rejected mandate used to end here: mandateStatus was written and nothing else happened.
+  // But the FIRST PAYMENT has usually already been captured by this point (payment and mandate
+  // are two separate results of the same registration link), so the customer is charged, cannot
+  // be activated - activation requires a usable mandate - and was never told either fact. Found
+  // live: an org paid Rs.295, the card failed tokenisation, and they sat on 'trial' with no
+  // explanation and no refund until they complained.
+  if (mandateStatus === 'rejected' || mandateStatus === 'cancelled') {
+    await handleUnusableMandate(subscription, { tokenEntity, mandateStatus });
+  }
+}
+
+// ============================================================
+// Rejected/cancelled mandate with money already taken.
+//
+// The default is NOT to refund: reconcileMandate now activates the paid period regardless (see
+// its gate above), so the customer gets what they bought and simply does not auto-renew. Refunding
+// on top of that would be giving away the term.
+//
+// Set RAZORPAY_AUTO_REFUND_REJECTED_MANDATE=true to refund instead - appropriate only if you
+// decide a subscription that cannot renew should not be sold at all. When enabled it is
+// deliberately narrow: only the first payment tied to THIS subscription's own registration link,
+// only when captured and not already refunded, and it records a REFUND billing event so the money
+// movement is auditable rather than silent.
+//
+// Either way the failure reason is recorded for the customer-facing banner, and a payment we can
+// neither deliver against nor return is escalated as BILLING_RECONCILIATION_NEEDED.
+// ============================================================
+async function handleUnusableMandate(subscription, { tokenEntity, mandateStatus }) {
+  const autoRefundEnabled = process.env.RAZORPAY_AUTO_REFUND_REJECTED_MANDATE === 'true';
+
+  const linkIds = [
+    subscription.registrationLinkId,
+    ...(subscription.priorRegistrationLinkIds || []),
+  ].filter(Boolean);
+
+  let refunded = null;
+  let capturedPayment = null;
+
+  for (const linkId of linkIds) {
+    const invoice = await razorpay.invoices.fetch(linkId).catch(() => null);
+    if (!invoice?.payment_id) continue;
+    const payment = await razorpay.payments.fetch(invoice.payment_id).catch(() => null);
+    if (payment?.status === 'captured' && (payment.amount_refunded || 0) < payment.amount) {
+      capturedPayment = payment;
+      break;
+    }
+  }
+
+  if (capturedPayment && autoRefundEnabled) {
+    try {
+      refunded = await razorpay.payments.refund(capturedPayment.id, {
+        speed: 'normal',
+        notes: {
+          reason: `mandate_${mandateStatus}`,
+          subscription_id: String(subscription._id),
+          organization_id: String(subscription.organization),
+        },
+      });
+      // Money returned means the paid period is no longer paid for - undo the activation inputs so
+      // the gate in reconcileMandate stops treating this as a delivered term.
+      subscription.paymentStatus = 'payment_failed';
+      subscription.isPaymentConfirmed = false;
+      subscription.cancelAtPeriodEnd = false;
+    } catch (err) {
+      // A failed refund must not lose the rest of this handler (the alert still needs to fire).
+      console.error('handleUnusableMandate: refund failed for', capturedPayment.id, err?.message);
+    }
+  }
+
+  subscription.mandateFailureReason =
+    tokenEntity?.error_description || tokenEntity?.notes?.reason || 'Bank rejected the auto-pay mandate';
+  await subscription.save();
+
+  const { emitBillingEvent } = require('../utils/billingEvents');
+
+  if (refunded) {
+    await emitBillingEvent({
+      organization: subscription.organization,
+      subscription: subscription._id,
+      eventType: 'REFUND',
+      status: 'completed',
+      amount: (refunded.amount || 0) / 100,
+      metadata: {
+        reason: `Mandate ${mandateStatus} - first payment refunded automatically`,
+        razorpayPaymentId: capturedPayment.id,
+        razorpayRefundId: refunded.id,
+      },
+    });
+  } else if (capturedPayment) {
+    // Money is sitting on a subscription that can never activate, and we did not (or could not)
+    // return it - that needs a human, so say so loudly rather than leaving it to be noticed.
+    await emitBillingEvent({
+      organization: subscription.organization,
+      subscription: subscription._id,
+      eventType: 'BILLING_RECONCILIATION_NEEDED',
+      status: 'pending',
+      amount: (capturedPayment.amount || 0) / 100,
+      metadata: {
+        reason: autoRefundEnabled
+          ? `Mandate ${mandateStatus}; automatic refund of ${capturedPayment.id} failed - refund manually`
+          : `Mandate ${mandateStatus}; paid period honoured without auto-renew (payment ${capturedPayment.id} kept)`,
+        razorpayPaymentId: capturedPayment.id,
+      },
+    });
+  }
+
+  console.warn(
+    `[mandate] ${mandateStatus} for organization ${subscription.organization}.`,
+    capturedPayment
+      ? `Captured payment ${capturedPayment.id}: ${refunded ? `refunded (${refunded.id})` : 'NOT refunded - needs manual handling'}.`
+      : 'No captured first payment found.'
+  );
 }
 
 // Exported so the future timeout-based reconciliation job (CAW_BILLING_DESIGN.md

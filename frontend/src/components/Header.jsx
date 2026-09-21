@@ -1424,11 +1424,18 @@ const Header = () => {
         // continuous surface, joined by the curved corner.
         style={{ left: "var(--sidebar-width, 0px)", background: "var(--chrome-bg, #EBEDFF)", top: "var(--dc-offline-offset, 0px)" }}
       >
-        <img
-          src="/DC Logo Export.png"
-          alt="DataCircles"
-          className="h-9 w-auto object-contain"
-        />
+        <button
+          type="button"
+          onClick={() => navigate("/")}
+          className="flex items-center flex-shrink-0"
+          title="Go to dashboard"
+        >
+          <img
+            src="/DC Logo Export.png"
+            alt="DataCircles"
+            className="h-9 w-auto object-contain"
+          />
+        </button>
 
         {/* Right Section: Promo Buttons, Search & Actions */}
         <div className="flex items-center gap-2 lg:gap-4 ml-auto">
