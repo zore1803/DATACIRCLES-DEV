@@ -54,7 +54,7 @@ const BASE = {
   formRadius: 12,
   formShadow: "sm",
   inputStyle: "outlined", // outlined | filled | underline
-  inputRadius: 8,
+  inputRadius: 999, // fully rounded pill, matching the rest of the redesigned form-builder chrome
   buttonRadius: 8,
   buttonWidth: "auto", // auto | full
   buttonPosition: "left",
@@ -69,7 +69,7 @@ export const THEME_PRESETS = {
       ...BASE,
       primaryColor: "#111827", backgroundColor: "#FFFFFF", surfaceColor: "#FFFFFF",
       textColor: "#111827", mutedTextColor: "#6B7280", borderColor: "#E5E7EB",
-      buttonColor: "#111827", formRadius: 8, inputRadius: 6, buttonRadius: 6, formShadow: "none",
+      buttonColor: "#0085FF", formRadius: 8, inputRadius: 999, buttonRadius: 999, formShadow: "none",
     },
   },
   professional: {

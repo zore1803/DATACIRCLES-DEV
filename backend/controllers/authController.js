@@ -1903,9 +1903,10 @@ exports.completeRegistration = async (req, res) => {
 exports.forgotPassword = async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ message: "Email is required" });
+  const normalizedEmail = email.trim().toLowerCase();
 
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: normalizedEmail });
 
     // Always return the same generic message to prevent email enumeration
     if (!user) {
@@ -1935,54 +1936,131 @@ exports.forgotPassword = async (req, res) => {
       console.log("Reset link:", resetLink);
     }
 
+    // The in-page ForgotPass flow (email -> 6-digit code -> new password, all
+    // without leaving the page) reads the OTP below via /auth/verify-reset-otp
+    // rather than following the link — both are sent from this one request so
+    // either UI (the old link-based /reset-password page, or the new in-page
+    // one) works off a single "forgot password" trigger.
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await TempEmailOTP.deleteMany({ email: normalizedEmail });
+    await new TempEmailOTP({
+      email: normalizedEmail,
+      otp,
+      verified: false,
+      expires: new Date(Date.now() + 10 * 60 * 1000),
+    }).save();
+
     await sendGridMail({
       to: email,
       subject: "Reset your DataCircles password",
       html: renderEmail({
         greetingName: user.name || null,
-        intro: 'We received a request to reset the password for your DataCircles account. Use the button below to choose a new one.',
+        intro: 'We received a request to reset the password for your DataCircles account. Enter the code below to choose a new one, or use the button.',
+        blocks: [
+          {
+            html: `<div style="margin:20px 0;text-align:center;">
+              <div style="display:inline-block;padding:16px 28px;background:#f4f6f8;border:1px solid #e5e7eb;border-radius:6px;font-size:32px;font-weight:700;letter-spacing:8px;font-family:'Courier New',monospace;color:#111111;">${otp}</div>
+            </div>`,
+          },
+        ],
         ctaLabel: 'Reset password',
         ctaUrl: resetLink,
-        closingHtml: "<p style=\"margin:8px 0 0;font-size:14px;line-height:1.6;color:#333333;\">This link expires in 1 hour. If you didn't make this request, no action is needed and your password stays the same.</p>",
+        closingHtml: "<p style=\"margin:8px 0 0;font-size:14px;line-height:1.6;color:#333333;\">The code expires in 10 minutes and the link in 1 hour. If you didn't make this request, no action is needed and your password stays the same.</p>",
         preheader: 'Reset your DataCircles password.',
       }),
     });
 
-    res.json({ message: "If that email is in our system, we sent a reset link to it." });
+    res.json({ message: "If that email is in our system, we sent a reset code to it." });
   } catch (error) {
     console.error("Forgot password error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// Password Reset - Reset Password
-exports.resetPassword = async (req, res) => {
-  const { token, password } = req.body;
+/**
+ * POST /api/auth/verify-reset-otp — the code step of the in-page ForgotPass
+ * flow (email -> code -> new password). Marks the TempEmailOTP `verified`
+ * rather than deleting it, so resetPassword below can require the same
+ * "verified: true" record it consumes — the exact pattern updateProfile
+ * already uses for a changed email/phone (see TempEmailOTP.findOne with
+ * verified: true above).
+ */
+exports.verifyResetOtp = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    if (!email || !code) {
+      return res.status(400).json({ message: "Email and code are required" });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
 
-  if (!token || !password) {
-    return res.status(400).json({ message: "Token and new password are required" });
+    const tempOtp = await TempEmailOTP.findOne({
+      email: normalizedEmail,
+      otp: code.toString(),
+      expires: { $gt: new Date() },
+    });
+    if (!tempOtp) {
+      return res.status(400).json({ message: "Invalid or expired verification code." });
+    }
+
+    tempOtp.verified = true;
+    await tempOtp.save();
+
+    res.json({ success: true, message: "Code verified." });
+  } catch (error) {
+    console.error("Verify reset OTP error:", error);
+    res.status(500).json({ message: "Unable to verify code. Please try again." });
   }
+};
 
-  if (password.length < 8) {
-    return res.status(400).json({ message: "Password must be at least 8 characters" });
+// Password Reset - Reset Password
+// Two independent ways in: the original emailed-link flow (token) for the
+// standalone /reset-password page, and the in-page ForgotPass flow (email),
+// which only proceeds here once verifyResetOtp above marked that email's
+// TempEmailOTP record verified — same "check a verified record, then
+// consume it" shape as the token check just below.
+exports.resetPassword = async (req, res) => {
+  const { token, email, password } = req.body;
+
+  if (!token && !email) {
+    return res.status(400).json({ message: "Token or email is required" });
+  }
+  if (!password || password.length < 6) {
+    return res.status(400).json({ message: "Password must be at least 6 characters" });
   }
 
   try {
-    // Hash the incoming raw token to match what's stored in the DB
-    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    let user;
 
-    const user = await User.findOne({
-      passwordResetToken: tokenHash,
-      passwordResetExpires: { $gt: new Date() },
-    });
-
-    if (!user) {
-      return res.status(400).json({ message: "Invalid or expired token" });
+    if (token) {
+      // Hash the incoming raw token to match what's stored in the DB
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      user = await User.findOne({
+        passwordResetToken: tokenHash,
+        passwordResetExpires: { $gt: new Date() },
+      });
+      if (!user) {
+        return res.status(400).json({ message: "Invalid or expired token" });
+      }
+      user.passwordResetToken = undefined;
+      user.passwordResetExpires = undefined;
+    } else {
+      const normalizedEmail = email.trim().toLowerCase();
+      const verifiedOtp = await TempEmailOTP.findOne({
+        email: normalizedEmail,
+        verified: true,
+        expires: { $gt: new Date() },
+      });
+      if (!verifiedOtp) {
+        return res.status(400).json({ message: "Please verify your code before resetting your password." });
+      }
+      user = await User.findOne({ email: normalizedEmail });
+      if (!user) {
+        return res.status(400).json({ message: "No account found for this email." });
+      }
+      await TempEmailOTP.deleteMany({ email: normalizedEmail });
     }
 
     user.password = await bcrypt.hash(password, 12);
-    user.passwordResetToken = undefined;
-    user.passwordResetExpires = undefined;
     await user.save();
 
     res.json({ message: "Password successfully reset. You can now sign in." });
@@ -2091,6 +2169,241 @@ exports.setupWorkspace = async (req, res) => {
   }
 };
 
+// ============ EMAIL/PASSWORD SELF-SERVE REGISTRATION ============
+// A second signup path alongside the phone-OTP one (verifyOtp/completeRegistration
+// above): registers with a plain email+password instead, verifies ownership with
+// a 6-digit email code, and — because there's no company-code/create-org step in
+// this form — provisions a brand-new Organization for the account immediately
+// (same Organization+Branding+KanbanBoard+admin-permissions bundle as the
+// "orgName" branch of completeRegistration) rather than deferring it to
+// /onboarding. The user can rename that placeholder workspace from Settings
+// later; nothing here requires them to.
+
+const ADMIN_PERMISSIONS = [
+  { name: "Companies", permission: "read-write" },
+  { name: "Deals", permission: "read-write" },
+  { name: "Contacts", permission: "read-write" },
+  { name: "Invoices", permission: "read-write" },
+  { name: "Tasks", permission: "read-write" },
+  { name: "Vendors", permission: "read-write" },
+  { name: "purchases", permission: "read-write" },
+  { name: "purchase-orders", permission: "read-write" },
+  { name: "Items", permission: "read-write" },
+  { name: "Meetings", permission: "read-write" },
+  { name: "Emails", permission: "read-write" },
+  { name: "quotations", permission: "read-write" },
+  { name: "delivery-challans", permission: "read-write" },
+  { name: "Forms", permission: "read-write" },
+];
+
+async function provisionOrganizationForNewAccount(orgName) {
+  const code = await generateUniqueCode();
+  const org = new Organization({ name: orgName, code });
+  await org.save();
+
+  const branding = new Branding();
+  branding.companyName = orgName;
+  branding.colors = { primary: "#ffffff", secondary: "#000000" };
+  branding.organization = org._id;
+  await branding.save();
+
+  const kanbanBoard = new KanbanBoard({
+    statuses: ["Open", "Won", "Lost"],
+    organization: org._id,
+  });
+  await kanbanBoard.save();
+
+  return org;
+}
+
+async function sendSignupOtpEmail(email, otp) {
+  const emailHtml = renderEmail({
+    greetingName: null,
+    intro: "Use this code to verify your email address and finish setting up your DataCircles account:",
+    blocks: [
+      {
+        html: `<div style="margin:20px 0;text-align:center;">
+          <div style="display:inline-block;padding:16px 28px;background:#f4f6f8;border:1px solid #e5e7eb;border-radius:6px;font-size:32px;font-weight:700;letter-spacing:8px;font-family:'Courier New',monospace;color:#111111;">${otp}</div>
+        </div>`,
+      },
+    ],
+    closingHtml: '<p style="margin:8px 0 0;font-size:14px;line-height:1.6;color:#333333;">This code expires in <strong>10 minutes</strong>. If you didn\'t request it, you can ignore this email.</p>',
+    preheader: "Your DataCircles email verification code.",
+  });
+  await sendGridMail({
+    to: email,
+    subject: "Your DataCircles verification code",
+    html: emailHtml,
+  });
+}
+
+/**
+ * POST /api/auth/register
+ * Body: { fullName, email, password }
+ */
+exports.register = async (req, res) => {
+  try {
+    const { fullName, email, password } = req.body;
+
+    if (!fullName || !fullName.trim()) {
+      return res.status(400).json({ message: "Full name is required" });
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      return res.status(400).json({ message: "A valid email is required" });
+    }
+    if (!password || password.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const hashedPassword = await bcrypt.hash(password, 12);
+    let user = await User.findOne({ email: normalizedEmail });
+
+    if (user && user.isEmailVerified) {
+      return res.status(400).json({ message: "An account with this email already exists." });
+    }
+
+    if (user && !user.isEmailVerified) {
+      // A previous registration attempt never got verified — let this submission
+      // retry it in place (fresh password/name, fresh OTP) instead of bouncing
+      // off the unique email index with a confusing duplicate-key error.
+      user.name = fullName.trim();
+      user.password = hashedPassword;
+      await user.save();
+    } else {
+      const org = await provisionOrganizationForNewAccount(`${fullName.trim()}'s Workspace`);
+      user = new User({
+        name: fullName.trim(),
+        email: normalizedEmail,
+        password: hashedPassword,
+        organization: org._id,
+        role: "admin",
+        permissions: ADMIN_PERMISSIONS,
+        isEmailVerified: false,
+        onboarding: { isCompleted: false, currentStep: 1 },
+      });
+      await user.save();
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await TempEmailOTP.deleteMany({ email: normalizedEmail });
+    await new TempEmailOTP({
+      email: normalizedEmail,
+      otp,
+      verified: false,
+      expires: new Date(Date.now() + 10 * 60 * 1000),
+    }).save();
+
+    await sendSignupOtpEmail(normalizedEmail, otp);
+
+    res.status(201).json({
+      success: true,
+      message: "Account created. Check your email for a verification code.",
+      user: { email: normalizedEmail },
+    });
+  } catch (error) {
+    console.error("Register error:", error);
+    res.status(500).json({ message: "Unable to create account. Please try again." });
+  }
+};
+
+/**
+ * POST /api/auth/verify-email — confirms the OTP from /auth/register and
+ * flips the new account's isEmailVerified so /auth/login stops rejecting it.
+ */
+exports.verifyEmail = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    if (!email || !code) {
+      return res.status(400).json({ message: "Email and code are required" });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const tempOtp = await TempEmailOTP.findOne({
+      email: normalizedEmail,
+      otp: code.toString(),
+      expires: { $gt: new Date() },
+    });
+    if (!tempOtp) {
+      return res.status(400).json({ message: "Invalid or expired verification code." });
+    }
+
+    const user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      return res.status(404).json({ message: "No pending registration found for this email." });
+    }
+
+    user.isEmailVerified = true;
+    await user.save();
+    await TempEmailOTP.deleteMany({ email: normalizedEmail });
+
+    res.json({ success: true, message: "Email verified successfully." });
+  } catch (error) {
+    console.error("Verify email error:", error);
+    res.status(500).json({ message: "Unable to verify email. Please try again." });
+  }
+};
+
+/**
+ * POST /api/auth/resend-otp — reissues the /auth/register verification code
+ * (distinct from /auth/send-otp above, which is the phone-login OTP).
+ */
+exports.resendOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      return res.status(404).json({ message: "No account found for this email." });
+    }
+    if (user.isEmailVerified) {
+      return res.status(400).json({ message: "This email is already verified." });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await TempEmailOTP.deleteMany({ email: normalizedEmail });
+    await new TempEmailOTP({
+      email: normalizedEmail,
+      otp,
+      verified: false,
+      expires: new Date(Date.now() + 10 * 60 * 1000),
+    }).save();
+
+    await sendSignupOtpEmail(normalizedEmail, otp);
+
+    res.json({ success: true, message: "A new verification code has been sent." });
+  } catch (error) {
+    console.error("Resend OTP error:", error);
+    res.status(500).json({ message: "Unable to resend code. Please try again." });
+  }
+};
+
+/**
+ * POST /api/auth/set-password — lets an OTP-only phone account add a password so
+ * future sign-ins don't require a fresh text every time (login's email-or-phone
+ * branch already accepts { phone, password } once one exists; there was just never
+ * a way to set the first one). requireAuth, so req.user is already the phone
+ * account that just verified its OTP — no separate identity check needed here.
+ */
+exports.setPassword = async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password || password.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+    req.user.password = await bcrypt.hash(password, 12);
+    await req.user.save();
+    res.json({ success: true, message: "Password saved." });
+  } catch (error) {
+    console.error("Set password error:", error);
+    res.status(500).json({ message: "Unable to save password. Please try again." });
+  }
+};
 
 /**
  * Login for all user roles
@@ -2114,14 +2427,28 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // 3. Verify Password 
-    // Note: Ensure you add 'password' to your User schema. 
+    // 3. Verify Password
+    // Note: Ensure you add 'password' to your User schema.
     // If using password_hash from Sequelize, rename field accordingly.
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
         message: "Invalid credentials",
+      });
+    }
+
+    // 3b. An email/password account created via /auth/register starts
+    // isEmailVerified: false until the signup OTP is confirmed — block login
+    // until then rather than issuing a token for an account nobody has
+    // proven ownership of. Phone accounts aren't gated here: they default
+    // isPhoneVerified true and log in through the separate send-otp/verify-otp
+    // flow, never through this password branch.
+    if (email && !user.isEmailVerified) {
+      return res.status(403).json({
+        success: false,
+        requiresVerification: true,
+        message: "Please verify your email before signing in.",
       });
     }
 

@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
+import API from "../services/api";
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
@@ -61,52 +62,35 @@ export default function Login() {
     }
 
     try {
-      const response = await fetch(
-        "http://localhost:5000/api/auth/login",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
+      const res = await API.post("/auth/login", {
+        email: email.trim().toLowerCase(),
+        password,
+      });
+
+      // User is already verified, so go directly to dashboard (the "/" route, not "/dashboard" —
+      // there is no route by that name).
+      localStorage.setItem("token", res.data.token);
+      navigate("/");
+    } catch (error) {
+      setIsError(true);
+
+      // Only send unverified users to OTP verification.
+      if (error.response?.data?.requiresVerification) {
+        navigate("/verification", {
+          state: {
             email: email.trim().toLowerCase(),
-            password,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setIsError(true);
-
-        // Only send unverified users to OTP verification.
-        if (data.requiresVerification) {
-          navigate("/verification", {
-            state: {
-              email: email.trim().toLowerCase(),
-            },
-          });
-        }
-
+          },
+        });
         return;
       }
 
-      // User is already verified, so go directly to dashboard.
-      localStorage.setItem("token", data.token);
-      navigate("/dashboard");
-    } catch (error) {
       console.error("Login error:", error);
-      setIsError(true);
     }
   };
 
   return (
     <div className="h-screen w-full bg-[#EAEAEA] p-0 font-inter overflow-hidden flex items-center justify-center">
-      <div
-        className="flex w-full h-full items-stretch gap-4 flex-col lg:flex-row"
-        style={{ transform: "scale(0.97)", transformOrigin: "center center" }}
-      >
+      <div className="flex w-full h-full items-stretch gap-4 flex-col lg:flex-row">
 
         {/* ==================================================
             LEFT SECTION
@@ -566,45 +550,10 @@ export default function Login() {
                     />
                   </button>
 
-                  {/* GITHUB */}
-                  <button
-                    type="button"
-                    className="
-                      flex
-                      h-[42px]
-                      w-[42px]
-                      items-center
-                      justify-center
-                    "
-                  >
-                    <img
-                      src="https://ik.imagekit.io/qiap0iq38/DATACIRCLES_PROJECT/signup/Rectangle%2034624566.png"
-                      alt="Github"
-                      className="h-[42px] w-[42px]"
-                    />
-                  </button>
-
-                  {/* FACEBOOK */}
-                  <button
-                    type="button"
-                    className="
-                      flex
-                      h-[42px]
-                      w-[42px]
-                      items-center
-                      justify-center
-                    "
-                  >
-                    <img
-                      src="https://ik.imagekit.io/qiap0iq38/DATACIRCLES_PROJECT/signup/Rectangle%2034624567.png"
-                      alt="Facebook"
-                      className="h-[42px] w-[42px]"
-                    />
-                  </button>
-
                   {/* PHONE */}
                   <button
                     type="button"
+                    onClick={() => navigate("/phone-login")}
                     className="
                       flex
                       h-[42px]

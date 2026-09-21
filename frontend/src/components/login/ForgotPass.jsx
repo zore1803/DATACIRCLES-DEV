@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import API from "../../services/api";
 
 const ForgotPass = () => {
   // ==================================================
@@ -46,31 +47,15 @@ const ForgotPass = () => {
   try {
     setIsSending(true);
 
-    const response = await fetch(
-      "http://localhost:5000/api/auth/forgot-password",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-        }),
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      setError(data.message || "Unable to send reset instructions.");
-      return;
-    }
+    await API.post("/auth/forgot-password", {
+      email: email.trim().toLowerCase(),
+    });
 
     setError("");
     setIsSent(true);
   } catch (error) {
     console.error("Forgot password error:", error);
-    setError("Unable to connect to the server. Please try again.");
+    setError(error.response?.data?.message || "Unable to send reset instructions.");
   } finally {
     setIsSending(false);
   }
@@ -90,32 +75,16 @@ const ForgotPass = () => {
     try {
       setIsVerifyingOTP(true);
 
-      const response = await fetch(
-        "http://localhost:5000/api/auth/verify-reset-otp",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: email.trim().toLowerCase(),
-            code: resetOTP,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.message || "Invalid verification code.");
-        return;
-      }
+      await API.post("/auth/verify-reset-otp", {
+        email: email.trim().toLowerCase(),
+        code: resetOTP,
+      });
 
       setError("");
       setIsResetPage(true);
     } catch (error) {
       console.error("Reset OTP verification error:", error);
-      setError("Unable to connect to the server. Please try again.");
+      setError(error.response?.data?.message || "Invalid verification code.");
     } finally {
       setIsVerifyingOTP(false);
     }
@@ -148,32 +117,16 @@ const ForgotPass = () => {
     }
 
     try {
-      const response = await fetch(
-        "http://localhost:5000/api/auth/reset-password",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: email.trim().toLowerCase(),
-            password,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.message || "Unable to reset password.");
-        return;
-      }
+      await API.post("/auth/reset-password", {
+        email: email.trim().toLowerCase(),
+        password,
+      });
 
       setError("");
       setIsResetSuccess(true);
     } catch (error) {
       console.error("Password reset error:", error);
-      setError("Unable to connect to the server. Please try again.");
+      setError(error.response?.data?.message || "Unable to reset password.");
     }
   };
 
@@ -186,10 +139,7 @@ const ForgotPass = () => {
 
   return (
     <div className="h-screen w-full bg-[#EAEAEA] p-0 font-inter overflow-hidden flex items-center justify-center">
-      <div
-        className="flex w-full h-full items-stretch gap-4 flex-col lg:flex-row"
-        style={{ transform: "scale(0.97)", transformOrigin: "center center" }}
-      >
+      <div className="flex w-full h-full items-stretch gap-4 flex-col lg:flex-row">
 
        {/* ==================================================
     LEFT SECTION

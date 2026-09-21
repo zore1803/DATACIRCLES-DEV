@@ -221,12 +221,28 @@ router.delete("/link-google", requireAuth, authController.unlinkGoogleAccount);
 // Complete registration
 router.post("/complete-registration", authMiddleware, authController.completeRegistration);
 
+// Email/password self-serve signup (UserRegister.jsx -> Verification.jsx)
+router.post("/register", globalOtpLimiter, sendOtpLimiter, authController.register);
+router.post("/verify-email", globalOtpLimiter, verifyOtpLimiter, authController.verifyEmail);
+router.post("/resend-otp", globalOtpLimiter, sendOtpLimiter, authController.resendOtp);
+
+// Lets a phone-OTP account add a password, for a faster sign-in next time
+// than requesting a fresh text every visit.
+router.post("/set-password", requireAuth, authController.setPassword);
+
 // Password Reset Routes
 router.post(
   "/forgot-password",
   globalOtpLimiter,
   sendOtpLimiter,
   authController.forgotPassword,
+);
+
+router.post(
+  "/verify-reset-otp",
+  globalOtpLimiter,
+  verifyOtpLimiter,
+  authController.verifyResetOtp,
 );
 
 router.post(

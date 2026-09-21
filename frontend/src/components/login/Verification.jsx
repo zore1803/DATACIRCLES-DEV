@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import API from "../../services/api";
 
 export default function Verification() {
   const location = useLocation();
@@ -90,27 +91,11 @@ export default function Verification() {
     if (timeLeft > 0) return;
 
     try {
-      const response = await fetch(
-        "http://localhost:5000/api/auth/resend-otp",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        console.error("Resend OTP error:", data.message);
-        return;
-      }
+      await API.post("/auth/resend-otp", { email });
 
       setCode(["", "", "", "", "", ""]);
       setTimeLeft(39);
       inputRefs.current[0]?.focus();
-
-      console.log(data.message);
     } catch (error) {
       console.error("Resend OTP request failed:", error);
     }
@@ -130,24 +115,10 @@ export default function Verification() {
     try {
       setIsVerifying(true);
       setVerificationError("");
-      const response = await fetch(
-        "http://localhost:5000/api/auth/verify-email",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email,
-            code: enteredCode,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setVerificationError(data.message || "Invalid verification code.");
-        return;
-      }
+      await API.post("/auth/verify-email", {
+        email,
+        code: enteredCode,
+      });
 
       navigate("/register", {
         replace: true,
@@ -155,7 +126,7 @@ export default function Verification() {
       });
     } catch (error) {
       console.error("Verification request failed:", error);
-      setVerificationError("Unable to connect to the server. Please try again.");
+      setVerificationError(error.response?.data?.message || "Invalid verification code.");
     } finally {
       setIsVerifying(false);
     }
@@ -167,10 +138,7 @@ export default function Verification() {
 
   return (
    <div className="h-screen w-full bg-[#EAEAEA] p-0 font-inter overflow-hidden flex items-center justify-center">
-      <div
-        className="flex w-full h-full items-stretch gap-4 flex-col lg:flex-row"
-        style={{ transform: "scale(0.97)", transformOrigin: "center center" }}
-      >
+      <div className="flex w-full h-full items-stretch gap-4 flex-col lg:flex-row">
          {/* ==================================================
     LEFT SECTION
     ================================================== */}
@@ -377,7 +345,6 @@ export default function Verification() {
                     onClick={handleResend}
                     disabled={timeLeft > 0}
                     className={`
-                      cursor-pointer
                       font-['Inter']
                       text-[14px]
                       font-semibold
@@ -389,37 +356,8 @@ export default function Verification() {
                       }
                     `}
                   >
-                    Send Again
+                    {timeLeft > 0 ? formattedTime : "Resend"}
                   </button>
-
-                </div>
-
-                {/* RESEND TIMER */}
-                <div className="mt-[clamp(8px,1.5vh,12px)] flex w-full items-center justify-center gap-[clamp(6px,0.7vw,8px)]">
-
-                  <span
-                    className="
-                      font-['Inter']
-                      text-[14px]
-                      font-semibold
-                      leading-[20px]
-                      text-[#0F172A]
-                    "
-                  >
-                    Resend
-                  </span>
-
-                  <span
-                    className="
-                      font-['Inter']
-                      text-[14px]
-                      font-semibold
-                      leading-[20px]
-                      text-[#0085FF]
-                    "
-                  >
-                    {formattedTime}
-                  </span>
 
                 </div>
 
@@ -453,6 +391,25 @@ export default function Verification() {
                 >
                   Verify Code
                 </button>
+
+                {/* BACK */}
+                <div className="mt-[clamp(12px,2vh,18px)] flex w-full items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => navigate(-1)}
+                    className="
+                      cursor-pointer
+                      font-['Inter']
+                      text-[14px]
+                      font-semibold
+                      leading-[20px]
+                      text-[#64748B]
+                      hover:underline
+                    "
+                  >
+                    ← Go Back
+                  </button>
+                </div>
 
               </div>
 

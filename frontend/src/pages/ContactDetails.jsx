@@ -510,7 +510,7 @@ const ContactDetailsPage = () => {
                 src={twitterLogo}
                 alt=""
                 className="w-8 h-8 object-contain"
-                style={{ transform: "scale(1.56)" }}
+                style={{ transform: "scale(1.4)" }}
               />
             </button>
 
@@ -689,7 +689,7 @@ const ContactDetailsPage = () => {
               src={twitterLogo}
               alt=""
               className="w-6 h-6 object-contain"
-              style={{ transform: "scale(1.56)" }}
+              style={{ transform: "scale(1.4)" }}
             />
           </button>
           <button

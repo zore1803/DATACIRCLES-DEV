@@ -967,11 +967,16 @@ const CompanyProfilePage = () => {
                   : "No Twitter/X link available"
               }
             >
+              {/* The X inside this badge is a transparent cutout, not a filled shape (confirmed by
+                  swapping in a colored backdrop — the X took on that color), so a backdrop behind
+                  it to hide the badge's own padding would erase the X too. 1.4 is close to the smallest
+                  scale that lets the badge's rounded-square edges reach this circle's boundary on
+                  their own, matching LinkedIn/Instagram's fill without touching the cutout. */}
               <img
                 src={twitterLogo}
                 alt=""
                 className="w-8 h-8 object-contain"
-                style={{ transform: "scale(1.56)" }}
+                style={{ transform: "scale(1.4)" }}
               />
             </button>
 
@@ -1162,7 +1167,7 @@ const CompanyProfilePage = () => {
               src={twitterLogo}
               alt=""
               className="w-6 h-6 object-contain"
-              style={{ transform: "scale(1.56)" }}
+              style={{ transform: "scale(1.4)" }}
             />
           </button>
           <button

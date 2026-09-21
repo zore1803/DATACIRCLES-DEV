@@ -1243,8 +1243,45 @@ function Dashboard() {
     }));
     const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
 
-    return { clearedPct, topClient, topClientPct, points, linePath, months: months.map((m) => m.month) };
+    return {
+      clearedPct,
+      topClient,
+      topClientPct,
+      points,
+      linePath,
+      months: months.map((m) => m.month),
+      chartData: months.map((m) => ({ month: m.month, amount: m.amount })),
+    };
   }, [invoices, deals, invoiceStats]);
+
+  // "Invoice Performance Analysis" chart — collection rate (paid ÷ issued, per
+  // month) over the last 8 months. Y-axis range is derived from the real data
+  // instead of a fixed 5-9% band, so it still reads correctly however low or
+  // high the actual rate is.
+  const invoicePerformanceData = useMemo(() => {
+    const months = Array.from({ length: 8 }, (_, i) => {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() - (7 - i));
+      return { key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleDateString("en-IN", { month: "short" }), issued: 0, paid: 0 };
+    });
+    const index = new Map(months.map((m, i) => [m.key, i]));
+    (invoices || []).forEach((inv) => {
+      const date = inv.date || inv.createdAt;
+      if (!date) return;
+      const d = new Date(date);
+      const idx = index.get(`${d.getFullYear()}-${d.getMonth()}`);
+      if (idx === undefined) return;
+      months[idx].issued += inv.amount || 0;
+      if ((inv.status || "").toLowerCase() === "accepted") months[idx].paid += inv.amount || 0;
+    });
+
+    return months.map((m) => ({
+      label: m.label,
+      collectionRate: m.issued > 0 ? Math.round((m.paid / m.issued) * 100) : 0,
+      overdueRate: m.issued > 0 ? Math.max(0, Math.round(100 - (m.paid / m.issued) * 100)) : 0,
+    }));
+  }, [invoices]);
 
   // Sales Revenue widget — 100 evenly-spaced points across the last 12 months,
   // built entirely from this org's own invoices (no fabricated baseline/noise —
@@ -1573,10 +1610,18 @@ function Dashboard() {
             <div className="flex flex-col items-start self-stretch flex-shrink-0" style={{ gap: 24, width: "100%", height: 101 }}>
               <div className="flex flex-row items-start self-stretch flex-shrink-0" style={{ gap: 24, width: "100%", height: 51 }}>
                 {[
-                  { label: "Lorem Ipsum", value: "+2.1%", color: "#1F2937" },
-                  { label: "Lorem Ipsum", value: "95%", color: "#1F2937" },
-                  { label: "Lorem Ipsum", value: "3.3L INR", color: "#1F2937" },
-                  { label: "Lorem Ipsum", value: "12%", color: "#00C950" },
+                  {
+                    label: "Invoiced Growth",
+                    value: `${invoiceKpiTrends.total.up ? "+" : ""}${invoiceKpiTrends.total.pct}%`,
+                    color: invoiceKpiTrends.total.up ? "#00C950" : "#E82222",
+                  },
+                  { label: "Collection Rate", value: `${totalInvoicesCard.clearedPct}%`, color: "#1F2937" },
+                  { label: "Total Invoiced", value: formatCompactRupee(invoiceStats.total), color: "#1F2937" },
+                  {
+                    label: "Paid Growth",
+                    value: `${invoiceKpiTrends.paid.up ? "+" : ""}${invoiceKpiTrends.paid.pct}%`,
+                    color: invoiceKpiTrends.paid.up ? "#00C950" : "#E82222",
+                  },
                 ].map((item, idx) => (
                   <>
                     <div key={idx} className="flex flex-col items-start self-stretch flex-1" style={{ gap: 8, width: 184.25, height: 51 }}>
@@ -1599,62 +1644,51 @@ function Dashboard() {
               className="flex flex-col justify-center items-center self-stretch flex-shrink-0"
               style={{ padding: "14px 0px", gap: 10, width: "100%", height: 282, background: "#F8FAFC", borderRadius: 14 }}
             >
-              <div className="flex flex-col items-start self-stretch flex-shrink-0 relative" style={{ gap: 6, width: "100%", height: 230 }}>
-                <div className="flex flex-col justify-between items-center self-stretch flex-shrink-0" style={{ gap: 10, width: "100%", height: 210 }}>
-                  {[
-                    { pct: "9%", dashed: true },
-                    { pct: "8%", dashed: true },
-                    { pct: "7%", dashed: true },
-                    { pct: "6%", dashed: true },
-                    { pct: "5%", dashed: false },
-                  ].map((row) => (
-                    <div key={row.pct} className="mx-auto flex flex-row items-center self-stretch flex-shrink-0" style={{ gap: 6, width: "100%", height: 14 }}>
-                      <span style={{ width: 22, height: 14, fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "120%", textAlign: "right", color: "#1F2937" }}>
-                        {row.pct}
-                      </span>
-                      <div
-                        className="flex-1"
-                        style={{
-                          height: 0,
-                          borderTop: row.dashed ? "1px dashed rgba(31, 41, 55, 0.1)" : "1px solid rgba(31, 41, 55, 0.3)",
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mx-auto flex flex-row justify-between items-center self-stretch flex-shrink-0" style={{ padding: "0px 0px 0px 28px", gap: 10, width: "100%", height: 14 }}>
-                  {["Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8"].map((q) => (
-                    <span key={q} className="mx-auto" style={{ height: 14, fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "120%", textAlign: "right", color: "#1F2937" }}>
-                      {q}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="absolute flex flex-row justify-between items-center" style={{ gap: 22, width: "93.4%", height: 196, left: "3.4%", top: 7 }}>
-                  {Array.from({ length: 8 }).map((_, idx) => (
-                    <div
-                      key={idx}
-                      className="self-stretch flex-shrink-0"
-                      style={{ width: 0, borderLeft: idx === 0 ? "1px solid rgba(31, 41, 55, 0.3)" : "1px dashed rgba(31, 41, 55, 0.1)" }}
+              <div className="self-stretch flex-shrink-0" style={{ width: "100%", height: 230 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={invoicePerformanceData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(31, 41, 55, 0.1)" />
+                    <XAxis
+                      dataKey="label"
+                      tickLine={false}
+                      axisLine={{ stroke: "rgba(31, 41, 55, 0.3)" }}
+                      tick={{ fontSize: 12, fontFamily: "Inter", fill: "#1F2937" }}
                     />
-                  ))}
-                </div>
-
+                    <YAxis
+                      tickFormatter={(v) => `${v}%`}
+                      tickLine={false}
+                      axisLine={false}
+                      width={40}
+                      tick={{ fontSize: 12, fontFamily: "Inter", fill: "#1F2937" }}
+                    />
+                    <Tooltip
+                      formatter={(value, name) => [`${value}%`, name === "collectionRate" ? "Collection Rate" : "Overdue Rate"]}
+                      contentStyle={{
+                        borderRadius: 8,
+                        border: "1px solid #E1E4EA",
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                        fontFamily: "Inter",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Line type="monotone" dataKey="collectionRate" stroke="#0AA43E" strokeWidth={2} dot={false} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="overdueRate" stroke="#0085FF" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
               </div>
 
               <div className="flex flex-row justify-center items-center" style={{ gap: 16, width: "100%", height: 14 }}>
                 <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 4, width: 95, height: 14 }}>
                   <div className="flex-shrink-0" style={{ width: 16, height: 8, background: "#0AA43E", borderRadius: 4 }} />
                   <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "120%", color: "#1F2937" }}>
-                    Lorem Ipsum
+                    Collection Rate
                   </span>
                 </div>
 
                 <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 4, width: 95, height: 14 }}>
                   <div className="flex-shrink-0" style={{ width: 16, height: 8, background: "#0085FF", borderRadius: 4 }} />
                   <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "120%", color: "#1F2937" }}>
-                    Lorem Ipsum
+                    Overdue Rate
                   </span>
                 </div>
               </div>
@@ -2699,28 +2733,37 @@ function Dashboard() {
             {loading ? (
               <Skeleton width="100%" height={197} shape="rect" className="rounded-md" />
             ) : (
-              <div className="relative flex flex-row items-center self-stretch flex-shrink-0" style={{ height: 197 }}>
-                {totalInvoicesCard.points.map((p, idx) => (
-                  <div
-                    key={idx}
-                    className="flex flex-col justify-center items-center self-stretch flex-1"
-                    style={{ gap: 6 }}
-                  >
-                    <div className="flex-1" style={{ width: 1, background: "rgba(31, 41, 55, 0.1)" }} />
-                    <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 12, lineHeight: "120%", color: "#6B7280" }}>
-                      {totalInvoicesCard.months[idx]}
-                    </span>
-                  </div>
-                ))}
-
-                <div className="absolute" style={{ left: 0, right: 0, height: 124, top: 29 }}>
-                  <svg width="100%" height="124" viewBox="0 0 374 124" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d={totalInvoicesCard.linePath} stroke="#0085FF" strokeWidth="2" fill="none" vectorEffect="non-scaling-stroke" />
-                    {totalInvoicesCard.points.map((p, idx) => (
-                      <circle key={idx} cx={p.x} cy={p.y} r={2.5} fill="#FFFFFF" stroke="#0085FF" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-                    ))}
-                  </svg>
-                </div>
+              <div className="self-stretch flex-shrink-0" style={{ height: 197 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={totalInvoicesCard.chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <XAxis
+                      dataKey="month"
+                      tickLine={false}
+                      axisLine={{ stroke: "rgba(31, 41, 55, 0.1)" }}
+                      tick={{ fontSize: 12, fontFamily: "Inter", fill: "#6B7280" }}
+                    />
+                    <YAxis hide domain={[0, "dataMax"]} />
+                    <Tooltip
+                      formatter={(value) => [`₹${formatNumberToIndian(Math.round(value || 0))}`, "Paid"]}
+                      contentStyle={{
+                        borderRadius: 8,
+                        border: "1px solid #E1E4EA",
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                        fontFamily: "Inter",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="amount"
+                      stroke="#0085FF"
+                      strokeWidth={2}
+                      dot={{ r: 2.5, fill: "#FFFFFF", stroke: "#0085FF", strokeWidth: 1 }}
+                      activeDot={{ r: 4 }}
+                      isAnimationActive={false}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
               </div>
             )}
           </div>

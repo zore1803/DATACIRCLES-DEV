@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import API from "../services/api";
 
 export default function Register() {
   const location = useLocation();
@@ -107,40 +108,11 @@ export default function Register() {
     try {
       setIsCreatingAccount(true);
 
-      const response = await fetch(
-        "http://localhost:5000/api/auth/register",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            fullName: fullName.trim(),
-            email: workEmail.trim().toLowerCase(),
-            password,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      // --------------------------------------------------
-      // BACKEND ERROR
-      // --------------------------------------------------
-
-      if (!response.ok) {
-        setErrors({
-          fullName: "",
-          workEmail: "",
-          password: "",
-          confirmPassword: "",
-          general:
-            data.message ||
-            "Unable to create account. Please try again.",
-        });
-
-        return;
-      }
+      const { data } = await API.post("/auth/register", {
+        fullName: fullName.trim(),
+        email: workEmail.trim().toLowerCase(),
+        password,
+      });
 
       // --------------------------------------------------
       // SUCCESS
@@ -171,7 +143,8 @@ export default function Register() {
         password: "",
         confirmPassword: "",
         general:
-          "Unable to connect to the server. Please try again.",
+          error.response?.data?.message ||
+          "Unable to create account. Please try again.",
       });
     } finally {
       setIsCreatingAccount(false);
@@ -184,10 +157,7 @@ export default function Register() {
 
   return (
     <div className="h-screen w-full bg-[#EAEAEA] p-0 font-inter overflow-hidden flex items-center justify-center">
-      <div
-        className="flex w-full h-full items-stretch gap-4 flex-col lg:flex-row"
-        style={{ transform: "scale(0.97)", transformOrigin: "center center" }}
-      >
+      <div className="flex w-full h-full items-stretch gap-4 flex-col lg:flex-row">
 
         {/* ==================================================
             LEFT SECTION
@@ -946,33 +916,10 @@ export default function Register() {
                       />
                     </button>
 
-                    {/* Github */}
-                    <button
-                      type="button"
-                      className="flex h-[clamp(36px,5vh,42px)] w-[clamp(36px,5vh,42px)] items-center justify-center"
-                    >
-                      <img
-                        src="https://ik.imagekit.io/qiap0iq38/DATACIRCLES_PROJECT/signup/Rectangle%2034624566.png"
-                        alt="Github"
-                        className="h-[clamp(36px,5vh,42px)] w-[clamp(36px,5vh,42px)]"
-                      />
-                    </button>
-
-                    {/* Facebook */}
-                    <button
-                      type="button"
-                      className="flex h-[clamp(36px,5vh,42px)] w-[clamp(36px,5vh,42px)] items-center justify-center"
-                    >
-                      <img
-                        src="https://ik.imagekit.io/qiap0iq38/DATACIRCLES_PROJECT/signup/Rectangle%2034624567.png"
-                        alt="Facebook"
-                        className="h-[clamp(36px,5vh,42px)] w-[clamp(36px,5vh,42px)]"
-                      />
-                    </button>
-
                     {/* Phone */}
                     <button
                       type="button"
+                      onClick={() => navigate("/phone-login")}
                       className="flex h-[clamp(36px,5vh,42px)] w-[clamp(36px,5vh,42px)] items-center justify-center"
                     >
                       <img
