@@ -3,7 +3,6 @@ import React from "react";
 import { X, ShoppingCart, AlertTriangle, CheckCircle2 } from "lucide-react";
 import OrderSummary from "./OrderSummary";
 import TransitionConfirmationCard from "./TransitionConfirmationCard";
-import MandateMethodPicker from "./MandateMethodPicker";
 
 // Coupons are applied/removed on the plans page (outside checkout) so the
 // customer sees the discount ripple across every plan/add-on card before
@@ -12,7 +11,6 @@ import MandateMethodPicker from "./MandateMethodPicker";
 const CheckoutSummaryModal = ({
   checkoutData, onConfirm, onCancel, onCarryForwardChange, onDowngradeResolutionChange, processing,
   transitionAddonChoices = {}, onTransitionAddonChoiceChange,
-  mandateMethod = null, onMandateMethodChange,
 }) => {
   if (!checkoutData) return null;
 
@@ -966,9 +964,6 @@ const CheckoutSummaryModal = ({
 
         {/* Actions — fixed, never scrolls, always reachable */}
         <div className="space-y-3 p-8 pt-6 flex-shrink-0">
-          {mandateMethod && !isPlanDowngrade && !isAddonRemoval && (
-            <MandateMethodPicker value={mandateMethod} onChange={onMandateMethodChange} />
-          )}
           <button
             onClick={onConfirm}
             disabled={processing || (isPlanDowngrade && hasHardBlocker)}
