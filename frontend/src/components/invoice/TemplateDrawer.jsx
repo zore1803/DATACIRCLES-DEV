@@ -148,9 +148,9 @@ const TemplatePreviewCard = ({
   );
 };
 
-const TemplateDrawer = ({ isOpen, onClose, type = "tax", docLabel = "Invoice" }) => {
+const TemplateDrawer = ({ isOpen, onClose, type = "tax", docLabel = "Invoice", initialTab = "template" }) => {
   useBodyScrollLock(isOpen);
-  const [tab, setTab] = useState("template");
+  const [tab, setTab] = useState(initialTab);
   const [templates, setTemplates] = useState(null);
   const [orgDetails, setOrgDetails] = useState(null);
   const [bankDetails, setBankDetails] = useState(null);
@@ -184,7 +184,7 @@ const TemplateDrawer = ({ isOpen, onClose, type = "tax", docLabel = "Invoice" })
 
   useEffect(() => {
     if (!isOpen) return;
-    setTab("template");
+    setTab(initialTab);
     let cancelled = false;
 
     (async () => {

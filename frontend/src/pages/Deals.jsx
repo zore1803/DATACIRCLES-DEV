@@ -706,6 +706,146 @@ const PipelineSummaryIcon = (props) => (
   </svg>
 );
 
+// Enhanced Confetti Component with Scattered Pieces (Like Image) — hoisted to
+// module scope (was previously declared inside Deals()'s body, which meant
+// every re-render of Deals created a brand-new ConfettiCelebration function
+// reference; React treats that as a different component type at the same
+// JSX position and force-unmounts+remounts it, killing the modal (and its
+// confetti timers) the moment anything else in Deals re-renders while it's
+// open, instead of letting it run its full 5s lifecycle.
+const ConfettiCelebration = ({ deal, onClose }) => {
+  useEffect(() => {
+    const duration = 5000;
+    const animationEnd = Date.now() + duration;
+
+    function randomInRange(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    // Initial burst of confetti
+    const burstCount = 150;
+    confetti({
+      particleCount: burstCount,
+      spread: 180,
+      origin: { y: 0.6 },
+      colors: [
+        "#FFD700",
+        "#FFA500",
+        "#FF69B4",
+        "#00FF00",
+        "#00CED1",
+        "#FF1493",
+        "#FFED4E",
+        "#9370DB",
+      ],
+      shapes: ["square", "circle"],
+      scalar: randomInRange(0.8, 1.4),
+      zIndex: 99999,
+    });
+
+    // Continuous floating confetti like in the image
+    const interval = setInterval(function () {
+      const timeLeft = animationEnd - Date.now();
+
+      if (timeLeft <= 0) {
+        clearInterval(interval);
+        return;
+      }
+
+      // Random positions around the screen
+      const x = Math.random();
+      const y = Math.random() * 0.5;
+
+      confetti({
+        particleCount: 2,
+        angle: randomInRange(60, 120),
+        spread: randomInRange(50, 100),
+        origin: { x, y },
+        colors: [
+          "#FFD700",
+          "#FFA500",
+          "#FF69B4",
+          "#00FF00",
+          "#00CED1",
+          "#FF1493",
+          "#FFED4E",
+          "#9370DB",
+          "#FF6347",
+        ],
+        shapes: ["square", "circle"],
+        scalar: randomInRange(0.6, 1.2),
+        gravity: randomInRange(0.3, 0.6),
+        drift: randomInRange(-0.5, 0.5),
+        ticks: 400,
+        zIndex: 99999,
+      });
+    }, 100);
+
+    const timeout = setTimeout(() => {
+      onClose();
+    }, 5000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-[99998] pointer-events-none p-4">
+      {/* Semi-transparent backdrop */}
+      <div
+        className="absolute inset-0 bg-black/5 pointer-events-auto"
+        onClick={onClose}
+      ></div>
+
+      {/* Modal Card */}
+      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 pointer-events-auto animate-scale-in max-w-md w-full relative z-[99999]">
+        <div className="p-10 text-center">
+          {/* Green Check Icon */}
+          <div className="flex justify-center mb-6 animate-bounce-once">
+            <div className="bg-green-500 rounded-full w-16 h-16 flex items-center justify-center shadow-lg">
+              <svg
+                className="w-9 h-9 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                strokeWidth="3"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5 13l4 4L19 7"
+                ></path>
+              </svg>
+            </div>
+          </div>
+
+          {/* Title */}
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">Deal Won!</h2>
+
+          {/* Deal Title */}
+          <p className="text-base text-gray-700 mb-3 font-medium">
+            {deal.title}
+          </p>
+
+          {/* Amount */}
+          <div className="mb-6">
+            <h6 className="text-2xl font-bold text-gray-900">
+              ₹{formatNumberToIndian(parseInt(deal.amount || 0))}
+            </h6>
+          </div>
+
+          {/* Motivational Message */}
+          <p className="text-sm text-gray-600 leading-relaxed">
+            Great job! Keep up the amazing work! 💪
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- MAIN COMPONENT ---
 
 function Deals() {
@@ -2124,140 +2264,6 @@ function Deals() {
       <PageSkeleton variant="kanban" boardVariant={showKanban ? "kanban" : "table"} tableRows={dealsPerPage} />
     );
   }
-
-  // Enhanced Confetti Component with Scattered Pieces (Like Image)
-  const ConfettiCelebration = ({ deal, onClose }) => {
-    useEffect(() => {
-      const duration = 5000;
-      const animationEnd = Date.now() + duration;
-
-      function randomInRange(min, max) {
-        return Math.random() * (max - min) + min;
-      }
-
-      // Initial burst of confetti
-      const burstCount = 150;
-      confetti({
-        particleCount: burstCount,
-        spread: 180,
-        origin: { y: 0.6 },
-        colors: [
-          "#FFD700",
-          "#FFA500",
-          "#FF69B4",
-          "#00FF00",
-          "#00CED1",
-          "#FF1493",
-          "#FFED4E",
-          "#9370DB",
-        ],
-        shapes: ["square", "circle"],
-        scalar: randomInRange(0.8, 1.4),
-        zIndex: 99999,
-      });
-
-      // Continuous floating confetti like in the image
-      const interval = setInterval(function () {
-        const timeLeft = animationEnd - Date.now();
-
-        if (timeLeft <= 0) {
-          clearInterval(interval);
-          return;
-        }
-
-        // Random positions around the screen
-        const x = Math.random();
-        const y = Math.random() * 0.5;
-
-        confetti({
-          particleCount: 2,
-          angle: randomInRange(60, 120),
-          spread: randomInRange(50, 100),
-          origin: { x, y },
-          colors: [
-            "#FFD700",
-            "#FFA500",
-            "#FF69B4",
-            "#00FF00",
-            "#00CED1",
-            "#FF1493",
-            "#FFED4E",
-            "#9370DB",
-            "#FF6347",
-          ],
-          shapes: ["square", "circle"],
-          scalar: randomInRange(0.6, 1.2),
-          gravity: randomInRange(0.3, 0.6),
-          drift: randomInRange(-0.5, 0.5),
-          ticks: 400,
-          zIndex: 99999,
-        });
-      }, 100);
-
-      const timeout = setTimeout(() => {
-        onClose();
-      }, 5000);
-
-      return () => {
-        clearInterval(interval);
-        clearTimeout(timeout);
-      };
-    }, [onClose]);
-
-    return (
-      <div className="fixed inset-0 flex items-center justify-center z-[99998] pointer-events-none p-4">
-        {/* Semi-transparent backdrop */}
-        <div
-          className="absolute inset-0 bg-black/5 pointer-events-auto"
-          onClick={onClose}
-        ></div>
-
-        {/* Modal Card */}
-        <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 pointer-events-auto animate-scale-in max-w-md w-full relative z-[99999]">
-          <div className="p-10 text-center">
-            {/* Green Check Icon */}
-            <div className="flex justify-center mb-6 animate-bounce-once">
-              <div className="bg-green-500 rounded-full w-16 h-16 flex items-center justify-center shadow-lg">
-                <svg
-                  className="w-9 h-9 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  strokeWidth="3"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M5 13l4 4L19 7"
-                  ></path>
-                </svg>
-              </div>
-            </div>
-
-            {/* Title */}
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Deal Won!</h2>
-
-            {/* Deal Title */}
-            <p className="text-base text-gray-700 mb-3 font-medium">
-              {deal.title}
-            </p>
-
-            {/* Amount */}
-            <div className="mb-6">
-              <h6 className="text-2xl font-bold text-gray-900">
-                ₹{formatNumberToIndian(parseInt(deal.amount || 0))}
-              </h6>
-            </div>
-
-            {/* Motivational Message */}
-            <p className="text-sm text-gray-600 leading-relaxed">
-              Great job! Keep up the amazing work! 💪
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="bg-white min-h-screen font-sans">

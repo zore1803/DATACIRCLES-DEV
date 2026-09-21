@@ -1,6 +1,7 @@
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import SignatureCanvas from "react-signature-canvas";
 import { X, Type, Check, RefreshCw, Palette, Eraser, PenTool } from "lucide-react";
 import toast from "react-hot-toast";
@@ -517,61 +518,74 @@ export default function SignatureModal({ isOpen, onClose, onSave, initialData })
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl transition-all max-h-[92vh] overflow-y-auto">
+  // Close modal when clicking backdrop
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
+  return createPortal(
+    <div 
+      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/20 p-4 backdrop-blur-sm animate-fadeIn font-inter"
+      onClick={handleBackdropClick}
+    >
+      <div 
+        className="w-full max-w-2xl bg-white shadow-2xl transition-all max-h-[92vh] flex flex-col overflow-hidden rounded-2xl animate-slideUp"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-          <div>
-            <h3 className="text-xl font-bold text-gray-900">
-              {initialData ? "Edit Digital Signature" : "Add Digital Signature"}
-            </h3>
-            <p className="text-xs text-gray-500">Choose a method to add or edit your authorized signature</p>
-          </div>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white">
+          <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
+            {initialData ? "Edit Digital Signature" : "Add Digital Signature"}
+          </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            title="Close"
+            className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity"
+            aria-label="Close"
           >
-            <X className="h-5 w-5" />
+            <X className="w-[18px] h-[18px]" strokeWidth={2} />
           </button>
         </div>
 
-        {/* Tab Selection */}
-        <div className="mt-4 flex rounded-xl bg-gray-100 p-1">
-          <button
-            type="button"
-            onClick={() => setActiveTab("upload")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition ${
-              activeTab === "upload" ? "bg-white text-sky-600 shadow-sm" : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <UploadIcon className="h-4 w-4" />
-            Upload Image
-          </button>
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {/* Tab Selection */}
+          <div className="flex border-b border-gray-200 mb-6">
+            <button
+              type="button"
+              onClick={() => setActiveTab("upload")}
+              className={`flex items-center gap-2 py-3 px-4 text-sm font-medium transition border-b-2 -mb-px ${
+                activeTab === "upload" ? "border-[#158FFF] text-[#158FFF]" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              <UploadIcon className="h-4 w-4" />
+              Upload Image
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("draw")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition ${
-              activeTab === "draw" ? "bg-white text-sky-600 shadow-sm" : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <EditIcon className="h-4 w-4" />
-            Draw Signature
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("draw")}
+              className={`flex items-center gap-2 py-3 px-4 text-sm font-medium transition border-b-2 -mb-px ${
+                activeTab === "draw" ? "border-[#158FFF] text-[#158FFF]" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              <EditIcon className="h-4 w-4" />
+              Draw Signature
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("type")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition ${
-              activeTab === "type" ? "bg-white text-sky-600 shadow-sm" : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <Type className="h-4 w-4" />
-            Type Text
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab("type")}
+              className={`flex items-center gap-2 py-3 px-4 text-sm font-medium transition border-b-2 -mb-px ${
+                activeTab === "type" ? "border-[#158FFF] text-[#158FFF]" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              <Type className="h-4 w-4" />
+              Type Text
+            </button>
+          </div>
 
         {/* Color Palette (for Draw and Type tabs) */}
         {(activeTab === "draw" || activeTab === "type") && (
@@ -818,47 +832,49 @@ export default function SignatureModal({ isOpen, onClose, onSave, initialData })
           </div>
 
           {/* Common Form Fields */}
-          <div className="border-t border-gray-100 pt-4 space-y-4">
+          <div className="border-t border-gray-100 mt-6 pt-5 space-y-4">
             <div className="flex gap-4">
               <div className="flex-1">
-                <label className="block text-xs font-semibold text-gray-700">Signature Label / Owner Name *</label>
+                <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Signature Label / Owner Name <span className="text-[#FF4935]">*</span></label>
                 <input
                   type="text"
                   value={sigName}
                   onChange={(e) => setSigName(e.target.value)}
                   placeholder="e.g. Authorized Signatory / CEO"
-                  className="mt-1 w-full rounded-xl border border-gray-300 px-3.5 py-2 text-sm outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                  className="w-full border border-[#1F2937]/10 rounded-full px-4 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter"
                   required
                 />
               </div>
 
               <div className="flex items-end pb-2">
-                <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-gray-700">
+                <label className="flex cursor-pointer items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em]">
                   <Checkbox checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
                   Set as Default
                 </label>
               </div>
             </div>
 
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-3 pt-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                className="bg-white border border-[#1F2937]/10 px-4 py-2 rounded-lg text-sm font-medium text-[#1F2937] hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="rounded-xl bg-sky-600 px-5 py-2 text-sm font-semibold text-white shadow-md hover:bg-sky-700 disabled:opacity-60"
+                className="bg-[#158FFF] text-white px-5 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
               >
                 {loading ? (initialData ? "Updating..." : "Saving...") : (initialData ? "Update Signature" : "Save Signature")}
               </button>
             </div>
           </div>
         </form>
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

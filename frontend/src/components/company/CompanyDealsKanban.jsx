@@ -556,6 +556,49 @@ const KanbanColumn = React.memo(({ status, deals, amountDeals, totalDealsCount, 
   );
 });
 
+// Hoisted to module scope — was previously declared inside the component
+// body below, which meant every re-render created a brand-new
+// ConfettiCelebration function reference; React treats that as a different
+// component type at the same JSX position and force-unmounts+remounts it,
+// killing the modal (and its confetti timers) the moment anything else in
+// this component re-renders while it's open, instead of running its full 5s
+// lifecycle.
+const ConfettiCelebration = ({ deal, onClose }) => {
+  useEffect(() => {
+    const animationEnd = Date.now() + 5000;
+    confetti({ particleCount: 150, spread: 180, origin: { y: 0.6 }, zIndex: 99999 });
+    const interval = setInterval(() => {
+      if (Date.now() > animationEnd) { clearInterval(interval); return; }
+      confetti({ particleCount: 2, angle: 90 + (Math.random() - 0.5) * 60, spread: 80, origin: { x: Math.random(), y: Math.random() * 0.5 }, gravity: 0.4, ticks: 400, zIndex: 99999 });
+    }, 100);
+    const timeout = setTimeout(onClose, 5000);
+    return () => { clearInterval(interval); clearTimeout(timeout); };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-[99998] pointer-events-none p-4">
+      <div className="absolute inset-0 bg-black/5 pointer-events-auto" onClick={onClose} />
+      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 pointer-events-auto max-w-md w-full relative z-[99999]">
+        <div className="p-10 text-center">
+          <div className="flex justify-center mb-6">
+            <div className="bg-green-500 rounded-full w-16 h-16 flex items-center justify-center shadow-lg">
+              <svg className="w-9 h-9 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+          </div>
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">Deal Won!</h2>
+          <p className="text-base text-gray-700 mb-3 font-medium">{deal.title}</p>
+          <div className="mb-6">
+            <h6 className="text-2xl font-bold text-gray-900">₹{formatNumberToIndian(parseInt(deal.amount || 0))}</h6>
+          </div>
+          <p className="text-sm text-gray-600 leading-relaxed">Great job! Keep up the amazing work! 💪</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function CompanyDealsKanban({
   deals,
   setDeals,
@@ -1456,42 +1499,6 @@ export default function CompanyDealsKanban({
       toast.error("Failed to refresh deals list.");
     }
     closeDealForm();
-  };
-
-  const ConfettiCelebration = ({ deal, onClose }) => {
-    useEffect(() => {
-      const animationEnd = Date.now() + 5000;
-      confetti({ particleCount: 150, spread: 180, origin: { y: 0.6 }, zIndex: 99999 });
-      const interval = setInterval(() => {
-        if (Date.now() > animationEnd) { clearInterval(interval); return; }
-        confetti({ particleCount: 2, angle: 90 + (Math.random() - 0.5) * 60, spread: 80, origin: { x: Math.random(), y: Math.random() * 0.5 }, gravity: 0.4, ticks: 400, zIndex: 99999 });
-      }, 100);
-      const timeout = setTimeout(onClose, 5000);
-      return () => { clearInterval(interval); clearTimeout(timeout); };
-    }, [onClose]);
-
-    return (
-      <div className="fixed inset-0 flex items-center justify-center z-[99998] pointer-events-none p-4">
-        <div className="absolute inset-0 bg-black/5 pointer-events-auto" onClick={onClose} />
-        <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 pointer-events-auto max-w-md w-full relative z-[99999]">
-          <div className="p-10 text-center">
-            <div className="flex justify-center mb-6">
-              <div className="bg-green-500 rounded-full w-16 h-16 flex items-center justify-center shadow-lg">
-                <svg className="w-9 h-9 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-            </div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Deal Won!</h2>
-            <p className="text-base text-gray-700 mb-3 font-medium">{deal.title}</p>
-            <div className="mb-6">
-              <h6 className="text-2xl font-bold text-gray-900">₹{formatNumberToIndian(parseInt(deal.amount || 0))}</h6>
-            </div>
-            <p className="text-sm text-gray-600 leading-relaxed">Great job! Keep up the amazing work! 💪</p>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   return (

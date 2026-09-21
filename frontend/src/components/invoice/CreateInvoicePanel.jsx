@@ -6,8 +6,7 @@ import { resolveDiscount } from "../../utils/variantResolve";
 import DeleteIcon from "../common/DeleteIcon";
 import PlusIcon from "../common/PlusIcon";
 import SearchIcon from "../common/SearchIcon";
-import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -32,6 +31,8 @@ import InvoiceLivePreview from "./InvoiceLivePreview";
 import BankSelect from "./BankSelect";
 import InsufficientStockDialog from "../common/InsufficientStockDialog";
 import SuccessModal from "../common/SuccessModal";
+import BankModal from "../settings/BankModal";
+import SignatureModal from "../settings/SignatureModal";
 import TemplateDrawer from "./TemplateDrawer";
 import NotesTermsDrawer from "./NotesTermsDrawer";
 import AddressBookDrawer from "./AddressBookDrawer";
@@ -403,6 +404,12 @@ const CreateInvoicePanel = ({
   // the org's default; existing ones keep whatever was chosen when created.
   const [savedSignatures, setSavedSignatures] = useState([]);
   const [signaturesLoading, setSignaturesLoading] = useState(false);
+  // Quick-add controls beside Select Bank / Signature, and which tab
+  // TemplateDrawer opens on (its own default "template", or "numbering" when
+  // launched from the prefix/suffix "+ Add" links below).
+  const [showBankModal, setShowBankModal] = useState(false);
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [templateDrawerTab, setTemplateDrawerTab] = useState("template");
 
   // Draggable split between the form (left) and the preview (right).
   const splitRef = useRef(null);
@@ -696,38 +703,88 @@ const CreateInvoicePanel = ({
   // whenever the document doesn't already carry a signature of its own — so
   // every invoice gets the default unless someone picked a specific one. A
   // document that stored its own custom signature keeps it untouched.
-  useEffect(() => {
-    const loadSignatures = async () => {
-      setSignaturesLoading(true);
-      try {
-        const res = await API.get("/document-settings/signatures");
-        const sigs = Array.isArray(res.data) ? res.data : [];
-        setSavedSignatures(sigs);
-        const defaultSig = sigs.find((s) => s.isDefault);
-        if (defaultSig) {
-          // Fall back to the default whenever the document isn't already
-          // pointing at one of the saved signatures — so a blank, stale, or
-          // never-set signature resolves to the default rather than nothing.
-          // A document that stored a still-valid custom signature keeps it.
-          setForm((prev) => {
-            const hasSavedMatch = sigs.some((s) => s.dataUrl === prev.signature);
-            return hasSavedMatch
-              ? prev
-              : { ...prev, signature: defaultSig.dataUrl || "" };
-          });
-        }
-      } catch (error) {
-        console.error("Failed to load signatures", error);
-        setSavedSignatures([]);
-      } finally {
-        setSignaturesLoading(false);
+  // Extracted so the "+" add-signature control can re-run it after saving a
+  // new signature, not just on mount — optionally selecting the just-saved
+  // dataUrl instead of falling back to the org default.
+  const loadSignatures = useCallback(async (selectDataUrl) => {
+    setSignaturesLoading(true);
+    try {
+      const res = await API.get("/document-settings/signatures");
+      const sigs = Array.isArray(res.data) ? res.data : [];
+      setSavedSignatures(sigs);
+      const toSelect = selectDataUrl
+        ? sigs.find((s) => s.dataUrl === selectDataUrl)
+        : sigs.find((s) => s.isDefault);
+      if (toSelect) {
+        // Fall back to the default whenever the document isn't already
+        // pointing at one of the saved signatures — so a blank, stale, or
+        // never-set signature resolves to the default rather than nothing.
+        // A document that stored a still-valid custom signature keeps it.
+        setForm((prev) => {
+          const hasSavedMatch = sigs.some((s) => s.dataUrl === prev.signature);
+          return selectDataUrl || !hasSavedMatch
+            ? { ...prev, signature: toSelect.dataUrl || "" }
+            : prev;
+        });
       }
-    };
+    } catch (error) {
+      console.error("Failed to load signatures", error);
+      setSavedSignatures([]);
+    } finally {
+      setSignaturesLoading(false);
+    }
+  }, []);
 
+  useEffect(() => {
     loadSignatures();
+    // Only needs to run once on mount — later reloads (after adding a
+    // signature) are triggered explicitly via loadSignatures() itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Extracted so the "+" add-bank control can re-run just the bank list
+  // after creating one, without waiting for the broader branding/bank/
+  // numbering effect above (which only reruns on `[type, showTemplates]`).
+  // Optionally selects the newly created account by id.
+  const loadBanksOnly = useCallback(async (selectId) => {
+    try {
+      const res = await API.get("/bank-details/all");
+      const list = Array.isArray(res.data) ? res.data : [];
+      setBanks(list);
+      const toSelect = selectId ? list.find((b) => b._id === selectId) : null;
+      if (toSelect) {
+        setForm((prev) => ({ ...prev, bankDetails: toSelect._id }));
+      }
+    } catch (error) {
+      console.error("Failed to load bank accounts", error);
+    }
   }, []);
 
   const setField = (key, value) => setForm((p) => ({ ...p, [key]: value }));
+
+  // Quick-add bank (the "+" beside Select Bank) — same create call Settings
+  // → Bank Details uses (BankModal itself calls onClose() on success, so
+  // this only needs to persist and select the newly created account).
+  const handleSaveBank = async (payload) => {
+    try {
+      const res = await API.post("/bank-details", payload);
+      toast.success("Bank account added");
+      await loadBanksOnly(res.data?._id);
+    } catch (err) {
+      if (err.response?.status === 402) {
+        toast.error(err.response?.data?.message || "An active subscription is required to make changes.");
+      }
+      throw err;
+    }
+  };
+
+  // Quick-add signature (the "+" beside Signature) — same call the Settings
+  // drawer's Signatures tab uses, selecting the new signature once saved.
+  const handleSaveSignature = async (sigData) => {
+    await API.post("/document-settings/signatures", sigData);
+    toast.success("Signature added");
+    await loadSignatures(sigData.dataUrl);
+  };
 
   const updateItem = (index, patch) =>
     setForm((p) => ({
@@ -1393,9 +1450,14 @@ const CreateInvoicePanel = ({
                       phone screen; document numbering is still reachable via
                       Settings. */}
                   {!isEditing && (
-                      <div className="hidden lg:flex items-center gap-2">
-                        <div className="flex items-center border border-[#E1E4EA] rounded-full overflow-hidden h-9 bg-white flex-shrink-0">
-                          <div className="relative h-full border-r border-[#E1E4EA] bg-[#F8F9FB] flex items-center">
+                      /* A single 3-column grid holding both the pill (row 1)
+                         and its add-links (row 2), so each link's column is
+                         sized together with — and lands exactly under — its
+                         own field. Two separate rows/containers can't do
+                         this: grid column widths are only shared within one
+                         grid. */
+                      <div className="hidden lg:inline-grid grid-cols-[auto_auto_auto] gap-y-0.5 flex-shrink-0">
+                          <div className="h-9 border border-[#E1E4EA] border-r-0 rounded-l-full bg-[#F8F9FB] flex items-center relative">
                             <select
                               value={form.invoicePrefix}
                               onChange={(e) => setForm((prev) => ({ ...prev, invoicePrefix: e.target.value }))}
@@ -1423,9 +1485,9 @@ const CreateInvoicePanel = ({
                             readOnly
                             title={`${docName} number is allocated automatically on save`}
                             aria-label={`${docName} number`}
-                            className="w-20 h-full px-2 text-sm font-semibold text-[#1F2937] bg-[#F8F9FB] border-r border-[#E1E4EA] focus:outline-none cursor-default"
+                            className="h-9 w-20 px-2 border-y border-[#E1E4EA] text-sm font-semibold text-[#1F2937] bg-[#F8F9FB] focus:outline-none cursor-default"
                           />
-                          <div className="relative h-full bg-[#F8F9FB] flex items-center">
+                          <div className="h-9 border border-[#E1E4EA] border-l-0 rounded-r-full bg-[#F8F9FB] flex items-center relative">
                             <select
                               value={form.invoiceSuffix}
                               onChange={(e) => setForm((prev) => ({ ...prev, invoiceSuffix: e.target.value }))}
@@ -1440,14 +1502,32 @@ const CreateInvoicePanel = ({
                             </select>
                             <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
                           </div>
-                        </div>
-                        <Link
-                          to="/settings/document-settings"
-                          title="Manage Document Numbering"
-                          className="flex items-center justify-center w-7 h-7 rounded-full bg-white border border-[#E1E4EA] hover:bg-gray-50 text-gray-600 transition-colors shrink-0 shadow-sm"
-                        >
-                          <SettingsIcon className="w-3.5 h-3.5" />
-                        </Link>
+
+                          {/* Row 2 — same 3 columns, so each link sits
+                              directly under its own field. Both open the
+                              Numbering tab, since prefix and suffix are
+                              edited together there. */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTemplateDrawerTab("numbering");
+                              setShowTemplates(true);
+                            }}
+                            className="justify-self-start text-[10px] font-medium text-blue-600 hover:text-blue-800 underline underline-offset-1 whitespace-nowrap"
+                          >
+                            + Add Prefix
+                          </button>
+                          <span />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTemplateDrawerTab("numbering");
+                              setShowTemplates(true);
+                            }}
+                            className="justify-self-start text-[10px] font-medium text-blue-600 hover:text-blue-800 underline underline-offset-1 whitespace-nowrap"
+                          >
+                            + Add Suffix
+                          </button>
                       </div>
                   )}
                 </div>
@@ -2150,14 +2230,29 @@ const CreateInvoicePanel = ({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 w-full">
             <div className="flex flex-col gap-1">
               <FieldLabel>Select Bank</FieldLabel>
-              <BankSelect
-                banks={banks}
-                value={form.bankDetails || ""}
-                onChange={(id) => setField("bankDetails", id)}
-              />
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <BankSelect
+                    banks={banks}
+                    value={form.bankDetails || ""}
+                    onChange={(id) => setField("bankDetails", id)}
+                  />
+                </div>
+                {/* Same round "+" pattern as Select Deal — quick-adds a bank
+                    account without leaving this form. */}
+                <button
+                  type="button"
+                  onClick={() => setShowBankModal(true)}
+                  title="Add a new bank account"
+                  aria-label="Add a new bank account"
+                  className="w-10 h-10 flex-shrink-0 rounded-full bg-[#158FFF] hover:opacity-90 text-white flex items-center justify-center transition-colors"
+                >
+                  <PlusIcon className="w-4 h-4" />
+                </button>
+              </div>
               <p className="text-[11px] text-[#99A0AE]">
                 {banks.length === 0
-                  ? "No bank accounts yet — add them in Settings → Bank Details."
+                  ? "No bank accounts yet — add one above or in Settings → Bank Details."
                   : `The default prints on every ${docName.toLowerCase()} unless you pick another here.`}
               </p>
             </div>
@@ -2186,28 +2281,41 @@ const CreateInvoicePanel = ({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 w-full">
             <div className="flex flex-col gap-1">
               <FieldLabel>Signature</FieldLabel>
-              <div className="relative flex items-center h-[38px] rounded-full border border-[#1F2937]/10 focus-within:ring-1 focus-within:ring-blue-500 overflow-hidden transition-all">
-                <select
-                  value={form.signature}
-                  onChange={(e) => setField("signature", e.target.value)}
-                  disabled={signaturesLoading}
-                  className="flex-1 min-w-0 h-full pl-3.5 pr-8 text-[13px] text-[#1F2937] bg-transparent appearance-none focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 min-w-0 flex items-center h-[38px] rounded-full border border-[#1F2937]/10 focus-within:ring-1 focus-within:ring-blue-500 overflow-hidden transition-all">
+                  <select
+                    value={form.signature}
+                    onChange={(e) => setField("signature", e.target.value)}
+                    disabled={signaturesLoading}
+                    className="flex-1 min-w-0 h-full pl-3.5 pr-8 text-[13px] text-[#1F2937] bg-transparent appearance-none focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <option value="">No signature</option>
+                    {savedSignatures.map((sig) => (
+                      <option key={sig.id} value={sig.dataUrl}>
+                        {sig.name}
+                        {sig.isDefault ? " (Default)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                </div>
+                {/* Same round "+" pattern as Select Deal — quick-adds a
+                    signature (draw/type/upload) without leaving this form. */}
+                <button
+                  type="button"
+                  onClick={() => setShowSignatureModal(true)}
+                  title="Add a new signature"
+                  aria-label="Add a new signature"
+                  className="w-10 h-10 flex-shrink-0 rounded-full bg-[#158FFF] hover:opacity-90 text-white flex items-center justify-center transition-colors"
                 >
-                  <option value="">No signature</option>
-                  {savedSignatures.map((sig) => (
-                    <option key={sig.id} value={sig.dataUrl}>
-                      {sig.name}
-                      {sig.isDefault ? " (Default)" : ""}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <PlusIcon className="w-4 h-4" />
+                </button>
               </div>
               <p className="text-xs text-[#99A0AE]">
                 {signaturesLoading
                   ? "Loading signatures…"
                   : savedSignatures.length === 0
-                    ? "No saved signatures yet — add them in Settings → Document Settings → Signatures."
+                    ? "No saved signatures yet — add one above."
                     : "The default is applied to every document unless you pick another here."}
               </p>
             </div>
@@ -2536,13 +2644,39 @@ const CreateInvoicePanel = ({
         }}
       />
 
-      {/* Opened by "Change Template" above — edits the organization-wide
-          choice, so closing it refreshes orgTemplate and the preview restyles. */}
+      {/* Opened by "Change Template" above, and by the "+ Add Prefix"/
+          "+ Add Suffix" links (which jump straight to the Numbering tab) —
+          closing it refreshes orgTemplate, banks/numbering (via the effect
+          above keyed on showTemplates) and the preview restyles. */}
       <TemplateDrawer
         isOpen={showTemplates}
-        onClose={() => setShowTemplates(false)}
+        initialTab={templateDrawerTab}
+        onClose={() => {
+          setShowTemplates(false);
+          setTemplateDrawerTab("template");
+        }}
         type={type}
         docLabel={docName}
+      />
+
+      {/* Opened by the "+" beside Select Bank — same modal Settings → Bank
+          Details uses; the new account is auto-selected once saved. */}
+      <BankModal
+        isOpen={showBankModal}
+        onClose={() => setShowBankModal(false)}
+        onSave={handleSaveBank}
+        initialData={null}
+        hasExistingDefault={banks.some((b) => b.isDefault)}
+      />
+
+      {/* Opened by the "+" beside Signature — same modal the Settings
+          drawer's Signatures tab uses; the new signature is auto-selected
+          once saved. */}
+      <SignatureModal
+        isOpen={showSignatureModal}
+        initialData={null}
+        onClose={() => setShowSignatureModal(false)}
+        onSave={handleSaveSignature}
       />
 
       {showFullView &&

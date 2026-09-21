@@ -461,6 +461,16 @@ function Tasks() {
   // Tab state
   const [activeTab, setActiveTab] = useState("tasks"); // "tasks" or "meetings"
   const [showKanban, setShowKanban] = useState(false);
+  // The Kanban board needs every task across all three status columns at
+  // once — `tasks` (below) is fed from the paginated, table-scoped
+  // `/tasks/pagination` endpoint (capped at `taskPagination.limit`, and
+  // narrowed to a single status when a table filter is active), so reusing
+  // it here silently hid tasks outside the current page/filter and made
+  // dragging a card into a column that endpoint hadn't fetched look broken
+  // (the card would vanish on the next refetch instead of landing there).
+  // Kept as a separate state, fetched from the same unpaginated /all-tasks
+  // endpoint the Calendar view already uses.
+  const [kanbanTasks, setKanbanTasks] = useState([]);
   const [showMeetingCalendar, setShowMeetingCalendar] = useState(false);
   const meetingToggleRefs = useRef({});
   const [meetingToggleIndicator, setMeetingToggleIndicator] = useState({ left: 4, width: 32 });
@@ -975,6 +985,13 @@ function Tasks() {
     debouncedDateFilter,
   ]);
 
+  // Kanban has its own unfiltered/unpaginated data source (see
+  // fetchKanbanTasks) — refetch whenever it's opened, since `showKanban`
+  // toggling on is the moment its data could be stale.
+  useEffect(() => {
+    if (activeTab === "tasks" && showKanban) fetchKanbanTasks();
+  }, [activeTab, showKanban]);
+
   useEffect(() => {
     fetchRelatedData();
   }, []);
@@ -1036,6 +1053,19 @@ function Tasks() {
       setTasks([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Unpaginated, unfiltered — every task in the org, so all three Kanban
+  // columns render fully and a card can be dragged into any of them. Same
+  // endpoint the Calendar view already relies on for this reason.
+  const fetchKanbanTasks = async () => {
+    try {
+      const res = await API.get("/tasks/all-tasks");
+      setKanbanTasks(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to load tasks");
+      setKanbanTasks([]);
     }
   };
 
@@ -1193,8 +1223,13 @@ function Tasks() {
   };
 
   const handleTaskMove = async (taskId, newStatus, oldStatus) => {
-    // Optimistic update
+    // Optimistic update — both the table's `tasks` and the Kanban's own
+    // `kanbanTasks` need it, since they're now two separate state slices
+    // (see fetchKanbanTasks) fed by two different endpoints.
     setTasks((prev) =>
+      prev.map((t) => (t._id === taskId ? { ...t, status: newStatus } : t)),
+    );
+    setKanbanTasks((prev) =>
       prev.map((t) => (t._id === taskId ? { ...t, status: newStatus } : t)),
     );
     try {
@@ -1208,6 +1243,7 @@ function Tasks() {
         toast.error(err.response?.data?.error || "Failed to update status");
       }
       fetchTasks(); // Revert
+      if (showKanban) fetchKanbanTasks();
     }
   };
 
@@ -1331,6 +1367,7 @@ function Tasks() {
       if (deleteType === "task") {
         await API.delete(`/tasks/${itemToDelete}`);
         await fetchTasks();
+        if (showKanban) await fetchKanbanTasks();
       } else {
         await API.delete(`/meetings/${itemToDelete}`);
         await fetchMeetings();
@@ -1377,6 +1414,7 @@ function Tasks() {
         itemIds.map((id) => API.put(`/tasks/${id}`, { [field]: value })),
       );
       await fetchTasks();
+      if (showKanban) await fetchKanbanTasks();
       setSelectedTasks([]);
       setShowBulkActions(false);
       toast.success(`Successfully updated ${itemIds.length} tasks`);
@@ -1392,6 +1430,7 @@ function Tasks() {
     try {
       await Promise.all(itemIds.map((id) => API.delete(`/tasks/${id}`)));
       await fetchTasks();
+      if (showKanban) await fetchKanbanTasks();
       setSelectedTasks([]);
       setShowBulkDeleteModal(false);
       toast.success(`Successfully deleted ${itemIds.length} tasks`);
@@ -3706,7 +3745,7 @@ function Tasks() {
         >
           <TaskKanbanBoard
             columns={["Pending", "In Progress", "Completed"]}
-            items={tasks}
+            items={kanbanTasks}
             getItemColumn={(t) => t.status || "Pending"}
             onItemMove={handleTaskMove}
             onCardEdit={handleTaskEdit}
@@ -3727,12 +3766,14 @@ function Tasks() {
           initialDueDate={taskFormDueDate}
           onTaskCreated={() => {
             fetchTasks();
+            if (showKanban) fetchKanbanTasks();
             if (showMeetingCalendar) fetchCalendarData();
             setShowTaskForm(false);
             setTaskFormDueDate("");
           }}
           onTaskUpdated={() => {
             fetchTasks();
+            if (showKanban) fetchKanbanTasks();
             if (showMeetingCalendar) fetchCalendarData();
             setShowTaskForm(false);
             setEditTask(null);
@@ -3851,7 +3892,7 @@ function Tasks() {
         isOpen={showBulkActions}
         onClose={() => setShowBulkActions(false)}
         selectedItems={selectedTasks
-          .map((id) => tasks.find((t) => t._id === id))
+          .map((id) => tasks.find((t) => t._id === id) || kanbanTasks.find((t) => t._id === id))
           .filter(Boolean)}
         onBulkUpdate={handleBulkUpdateTasks}
         fieldConfig={taskFieldConfig}
@@ -3891,7 +3932,7 @@ function Tasks() {
         onExportBeforeDelete={() => {
           const records =
             activeTab === "tasks"
-              ? tasks.filter((t) => selectedTasks.includes(t._id))
+              ? (showKanban ? kanbanTasks : tasks).filter((t) => selectedTasks.includes(t._id))
               : meetings.filter((m) => selectedMeetings.includes(m._id));
           exportRecordsToCSV(records, activeTab === "tasks" ? "tasks" : "meetings");
         }}

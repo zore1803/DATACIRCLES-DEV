@@ -21,6 +21,8 @@ import TemplateDrawer from "../invoice/TemplateDrawer";
 import { AddressFieldsGroup, emptyAddress, isAddressEmpty, SectionHeader } from "../invoice/formPrimitives";
 import AddressBookDrawer from "../invoice/AddressBookDrawer";
 import BankSelect from "../invoice/BankSelect";
+import BankModal from "../settings/BankModal";
+import SignatureModal from "../settings/SignatureModal";
 import NotesTermsDrawer from "../invoice/NotesTermsDrawer";
 import { resolveTransactionType, placeOfSupplyFields } from "../../utils/placeOfSupply";
 import EditIcon from "../common/EditIcon";
@@ -229,8 +231,8 @@ const ItemSearchSelect = ({
       {/* Same static box shape as the Companies.jsx search bar (h-10,
           rounded-full, #E1E4EA border, #0085FF focus) — without its
           expand/collapse animation, which doesn't apply here. */}
-      <div className="relative h-10 flex items-center border border-[#E1E4EA] rounded-full bg-white transition-colors hover:bg-gray-50 focus-within:border-[#0085FF] focus-within:hover:bg-white overflow-hidden">
-        <div className="pl-3 pr-2 flex items-center justify-center flex-shrink-0">
+      <div className="relative h-[38px] flex items-center border border-[#1F2937]/10 rounded-full bg-white transition-all focus-within:ring-1 focus-within:ring-blue-500 overflow-hidden">
+        <div className="pl-3.5 pr-2 flex items-center justify-center flex-shrink-0">
           <SearchIcon className="w-4 h-4 text-[#525866]" />
         </div>
 
@@ -241,7 +243,7 @@ const ItemSearchSelect = ({
           value={searchTerm}
           onChange={handleSearchChange}
           onFocus={handleInputFocus}
-          className="w-full h-full bg-transparent text-sm focus:outline-none pr-4 min-w-[100px]"
+          className="w-full h-full bg-transparent text-[13px] text-[#1F2937] focus:outline-none pr-4 min-w-[100px]"
           aria-label="Search items or variants"
         />
       </div>
@@ -423,6 +425,11 @@ const PerformaInvoiceFormFull = ({
   const [savedSignatures, setSavedSignatures] = useState([]);
   const [signaturesLoading, setSignaturesLoading] = useState(false);
   const [showQuickDealForm, setShowQuickDealForm] = useState(false);
+  const [showBankModal, setShowBankModal] = useState(false);
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [templateDrawerTab, setTemplateDrawerTab] = useState("template");
+  const [prefixOptions, setPrefixOptions] = useState(documentTypeSettings?.proformaInvoice?.prefixes || []);
+  const [suffixOptions, setSuffixOptions] = useState(documentTypeSettings?.proformaInvoice?.suffixes || []);
   const [localDeals, setLocalDeals] = useState(deals);
   const [sellerState, setSellerState] = useState("");
   // "billing" | "shipping" | null -- which field group opened the saved
@@ -437,26 +444,28 @@ const PerformaInvoiceFormFull = ({
   // with. The chosen id rides on the payload as `bankDetails`, which the
   // backend already stores and resolveBankDetails() already prints.
   const [banks, setBanks] = useState([]);
-  useEffect(() => {
-    const loadBanks = async () => {
-      try {
-        const res = await API.get("/bank-details/all");
-        const list = Array.isArray(res.data) ? res.data : [];
-        setBanks(list);
-        if (!editingPerformaInvoice) {
-          const fallback = list.find((b) => b.isDefault) || list[0];
-          if (fallback) {
-            setForm((prev) =>
-              prev.bankDetails ? prev : { ...prev, bankDetails: fallback._id }
-            );
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load bank accounts", error);
-        setBanks([]);
+  const loadBanks = useCallback(async (selectId) => {
+    try {
+      const res = await API.get("/bank-details/all");
+      const list = Array.isArray(res.data) ? res.data : [];
+      setBanks(list);
+      const fallback = selectId
+        ? list.find((b) => b._id === selectId)
+        : (!editingPerformaInvoice ? list.find((b) => b.isDefault) || list[0] : null);
+      if (fallback) {
+        setForm((prev) =>
+          selectId || !prev.bankDetails ? { ...prev, bankDetails: fallback._id } : prev
+        );
       }
-    };
+    } catch (error) {
+      console.error("Failed to load bank accounts", error);
+      setBanks([]);
+    }
+  }, [editingPerformaInvoice]);
+
+  useEffect(() => {
     loadBanks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingPerformaInvoice]);
   // Renaming a saved document's number, same flow as the split-view panel:
   // the prefix stays fixed and only the numeric part is editable.
@@ -725,48 +734,57 @@ const PerformaInvoiceFormFull = ({
   // a blank, stale, or never-set signature resolves to the default rather
   // than nothing. A performaInvoice that stored a still-valid custom signature
   // keeps it.
-  useEffect(() => {
-    const loadSignatures = async () => {
-      setSignaturesLoading(true);
-      try {
-        const res = await API.get("/document-settings/signatures");
-        const sigs = Array.isArray(res.data) ? res.data : [];
-        setSavedSignatures(sigs);
-        const defaultSig = sigs.find((s) => s.isDefault);
-        if (defaultSig) {
-          setForm((prev) => {
-            const hasSavedMatch = sigs.some((s) => s.dataUrl === prev.signature);
-            return hasSavedMatch
-              ? prev
-              : { ...prev, signature: defaultSig.dataUrl || "" };
-          });
-        }
-      } catch (error) {
-        console.error("Failed to load signatures", error);
-        setSavedSignatures([]);
-      } finally {
-        setSignaturesLoading(false);
+  const loadSignatures = useCallback(async (selectDataUrl) => {
+    setSignaturesLoading(true);
+    try {
+      const res = await API.get("/document-settings/signatures");
+      const sigs = Array.isArray(res.data) ? res.data : [];
+      setSavedSignatures(sigs);
+      const toSelect = selectDataUrl
+        ? sigs.find((s) => s.dataUrl === selectDataUrl)
+        : sigs.find((s) => s.isDefault);
+      if (toSelect) {
+        setForm((prev) => {
+          const hasSavedMatch = sigs.some((s) => s.dataUrl === prev.signature);
+          return selectDataUrl || !hasSavedMatch
+            ? { ...prev, signature: toSelect.dataUrl || "" }
+            : prev;
+        });
       }
-    };
+    } catch (error) {
+      console.error("Failed to load signatures", error);
+      setSavedSignatures([]);
+    } finally {
+      setSignaturesLoading(false);
+    }
+  }, []);
 
+  useEffect(() => {
     loadSignatures();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Live preview of the number this performa invoice will actually get on
   // save (from the same persistent per-org counter resolveDocumentNumber
   // uses) — shown as the number box's placeholder instead of a static "1" so
   // it stays in sync with the split-view panel.
-  useEffect(() => {
-    const loadNextNumberPreview = async () => {
-      try {
-        const res = await API.get("/document-settings");
-        setNextNumberPreview(res.data?.nextNumbers?.proformaInvoice || null);
-      } catch (error) {
-        console.error("Failed to load next performa invoice number preview", error);
+  const loadNumberSettings = useCallback(async () => {
+    try {
+      const res = await API.get("/document-settings");
+      setNextNumberPreview(res.data?.nextNumbers?.proformaInvoice || null);
+      const settings = res.data?.documentTypeSettings?.proformaInvoice;
+      if (settings) {
+        setPrefixOptions(settings.prefixes || []);
+        setSuffixOptions(settings.suffixes || []);
       }
-    };
+    } catch (error) {
+      console.error("Failed to load next performa invoice number preview", error);
+    }
+  }, []);
 
-    loadNextNumberPreview();
+  useEffect(() => {
+    loadNumberSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const calculateItemAmount = (item) => {
@@ -1044,6 +1062,27 @@ const PerformaInvoiceFormFull = ({
     setShowItemForm(true);
   };
 
+  const handleSaveBank = async (payload) => {
+    try {
+      const res = await API.post("/bank-details", payload);
+      toast.success("Bank account added");
+      await loadBanks(res.data?._id);
+      setHasUnsavedChanges(true);
+    } catch (err) {
+      if (err.response?.status === 402) {
+        toast.error(err.response?.data?.message || "An active subscription is required to make changes.");
+      }
+      throw err;
+    }
+  };
+
+  const handleSaveSignature = async (sigData) => {
+    await API.post("/document-settings/signatures", sigData);
+    toast.success("Signature added");
+    await loadSignatures(sigData.dataUrl);
+    setHasUnsavedChanges(true);
+  };
+
   const handleDealCreated = (newDeal) => {
     setShowQuickDealForm(false);
     // Scoped callers (initialCompanyId set) keep the document with that company:
@@ -1258,11 +1297,24 @@ const PerformaInvoiceFormFull = ({
       }
 
       setHasUnsavedChanges(false);
+      // Full reset back to "new document" defaults — this previously left out
+      // reference/performaInvoicePrefix/performaInvoiceSuffix/notes/terms/
+      // attachments/bankDetails/signature/transactionType entirely (a plain
+      // object literal, not a merge), so if this screen ever stays mounted
+      // across a save the signature/bank pickers would go blank instead of
+      // falling back to the org default — resolved from already-loaded
+      // savedSignatures/banks here since a full refetch isn't needed.
+      const defaultSigAfterSubmit = savedSignatures.find((s) => s.isDefault);
+      const defaultBankAfterSubmit = banks.find((b) => b.isDefault) || banks[0];
       setForm({
         deal: "",
         date: "",
         dueDate: "",
+        reference: "",
         receiverGSTIN: "",
+        performaInvoicePrefix: documentTypeSettings.proformaInvoice?.prefix || "PI-",
+        performaInvoiceSuffix: documentTypeSettings.proformaInvoice?.suffix || "",
+        performaInvoiceNumber: "",
         billingAddress: emptyAddress(),
         shippingAddress: emptyAddress(),
         sameAsBilling: true,
@@ -1270,6 +1322,12 @@ const PerformaInvoiceFormFull = ({
         discount: { type: "fixed", value: 0 },
         amount: 0,
         status: "Draft",
+        transactionType: "intra",
+        notes: defaultNotesForNew,
+        terms: defaultTermsForNew,
+        attachments: [],
+        bankDetails: defaultBankAfterSubmit?._id || "",
+        signature: defaultSigAfterSubmit?.dataUrl || "",
       });
       await fetchData();
       onClose();
@@ -1476,20 +1534,20 @@ const PerformaInvoiceFormFull = ({
                       suffixes come from Settings -> Document Numbering, so a document
                       cannot be saved with an ad-hoc prefix. documentTypeSettings.proformaInvoice
                       is this type's own list -- never another document type's. */}
-                  <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden h-10 bg-white flex-shrink-0">
-                    <div className="relative h-full border-r border-gray-300 bg-gray-50 flex items-center">
+                  <div className="inline-grid grid-cols-[auto_auto_auto] gap-y-0.5 flex-shrink-0">
+                    <div className="h-10 border border-gray-300 border-r-0 rounded-l-full bg-gray-50 flex items-center relative">
                       <select
                         value={form.performaInvoicePrefix}
                         onChange={(e) => {
                           setForm((prev) => ({ ...prev, performaInvoicePrefix: e.target.value }));
                           setHasUnsavedChanges(true);
                         }}
-                        title="Pro Forma Invoice number prefix"
-                        aria-label="Pro Forma Invoice number prefix"
+                        title="Performa Invoice number prefix"
+                        aria-label="Performa Invoice number prefix"
                         className="h-full pl-3.5 pr-7 text-sm font-semibold text-gray-700 bg-transparent focus:outline-none appearance-none cursor-pointer"
                       >
-                        {(documentTypeSettings?.proformaInvoice?.prefixes || []).length > 0 ? (
-                          documentTypeSettings.proformaInvoice.prefixes.map((pfx) => (
+                        {(prefixOptions.length > 0) ? (
+                          prefixOptions.map((pfx) => (
                             <option key={pfx} value={pfx}>{pfx}</option>
                           ))
                         ) : (
@@ -1505,28 +1563,50 @@ const PerformaInvoiceFormFull = ({
                       type="text"
                       value={nextNumberPreview != null ? String(nextNumberPreview) : "Auto"}
                       readOnly
-                      title="Pro Forma Invoice number is allocated automatically on save"
-                      aria-label="Pro Forma Invoice number"
-                      className="w-24 px-3 py-2 text-sm font-semibold text-gray-900 bg-gray-50 focus:outline-none cursor-default"
+                      title="Performa Invoice number is allocated automatically on save"
+                      aria-label="Performa Invoice number"
+                      className="h-10 w-20 px-2 border-y border-gray-300 text-sm font-semibold text-gray-900 bg-gray-50 focus:outline-none cursor-default"
                     />
-                    <div className="relative h-full border-l border-gray-300 bg-gray-50 flex items-center">
+                    <div className="h-10 border border-gray-300 border-l-0 rounded-r-full bg-gray-50 flex items-center relative">
                       <select
                         value={form.performaInvoiceSuffix}
                         onChange={(e) => {
                           setForm((prev) => ({ ...prev, performaInvoiceSuffix: e.target.value }));
                           setHasUnsavedChanges(true);
                         }}
-                        title="Pro Forma Invoice number suffix (optional)"
-                        aria-label="Pro Forma Invoice number suffix"
+                        title="Performa Invoice number suffix (optional)"
+                        aria-label="Performa Invoice number suffix"
                         className="h-full pl-2.5 pr-7 text-sm font-semibold text-gray-700 bg-transparent focus:outline-none appearance-none cursor-pointer"
                       >
                         <option value="">None</option>
-                        {(documentTypeSettings?.proformaInvoice?.suffixes || []).map((sfx) => (
+                        {suffixOptions.map((sfx) => (
                           <option key={sfx} value={sfx}>{sfx}</option>
                         ))}
                       </select>
                       <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTemplateDrawerTab("numbering");
+                        setShowTemplates(true);
+                      }}
+                      className="justify-self-start text-[10px] font-medium text-blue-600 hover:text-blue-800 underline underline-offset-1 whitespace-nowrap"
+                    >
+                      + Add Prefix
+                    </button>
+                    <span />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTemplateDrawerTab("numbering");
+                        setShowTemplates(true);
+                      }}
+                      className="justify-self-start text-[10px] font-medium text-blue-600 hover:text-blue-800 underline underline-offset-1 whitespace-nowrap"
+                    >
+                      + Add Suffix
+                    </button>
                   </div>
                   </>
                 )}
@@ -1584,54 +1664,57 @@ const PerformaInvoiceFormFull = ({
           </div>
 
 
-          <div className="p-6 space-y-6 flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto">
+          <div className="max-w-[1440px] mx-auto">
             {/* Section 2: Customer Details Card */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white px-8 py-7 border-b border-[#E9E9EC]">
               <div className="mb-5">
                 <SectionHeader number="01" title="Performa Invoice Details" />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+
                 {/* Select Customer */}
-                <div className="md:col-span-4 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <label className="text-sm font-semibold text-gray-700">Select Deal</label>
+                <div className="space-y-2">
+                  <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Select Deal</label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0 bg-blue-50/50 rounded-lg">
+                      <SearchableDropdown
+                        options={localDeals}
+                        value={form.deal}
+                        onChange={(value) => {
+                          // Switching the deal replaces the Receiver GSTIN and
+                          // billing/shipping address with whatever the new
+                          // deal's company has — same prefetch behavior as the
+                          // split-view Invoice panel (InvoiceForm.jsx). Clears
+                          // them to empty when that company has none, rather
+                          // than carrying over the previous deal's data.
+                          applyDealSelection(value);
+                        }}
+                        placeholder="Search customers by name, company, GSTIN..."
+                        displayKey="title"
+                        valueKey="_id"
+                        className="w-full"
+                      />
+                    </div>
                     <button
                       type="button"
                       onClick={() => setShowQuickDealForm(true)}
-                      className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center"
+                      title="Create a new deal"
+                      aria-label="Create a new deal"
+                      className="w-[38px] h-[38px] flex-shrink-0 rounded-full bg-[#158FFF] hover:opacity-90 text-white flex items-center justify-center transition-colors"
                     >
-                      + Create Deal
+                      <PlusIcon className="w-4 h-4" />
                     </button>
-                  </div>
-                  <div className="bg-blue-50/50 rounded-lg">
-                    <SearchableDropdown
-                      options={localDeals}
-                      value={form.deal}
-                      onChange={(value) => {
-                        // Switching the deal replaces the Receiver GSTIN and
-                        // billing/shipping address with whatever the new
-                        // deal's company has — same prefetch behavior as the
-                        // split-view Invoice panel (InvoiceForm.jsx). Clears
-                        // them to empty when that company has none, rather
-                        // than carrying over the previous deal's data.
-                        applyDealSelection(value);
-                      }}
-                      placeholder="Search customers by name, company, GSTIN..."
-                      displayKey="title"
-                      valueKey="_id"
-                      className="w-full"
-                    />
                   </div>
                 </div>
 
                 {/* Performa Invoice Date */}
-                <div className="md:col-span-2 space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Document Date</label>
+                <div className="space-y-2">
+                  <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Document Date</label>
                   <div className="relative">
                     <input
                       type="date"
-                      className="w-full pl-3 pr-8 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                      className="w-full h-[38px] px-3.5 text-[13px] border border-[#1F2937]/10 rounded-full bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
                       required
                       value={form.date}
                       onChange={(e) => {
@@ -1652,9 +1735,9 @@ const PerformaInvoiceFormFull = ({
                 </div>
 
                 {/* Validity */}
-                <div className="md:col-span-3 space-y-2">
+                <div className="space-y-2">
                   <div className="flex items-center gap-1">
-                    <label className="text-sm font-semibold text-gray-700">Due Date</label>
+                    <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Due Date</label>
                     <div className="group relative">
                       <div className="w-3.5 h-3.5 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-[10px] cursor-help">?</div>
                     </div>
@@ -1662,7 +1745,7 @@ const PerformaInvoiceFormFull = ({
                   <div className="relative">
                     <input
                       type="date"
-                      className="w-full pl-3 pr-8 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                      className="w-full h-[38px] px-3.5 text-[13px] border border-[#1F2937]/10 rounded-full bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
                       value={form.dueDate}
                       min={new Date().toISOString().split("T")[0]}
                       onChange={(e) => {
@@ -1692,9 +1775,9 @@ const PerformaInvoiceFormFull = ({
                 </div>
 
                 {/* Reference */}
-                <div className="md:col-span-3 space-y-2">
+                <div className="space-y-2">
                   <div className="flex items-center gap-1">
-                    <label className="text-sm font-semibold text-gray-700">Reference</label>
+                    <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Reference</label>
                     <div className="group relative">
                       <div className="w-3.5 h-3.5 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-[10px] cursor-help">?</div>
                     </div>
@@ -1707,7 +1790,7 @@ const PerformaInvoiceFormFull = ({
                       setForm((prev) => ({ ...prev, reference: e.target.value }));
                       setHasUnsavedChanges(true);
                     }}
-                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full h-[38px] px-3.5 text-[13px] border border-[#1F2937]/10 rounded-full bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
                   />
                 </div>
 
@@ -1718,7 +1801,7 @@ const PerformaInvoiceFormFull = ({
                 split-view Invoice panel's address section (AddressFieldsGroup
                 from formPrimitives.jsx), so performaInvoices round-trip these the
                 same way invoices do. ── */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white px-8 py-7 border-b border-[#E9E9EC]">
               <div className="flex items-center justify-between mb-4">
                 <SectionHeader number="02" title="Billing & Shipping Address" />
                 <div className="flex items-center gap-2">
@@ -1848,7 +1931,7 @@ const PerformaInvoiceFormFull = ({
             />
 
             {/* ── Section 3: Products & Services ── */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white px-8 py-7 border-b border-[#E9E9EC]">
               <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-2">
                   <SectionHeader number="03" title="Products & Services" />
@@ -1903,12 +1986,12 @@ const PerformaInvoiceFormFull = ({
                     placeholder="Qty"
                     value={quickAddQty}
                     onChange={(e) => setQuickAddQty(e.target.value)}
-                    className="w-20 h-[42px] text-center text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 flex-shrink-0"
+                    className="w-20 h-[38px] text-center text-[13px] text-[#1F2937] border border-[#1F2937]/10 rounded-full bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all flex-shrink-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                   <button
                     type="button"
                     onClick={handleAddToBill}
-                    className="h-[42px] px-4 flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors whitespace-nowrap"
+                    className="h-[38px] px-4 flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-[#158FFF] hover:opacity-90 text-white text-[13px] font-semibold rounded-full transition-colors whitespace-nowrap"
                   >
                     <PlusIcon className="w-4 h-4" />
                     Add to Bill
@@ -1982,7 +2065,7 @@ const PerformaInvoiceFormFull = ({
                               handleItemChange(index, "quantity", e.target.value);
                               setHasUnsavedChanges(true);
                             }}
-                            className="w-full text-center text-sm border border-gray-200 rounded-lg px-2 py-2.5 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                            className="w-full text-center text-[13px] text-[#1F2937] border border-[#1F2937]/10 rounded-full px-3 py-2.5 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             required
                           />
                         </div>
@@ -1999,7 +2082,7 @@ const PerformaInvoiceFormFull = ({
                               handleItemChange(index, "rate", e.target.value);
                               setHasUnsavedChanges(true);
                             }}
-                            className="w-full text-right text-sm border border-gray-200 rounded-lg px-2 py-2.5 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                            className="w-full text-right text-[13px] text-[#1F2937] border border-[#1F2937]/10 rounded-full px-3 py-2.5 bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             required
                           />
                         </div>
@@ -2028,7 +2111,7 @@ const PerformaInvoiceFormFull = ({
 
                         {/* Discount */}
                         <div className="col-span-2">
-                          <div className="flex items-center gap-1 border border-gray-200 rounded-lg bg-gray-50 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-colors overflow-hidden">
+                          <div className="flex items-center border border-[#1F2937]/10 rounded-full bg-gray-50 focus-within:bg-white focus-within:ring-1 focus-within:ring-blue-500 transition-all overflow-hidden">
                             <input
                               type="number" onWheel={(e) => e.target.blur()}
                               placeholder="0"
@@ -2039,19 +2122,22 @@ const PerformaInvoiceFormFull = ({
                                 handleItemChange(index, "discount", e.target.value);
                                 setHasUnsavedChanges(true);
                               }}
-                              className="w-full min-w-0 text-center text-sm px-2 py-2.5 bg-transparent focus:outline-none"
+                              className="w-full min-w-0 text-center text-[13px] text-[#1F2937] pl-3 pr-1 py-2.5 bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
-                            <select
-                              value={item.discountType}
-                              onChange={(e) => {
-                                handleItemChange(index, "discountType", e.target.value);
-                                setHasUnsavedChanges(true);
-                              }}
-                              className="w-12 text-xs font-medium border-l border-gray-200 bg-gray-100 py-3 focus:outline-none cursor-pointer"
-                            >
-                              <option value="percentage">%</option>
-                              <option value="amount">₹</option>
-                            </select>
+                            <div className="relative flex-shrink-0">
+                              <select
+                                value={item.discountType}
+                                onChange={(e) => {
+                                  handleItemChange(index, "discountType", e.target.value);
+                                  setHasUnsavedChanges(true);
+                                }}
+                                className="w-14 appearance-none text-xs font-medium text-[#1F2937] border-l border-[#1F2937]/10 bg-gray-100 pl-2 pr-5 py-3 focus:outline-none cursor-pointer"
+                              >
+                                <option value="percentage">%</option>
+                                <option value="amount">₹</option>
+                              </select>
+                              <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+                            </div>
                           </div>
                         </div>
 
@@ -2108,10 +2194,10 @@ const PerformaInvoiceFormFull = ({
                 (InvoiceForm.jsx's CreateInvoicePanel) instead of the old
                 collapsible accordions with a decorative, non-functional
                 "AI" button and dead Signature button. ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="bg-white px-8 py-7 border-b border-[#E9E9EC] grid grid-cols-1 lg:grid-cols-12 gap-8">
 
               {/* Left Column: Notes, Terms, Attachments */}
-              <div className="space-y-5">
+              <div className="lg:col-span-7 space-y-5">
                 <div>
                   <div className="flex items-center justify-between gap-2">
                     <SectionHeader number="04" title="Notes" />
@@ -2132,7 +2218,7 @@ const PerformaInvoiceFormFull = ({
                       setForm((prev) => ({ ...prev, notes: e.target.value }));
                       setHasUnsavedChanges(true);
                     }}
-                    className="w-full px-3 py-2 rounded-[25px] border border-gray-200 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 resize-y"
+                    className="w-full px-3 py-2.5 rounded-2xl border border-[#1F2937]/10 text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-y"
                   />
                 </div>
 
@@ -2156,7 +2242,7 @@ const PerformaInvoiceFormFull = ({
                       setForm((prev) => ({ ...prev, terms: e.target.value }));
                       setHasUnsavedChanges(true);
                     }}
-                    className="w-full px-3 py-2 rounded-[25px] border border-gray-200 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 resize-y"
+                    className="w-full px-3 py-2.5 rounded-2xl border border-[#1F2937]/10 text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-y"
                   />
                 </div>
 
@@ -2190,20 +2276,20 @@ const PerformaInvoiceFormFull = ({
               </div>
 
               {/* Right Column: Totals, Bank, Signature */}
-              <div className="space-y-6">
+              <div className="lg:col-span-5 space-y-6">
                 
                 {/* Math Card */}
                 <div className="bg-[#EBF5EE] rounded-xl p-5 shadow-sm space-y-4 relative">
                   <div className="flex justify-end gap-2 items-center mb-2">
                     <span className="text-xs text-gray-500 font-medium">Extra Discount</span>
-                    <div className="flex items-center border border-gray-200 bg-white rounded-[25px] overflow-hidden h-8">
+                    <div className="flex items-center border border-[#1F2937]/10 bg-white rounded-full overflow-hidden h-[38px] focus-within:ring-1 focus-within:ring-blue-500 transition-all">
                       <select
                         value={form.discount.type}
                         onChange={(e) => {
                           handleDiscountChange("type", e.target.value);
                           setHasUnsavedChanges(true);
                         }}
-                        className="text-xs font-medium text-gray-600 bg-transparent border-r border-gray-200 pl-3 pr-2 py-1 focus:outline-none cursor-pointer"
+                        className="text-xs font-medium text-gray-600 bg-transparent border-r border-[#1F2937]/10 pl-3.5 pr-2 py-1 focus:outline-none cursor-pointer"
                       >
                         <option value="fixed">₹</option>
                         <option value="percentage">%</option>
@@ -2218,7 +2304,7 @@ const PerformaInvoiceFormFull = ({
                           handleDiscountChange("value", e.target.value);
                           setHasUnsavedChanges(true);
                         }}
-                        className="w-16 text-right text-xs pr-3 pl-1 focus:outline-none"
+                        className="w-16 text-right text-[13px] text-[#1F2937] pr-3.5 pl-1 focus:outline-none"
                       />
                     </div>
                   </div>
@@ -2286,33 +2372,53 @@ const PerformaInvoiceFormFull = ({
                 {/* Select Bank */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-1">
-                    <label className="text-sm font-semibold text-gray-700">Select Bank</label>
+                    <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Select Bank</label>
                     <div className="w-3.5 h-3.5 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-[10px]">?</div>
                   </div>
-                  <BankSelect
-                    banks={banks}
-                    value={form.bankDetails || ""}
-                    onChange={(id) => {
-                      setForm((prev) => ({ ...prev, bankDetails: id }));
-                      setHasUnsavedChanges(true);
-                    }}
-                  />
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <BankSelect
+                        banks={banks}
+                        value={form.bankDetails || ""}
+                        onChange={(id) => {
+                          setForm((prev) => ({ ...prev, bankDetails: id }));
+                          setHasUnsavedChanges(true);
+                        }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowBankModal(true)}
+                      title="Add a new bank account"
+                      aria-label="Add a new bank account"
+                      className="w-10 h-10 flex-shrink-0 rounded-full bg-[#158FFF] hover:opacity-90 text-white flex items-center justify-center transition-colors"
+                    >
+                      <PlusIcon className="w-4 h-4" />
+                    </button>
+                  </div>
                   <p className="text-xs text-gray-400">
                     {banks.length === 0
-                      ? "No bank accounts yet — add them in Settings → Bank Details."
+                      ? "No bank accounts yet — add one above or in Settings → Bank Details."
                       : "The default is applied to every performa invoice unless you pick another here."}
                   </p>
                 </div>
 
-                {/* Signature — same functional select + preview + default-
-                    signature fallback as the split-view Invoice panel,
-                    replacing the old decorative button that didn't actually
-                    do anything. */}
-                <div>
-                  <SectionHeader number="06" title="Signature" />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="flex flex-col gap-1">
-                      <div className="relative flex items-center h-10 rounded-[25px] border border-gray-200 focus-within:border-blue-500 overflow-hidden">
+              </div>
+            </div>
+
+            {/* ── Section 6: Signature — full width below the Notes/Terms + Summary
+                grid, matching the card style used by every other section here. ── */}
+            <div className="bg-white px-8 py-7">
+              {/* Signature — same functional select + preview + default-
+                  signature fallback as the split-view Invoice panel,
+                  replacing the old decorative button that didn't actually
+                  do anything. */}
+              <div>
+                <SectionHeader number="06" title="Signature" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1 min-w-0 flex items-center h-10 rounded-lg border border-gray-200 focus-within:border-blue-500 overflow-hidden">
                         <select
                           value={form.signature}
                           onChange={(e) => {
@@ -2332,28 +2438,36 @@ const PerformaInvoiceFormFull = ({
                         </select>
                         <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                       </div>
-                      <p className="text-xs text-gray-400">
-                        {signaturesLoading
-                          ? "Loading signatures…"
-                          : savedSignatures.length === 0
-                            ? "No saved signatures yet — add them in Settings → Document Settings → Signatures."
-                            : "The default is applied to every performaInvoice unless you pick another here."}
-                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowSignatureModal(true)}
+                        title="Add a new signature"
+                        aria-label="Add a new signature"
+                        className="w-10 h-10 flex-shrink-0 rounded-full bg-[#158FFF] hover:opacity-90 text-white flex items-center justify-center transition-colors"
+                      >
+                        <PlusIcon className="w-4 h-4" />
+                      </button>
                     </div>
-                    <div className="h-[72px] flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50">
-                      {form.signature ? (
-                        <img
-                          src={form.signature}
-                          alt="Selected signature"
-                          className="max-h-16 max-w-full object-contain"
-                        />
-                      ) : (
-                        <span className="text-xs text-gray-400">No signature selected</span>
-                      )}
-                    </div>
+                    <p className="text-xs text-gray-400">
+                      {signaturesLoading
+                        ? "Loading signatures…"
+                        : savedSignatures.length === 0
+                          ? "No saved signatures yet — add one above."
+                          : "The default is applied to every performaInvoice unless you pick another here."}
+                    </p>
+                  </div>
+                  <div className="h-[72px] flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50">
+                    {form.signature ? (
+                      <img
+                        src={form.signature}
+                        alt="Selected signature"
+                        className="max-h-16 max-w-full object-contain"
+                      />
+                    ) : (
+                      <span className="text-xs text-gray-400">No signature selected</span>
+                    )}
                   </div>
                 </div>
-
               </div>
             </div>
 
@@ -2397,6 +2511,7 @@ const PerformaInvoiceFormFull = ({
               </div>
             </div>
           </div>
+          </div>
         </form>
 
         {/* Right-side drawer for adding a product on the fly, matching the
@@ -2412,9 +2527,30 @@ const PerformaInvoiceFormFull = ({
             Signatures drawer the split view uses. */}
         <TemplateDrawer
           isOpen={showTemplates}
-          onClose={() => setShowTemplates(false)}
+          initialTab={templateDrawerTab}
+          onClose={() => {
+            setShowTemplates(false);
+            setTemplateDrawerTab("template");
+            loadNumberSettings();
+            loadSignatures();
+          }}
           type="performa"
           docLabel="Performa Invoice"
+        />
+
+        <BankModal
+          isOpen={showBankModal}
+          onClose={() => setShowBankModal(false)}
+          onSave={handleSaveBank}
+          initialData={null}
+          hasExistingDefault={banks.some((b) => b.isDefault)}
+        />
+
+        <SignatureModal
+          isOpen={showSignatureModal}
+          initialData={null}
+          onClose={() => setShowSignatureModal(false)}
+          onSave={handleSaveSignature}
         />
       </div>
     </>

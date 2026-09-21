@@ -3,7 +3,6 @@ import { resolveField, resolveDiscount, resolveMaxDiscountPercent } from "../../
 import PdfIcon from "../common/PdfIcon";
 import PlusIcon from "../common/PlusIcon";
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Link } from "react-router-dom";
 import { formatNumberToIndian, formatNumberFixed } from "../../utils/numberFormatter";
 import {
   IndianRupeeIcon,
@@ -22,13 +21,15 @@ import TemplateDrawer from "./TemplateDrawer";
 import BankSelect from "./BankSelect";
 import { AddressFieldsGroup, emptyAddress, isAddressEmpty, SectionHeader } from "../invoice/formPrimitives";
 import AddressBookDrawer from "./AddressBookDrawer";
-import NotesTermsDrawer from "./NotesTermsDrawer";
+import NotesTermsDrawer from "./NotesTermsDrawer";
 import EditIcon from "../common/EditIcon";
 import { resolveTransactionType, placeOfSupplyFields } from "../../utils/placeOfSupply";
 import QuickDealForm from "../deal/QuickDealForm";
 import SearchableDropdown from "../contact/SearchableDropdown";
 import InsufficientStockDialog from "../common/InsufficientStockDialog";
 import SuccessModal from "../common/SuccessModal";
+import BankModal from "../settings/BankModal";
+import SignatureModal from "../settings/SignatureModal";
 import toast from "react-hot-toast";
 import { computeDocument, GST_RATES } from "../../../../shared/documentTemplates";
 import { PREDEFINED_NOTES, PREDEFINED_TERMS } from "../../utils/documentDefaultText";
@@ -453,13 +454,24 @@ const InvoiceFormFull = ({
   const [shouldRender, setShouldRender] = useState(true);
   const [showItemForm, setShowItemForm] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  // Which tab TemplateDrawer opens on — "numbering" when launched from the
+  // Prefix/Suffix "+" controls, "template" (its own default) otherwise.
+  const [templateDrawerTab, setTemplateDrawerTab] = useState("template");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [nextNumberPreview, setNextNumberPreview] = useState(null);
+  // Prefix/suffix choices for the header numbering pill — seeded from the
+  // documentTypeSettings prop and refreshed after the Numbering tab (opened
+  // via the "+" controls below) saves a newly added one, so a prefix/suffix
+  // just created is selectable immediately without reopening this screen.
+  const [prefixOptions, setPrefixOptions] = useState(documentTypeSettings?.invoice?.prefixes || []);
+  const [suffixOptions, setSuffixOptions] = useState(documentTypeSettings?.invoice?.suffixes || []);
   const [quickAddItem, setQuickAddItem] = useState(null);
   const [quickAddQty, setQuickAddQty] = useState(1);
   const [savedSignatures, setSavedSignatures] = useState([]);
   const [signaturesLoading, setSignaturesLoading] = useState(false);
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [showBankModal, setShowBankModal] = useState(false);
   const [showQuickDealForm, setShowQuickDealForm] = useState(false);
   const [localDeals, setLocalDeals] = useState(deals);
   const [sellerState, setSellerState] = useState("");
@@ -750,57 +762,69 @@ const InvoiceFormFull = ({
   // a blank, stale, or never-set signature resolves to the default rather
   // than nothing. A invoice that stored a still-valid custom signature
   // keeps it.
-  useEffect(() => {
-    const loadSignatures = async () => {
-      setSignaturesLoading(true);
-      try {
-        const res = await API.get("/document-settings/signatures");
-        const sigs = Array.isArray(res.data) ? res.data : [];
-        setSavedSignatures(sigs);
-        const defaultSig = sigs.find((s) => s.isDefault);
-        if (defaultSig) {
-          setForm((prev) => {
-            const hasSavedMatch = sigs.some((s) => s.dataUrl === prev.signature);
-            return hasSavedMatch
-              ? prev
-              : { ...prev, signature: defaultSig.dataUrl || "" };
-          });
-        }
-      } catch (error) {
-        console.error("Failed to load signatures", error);
-        setSavedSignatures([]);
-      } finally {
-        setSignaturesLoading(false);
+  // Extracted so the "+" add-signature control can re-run it after saving a
+  // new signature, not just on mount. Optionally selects a specific dataUrl
+  // (the one just saved) instead of falling back to the org default.
+  const loadSignatures = useCallback(async (selectDataUrl) => {
+    setSignaturesLoading(true);
+    try {
+      const res = await API.get("/document-settings/signatures");
+      const sigs = Array.isArray(res.data) ? res.data : [];
+      setSavedSignatures(sigs);
+      const toSelect = selectDataUrl
+        ? sigs.find((s) => s.dataUrl === selectDataUrl)
+        : sigs.find((s) => s.isDefault);
+      if (toSelect) {
+        setForm((prev) => {
+          const hasSavedMatch = sigs.some((s) => s.dataUrl === prev.signature);
+          return selectDataUrl || !hasSavedMatch
+            ? { ...prev, signature: toSelect.dataUrl || "" }
+            : prev;
+        });
       }
-    };
+    } catch (error) {
+      console.error("Failed to load signatures", error);
+      setSavedSignatures([]);
+    } finally {
+      setSignaturesLoading(false);
+    }
+  }, []);
 
+  useEffect(() => {
     loadSignatures();
+    // Only ever needs to run once on mount — later reloads (after adding a
+    // signature) are triggered explicitly via loadSignatures() itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Bank accounts saved under Settings → Bank Details. A brand-new invoice
   // adopts the org's default; an edit keeps whatever account it was saved
-  // with. The chosen id rides on the payload as `bankDetails`.
+  // with. The chosen id rides on the payload as `bankDetails`. Extracted so
+  // the "+" add-bank control can re-run it after creating a bank, optionally
+  // selecting that new account (via its id) instead of the org default.
   const [banks, setBanks] = useState([]);
-  useEffect(() => {
-    const loadBanks = async () => {
-      try {
-        const res = await API.get("/bank-details/all");
-        const list = Array.isArray(res.data) ? res.data : [];
-        setBanks(list);
-        if (!editingInvoice) {
-          const fallback = list.find((b) => b.isDefault) || list[0];
-          if (fallback) {
-            setForm((prev) =>
-              prev.bankDetails ? prev : { ...prev, bankDetails: fallback._id }
-            );
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load bank accounts", error);
-        setBanks([]);
+  const loadBanks = useCallback(async (selectId) => {
+    try {
+      const res = await API.get("/bank-details/all");
+      const list = Array.isArray(res.data) ? res.data : [];
+      setBanks(list);
+      const fallback = selectId
+        ? list.find((b) => b._id === selectId)
+        : (!editingInvoice ? list.find((b) => b.isDefault) || list[0] : null);
+      if (fallback) {
+        setForm((prev) =>
+          selectId || !prev.bankDetails ? { ...prev, bankDetails: fallback._id } : prev
+        );
       }
-    };
+    } catch (error) {
+      console.error("Failed to load bank accounts", error);
+      setBanks([]);
+    }
+  }, [editingInvoice]);
+
+  useEffect(() => {
     loadBanks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingInvoice]);
 
   // Live preview of the number this invoice will actually get on save (from
@@ -808,17 +832,26 @@ const InvoiceFormFull = ({
   // as the number box's placeholder instead of a static "1" so it stays in
   // sync with the split-view panel and with however many invoices already
   // exist.
-  useEffect(() => {
-    const loadNextNumberPreview = async () => {
-      try {
-        const res = await API.get("/document-settings");
-        setNextNumberPreview(res.data?.nextNumbers?.invoice || null);
-      } catch (error) {
-        console.error("Failed to load next invoice number preview", error);
+  // Extracted so the "+" add-prefix/suffix control can re-run it after the
+  // Numbering tab (TemplateDrawer) saves, so a prefix/suffix just created is
+  // selectable in the header pill immediately, without reopening this screen.
+  const loadNumberSettings = useCallback(async () => {
+    try {
+      const res = await API.get("/document-settings");
+      setNextNumberPreview(res.data?.nextNumbers?.invoice || null);
+      const invoiceSettings = res.data?.documentTypeSettings?.invoice;
+      if (invoiceSettings) {
+        setPrefixOptions(invoiceSettings.prefixes || []);
+        setSuffixOptions(invoiceSettings.suffixes || []);
       }
-    };
+    } catch (error) {
+      console.error("Failed to load next invoice number preview", error);
+    }
+  }, []);
 
-    loadNextNumberPreview();
+  useEffect(() => {
+    loadNumberSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const calculateItemAmount = (item) => {
@@ -1195,6 +1228,34 @@ const InvoiceFormFull = ({
     if (onPreview) onPreview(form);
   };
 
+  // Quick-add bank (the "+" beside Select Bank) — same create/update call
+  // Settings → Bank Details uses (BankModal itself calls onClose() on
+  // success, so this only needs to persist and refresh the list, selecting
+  // the newly created account on this document).
+  const handleSaveBank = async (payload) => {
+    try {
+      const res = await API.post("/bank-details", payload);
+      toast.success("Bank account added");
+      await loadBanks(res.data?._id);
+      setHasUnsavedChanges(true);
+    } catch (err) {
+      if (err.response?.status === 402) {
+        toast.error(err.response?.data?.message || "An active subscription is required to make changes.");
+      }
+      throw err;
+    }
+  };
+
+  // Quick-add signature (the "+" beside Signature) — same call the
+  // Settings drawer's Signatures tab uses. Selects the just-saved signature
+  // on this document once the refreshed list confirms it was persisted.
+  const handleSaveSignature = async (sigData) => {
+    await API.post("/document-settings/signatures", sigData);
+    toast.success("Signature added");
+    await loadSignatures(sigData.dataUrl);
+    setHasUnsavedChanges(true);
+  };
+
   const validateGSTIN = (gstin) => {
     if (!gstin) return true;
     return gstinRegex.test(gstin);
@@ -1341,11 +1402,25 @@ const InvoiceFormFull = ({
       }
 
       setHasUnsavedChanges(false);
+      // Full reset back to "new document" defaults — this previously left out
+      // reference/invoicePrefix/invoiceSuffix/isRoundOff/notes/terms/
+      // attachments/bankDetails/qrNote/signature entirely (a plain object
+      // literal, not a merge), so after creating one invoice the signature
+      // (and bank/notes/terms) picker went blank instead of falling back to
+      // the org default on the next "Create Invoice" in the same session —
+      // defaults are only resolved from already-loaded savedSignatures/banks
+      // here since a full refetch isn't needed for values already in memory.
+      const defaultSigAfterSubmit = savedSignatures.find((s) => s.isDefault);
+      const defaultBankAfterSubmit = banks.find((b) => b.isDefault) || banks[0];
       setForm({
         deal: "",
         date: "",
         dueDate: "",
+        reference: "",
         receiverGSTIN: "",
+        invoicePrefix: documentTypeSettings.invoice?.prefix || "INV-",
+        invoiceSuffix: documentTypeSettings.invoice?.suffix || "",
+        invoiceNumber: "",
         billingAddress: emptyAddress(),
         shippingAddress: emptyAddress(),
         sameAsBilling: true,
@@ -1354,6 +1429,13 @@ const InvoiceFormFull = ({
         amount: 0,
         status: "Draft",
         transactionType: "intra",
+        isRoundOff: true,
+        notes: defaultNotesForNew,
+        terms: defaultTermsForNew,
+        attachments: [],
+        bankDetails: defaultBankAfterSubmit?._id || "",
+        qrNote: "",
+        signature: defaultSigAfterSubmit?.dataUrl || "",
       });
       await fetchData();
       setShowSuccessModal(true);
@@ -1554,66 +1636,88 @@ const InvoiceFormFull = ({
                       </h2>
                     </div>
                     
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden h-10 bg-white flex-shrink-0">
-                        <div className="relative h-full border-r border-gray-300 bg-gray-50 flex items-center">
-                          <select
-                            value={form.invoicePrefix}
-                            onChange={(e) => {
-                              setForm((prev) => ({ ...prev, invoicePrefix: e.target.value }));
-                              setHasUnsavedChanges(true);
-                            }}
-                            title="Invoice number prefix"
-                            aria-label="Invoice number prefix"
-                            className="h-full pl-3.5 pr-7 text-sm font-semibold text-gray-700 bg-transparent focus:outline-none appearance-none cursor-pointer"
-                          >
-                            {(documentTypeSettings?.invoice?.prefixes || []).length > 0 ? (
-                              documentTypeSettings.invoice.prefixes.map(pfx => (
-                                <option key={pfx} value={pfx}>{pfx}</option>
-                              ))
-                            ) : (
-                              <option value={form.invoicePrefix}>{form.invoicePrefix || "None"}</option>
-                            )}
-                          </select>
-                          <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
-                        </div>
-                        {/* Read-only while creating: the number is allocated from this
-                            series' counter on save, so it cannot be typed over. It stays
-                            renameable afterwards from the saved document. */}
-                        <input
-                          type="text"
-                          value={nextNumberPreview != null ? String(nextNumberPreview) : "Auto"}
-                          readOnly
-                          title="Invoice number is allocated automatically on save"
-                          aria-label="Invoice number"
-                          className="w-24 px-3 py-2 text-sm font-semibold text-gray-900 bg-gray-50 focus:outline-none cursor-default"
-                        />
-                        <div className="relative h-full border-l border-gray-300 bg-gray-50 flex items-center">
-                          <select
-                            value={form.invoiceSuffix}
-                            onChange={(e) => {
-                              setForm((prev) => ({ ...prev, invoiceSuffix: e.target.value }));
-                              setHasUnsavedChanges(true);
-                            }}
-                            title="Invoice number suffix (optional)"
-                            aria-label="Invoice number suffix"
-                            className="h-full pl-2.5 pr-7 text-sm font-semibold text-gray-700 bg-transparent focus:outline-none appearance-none cursor-pointer"
-                          >
-                            <option value="">None</option>
-                            {(documentTypeSettings?.invoice?.suffixes || []).map(sfx => (
-                              <option key={sfx} value={sfx}>{sfx}</option>
-                            ))}
-                          </select>
-                          <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
-                        </div>
+                    {/* A single 3-column grid holding both the pill (row 1)
+                        and its add-links (row 2), so each link's column is
+                        sized together with — and lands exactly under — its
+                        own field. Two separate rows/containers can't do
+                        this: grid column widths are only shared within one
+                        grid. */}
+                    <div className="inline-grid grid-cols-[auto_auto_auto] gap-y-0.5 flex-shrink-0">
+                      <div className="h-10 border border-gray-300 border-r-0 rounded-l-full bg-gray-50 flex items-center relative">
+                        <select
+                          value={form.invoicePrefix}
+                          onChange={(e) => {
+                            setForm((prev) => ({ ...prev, invoicePrefix: e.target.value }));
+                            setHasUnsavedChanges(true);
+                          }}
+                          title="Invoice number prefix"
+                          aria-label="Invoice number prefix"
+                          className="h-full pl-3.5 pr-7 text-sm font-semibold text-gray-700 bg-transparent focus:outline-none appearance-none cursor-pointer"
+                        >
+                          {prefixOptions.length > 0 ? (
+                            prefixOptions.map(pfx => (
+                              <option key={pfx} value={pfx}>{pfx}</option>
+                            ))
+                          ) : (
+                            <option value={form.invoicePrefix}>{form.invoicePrefix || "None"}</option>
+                          )}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
                       </div>
-                      <Link
-                        to="/settings/document-settings"
-                        title="Manage Document Numbering"
-                        className="flex items-center justify-center w-8 h-8 rounded-full bg-white border border-[#E1E4EA] hover:bg-gray-50 text-gray-600 transition-colors shrink-0 shadow-sm"
+                      {/* Read-only while creating: the number is allocated from this
+                          series' counter on save, so it cannot be typed over. It stays
+                          renameable afterwards from the saved document. */}
+                      <input
+                        type="text"
+                        value={nextNumberPreview != null ? String(nextNumberPreview) : "Auto"}
+                        readOnly
+                        title="Invoice number is allocated automatically on save"
+                        aria-label="Invoice number"
+                        className="h-10 w-20 px-2 border-y border-gray-300 text-sm font-semibold text-gray-900 bg-gray-50 focus:outline-none cursor-default"
+                      />
+                      <div className="h-10 border border-gray-300 border-l-0 rounded-r-full bg-gray-50 flex items-center relative">
+                        <select
+                          value={form.invoiceSuffix}
+                          onChange={(e) => {
+                            setForm((prev) => ({ ...prev, invoiceSuffix: e.target.value }));
+                            setHasUnsavedChanges(true);
+                          }}
+                          title="Invoice number suffix (optional)"
+                          aria-label="Invoice number suffix"
+                          className="h-full pl-2.5 pr-7 text-sm font-semibold text-gray-700 bg-transparent focus:outline-none appearance-none cursor-pointer"
+                        >
+                          <option value="">None</option>
+                          {suffixOptions.map(sfx => (
+                            <option key={sfx} value={sfx}>{sfx}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
+                      </div>
+
+                      {/* Row 2 — same 3 columns, so each link sits directly
+                          under its own field. Both open the Numbering tab,
+                          since prefix and suffix are edited together there. */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTemplateDrawerTab("numbering");
+                          setShowTemplates(true);
+                        }}
+                        className="justify-self-start text-[10px] font-medium text-blue-600 hover:text-blue-800 underline underline-offset-1 whitespace-nowrap"
                       >
-                        <SettingsIcon className="w-4 h-4" />
-                      </Link>
+                        + Add Prefix
+                      </button>
+                      <span />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTemplateDrawerTab("numbering");
+                          setShowTemplates(true);
+                        }}
+                        className="justify-self-start text-[10px] font-medium text-blue-600 hover:text-blue-800 underline underline-offset-1 whitespace-nowrap"
+                      >
+                        + Add Suffix
+                      </button>
                     </div>
                   </>
                 )}
@@ -1660,37 +1764,42 @@ const InvoiceFormFull = ({
           </div>
 
           <div className="flex-1 overflow-y-auto">
+           <div className="max-w-[1440px] mx-auto">
             {/* Section 2: Customer Details Card */}
-            <div className="bg-white px-8 py-6 border-b border-[#E9E9EC]">
+            <div className="bg-white px-8 py-7 border-b border-[#E9E9EC]">
               <div className="mb-5">
                 <SectionHeader number="01" title="Invoice Details" />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+
                 {/* Select Customer */}
-                <div className="md:col-span-4 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Select Deal</label>
+                <div className="space-y-2">
+                  <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Select Deal</label>
+                  <div ref={dealFieldRef} className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0 bg-blue-50/50 rounded-lg">
+                      <SearchableDropdown
+                        options={localDeals}
+                        value={form.deal}
+                        error={dealError ? "Deal is required" : null}
+                        onChange={(value) => applyDealSelection(value)}
+                        placeholder="Search customers by name, company, GSTIN..."
+                        displayKey="title"
+                        valueKey="_id"
+                        className="w-full"
+                        compact
+                      />
+                    </div>
+                    {/* Same round "+" pattern the split-view Invoice panel
+                        uses beside its Select Deal picker. */}
                     <button
                       type="button"
                       onClick={() => setShowQuickDealForm(true)}
-                      className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center"
+                      title="Create a new deal"
+                      aria-label="Create a new deal"
+                      className="w-[38px] h-[38px] flex-shrink-0 rounded-full bg-[#158FFF] hover:opacity-90 text-white flex items-center justify-center transition-colors"
                     >
-                      + Create Deal
+                      <PlusIcon className="w-4 h-4" />
                     </button>
-                  </div>
-                  <div ref={dealFieldRef} className="bg-blue-50/50 rounded-lg">
-                    <SearchableDropdown
-                      options={localDeals}
-                      value={form.deal}
-                      error={dealError ? "Deal is required" : null}
-                      onChange={(value) => applyDealSelection(value)}
-                      placeholder="Search customers by name, company, GSTIN..."
-                      displayKey="title"
-                      valueKey="_id"
-                      className="w-full"
-                      compact
-                    />
                   </div>
                   {dealError && (
                     <p className="mt-1 text-xs text-red-600">Deal is required</p>
@@ -1698,7 +1807,7 @@ const InvoiceFormFull = ({
                 </div>
 
                 {/* Invoice Date */}
-                <div className="md:col-span-2 space-y-2">
+                <div className="space-y-2">
                   <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Document Date</label>
                   <div className="relative">
                     <input
@@ -1728,7 +1837,7 @@ const InvoiceFormFull = ({
                 </div>
 
                 {/* Validity */}
-                <div className="md:col-span-3 space-y-2">
+                <div className="space-y-2">
                   <div className="flex items-center gap-1">
                     <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Due Date</label>
                   </div>
@@ -1765,7 +1874,7 @@ const InvoiceFormFull = ({
                 </div>
 
                 {/* Reference */}
-                <div className="md:col-span-3 space-y-2">
+                <div className="space-y-2">
                   <div className="flex items-center gap-1">
                     <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Reference</label>
                   </div>
@@ -1788,7 +1897,7 @@ const InvoiceFormFull = ({
                 split-view Invoice panel's address section (AddressFieldsGroup
                 from formPrimitives.jsx), so invoices round-trip these the
                 same way invoices do. ── */}
-            <div className="bg-white px-8 py-6 border-b border-[#E9E9EC]">
+            <div className="bg-white px-8 py-7 border-b border-[#E9E9EC]">
               <div className="flex items-center justify-between mb-4">
                 <SectionHeader number="02" title="Billing & Shipping Address" />
                 <div className="flex items-center gap-2">
@@ -1914,20 +2023,20 @@ const InvoiceFormFull = ({
             />
 
             {/* ── Section 3: Products & Services ── */}
-            <div className="bg-white px-8 py-6 border-b border-[#E9E9EC]">
+            <div className="bg-white px-8 py-7 border-b border-[#E9E9EC]">
               <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-2">
                   <SectionHeader number="03" title="Products & Services" />
                   <button
                     type="button"
                     onClick={handleOpenItemForm}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-800 ml-2"
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-800 ml-2 whitespace-nowrap"
                   >
                     + Add new Product?
                   </button>
                 </div>
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 text-sm text-gray-600">
+                <div className="flex items-center gap-4 flex-shrink-0">
+                  <label className="flex items-center gap-2 text-sm text-gray-600 whitespace-nowrap">
                     <input type="checkbox" className="rounded text-blue-600 focus:ring-blue-500" defaultChecked />
                     Show description
                   </label>
@@ -2170,10 +2279,10 @@ const InvoiceFormFull = ({
                 (InvoiceForm.jsx's CreateInvoicePanel) instead of the old
                 collapsible accordions with a decorative, non-functional
                 "AI" button and dead Signature button. ── */}
-            <div className="bg-white px-8 py-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="bg-white px-8 py-7 border-b border-[#E9E9EC] grid grid-cols-1 lg:grid-cols-12 gap-8">
 
               {/* Left Column: Notes, Terms, Attachments */}
-              <div className="space-y-5">
+              <div className="lg:col-span-7 space-y-5">
                 <div>
                   <div className="flex items-center justify-between gap-2">
                     <SectionHeader number="04" title="Notes" />
@@ -2224,8 +2333,9 @@ const InvoiceFormFull = ({
 
               </div>
 
-              {/* Right Column: Totals, Bank, Signature */}
-              <div className="space-y-6">
+              {/* Right Column: Totals, Bank, QR — fixed 5-column width so it
+                  does not resize based on the Notes/Terms column's content. */}
+              <div className="lg:col-span-5 space-y-6">
                 
                 {/* Math Card */}
                 <div className="bg-[#EBF5EE] rounded-xl p-5 shadow-sm space-y-4 relative">
@@ -2324,17 +2434,32 @@ const InvoiceFormFull = ({
                     default bank. */}
                 <div className="space-y-2">
                   <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Select Bank</label>
-                  <BankSelect
-                    banks={banks}
-                    value={form.bankDetails || ""}
-                    onChange={(id) => {
-                      setForm((prev) => ({ ...prev, bankDetails: id }));
-                      setHasUnsavedChanges(true);
-                    }}
-                  />
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <BankSelect
+                        banks={banks}
+                        value={form.bankDetails || ""}
+                        onChange={(id) => {
+                          setForm((prev) => ({ ...prev, bankDetails: id }));
+                          setHasUnsavedChanges(true);
+                        }}
+                      />
+                    </div>
+                    {/* Same round "+" pattern as Select Deal — quick-adds a
+                        bank account without leaving this form. */}
+                    <button
+                      type="button"
+                      onClick={() => setShowBankModal(true)}
+                      title="Add a new bank account"
+                      aria-label="Add a new bank account"
+                      className="w-10 h-10 flex-shrink-0 rounded-full bg-[#158FFF] hover:opacity-90 text-white flex items-center justify-center transition-colors"
+                    >
+                      <PlusIcon className="w-4 h-4" />
+                    </button>
+                  </div>
                   <p className="text-xs text-gray-400">
                     {banks.length === 0
-                      ? "No bank accounts yet — add them in Settings → Bank Details."
+                      ? "No bank accounts yet — add one above or in Settings → Bank Details."
                       : "The default is applied to every invoice unless you pick another here."}
                   </p>
                 </div>
@@ -2361,58 +2486,71 @@ const InvoiceFormFull = ({
                   </p>
                 </div>
 
-                {/* Signature — same functional select + preview + default-
-                    signature fallback as the split-view Invoice panel,
-                    replacing the old decorative button that didn't actually
-                    do anything. */}
-                <div>
-                  <SectionHeader number="06" title="Signature" />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="flex flex-col gap-1">
-                      <div className="relative flex items-center h-10 rounded-lg border border-gray-200 focus-within:border-blue-500 overflow-hidden">
-                        <select
-                          value={form.signature}
-                          onChange={(e) => {
-                            setForm((prev) => ({ ...prev, signature: e.target.value }));
-                            setHasUnsavedChanges(true);
-                          }}
-                          disabled={signaturesLoading}
-                          className="flex-1 min-w-0 h-full pl-3 pr-8 text-[13px] bg-transparent appearance-none focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                          <option value="">No signature</option>
-                          {savedSignatures.map((sig) => (
-                            <option key={sig.id} value={sig.dataUrl}>
-                              {sig.name}
-                              {sig.isDefault ? " (Default)" : ""}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      </div>
-                      <p className="text-xs text-gray-400">
-                        {signaturesLoading
-                          ? "Loading signatures…"
-                          : savedSignatures.length === 0
-                            ? "No saved signatures yet — add them in Settings → Document Settings → Signatures."
-                            : "The default is applied to every invoice unless you pick another here."}
-                      </p>
-                    </div>
-                    <div className="h-[72px] flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50">
-                      {form.signature ? (
-                        <img
-                          src={form.signature}
-                          alt="Selected signature"
-                          className="max-h-16 max-w-full object-contain"
-                        />
-                      ) : (
-                        <span className="text-xs text-gray-400">No signature selected</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
               </div>
             </div>
+
+            {/* ── Section 6: Signature — full width below the Notes/Terms +
+                Summary grid, same functional select + preview + default-
+                signature fallback as the split-view Invoice panel. ── */}
+            <div className="bg-white px-8 py-7">
+              <SectionHeader number="06" title="Signature" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 max-w-xl">
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1 min-w-0 flex items-center h-10 rounded-lg border border-gray-200 focus-within:border-blue-500 overflow-hidden">
+                      <select
+                        value={form.signature}
+                        onChange={(e) => {
+                          setForm((prev) => ({ ...prev, signature: e.target.value }));
+                          setHasUnsavedChanges(true);
+                        }}
+                        disabled={signaturesLoading}
+                        className="flex-1 min-w-0 h-full pl-3 pr-8 text-[13px] bg-transparent appearance-none focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <option value="">No signature</option>
+                        {savedSignatures.map((sig) => (
+                          <option key={sig.id} value={sig.dataUrl}>
+                            {sig.name}
+                            {sig.isDefault ? " (Default)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    </div>
+                    {/* Same round "+" pattern as Select Deal — quick-adds a
+                        signature (draw/type/upload) without leaving this form. */}
+                    <button
+                      type="button"
+                      onClick={() => setShowSignatureModal(true)}
+                      title="Add a new signature"
+                      aria-label="Add a new signature"
+                      className="w-10 h-10 flex-shrink-0 rounded-full bg-[#158FFF] hover:opacity-90 text-white flex items-center justify-center transition-colors"
+                    >
+                      <PlusIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    {signaturesLoading
+                      ? "Loading signatures…"
+                      : savedSignatures.length === 0
+                        ? "No saved signatures yet — add one above."
+                        : "The default is applied to every invoice unless you pick another here."}
+                  </p>
+                </div>
+                <div className="h-[72px] flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50">
+                  {form.signature ? (
+                    <img
+                      src={form.signature}
+                      alt="Selected signature"
+                      className="max-h-16 max-w-full object-contain"
+                    />
+                  ) : (
+                    <span className="text-xs text-gray-400">No signature selected</span>
+                  )}
+                </div>
+              </div>
+            </div>
+           </div>
 
             {/* Running total + primary actions, as a floating pill pinned to
                 the bottom of the form — matched to the split-view Invoice
@@ -2465,11 +2603,20 @@ const InvoiceFormFull = ({
           onSaved={handleProductCreated}
         />
 
-        {/* Opened by the "Settings" pill above — same Template/Numbering/
-            Signatures drawer the split view uses. */}
+        {/* Opened by the "Settings" pill above, and by the "+" prefix/suffix
+            controls (which jump straight to the Numbering tab) — same
+            Template/Numbering/Signatures drawer the split view uses. */}
         <TemplateDrawer
           isOpen={showTemplates}
-          onClose={() => setShowTemplates(false)}
+          initialTab={templateDrawerTab}
+          onClose={() => {
+            setShowTemplates(false);
+            setTemplateDrawerTab("template");
+            // Pick up anything just added/changed on the Numbering or
+            // Signatures tab so it's usable here without reopening the form.
+            loadNumberSettings();
+            loadSignatures();
+          }}
           type="tax"
           docLabel="Invoice"
         />
@@ -2478,6 +2625,26 @@ const InvoiceFormFull = ({
           isOpen={!!stockErrorMessage}
           message={stockErrorMessage}
           onClose={() => setStockErrorMessage(null)}
+        />
+
+        {/* Opened by the "+" beside Select Bank — same modal Settings →
+            Bank Details uses; the new account is auto-selected once saved. */}
+        <BankModal
+          isOpen={showBankModal}
+          onClose={() => setShowBankModal(false)}
+          onSave={handleSaveBank}
+          initialData={null}
+          hasExistingDefault={banks.some((b) => b.isDefault)}
+        />
+
+        {/* Opened by the "+" beside Signature — same modal the Settings
+            drawer's Signatures tab uses; the new signature is auto-selected
+            once saved. */}
+        <SignatureModal
+          isOpen={showSignatureModal}
+          initialData={null}
+          onClose={() => setShowSignatureModal(false)}
+          onSave={handleSaveSignature}
         />
 
         <SuccessModal
