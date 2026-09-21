@@ -1391,6 +1391,14 @@ function Dashboard() {
         //   API.get("/meetings/all-meetings"),
         // ]);
 
+        // allSettled, not all: these six endpoints are independently permission-gated per org
+        // (an org without the Invoices or Tasks module enabled 403s on just that one), so one
+        // rejecting used to fail the whole batch — every card on the page, including ones whose
+        // own data (companies/contacts) had already succeeded, fell back to 0 and the loading
+        // flag never cleared for that account since Promise.all short-circuits on the first
+        // rejection without ever reaching the setXxx calls below. Each request now succeeds or
+        // fails on its own; a failed one just keeps that section at its empty default instead
+        // of taking every other section down with it.
         const [
           companiesRes,
           contactsRes,
@@ -1398,14 +1406,16 @@ function Dashboard() {
           tasksRes,
           invoicesRes,
           meetingRes,
-        ] = await Promise.all([
+        ] = await Promise.allSettled([
           API.get("/companies"),
           API.get("/contacts"),
           API.get("/deals/dashboard-deals"),
           API.get("/tasks"), // ⬅️ staff can now access this
           API.get("/invoices"), // ⬅️ filtered automatically
           API.get("/meetings/dashboard"), // ⬅️ staff gets own meetings
-        ]);
+        ]).then((results) =>
+          results.map((r) => (r.status === "fulfilled" ? r.value : { data: [] }))
+        );
 
         const allInvoices = invoicesRes.data;
 
@@ -1507,6 +1517,9 @@ function Dashboard() {
             { icon: TotalDealsClosedIcon, label: "Pending Invoices", value: `₹${Math.round(invoiceStats.sent).toLocaleString("en-IN")}`, trend: `${invoiceKpiTrends.pending.pct}% this month`, trendUp: invoiceKpiTrends.pending.up },
             { icon: DealValueOvertimeIcon, label: "Due Invoices", value: `₹${Math.round(invoiceStats.due).toLocaleString("en-IN")}`, trend: `${invoiceKpiTrends.due.pct}% this month`, trendUp: invoiceKpiTrends.due.up },
           ].map((kpi, i) => (
+            // fetchData's Promise.all is now allSettled (see the effect above), so `loading`
+            // clears promptly and reliably regardless of which individual endpoints 403 — safe
+            // to gate a real skeleton on it again here.
             loading ? (
               <StatTileSkeleton key={i} subtitle />
             ) : (
@@ -2206,6 +2219,9 @@ function Dashboard() {
             { icon: TotalDealsClosedIcon, label: "Total Deals Closed", value: `${overviewKpis.dealsClosedCount}`, trend: `${overviewKpis.dealsClosedTrend.pct}% this month`, trendUp: overviewKpis.dealsClosedTrend.up },
             { icon: DealValueOvertimeIcon, label: "Deal Value Overtime", value: `₹${Math.round(overviewKpis.dealValue).toLocaleString("en-IN")}`, trend: `${overviewKpis.dealValueTrend.pct}% this month`, trendUp: overviewKpis.dealValueTrend.up },
           ].map((kpi, i) => (
+            // fetchData's Promise.all is now allSettled (see the effect above), so `loading`
+            // clears promptly and reliably regardless of which individual endpoints 403 — safe
+            // to gate a real skeleton on it again here.
             loading ? (
               <StatTileSkeleton key={i} subtitle />
             ) : (
@@ -2253,15 +2269,19 @@ function Dashboard() {
               style={{ marginTop: 12 }}
             >
               {crmKpis.map((kpi, i) => (
-                <StatTile
-                  key={i}
-                  tile={{
-                    ...kpi,
-                    subtitle: kpi.trend,
-                    subtitleIcon: kpi.trendUp ? TrendingUp : TrendingDown,
-                    subtitleColor: kpi.trendUp ? "#00C950" : "#E82222",
-                  }}
-                />
+                loading ? (
+                  <StatTileSkeleton key={i} subtitle />
+                ) : (
+                  <StatTile
+                    key={i}
+                    tile={{
+                      ...kpi,
+                      subtitle: kpi.trend,
+                      subtitleIcon: kpi.trendUp ? TrendingUp : TrendingDown,
+                      subtitleColor: kpi.trendUp ? "#00C950" : "#E82222",
+                    }}
+                  />
+                )
               ))}
             </div>
           );
@@ -2300,7 +2320,20 @@ function Dashboard() {
             CRM Health
           </span>
 
-          {/* Chart Content: gauge on the left, metric bars on the right. */}
+          {loading ? (
+            <div className="flex flex-col sm:flex-row items-center self-stretch min-w-0" style={{ gap: 24, flex: 1 }}>
+              <Skeleton shape="circle" width={180} height={180} />
+              <div className="flex flex-col justify-center min-w-0" style={{ gap: 16, flex: 1, maxWidth: 260 }}>
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="flex flex-col items-start self-stretch" style={{ gap: 9 }}>
+                    <Skeleton width={100} height={12} />
+                    <Skeleton width="100%" height={4} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+          /* Chart Content: gauge on the left, metric bars on the right. */
           <div
             className="flex flex-col sm:flex-row items-center self-stretch min-w-0"
             style={{ gap: 24, flex: 1 }}
@@ -2346,6 +2379,7 @@ function Dashboard() {
               ))}
             </div>
           </div>
+          )}
         </div>
 
         <div
@@ -2367,6 +2401,20 @@ function Dashboard() {
             Pipeline Snapshot
           </span>
 
+          {loading ? (
+            <div className="flex flex-col self-stretch" style={{ gap: 16, flex: 1 }}>
+              <div className="flex flex-row items-stretch self-stretch" style={{ gap: 8, height: 40 }}>
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="flex flex-col items-start min-w-0" style={{ flex: 1, gap: 4 }}>
+                    <Skeleton width={60} height={10} />
+                    <Skeleton width={70} height={16} />
+                  </div>
+                ))}
+              </div>
+              <Skeleton width="100%" height="100%" className="flex-1" />
+            </div>
+          ) : (
+          <>
           {/* Metric strip: four figures separated by vertical rules, each
               with its own month-over-month delta. */}
           <div className="flex flex-col self-stretch" style={{ gap: 12 }}>
@@ -2432,7 +2480,7 @@ function Dashboard() {
                   tickFormatter={formatCompactRupee}
                   tickLine={false}
                   axisLine={false}
-                  width={44}
+                  width={56}
                   tick={{ fontSize: 10, fontFamily: "Inter", fill: "#1F2937" }}
                 />
                 <Tooltip
@@ -2453,6 +2501,8 @@ function Dashboard() {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+          </>
+          )}
         </div>
       </div>
 
