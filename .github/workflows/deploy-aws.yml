@@ -1,0 +1,94 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+
+# A run's `docker compose build` executes on the VPS itself, not on the
+# GitHub runner — so two runs overlapping means two builds fighting for the
+# same small instance's CPU/RAM, each running for several times its normal
+# duration until one blows past command_timeout below. cancel-in-progress
+# means a fast run of pushes lands only the last one, matching how deploys
+# get triggered here (several small commits pushed close together).
+concurrency:
+  group: deploy-aws
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.repository == 'zore1803/DataCircles-PROD'
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH and deploy
+        # v1.0.3's Go SSH library offered only the legacy SHA-1 "ssh-rsa"
+        # signature, which OpenSSH on the Ubuntu 26.04 host rejects — the
+        # RSA deploy key authenticates fine from a normal ssh client, which
+        # negotiates rsa-sha2-512 instead. v1.2.x supports rsa-sha2.
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          # An uncontended build+up takes ~4m; the previous 10m default left
+          # no margin once a build ran under any real load (a full rebuild
+          # hit ~6m on the frontend step alone during the contention above).
+          command_timeout: 20m
+          script: |
+            set -e
+            cd /home/ubuntu/datacircles-crm
+
+            # BuildKit reuses unchanged layers far more aggressively than the
+            # legacy builder (and skips stages nothing depends on), which is
+            # most of the win on a commit that only touches source files.
+            export DOCKER_BUILDKIT=1
+            export COMPOSE_DOCKER_CLI_BUILD=1
+
+            BEFORE=$(git rev-parse HEAD)
+            git fetch origin main
+            git reset --hard origin/main
+            AFTER=$(git rev-parse HEAD)
+            echo "Deployed commit: $(git rev-parse --short HEAD)"
+
+            # Rebuild only the service whose inputs actually changed. The
+            # frontend's `npm run build` (Vite) is by far the slowest step on
+            # this instance, so skipping it on a backend-only push is the
+            # difference between a ~10m deploy and a ~2m one. A manual re-run
+            # (BEFORE == AFTER, nothing in the diff) falls through to
+            # rebuilding both, since "no changes" there means "redeploy what's
+            # already here", not "nothing to do".
+            CHANGED=$(git diff --name-only "$BEFORE" "$AFTER" || true)
+            echo "Changed files:"
+            echo "$CHANGED"
+
+            BUILD_BACKEND=false
+            BUILD_FRONTEND=false
+
+            if [ -z "$CHANGED" ]; then
+              echo "No file diff (re-run or forced deploy) — rebuilding both."
+              BUILD_BACKEND=true
+              BUILD_FRONTEND=true
+            else
+              # shared/ and the compose file feed BOTH images, so either one
+              # changing has to rebuild both.
+              if echo "$CHANGED" | grep -qE '^(backend/|shared/|docker-compose\.yml)'; then
+                BUILD_BACKEND=true
+              fi
+              if echo "$CHANGED" | grep -qE '^(frontend/|shared/|docker-compose\.yml)'; then
+                BUILD_FRONTEND=true
+              fi
+            fi
+
+            SERVICES=""
+            [ "$BUILD_BACKEND" = true ] && SERVICES="$SERVICES crm-backend"
+            [ "$BUILD_FRONTEND" = true ] && SERVICES="$SERVICES crm-frontend"
+
+            if [ -z "$SERVICES" ]; then
+              echo "Neither backend nor frontend inputs changed — nothing to rebuild."
+              exit 0
+            fi
+
+            echo "Rebuilding:$SERVICES"
+            docker compose build $SERVICES
+            docker compose up -d $SERVICES
+            docker image prune -f

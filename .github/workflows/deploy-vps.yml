@@ -11,11 +11,12 @@ on:
 # means a fast run of pushes lands only the last one, matching how deploys
 # get triggered here (several small commits pushed close together).
 concurrency:
-  group: deploy-prod
+  group: deploy-vps
   cancel-in-progress: true
 
 jobs:
   deploy:
+    if: github.repository == 'zore1803/DATACIRCLES-DEV'
     runs-on: ubuntu-latest
     steps:
       - name: SSH and deploy
@@ -35,7 +36,7 @@ jobs:
           command_timeout: 20m
           script: |
             set -e
-            cd ~/datacircles-crm
+            cd /root/datacircles-crm
 
             # BuildKit reuses unchanged layers far more aggressively than the
             # legacy builder (and skips stages nothing depends on), which is
