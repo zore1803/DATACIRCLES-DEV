@@ -45,7 +45,9 @@ function computeMandateMaxAmountRupees(_firstInvoiceRupees) {
 // activated on the account — it does not fall back to "every enabled method".
 // So a method is always sent: the customer's pick from checkout, else UPI
 // Autopay (what most Indian customers expect; ₹15,000 ceiling fits UPI's cap).
-const MANDATE_METHODS = ['upi', 'card', 'emandate'];
+// No 'emandate': Razorpay requires amount 0 on an e-mandate link, but ours
+// charges the first invoice during authorization.
+const MANDATE_METHODS = ['upi', 'card'];
 function resolveMandateMethod(requested) {
   return MANDATE_METHODS.includes(requested) ? requested : 'upi';
 }

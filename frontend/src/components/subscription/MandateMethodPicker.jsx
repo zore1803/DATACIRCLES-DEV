@@ -1,20 +1,20 @@
-import { Smartphone, CreditCard, Landmark, Check, ShieldCheck } from "lucide-react";
+import { Smartphone, CreditCard } from "lucide-react";
 
 // Autopay instrument for a new Razorpay mandate. A Registration Link shows
 // only ONE method on Razorpay's page (omitting it showed Cards only), so the
-// customer picks here, before we create the link.
+// customer picks here, before we create the link. No Net Banking: Razorpay
+// rejects an e-mandate link with a non-zero amount ("The amount should be
+// 0."), and ours charges the first invoice during authorization.
 const MANDATE_METHOD_OPTIONS = [
-  { value: "upi", label: "UPI AutoPay", hint: "GPay, PhonePe, Paytm & more", Icon: Smartphone },
-  { value: "card", label: "Credit / Debit Card", hint: "Visa, Mastercard, RuPay", Icon: CreditCard },
-  { value: "emandate", label: "Net Banking", hint: "Bank account e-mandate", Icon: Landmark },
+  { value: "upi", label: "UPI AutoPay", Icon: Smartphone },
+  { value: "card", label: "Card", Icon: CreditCard },
 ];
 
 const MandateMethodPicker = ({ value, onChange, className = "" }) => (
-  <fieldset className={className}>
-    <legend className="text-sm font-semibold text-gray-900 mb-1">Payment method</legend>
-    <p className="text-xs text-gray-500 mb-3">Used for today&apos;s payment and future automatic renewals.</p>
-    <div role="radiogroup" className="space-y-2">
-      {MANDATE_METHOD_OPTIONS.map(({ value: method, label, hint, Icon }) => {
+  <div className={`flex flex-wrap items-center gap-2 ${className}`}>
+    <span className="text-sm text-gray-600 mr-1">Pay with</span>
+    <div role="radiogroup" className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
+      {MANDATE_METHOD_OPTIONS.map(({ value: method, label, Icon }) => {
         const selected = value === method;
         return (
           <button
@@ -23,27 +23,15 @@ const MandateMethodPicker = ({ value, onChange, className = "" }) => (
             role="radio"
             aria-checked={selected}
             onClick={() => onChange?.(method)}
-            className={`w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all ${selected ? "border-blue-600 bg-blue-50/60 ring-1 ring-blue-600" : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"}`}
+            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${selected ? "bg-blue-600 text-white shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
           >
-            <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ${selected ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600"}`}>
-              <Icon className="h-4 w-4" />
-            </span>
-            <span className="flex-1 min-w-0">
-              <span className="block text-sm font-medium text-gray-900">{label}</span>
-              <span className="block text-xs text-gray-500 truncate">{hint}</span>
-            </span>
-            <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border ${selected ? "border-blue-600 bg-blue-600" : "border-gray-300"}`}>
-              {selected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
-            </span>
+            <Icon className="h-4 w-4" />
+            {label}
           </button>
         );
       })}
     </div>
-    <p className="mt-3 flex items-center gap-1.5 text-xs text-gray-500">
-      <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
-      Secured by Razorpay. Cancel autopay anytime.
-    </p>
-  </fieldset>
+  </div>
 );
 
 export default MandateMethodPicker;
