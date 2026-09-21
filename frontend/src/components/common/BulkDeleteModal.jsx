@@ -33,22 +33,18 @@ export default function BulkDeleteModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[10000] p-4">
-      <div className="bg-white rounded-lg shadow-xl border border-gray-100 max-w-xs w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        <div className="p-5">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-red-50 rounded-full flex items-center justify-center flex-shrink-0">
-              <DeleteIcon className="w-4 h-4 text-red-600" />
-            </div>
-            <div className="pt-0.5">
-              <h3 className="text-sm font-semibold text-gray-900 font-sf">
-                Confirm bulk delete
-              </h3>
-              <p className="text-sm text-gray-500 font-inter mt-1">{message}</p>
-            </div>
-          </div>
-          {onExportBeforeDelete && (
-            <label className="flex items-center gap-2 mt-3 ml-11 text-sm text-gray-600 cursor-pointer select-none">
+    <div className="fixed inset-0 bg-black/50 z-[10004] flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-sm sm:max-w-lg mx-4 animate-in fade-in zoom-in-95 duration-150">
+        <h3 className="text-lg font-semibold font-sf text-gray-900 mb-4">
+          Confirm bulk delete
+        </h3>
+        <p className="text-sm text-gray-600 mb-6 font-inter">
+          {message}
+        </p>
+        
+        {onExportBeforeDelete && (
+          <div className="mb-6">
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={keepCopy}
@@ -57,19 +53,34 @@ export default function BulkDeleteModal({
               />
               Keep a copy (download as CSV)
             </label>
-          )}
-          <div className="flex gap-2 justify-end mt-5">
+          </div>
+        )}
+
+        <div className="flex justify-between gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="bg-gray-200 font-sf text-gray-800 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors cursor-pointer hidden sm:block"
+          >
+            Cancel
+          </button>
+          
+          <div className="flex space-x-1 sm:space-x-0 w-full sm:w-auto">
+            {/* Mobile cancel button - since the other one is hidden on sm */}
             <button
+              type="button"
               onClick={onCancel}
               disabled={loading}
-              className="px-3.5 py-1.5 border border-gray-300 rounded-md text-sm text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              className="bg-gray-200 font-sf text-gray-800 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors cursor-pointer sm:hidden flex-1"
             >
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleConfirm}
               disabled={loading}
-              className="px-3.5 py-1.5 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 transition-colors shadow-sm flex items-center justify-center min-w-[92px]"
+              className="bg-red-600 font-sf text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors cursor-pointer flex items-center justify-center min-w-[92px] flex-1 sm:flex-none"
             >
               {loading ? (
                 <>

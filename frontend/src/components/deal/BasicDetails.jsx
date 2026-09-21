@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import AppToaster from "../AppToaster";
 import EyeIcon from "../common/EyeIcon";
+import DealFieldDrawer from "./DealFieldDrawer";
 import {
   ResponsiveContainer,
   BarChart,
@@ -42,7 +43,9 @@ import {
   Pie,
   LineChart,
   Line,
-  CartesianGrid
+  CartesianGrid,
+  AreaChart,
+  Area
 } from "recharts";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -71,15 +74,15 @@ const fmtDateTime = (d) => {
 // ─── small atoms ─────────────────────────────────────────────────────────────
 
 /** Activity icon */
-const AIcon = ({ type }) => {
+const AIcon = ({ type, className = "w-4 h-4" }) => {
   const m = {
-    invoice: <Receipt      className="w-3.5 h-3.5 text-blue-500"   />,
-    task:    <CheckSquare  className="w-3.5 h-3.5 text-violet-500" />,
-    meeting: <CalendarDays className="w-3.5 h-3.5 text-green-500"  />,
-    call:    <PhoneCall    className="w-3.5 h-3.5 text-orange-500" />,
-    note:    <MessageSquare className="w-3.5 h-3.5 text-yellow-500"/>,
+    invoice: <Receipt      className={className} />,
+    task:    <CheckSquare  className={className} />,
+    meeting: <CalendarDays className={className} />,
+    call:    <PhoneCall    className={className} />,
+    note:    <MessageSquare className={className} />,
   };
-  return m[(type || "").toLowerCase()] || <FileText className="w-3.5 h-3.5 text-gray-400" />;
+  return m[(type || "").toLowerCase()] || <FileText className={className} />;
 };
 
 /** Thin horizontal progress bar */
@@ -102,9 +105,10 @@ const DonutLabel = ({ cx, cy, value, total, label = "collected" }) => (
 
 // ─── main component ──────────────────────────────────────────────────────────
 
-const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate }) => {
+const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged }) => {
 
   // ── state ───────────────────────────────────────────────────────────────
+  const [showFieldDrawer, setShowFieldDrawer] = useState(false);
   const [isOwnerDropdownOpen, setIsOwnerDropdownOpen] = useState(false);
   const [searchOwnerQuery,    setSearchOwnerQuery]    = useState("");
   const [availableUsers,      setAvailableUsers]      = useState([]);
@@ -121,6 +125,12 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate }) => {
 
   const [showEmptyFields, setShowEmptyFields] = useState(false);
 
+  // Pipeline stages as configured in Settings -> Pipeline (KanbanBoard.statuses),
+  // the same list the Deals Kanban board renders as columns. Fetched here so the
+  // Deal Journey below reflects custom stages (e.g. "negotiation") instead of a
+  // hardcoded Open/Won/Lost, and so it doesn't drift from what Settings shows.
+  const [pipelineStatuses, setPipelineStatuses] = useState([]);
+
   // ── permissions ─────────────────────────────────────────────────────────
   const currentUser = useMemo(() => {
     try { return JSON.parse(localStorage.getItem("user")) || null; } catch { return null; }
@@ -136,6 +146,10 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate }) => {
     if (!canEdit) return;
     API.get("/auth/all-user").then(r => setAvailableUsers(r.data.allUsers || [])).catch(() => {});
   }, [canEdit]);
+
+  useEffect(() => {
+    API.get("/kanban").then(r => setPipelineStatuses(r.data?.statuses || [])).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!deal?._id) return;
@@ -209,7 +223,6 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate }) => {
   const unpaidCount = invoices.length - paidCount;
 
   // Pipeline stages
-  const stageSteps    = ["Open", "Won", "Lost"];
   const currentStatus = deal?.status || "Open";
   const isTerminal    = currentStatus === "Won" || currentStatus === "Lost";
   const daysInStage   = daysBetween(deal?.updatedAt);
@@ -248,36 +261,92 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate }) => {
     if (invoices.length === 0) return [];
     
     // Group invoices by date (using createdAt) and sum amount + paid amount
-    const grouped = invoices.reduce((acc, inv) => {
-      if (!inv.createdAt) return acc;
-      // Truncate to just YYYY-MM-DD for grouping
-      const dateKey = inv.createdAt.split('T')[0];
-      if (!acc[dateKey]) acc[dateKey] = { date: dateKey, dateObj: new Date(dateKey), dailyInvoiced: 0, dailyPaid: 0 };
-      
-      acc[dateKey].dailyInvoiced += (inv.amount || 0);
-      if ((inv.status || "").toLowerCase() === "paid") {
-         acc[dateKey].dailyPaid += (inv.amount || 0);
-      }
-      return acc;
-    }, {});
-
-    const sortedDates = Object.values(grouped).sort((a, b) => a.dateObj - b.dateObj);
+    const groups = {};
+    invoices.forEach(inv => {
+       const d = new Date(inv.createdAt);
+       const mY = isNaN(d) ? "Unknown" : `${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear().toString().slice(2)}`;
+       if (!groups[mY]) groups[mY] = { name: mY, Invoiced: 0, Collected: 0, timestamp: isNaN(d) ? 0 : d.getTime() };
+       groups[mY].Invoiced += (inv.amount || 0);
+       if ((inv.status || "").toLowerCase() === "paid") groups[mY].Collected += (inv.amount || 0);
+    });
     
-    // Accumulate running totals
-    let runInv = 0;
-    let runPaid = 0;
-    const finalData = sortedDates.map(item => {
-      runInv += item.dailyInvoiced;
-      runPaid += item.dailyPaid;
-      return {
-        name: new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        "Total Invoiced": runInv,
-        "Total Collected": runPaid
-      };
+    let runningInv = 0, runningCol = 0;
+    return Object.values(groups)
+      .sort((a,b) => a.timestamp - b.timestamp)
+      .map(g => {
+         runningInv += g.Invoiced;
+         runningCol += g.Collected;
+         return { name: g.name, Invoiced: runningInv, Collected: runningCol };
+      });
+  }, [invoices]);
+
+  // Invoice Aging Logic
+  const invoiceAging = useMemo(() => {
+    if (invoices.length === 0) return null;
+    let paid = 0, notDue = 0, dueSoon = 0, overdue = 0;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0); // Start of today
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    
+    invoices.forEach(i => {
+      if ((i.status || "").toLowerCase() === "paid") {
+        paid++;
+        return;
+      }
+      if (!i.dueDate) {
+        notDue++;
+        return;
+      }
+      const due = new Date(i.dueDate);
+      due.setHours(0, 0, 0, 0);
+      
+      if (due < now) {
+        overdue++;
+      } else if (due <= nextWeek) {
+        dueSoon++;
+      } else {
+        notDue++;
+      }
     });
 
-    return finalData;
+    if (paid + notDue + dueSoon + overdue === 0) return null;
+    return { paid, notDue, dueSoon, overdue };
   }, [invoices]);
+
+  // Activity Breakdown Logic
+  const activityBreakdown = useMemo(() => {
+    const counts = {
+      Invoices: invoices.length,
+      Tasks: tasks.length,
+      Meetings: meetings.length,
+      Notes: notes.length,
+    };
+    
+    const categoriesWithData = Object.values(counts).filter(v => v > 0).length;
+    // Only show if there's multiple categories of activity (otherwise Timeline is enough)
+    if (categoriesWithData <= 1) return null; 
+    
+    return counts;
+  }, [invoices, tasks, meetings, notes]);
+
+  // Heatmap Data (Last 28 days activity count)
+  const heatmapData = useMemo(() => {
+    const days = [];
+    const now = new Date();
+    for (let i = 27; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      d.setHours(0,0,0,0);
+      days.push({ date: d, count: 0 });
+    }
+    activities.forEach(a => {
+      const ad = new Date(a.date);
+      ad.setHours(0,0,0,0);
+      const target = days.find(day => day.date.getTime() === ad.getTime());
+      if (target) target.count++;
+    });
+    return days;
+  }, [activities]);
+
 
   // Custom fields
   const allMerged     = getMergedFields();
@@ -287,46 +356,89 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate }) => {
     visibleFields.reduce((acc, f) => { const c = f.category || "Uncategorized"; if (!acc[c]) acc[c] = []; acc[c].push(f); return acc; }, {})
   ).sort(([a], [b]) => a === "Uncategorized" ? 1 : b === "Uncategorized" ? -1 : a.localeCompare(b));
 
+  // Same order Settings -> Pipeline and the Deals Kanban board use, so a stage
+  // added there (e.g. "negotiation") shows up here without any further change.
+  // "Lost" is a branch outcome rather than a forward step, so it's excluded from
+  // the main path and only appended when it's actually the deal's current status
+  // (matching the original Open-then-Lost behavior, just with custom stages kept
+  // in between).
+  const configuredStages = pipelineStatuses.length ? pipelineStatuses : ["Open", "Won", "Lost"];
+  const forwardStages = configuredStages.filter((s) => s !== "Lost");
+  const visualStages = currentStatus === "Lost"
+    ? [...forwardStages.filter((s) => s !== "Won"), "Lost"]
+    : forwardStages;
+  const currentStageIdx = visualStages.indexOf(currentStatus);
+  const progressPct = visualStages.length > 1 && currentStageIdx >= 0
+    ? (currentStageIdx / (visualStages.length - 1)) * 100
+    : 0;
+
   // ── render ───────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-5 pb-8 relative z-0">
+    <div className="space-y-4 pb-8 relative z-0">
       <AppToaster />
 
       {/* ═══════════════════════════════════════════════════════════════════
-          1.  OWNER + AUDIT BAR
+          1. DEAL INFORMATION (Compact Strip)
       ════════════════════════════════════════════════════════════════════ */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-xl border border-gray-200 relative z-50">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-500">Owner:</span>
-          <div className="relative">
+      <div className="bg-white rounded-xl border border-[#E7E4E3] relative z-50 overflow-visible shadow-sm">
+        <div className="grid grid-cols-2 md:grid-cols-6 divide-y md:divide-y-0 divide-gray-100 md:divide-x border-gray-100 bg-white rounded-xl">
+          <div className="px-4 py-3 flex flex-col justify-center group hover:bg-gray-50 transition-colors col-span-2 md:col-span-1 rounded-tl-xl md:rounded-bl-xl text-left">
+            <p className="text-[11px] font-medium text-gray-500 mb-0.5">Company</p>
+            {deal.company ? (
+              <Link to={`/companies/${deal.company._id}`} className="text-sm font-semibold text-gray-900 hover:text-blue-600 flex items-center gap-1.5 group-hover:underline min-w-0">
+                <Building2 className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                <span className="truncate">{deal.company.name}</span>
+                <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+              </Link>
+            ) : (
+              <p className="text-sm font-semibold text-gray-800">—</p>
+            )}
+          </div>
+          <div className="px-4 py-3 flex flex-col justify-center group hover:bg-gray-50 transition-colors col-span-2 md:col-span-1 text-left">
+            <p className="text-[11px] font-medium text-gray-500 mb-0.5">Contact</p>
+            {deal.contact ? (
+              <p className="text-sm font-semibold text-gray-900 flex items-center gap-1.5 min-w-0">
+                <User className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                <span className="truncate">{deal.contact.name}</span>
+              </p>
+            ) : (
+              <p className="text-sm font-semibold text-gray-800">—</p>
+            )}
+          </div>
+          <div className="px-4 py-3 flex flex-col justify-center relative text-left">
+            <p className="text-[11px] font-medium text-gray-500 mb-0.5">Owner</p>
             <button
               onClick={() => canEdit && setIsOwnerDropdownOpen(v => !v)}
               disabled={!canEdit}
-              className={`flex items-center gap-1.5 px-2 py-1 -ml-2 rounded text-sm font-semibold transition-colors ${canEdit ? "text-gray-900 hover:bg-gray-50 cursor-pointer" : "text-gray-900 cursor-default"}`}
+              className={`flex items-center gap-1.5 -ml-1 px-1 py-0.5 rounded text-sm font-semibold transition-colors w-fit ${canEdit ? "text-gray-900 hover:bg-gray-50 cursor-pointer" : "text-gray-900 cursor-default"}`}
             >
-              <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px]">{deal.user?.name?.[0]?.toUpperCase() || "U"}</div>
-              {deal.user?.name || "Unassigned"}
-              {canEdit && <ChevronDown className="w-4 h-4 text-gray-400" />}
+              <div className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[9px] shadow-sm flex-shrink-0">
+                {deal.user?.name?.[0]?.toUpperCase() || "U"}
+              </div>
+              <span className="truncate">{deal.user?.name || "Unassigned"}</span>
+              {canEdit && <ChevronDown className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />}
             </button>
             {isOwnerDropdownOpen && canEdit && (
-              <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-md shadow-xl z-50">
-                <div className="p-3 border-b border-gray-100 flex justify-between items-center">
-                  <h4 className="text-xs font-semibold text-gray-700">Assign Owner</h4>
-                  <button onClick={() => setIsOwnerDropdownOpen(false)} className="text-xs text-gray-500 border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">Close</button>
+              <div className="absolute top-full left-4 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-hidden">
+                <div className="p-2 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                  <h4 className="text-[10px] uppercase tracking-wider font-semibold text-gray-500">Assign Owner</h4>
+                  <button onClick={() => setIsOwnerDropdownOpen(false)} className="text-[10px] text-gray-500 hover:text-gray-700 font-medium px-1">Close</button>
                 </div>
                 <div className="p-2">
-                  <input type="text" placeholder="Search..." className="w-full text-sm border border-gray-300 rounded px-3 py-1.5 focus:outline-none focus:border-blue-500 mb-2" value={searchOwnerQuery} onChange={e => setSearchOwnerQuery(e.target.value)} />
-                  <div className="max-h-48 overflow-y-auto">
-                    <button onClick={() => handleOwnerChange(null)} className="w-full text-left flex items-center gap-3 p-2 hover:bg-gray-50 rounded text-sm">
-                      <div className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center font-medium">N</div>
-                      <span className="text-gray-700">None</span>
-                      {!deal.user && <Check className="w-4 h-4 text-green-600 ml-auto" />}
+                  <input type="text" placeholder="Search users..." className="w-full text-xs border border-gray-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:border-blue-500 mb-2" value={searchOwnerQuery} onChange={e => setSearchOwnerQuery(e.target.value)} />
+                  <div className="max-h-40 overflow-y-auto space-y-0.5 custom-scrollbar">
+                    <button onClick={() => handleOwnerChange(null)} className="w-full text-left flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded-md text-xs">
+                      <div className="w-6 h-6 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center font-medium">N</div>
+                      <span className="text-gray-600 font-medium">None</span>
+                      {!deal.user && <Check className="w-3.5 h-3.5 text-[#00C950] ml-auto" />}
                     </button>
                     {availableUsers.filter(u => u.name?.toLowerCase().includes(searchOwnerQuery.toLowerCase())).map(u => (
-                      <button key={u._id} onClick={() => handleOwnerChange(u._id)} className="w-full text-left flex items-center gap-3 p-2 hover:bg-gray-50 rounded text-sm">
-                        <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-medium text-xs">{u.name?.[0]?.toUpperCase()}</div>
-                        <div className="flex flex-col"><span className="text-gray-900 font-medium">{u.name}</span><span className="text-gray-500 text-xs">{u.email}</span></div>
-                        {deal.user?._id === u._id && <Check className="w-4 h-4 text-green-600 ml-auto" />}
+                      <button key={u._id} onClick={() => handleOwnerChange(u._id)} className="w-full text-left flex items-center gap-2 p-1.5 hover:bg-gray-50 rounded-md text-xs">
+                        <div className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-[10px] border border-blue-100">{u.name?.[0]?.toUpperCase()}</div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-gray-900 font-medium truncate">{u.name}</span>
+                        </div>
+                        {deal.user?._id === u._id && <Check className="w-3.5 h-3.5 text-[#00C950] ml-auto flex-shrink-0" />}
                       </button>
                     ))}
                   </div>
@@ -334,421 +446,46 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate }) => {
               </div>
             )}
           </div>
-        </div>
-        <div className="flex flex-col text-xs text-right mt-4 md:mt-0 relative group/audit cursor-default">
-          <div className="flex items-center justify-end gap-1.5 text-gray-500">
-            <Clock className="w-3.5 h-3.5" />
-            <span>Updated: {fmtDateTime(deal.updatedAt)}</span>
-          </div>
-          <div className="text-gray-400">by: <span className="font-medium text-gray-600">{deal.lastUpdatedBy?.name || "Unknown"}</span></div>
-          <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 p-4 rounded-md shadow-xl opacity-0 group-hover/audit:opacity-100 transition-opacity pointer-events-none z-40 min-w-[250px] text-left">
-            <div className="mb-3">
-              <div className="flex justify-between text-gray-600 mb-1"><span>Updated on:</span><span className="font-medium">{fmtDateTime(deal.updatedAt)}</span></div>
-              <div className="flex justify-between text-gray-600"><span>Updated by:</span><span className="font-medium text-gray-900">{deal.lastUpdatedBy?.name || "Unknown"}</span></div>
-            </div>
-            <div className="border-t border-gray-200 my-3" />
-            <div>
-              <div className="flex justify-between text-gray-600 mb-1"><span>Added on:</span><span className="font-medium">{fmtDateTime(deal.createdAt)}</span></div>
-              <div className="flex justify-between text-gray-600"><span>Added by:</span><span className="font-medium text-gray-900">{deal.createdBy?.name || "Unknown"}</span></div>
+          <div className="px-4 py-3 flex flex-col justify-center text-left">
+            <p className="text-[11px] font-medium text-gray-500 mb-0.5">Stage</p>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: statusColor(deal.status) }} />
+              <span className="text-sm font-semibold text-gray-800">{deal.status || "Open"}</span>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          2. PIPELINE & DEAL SNAPSHOT
-      ════════════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 relative z-40">
-        
-        {/* PIPELINE */}
-        <div className="bg-white rounded-xl border border-gray-200 px-6 pt-5 pb-4">
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4 block">Pipeline</span>
-          
-          <div className="relative mb-2">
-            <div className="absolute top-1/2 left-0 w-full h-[2px] bg-gray-100 -translate-y-1/2 z-0" />
-            <div className="flex justify-between relative z-10">
-              {stageSteps.map((step, idx) => {
-                const isActive = currentStatus === step;
-                const isPast = stageSteps.indexOf(currentStatus) > idx;
-                
-                return (
-                  <div key={step} className="flex flex-col items-center">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 
-                      ${isActive ? "bg-blue-600 border-blue-600 text-white shadow-md ring-4 ring-blue-50" : 
-                        isPast ? "bg-green-500 border-green-500 text-white" : 
-                        "bg-white border-gray-200 text-gray-300"}`}>
-                      {isPast ? <Check className="w-3.5 h-3.5" /> : idx + 1}
-                    </div>
-                    <span className={`text-[11px] font-semibold mt-2 ${isActive ? "text-blue-600" : isPast ? "text-green-600" : "text-gray-400"}`}>
-                      {step}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+          <div className="px-4 py-3 flex flex-col justify-center text-left">
+            <p className="text-[11px] font-medium text-gray-500 mb-0.5">Created Date</p>
+            <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+               <Calendar className="w-3.5 h-3.5 text-gray-400" /> {fmtDate(deal.createdAt)}
+            </p>
           </div>
-          
-          <div className="flex justify-between items-center text-[11px] mt-4 text-gray-500 pt-3 border-t border-gray-50">
-            <div className="flex flex-col">
-              <span className="text-gray-400">Current stage</span>
-              <strong className="text-gray-900 text-sm mt-0.5">{currentStatus}</strong>
-              <span className="text-[10px] mt-0.5">Since {fmtDate(deal.updatedAt)}</span>
-            </div>
-            <div className="flex flex-col items-end text-right">
-              <span className="text-gray-400">Deal value</span>
-              <strong className="text-gray-900 text-sm mt-0.5">{fmt(dealValue)}</strong>
-            </div>
-          </div>
-        </div>
-
-        {/* DEAL SNAPSHOT */}
-        <div className="bg-white rounded-xl border border-gray-200 flex flex-col">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest block">Deal Snapshot</span>
-          </div>
-          <div className="grid grid-cols-3 divide-x divide-gray-100 flex-1">
-            <div className="p-4 flex flex-col justify-center">
-              <div className="flex items-center gap-1.5 mb-1.5"><TrendingUp className="w-3.5 h-3.5 text-gray-400" /><span className="text-[10px] font-bold text-gray-500 uppercase">Deal Value</span></div>
-              <span className="text-base font-bold text-gray-900">{fmt(dealValue)}</span>
-            </div>
-            <div className="p-4 flex flex-col justify-center bg-blue-50/30">
-              <div className="flex items-center gap-1.5 mb-1.5"><Receipt className="w-3.5 h-3.5 text-blue-400" /><span className="text-[10px] font-bold text-blue-600 uppercase">Invoiced</span></div>
-              <span className="text-base font-bold text-gray-900 mb-1">{fmt(totalInvoiced)}</span>
-              <span className="text-[10px] font-medium text-gray-500">{invoices.length} invoices</span>
-            </div>
-            <div className="p-4 flex flex-col justify-center bg-green-50/30">
-              <div className="flex items-center gap-1.5 mb-1.5"><CheckSquare className="w-3.5 h-3.5 text-green-500" /><span className="text-[10px] font-bold text-green-600 uppercase">Collected</span></div>
-              <span className="text-base font-bold text-gray-900 mb-1">{fmt(totalPaid)}</span>
-              <span className="text-[10px] font-medium text-gray-500">{totalInvoiced > 0 ? Math.round((totalPaid/totalInvoiced)*100) : 0}% collected</span>
-            </div>
-          </div>
-          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/50 rounded-b-xl flex justify-between text-[11px] font-medium text-gray-600">
-            <span><strong>{invoices.length}</strong> Invoices</span>
-            <span className="text-amber-600"><strong>{unpaidCount}</strong> Unpaid</span>
-            <span className="text-green-600"><strong>{paidCount}</strong> Paid</span>
-          </div>
-        </div>
-        
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          3. REVENUE TREND (LINE GRAPH OR PROGRESSION) & ACTIVITY TIMELINE
-      ════════════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 relative z-30">
-        
-        {/* REVENUE / COLLECTION SECTION */}
-        <div className="lg:col-span-3 bg-white rounded-xl border border-gray-200 p-5 flex flex-col">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Revenue & Collection Trend</h3>
-            {revenueChartData.length > 2 && (
-              <div className="flex gap-4">
-                 <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 bg-blue-500 rounded" /> <span className="text-[10px] font-medium text-gray-500">Invoiced</span></div>
-                 <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 bg-green-500 rounded" /> <span className="text-[10px] font-medium text-gray-500">Collected</span></div>
+          <div className="px-4 py-3 flex flex-col justify-center group/audit cursor-default relative rounded-tr-xl md:rounded-br-xl text-left">
+            <p className="text-[11px] font-medium text-gray-500 mb-0.5">Last Updated</p>
+            <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+               <Clock className="w-3.5 h-3.5 text-gray-400" /> {fmtDate(deal.updatedAt)}
+            </p>
+            <div className="absolute top-full right-4 mt-2 bg-white border border-gray-200 p-3 rounded-xl shadow-xl opacity-0 group-hover/audit:opacity-100 transition-opacity pointer-events-none z-40 min-w-[200px] text-left">
+              <div className="mb-2">
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Updated By</div>
+                <div className="font-semibold text-xs text-gray-900">{deal.lastUpdatedBy?.name || "Unknown"}</div>
+                <div className="text-[9px] text-gray-500 mt-0.5">{fmtDateTime(deal.updatedAt)}</div>
               </div>
-            )}
-          </div>
-
-          <div className="flex-1 flex flex-col justify-center min-h-[192px]">
-            {revenueChartData.length === 0 ? (
-               <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 border border-dashed border-gray-100 rounded-lg py-10">
-                 <TrendingUp className="w-6 h-6 mb-2 opacity-30" />
-                 <span className="text-xs">No invoice history to plot</span>
-               </div>
-            ) : revenueChartData.length <= 2 ? (
-               <div className="space-y-5 px-2">
-                 <div>
-                   <div className="flex justify-between text-xs mb-1.5 font-bold"><span className="text-gray-500">Invoiced</span><span className="text-gray-900">{fmt(totalInvoiced)}</span></div>
-                   <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden"><div className="bg-blue-500 h-full rounded-full transition-all" style={{width: '100%'}}/></div>
-                 </div>
-                 <div>
-                   <div className="flex justify-between text-xs mb-1.5 font-bold"><span className="text-gray-500">Collected</span><span className="text-green-600">{fmt(totalPaid)}</span></div>
-                   <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden"><div className="bg-green-500 h-full rounded-full transition-all" style={{width: `${totalInvoiced > 0 ? (totalPaid/totalInvoiced)*100 : 0}%`}}/></div>
-                 </div>
-                 <div>
-                   <div className="flex justify-between text-xs mb-1.5 font-bold"><span className="text-gray-500">Outstanding</span><span className="text-amber-600">{fmt(totalOutstanding)}</span></div>
-                   <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden"><div className="bg-amber-500 h-full rounded-full transition-all" style={{width: `${totalInvoiced > 0 ? (totalOutstanding/totalInvoiced)*100 : 0}%`}}/></div>
-                 </div>
-               </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={revenueChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={(val) => `₹${val/1000}k`} tick={{ fontSize: 10, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-                  <Tooltip 
-                    formatter={(val) => [fmt(val), ""]} 
-                    contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #E5E7EB", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} 
-                  />
-                  <Line type="monotone" dataKey="Total Invoiced" stroke="#0085FF" strokeWidth={2} dot={{ r: 3, fill: "#0085FF" }} activeDot={{ r: 5 }} />
-                  <Line type="monotone" dataKey="Total Collected" stroke="#00C950" strokeWidth={2} dot={{ r: 3, fill: "#00C950" }} activeDot={{ r: 5 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </div>
-
-        {/* ACTIVITY TIMELINE */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5 flex flex-col min-h-[300px]">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Activity Timeline</h3>
-          <div className="flex flex-wrap gap-1.5 mb-4">
-            {ACTIVITY_FILTERS.map(f => (
-              <button key={f} onClick={() => setActivityFilter(f)}
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-colors border ${activityFilter === f ? "bg-blue-600 text-white border-blue-600" : "bg-gray-50 text-gray-500 border-gray-200 hover:border-blue-300 hover:text-blue-600"}`}>
-                {f}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex-1 overflow-y-auto divide-y divide-gray-50 pr-2 max-h-64">
-            {activitiesLoading ? (
-              <div className="space-y-3 pt-2">{[1,2,3].map(i => <div key={i} className="flex items-start gap-2.5 animate-pulse"><div className="w-7 h-7 rounded-full bg-gray-200 flex-shrink-0" /><div className="flex-1 space-y-1.5 pt-0.5"><div className="h-3 bg-gray-200 rounded w-3/4" /><div className="h-2.5 bg-gray-100 rounded w-1/2" /></div></div>)}</div>
-            ) : filteredActivities.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-gray-400"><Activity className="w-8 h-8 mb-2 opacity-30" /><p className="text-xs">No {activityFilter === "All" ? "" : activityFilter.toLowerCase()} activity yet</p></div>
-            ) : filteredActivities.map((act, i) => (
-              <div key={i} className="flex items-start gap-3 py-3">
-                <div className="w-8 h-8 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0 shadow-sm"><AIcon type={act.type} /></div>
-                <div className="flex-1 min-w-0 pt-0.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs font-medium text-gray-800 leading-snug">{act.label}</p>
-                    {act.amount != null && <span className="text-xs font-bold text-gray-700 whitespace-nowrap tabular-nums">{fmt(act.amount)}</span>}
-                  </div>
-                  <p className="text-[10px] text-gray-400 mt-1">{fmtDate(act.date)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          4. INVOICE BREAKDOWN | PAYMENT COLLECTION | DEAL ACTIVITY
-      ════════════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 relative z-20">
-        
-        {/* INVOICE BREAKDOWN DONUT */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">Invoice Status</h3>
-          <div className="flex items-center flex-1">
-            <div className="w-24 h-24 relative flex-shrink-0">
-              {invoices.length === 0 ? (
-                 <div className="absolute inset-0 flex items-center justify-center text-gray-300 border-2 border-dashed border-gray-100 rounded-full">
-                   <Receipt className="w-6 h-6 opacity-50" />
-                 </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={invoiceDonutData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={28} outerRadius={44} paddingAngle={2} labelLine={false}>
-                      {invoiceDonutData.map((e, i) => <Cell key={i} fill={e.fill} />)}
-                    </Pie>
-                    <DonutLabel cx={48} cy={48} value={paidCount} total={invoices.length} label="paid" />
-                    <Tooltip formatter={v => [v, "Invoices"]} contentStyle={{ fontSize: 11, borderRadius: 8, border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-            <div className="flex-1 ml-4 space-y-2">
-              <div className="flex justify-between items-center text-xs">
-                <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#00C950]" /> Paid</span>
-                <span className="font-bold">{paidCount}</span>
-              </div>
-              <div className="flex justify-between items-center text-xs">
-                <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#EF4444]" /> Unpaid</span>
-                <span className="font-bold">{unpaidCount}</span>
-              </div>
-              <div className="border-t border-gray-100 pt-2 mt-2 text-[10px] text-gray-500">
-                Total Invoices: <strong className="text-gray-900">{invoices.length}</strong>
+              <div className="pt-2 border-t border-gray-100">
+                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Created By</div>
+                <div className="font-semibold text-xs text-gray-900">{deal.createdBy?.name || "Unknown"}</div>
+                <div className="text-[9px] text-gray-500 mt-0.5">{fmtDateTime(deal.createdAt)}</div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* PAYMENT COLLECTION */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">Payment Collection</h3>
-          <div className="flex items-center flex-1">
-             <div className="w-24 h-24 relative flex-shrink-0">
-               {totalInvoiced === 0 ? (
-                  <div className="absolute inset-0 flex items-center justify-center text-gray-300 border-2 border-dashed border-gray-100 rounded-full">
-                    <TrendingUp className="w-6 h-6 opacity-50" />
-                  </div>
-               ) : (
-                 <ResponsiveContainer width="100%" height="100%">
-                   <PieChart>
-                     <Pie data={donutData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={28} outerRadius={44} paddingAngle={2} labelLine={false}>
-                       {donutData.map((e, i) => <Cell key={i} fill={e.fill} />)}
-                     </Pie>
-                     <DonutLabel cx={48} cy={48} value={totalPaid} total={totalInvoiced} label="collected" />
-                     <Tooltip formatter={v => [fmt(v), ""]} contentStyle={{ fontSize: 11, borderRadius: 8, border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} />
-                   </PieChart>
-                 </ResponsiveContainer>
-               )}
-             </div>
-             <div className="flex-1 ml-4 space-y-2">
-               <div className="flex justify-between items-center text-xs">
-                 <span className="flex items-center gap-1.5 text-gray-600">Collected</span>
-                 <span className="font-bold text-gray-900 tabular-nums">{fmt(totalPaid)}</span>
-               </div>
-               <div className="flex justify-between items-center text-xs">
-                 <span className="flex items-center gap-1.5 text-gray-600">Outstanding</span>
-                 <span className="font-bold text-gray-900 tabular-nums">{fmt(totalOutstanding)}</span>
-               </div>
-               <div className="pt-2 mt-2">
-                 <Bar2 value={totalPaid} total={totalInvoiced} color="#00C950" bgClass="bg-[#F59E0B]" />
-               </div>
-               {unpaidCount > 0 && (
-                 <div className="pt-2 mt-1">
-                   <button className="w-full text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 py-1.5 rounded-md transition-colors flex items-center justify-center gap-1">
-                     <AlertTriangle className="w-3 h-3" /> Review {unpaidCount} unpaid {unpaidCount === 1 ? "invoice" : "invoices"}
-                   </button>
-                 </div>
-               )}
-             </div>
-          </div>
-        </div>
-
-        {/* ACTIVITY PULSE */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col justify-between">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">Activity Pulse</h3>
-          
-          <div className="space-y-3 mb-4 text-xs font-medium">
-            <div className="flex items-center justify-between group">
-              <span className="text-gray-500 w-16">Invoices</span>
-              <div className="flex-1 mx-3 h-2 bg-gray-50 border border-gray-100 rounded-full overflow-hidden flex shadow-inner">
-                <div className="h-full bg-gradient-to-r from-blue-400 to-blue-500 rounded-full transition-all group-hover:opacity-80" style={{width: `${Math.min(100, invoices.length * 10)}%`}} />
-              </div>
-              <span className="text-gray-900 w-4 text-right font-bold tabular-nums">{invoices.length}</span>
-            </div>
-            <div className="flex items-center justify-between group">
-              <span className="text-gray-500 w-16">Tasks</span>
-              <div className="flex-1 mx-3 h-2 bg-gray-50 border border-gray-100 rounded-full overflow-hidden flex shadow-inner">
-                <div className="h-full bg-gradient-to-r from-violet-400 to-violet-500 rounded-full transition-all group-hover:opacity-80" style={{width: `${Math.min(100, tasks.length * 10)}%`}} />
-              </div>
-              <span className="text-gray-900 w-4 text-right font-bold tabular-nums">{tasks.length}</span>
-            </div>
-            <div className="flex items-center justify-between group">
-              <span className="text-gray-500 w-16">Meetings</span>
-              <div className="flex-1 mx-3 h-2 bg-gray-50 border border-gray-100 rounded-full overflow-hidden flex shadow-inner">
-                <div className="h-full bg-gradient-to-r from-green-400 to-green-500 rounded-full transition-all group-hover:opacity-80" style={{width: `${Math.min(100, meetings.length * 10)}%`}} />
-              </div>
-              <span className="text-gray-900 w-4 text-right font-bold tabular-nums">{meetings.length}</span>
-            </div>
-            <div className="flex items-center justify-between group">
-              <span className="text-gray-500 w-16">Notes</span>
-              <div className="flex-1 mx-3 h-2 bg-gray-50 border border-gray-100 rounded-full overflow-hidden flex shadow-inner">
-                <div className="h-full bg-gradient-to-r from-yellow-400 to-yellow-500 rounded-full transition-all group-hover:opacity-80" style={{width: `${Math.min(100, notes.length * 10)}%`}} />
-              </div>
-              <span className="text-gray-900 w-4 text-right font-bold tabular-nums">{notes.length}</span>
-            </div>
-          </div>
-          
-          <div className="space-y-2 pt-3 border-t border-gray-100 text-[11px]">
-            <div className="flex justify-between">
-               <span className="text-gray-400 font-medium">Last Activity</span>
-               <span className="font-bold text-gray-700">{activities[0] ? fmtDate(activities[0].date) : "None"}</span>
-            </div>
-            <div className="flex justify-between">
-               <span className="text-gray-400 font-medium">Next Activity</span>
-               <span className="font-bold text-gray-700">{nextActivityDate ? fmtDate(nextActivityDate) : "None"}</span>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          5. DEAL DETAILS (CRM Visual Profile)
-      ════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-white rounded-xl border border-gray-200 relative z-20 overflow-hidden">
-        
-        {/* ROW 1: Company & Contact */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-gray-100 border-b border-gray-100">
-          <div className="p-6 flex flex-col justify-center group hover:bg-gray-50/50 transition-colors">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0 shadow-sm">
-                <Building2 className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Company</p>
-                {deal.company ? (
-                  <Link to={`/companies/${deal.company._id}`} className="text-sm font-bold text-gray-900 hover:text-blue-600 flex items-center gap-1.5 group-hover:underline">
-                    {deal.company.name} <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </Link>
-                ) : (
-                  <p className="text-sm font-bold text-gray-800">No Company</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="p-6 flex flex-col justify-center group hover:bg-gray-50/50 transition-colors">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center flex-shrink-0 shadow-sm">
-                <User className="w-6 h-6 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Contact</p>
-                <p className="text-sm font-bold text-gray-900">{deal.contact?.name || "No Contact"}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ROW 2: Metadata Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 divide-gray-100 md:divide-x border-b border-gray-100 bg-gray-50/30">
-           <div className="p-5">
-             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Owner</p>
-             <p className="text-xs font-bold text-gray-800 flex items-center gap-2">
-               <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] shadow-sm">
-                 {deal.user?.name?.[0]?.toUpperCase() || "U"}
-               </div> 
-               {deal.user?.name || "Unassigned"}
-             </p>
-           </div>
-           <div className="p-5">
-             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Created</p>
-             <p className="text-xs font-bold text-gray-800 flex items-center gap-2"><Calendar className="w-4 h-4 text-gray-400"/> {fmtDate(deal.createdAt)}</p>
-           </div>
-           <div className="p-5">
-             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Last Updated</p>
-             <p className="text-xs font-bold text-gray-800 flex items-center gap-2"><Clock className="w-4 h-4 text-gray-400"/> {fmtDate(deal.updatedAt)}</p>
-           </div>
-           <div className="p-5 flex items-center">
-             <div>
-               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Stage</p>
-               <div className="flex items-center gap-1.5">
-                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: statusColor(deal.status) }} />
-                 <span className="text-xs font-bold text-gray-800">{deal.status || "Open"}</span>
-               </div>
-             </div>
-           </div>
-        </div>
-
-        {/* ROW 3: Dynamic Custom Fields (Only if exist) */}
         {groupedFields.length > 0 && (
-          <div className="p-5 bg-white">
-            <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Additional Details</h4>
-            <div className="space-y-4">
-              {groupedFields.map(([cat, fields]) => (
-                <div key={cat}>
-                  {groupedFields.length > 1 && (
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{cat}</span>
-                      <div className="flex-1 h-px bg-gray-100" />
-                    </div>
-                  )}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {fields.map((field, i) => (
-                      <div key={i} className="flex flex-col gap-1">
-                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide truncate">
-                          {field.key}
-                        </span>
-                        <div className="min-w-0 bg-gray-50 px-2 py-1.5 rounded text-sm text-gray-900 border border-gray-100">
-                          {renderFieldValue(field)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+          <div className="px-5 py-4 bg-gray-50/50 border-t border-gray-100">
+            <div className="flex flex-wrap gap-x-8 gap-y-4">
+              {visibleFields.map((field, i) => (
+                <div key={i} className="flex flex-col gap-1 min-w-[120px]">
+                  <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">{field.key}</span>
+                  <div className="text-xs text-gray-900">{renderFieldValue(field)}</div>
                 </div>
               ))}
             </div>
@@ -756,26 +493,346 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate }) => {
         )}
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          6. CUSTOM FIELDS CONFIGURATION (Compact empty state)
-      ════════════════════════════════════════════════════════════════════ */}
-      <div className="relative z-10">
+      <div className="relative z-10 -mt-2">
         {groupedFields.length === 0 ? (
-          <div className="flex items-center justify-between py-2 text-gray-400">
-            <span className="text-xs">{totalFC === 0 ? "No custom fields configured for Deals." : "No custom fields filled out."}</span>
+          <div className="flex items-center justify-end px-2 text-gray-400">
             {totalFC === 0 && (
-              <Link to="/settings?section=deal-fields" className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline">
-                <Plus className="w-3.5 h-3.5" /> Add custom fields in settings
-              </Link>
+              <button
+                type="button"
+                onClick={() => setShowFieldDrawer(true)}
+                className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:underline"
+              >
+                <Plus className="w-3 h-3" /> Add custom fields
+              </button>
             )}
           </div>
         ) : (
-          <div className="flex justify-end pt-2">
-            <button onClick={() => setShowEmptyFields(v => !v)} className="text-xs font-medium text-gray-500 hover:text-blue-600 flex items-center gap-1">
-              {showEmptyFields ? <><EyeOff className="w-3.5 h-3.5" /> Hide empty fields</> : <><EyeIcon className="w-3.5 h-3.5" /> Show all fields</>}
+          <div className="flex items-center justify-end gap-3 px-2">
+            <button
+              type="button"
+              onClick={() => setShowFieldDrawer(true)}
+              className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:underline"
+            >
+              <Plus className="w-3 h-3" /> Add Field
+            </button>
+            <button onClick={() => setShowEmptyFields(v => !v)} className="text-[10px] font-medium text-gray-400 hover:text-blue-600 flex items-center gap-1">
+              {showEmptyFields ? <><EyeOff className="w-3 h-3" /> Hide empty fields</> : <><EyeIcon className="w-3 h-3" /> Show all fields</>}
             </button>
           </div>
         )}
+      </div>
+
+      <DealFieldDrawer
+        isOpen={showFieldDrawer}
+        onClose={() => {
+          setShowFieldDrawer(false);
+          // Same custom-field data Settings -> Deal Fields edits — refresh
+          // the parent's copy so anything added/changed/removed here shows
+          // up immediately instead of waiting for the next full page load.
+          onFieldsChanged?.();
+        }}
+      />
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          2. DEAL JOURNEY
+      ════════════════════════════════════════════════════════════════════ */}
+      <div className="bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm relative z-10 text-left">
+        <div className="flex justify-between items-center mb-5">
+          <h3 className="text-sm font-semibold text-[#0E121B]">Deal Journey</h3>
+        </div>
+        <div className="w-full pb-10 pt-2 overflow-x-auto custom-scrollbar">
+          <div className="min-w-[300px] max-w-2xl mx-auto relative flex items-center justify-between px-4 sm:px-8">
+            <div className="absolute left-4 sm:left-8 right-4 sm:right-8 top-1/2 h-[3px] bg-gray-100 -translate-y-1/2 z-0 rounded-full" />
+            <div 
+              className={`absolute left-4 sm:left-8 top-1/2 h-[3px] -translate-y-1/2 z-0 transition-all duration-700 ease-in-out rounded-full ${currentStatus === "Lost" ? "bg-[#EF4444]" : "bg-[#0085FF]"}`}
+              style={{ width: `calc(${progressPct}% - ${progressPct === 100 ? "4rem" : "0px"})` }} 
+            />
+            
+            {visualStages.map((step, idx) => {
+              const isActive = currentStatus === step;
+              const isPast = visualStages.indexOf(currentStatus) > idx;
+              const isLost = step === "Lost";
+              
+              return (
+                <div key={step} className="relative z-10 flex flex-col items-center group min-w-[100px]">
+                  <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all duration-300 border-[3px] shadow-sm bg-white
+                    ${isActive && !isLost ? "border-[#0085FF] ring-4 ring-blue-50 scale-110" : 
+                      isActive && isLost ? "border-[#EF4444] ring-4 ring-red-50 scale-110" : 
+                      isPast ? "border-[#0085FF] bg-[#0085FF] text-white" : 
+                      "border-gray-200 text-gray-300"}`}>
+                    {isPast ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" /> : 
+                     (isActive ? <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${isLost ? "bg-[#EF4444]" : "bg-[#0085FF]"}`} /> : 
+                                <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-gray-200 group-hover:bg-gray-300 transition-colors" />)}
+                  </div>
+                  <div className="absolute top-full mt-3 flex flex-col items-center">
+                    <span className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-wider whitespace-nowrap
+                      ${isActive && !isLost ? "text-gray-900" : 
+                        isActive && isLost ? "text-[#EF4444]" : 
+                        isPast ? "text-gray-700" : 
+                        "text-gray-400"}`}>
+                      {step}
+                    </span>
+                    {isActive && (
+                      <span className="text-[9px] text-[#0085FF] font-semibold mt-0.5 whitespace-nowrap">
+                        Current Stage
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          3. MAIN CONTENT (REVENUE GRAPH & TIMELINE)
+      ════════════════════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 relative z-10">
+        
+        {/* REVENUE GRAPH */}
+        <div className="lg:col-span-3 bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col h-[300px] text-left">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-sm font-semibold text-[#0E121B]">Revenue Trend</h3>
+            {revenueChartData.length > 0 && (
+              <div className="flex gap-4">
+                 <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-blue-500 rounded-full" /> <span className="text-[11px] font-medium text-gray-500">Invoiced</span></div>
+                 <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-[#00C950] rounded-full" /> <span className="text-[11px] font-medium text-gray-500">Collected</span></div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 flex flex-col justify-center min-h-[160px]">
+            {revenueChartData.length === 0 ? (
+               <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 border border-dashed border-gray-200 rounded-xl bg-gray-50/50">
+                 <TrendingUp className="w-6 h-6 mb-2 text-gray-300" />
+                 <span className="text-[11px] font-medium text-gray-500">No invoice history to plot</span>
+               </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={revenueChartData} margin={{ top: 5, right: 10, left: -25, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
+                  <XAxis dataKey="name" tick={{ fontSize: 9, fill: "#9CA3AF" }} axisLine={false} tickLine={false} dy={8} />
+                  <YAxis tickFormatter={(val) => `₹${val >= 1000 ? val/1000 + 'k' : val}`} tick={{ fontSize: 9, fill: "#9CA3AF" }} axisLine={false} tickLine={false} dx={-8} />
+                  <Tooltip 
+                    formatter={(val) => [fmt(val), ""]} 
+                    contentStyle={{ fontSize: 11, borderRadius: 6, border: "1px solid #E5E7EB", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} 
+                  />
+                  <Line type="monotone" dataKey="Total Invoiced" stroke="#0085FF" strokeWidth={2} dot={{ r: 3, fill: "#0085FF", strokeWidth: 0 }} activeDot={{ r: 5, strokeWidth: 0 }} />
+                  <Line type="monotone" dataKey="Total Collected" stroke="#00C950" strokeWidth={2} dot={{ r: 3, fill: "#00C950", strokeWidth: 0 }} activeDot={{ r: 5, strokeWidth: 0 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* ACTIVITY TIMELINE */}
+        <div className="lg:col-span-2 bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col h-[300px] text-left">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-sm font-semibold text-[#0E121B]">Activity Timeline</h3>
+          </div>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {ACTIVITY_FILTERS.map(f => (
+              <button key={f} onClick={() => setActivityFilter(f)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${activityFilter === f ? "bg-[#0085FF] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                {f}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+            {activitiesLoading ? (
+              <div className="space-y-3 pt-1">
+                {[1,2,3,4].map(i => (
+                  <div key={i} className="flex items-start gap-2.5 animate-pulse">
+                    <div className="w-6 h-6 rounded-full bg-gray-100 flex-shrink-0" />
+                    <div className="flex-1 space-y-1.5 pt-0.5">
+                      <div className="h-2 bg-gray-200 rounded-full w-3/4" />
+                      <div className="h-1.5 bg-gray-100 rounded-full w-1/3" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : filteredActivities.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                <Activity className="w-6 h-6 mb-2 text-gray-300" />
+                <p className="text-[11px] font-medium text-gray-500">No {activityFilter === "All" ? "recent" : activityFilter.toLowerCase()} activity</p>
+              </div>
+            ) : (
+              <div className="space-y-0">
+                {filteredActivities.map((act, i) => (
+                  <div key={i} className="flex items-start gap-3 py-2 relative group">
+                    {/* Connection line */}
+                    {i !== filteredActivities.length - 1 && (
+                      <div className="absolute left-[15px] top-[36px] bottom-[-8px] w-[2px] bg-gray-100" />
+                    )}
+                    
+                    {(() => {
+                       const t = (act.type || "").toLowerCase();
+                       let bg = "bg-gray-50", txt = "text-gray-500";
+                       if (t === "invoice") { bg = "bg-blue-50"; txt = "text-blue-500"; }
+                       else if (t === "task") { bg = "bg-violet-50"; txt = "text-violet-500"; }
+                       else if (t === "meeting") { bg = "bg-green-50"; txt = "text-[#00C950]"; }
+                       else if (t === "call") { bg = "bg-orange-50"; txt = "text-orange-500"; }
+                       else if (t === "note") { bg = "bg-yellow-50"; txt = "text-yellow-500"; }
+                       else if (act.label.toLowerCase().includes("won") || t === "deal") { bg = "bg-emerald-50"; txt = "text-[#00C950]"; }
+                       
+                       return (
+                         <div className={`w-8 h-8 rounded-full ${bg} ${txt} flex items-center justify-center flex-shrink-0 relative z-10`}>
+                           <AIcon type={t} className="w-4 h-4" />
+                         </div>
+                       );
+                    })()}
+                    
+                    <div className="flex-1 min-w-0 pb-2 flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[13px] font-medium text-gray-900 leading-snug truncate pr-2">{act.label}</p>
+                        <p className="text-[11px] font-medium text-gray-400 mt-0.5">{fmtDate(act.date)}</p>
+                      </div>
+                      {act.amount != null && <span className="text-[13px] font-semibold text-gray-900 whitespace-nowrap">₹{act.amount.toLocaleString('en-IN')}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          4. FINANCIAL VISUALS
+      ════════════════════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 relative z-0">
+        
+        {/* INVOICE STATUS (PIE CHART) */}
+        <div className="bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col text-left">
+          <h3 className="text-sm font-semibold text-[#0E121B] mb-4">Invoice Status</h3>
+          <div className="flex items-center justify-center gap-6 flex-1 py-2">
+            <div className="w-[100px] h-[100px] relative flex-shrink-0">
+              {invoices.length === 0 ? (
+                 <div className="absolute inset-0 flex items-center justify-center text-gray-300 border border-dashed border-gray-200 rounded-full bg-gray-50/50">
+                   <Receipt className="w-5 h-5 opacity-40" />
+                 </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie 
+                      data={invoiceDonutData} 
+                      dataKey="value" 
+                      nameKey="name" 
+                      cx="50%" 
+                      cy="50%" 
+                      innerRadius={36} 
+                      outerRadius={50} 
+                      paddingAngle={4} 
+                      stroke="none"
+                    >
+                      {invoiceDonutData.map((e, i) => <Cell key={i} fill={e.fill} stroke="transparent" strokeWidth={0} />)}
+                    </Pie>
+                    <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle">
+                      <tspan x="50%" dy="-2" fontSize={22} fontWeight={700} fill="#111827">{invoices.length}</tspan>
+                      <tspan x="50%" dy={16} fontSize={10} fontWeight={500} fill="#6B7280">Total</tspan>
+                    </text>
+                    <Tooltip formatter={v => [v, "Invoices"]} contentStyle={{ fontSize: 11, borderRadius: 6, border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+            <div className="flex flex-col gap-2 flex-1 max-w-[90px]">
+              <div className="bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-100 flex flex-col">
+                <div className="flex items-center gap-1.5 text-[10px] font-medium text-gray-500 mb-0.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#00C950]" /> Paid
+                </div>
+                <div className="text-[13px] font-semibold text-gray-900">{paidCount}</div>
+              </div>
+              <div className="bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-100 flex flex-col">
+                <div className="flex items-center gap-1.5 text-[10px] font-medium text-gray-500 mb-0.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#EF4444]" /> Unpaid
+                </div>
+                <div className="text-[13px] font-semibold text-gray-900">{unpaidCount}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* INVOICE AGING MATRIX (WITH PROGRESS BARS) */}
+        <div className="bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col text-left">
+          <h3 className="text-sm font-semibold text-[#0E121B] mb-4">Invoice Aging Matrix</h3>
+          <div className="flex-1 flex flex-col justify-center gap-3.5">
+            {invoiceAging ? (
+              [
+                { label: "Paid", count: invoiceAging.paid, color: "bg-[#00C950]" },
+                { label: "Not Due", count: invoiceAging.notDue, color: "bg-blue-500" },
+                { label: "Due Soon", count: invoiceAging.dueSoon, color: "bg-amber-500" },
+                { label: "Overdue", count: invoiceAging.overdue, color: "bg-[#EF4444]" },
+              ].map(item => {
+                const total = invoices.length || 1;
+                const pct = (item.count / total) * 100;
+                return (
+                  <div key={item.label} className="group">
+                    <div className="flex justify-between items-center mb-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-1.5 h-1.5 rounded-full ${item.color}`} />
+                        <span className="text-[11px] font-medium text-gray-500">{item.label}</span>
+                      </div>
+                      <span className="text-sm font-semibold text-gray-900">{item.count}</span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-[3px] overflow-hidden flex">
+                       <div className={`${item.color} h-full rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+               <div className="flex items-center justify-center h-full text-[11px] font-medium text-gray-500">No invoices found</div>
+            )}
+          </div>
+        </div>
+
+        {/* FINANCIAL SUMMARY */}
+        <div className="bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col text-left">
+           <h3 className="text-sm font-semibold text-[#0E121B] mb-4">Financial Overview</h3>
+           <div className="flex-1 flex flex-col justify-center">
+             <div className="grid grid-cols-1 gap-2.5">
+               <div className="flex items-center gap-3 px-3 py-2 bg-white border border-gray-100 rounded-xl shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+                  <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 text-gray-400 flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <Receipt className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate w-full text-[10px] font-medium text-gray-500 leading-tight">Total Invoiced</p>
+                    <p className="truncate w-full text-[13px] font-semibold text-gray-900 leading-tight">{fmt(totalInvoiced)}</p>
+                  </div>
+               </div>
+               <div className="flex items-center gap-3 px-3 py-2 bg-white border border-gray-100 rounded-xl shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+                  <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 text-gray-400 flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate w-full text-[10px] font-medium text-gray-500 leading-tight">Pending</p>
+                    <p className="truncate w-full text-[13px] font-semibold text-gray-900 leading-tight">{fmt(totalInvoiced)}</p>
+                  </div>
+               </div>
+               <div className="flex items-center gap-3 px-3 py-2 bg-white border border-gray-100 rounded-xl shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+                  <div className="w-8 h-8 rounded-lg bg-red-50 border border-red-100 text-[#EF4444] flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <Clock className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate w-full text-[10px] font-medium text-gray-500 leading-tight">Overdue</p>
+                    <p className="truncate w-full text-[13px] font-semibold text-[#EF4444] leading-tight">{fmt(totalOutstanding)}</p>
+                  </div>
+               </div>
+               <div className="flex items-center gap-3 px-3 py-2 bg-white border border-gray-100 rounded-xl shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+                  <div className="w-8 h-8 rounded-lg bg-green-50 border border-green-100 text-[#00C950] flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <CheckSquare className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate w-full text-[10px] font-medium text-gray-500 leading-tight">Collected</p>
+                    <p className="truncate w-full text-[13px] font-semibold text-[#00C950] leading-tight">{fmt(totalPaid)}</p>
+                  </div>
+               </div>
+             </div>
+           </div>
+        </div>
       </div>
 
 
@@ -783,4 +840,4 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate }) => {
   );
 };
 
-export default BasicDetails;
+export default BasicDetails;

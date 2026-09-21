@@ -213,6 +213,18 @@ function DealDetail() {
     }
   };
 
+  // Only the custom-field config, not the whole deal — cheap enough to
+  // refetch right after the field drawer closes (see BasicDetails'
+  // onFieldsChanged) instead of reloading everything fetchData() does.
+  const refreshDealFields = async () => {
+    try {
+      const res = await API.get("/deal-fields/latest");
+      setDealFieldList(res.data?.fields || []);
+    } catch (err) {
+      console.error("Failed to refresh deal fields:", err);
+    }
+  };
+
   useEffect(() => {
     // Reset so stepping to another deal shows the skeleton again rather than
     // leaving the previous deal on screen until the new fetch resolves.
@@ -620,6 +632,7 @@ function DealDetail() {
               deal={deal}
               dealFieldList={dealFieldList}
               onDealUpdate={(updated) => (updated ? setDeal(updated) : fetchData())}
+              onFieldsChanged={refreshDealFields}
             />
           )}
           {activeTab === "Invoices" && (

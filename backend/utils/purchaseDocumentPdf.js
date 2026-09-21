@@ -102,14 +102,29 @@ function buildHtml(doc, orgDetails, vendor, type) {
   const items = doc.items || [];
   const totalItems = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
   const subtotal = doc.subtotal || 0;
-  const gstRate = doc.gstRate || 0;
   const totalTax = doc.totalTax || 0;
   const grandTotal = doc.grandTotal || (isPO ? doc.totalAmount : subtotal + totalTax) || 0;
-  const halfRate = gstRate / 2;
   const isIntra = doc.transactionType !== "inter";
-  const cgstAmount = isIntra ? subtotal * (halfRate / 100) : 0;
-  const sgstAmount = isIntra ? subtotal * (halfRate / 100) : 0;
-  const igstAmount = !isIntra ? subtotal * (gstRate / 100) : 0;
+  // Summed per line rather than from doc.gstRate: that document-level field
+  // is a vestige that's never actually populated (each line carries its own
+  // gstRate/taxInclusive), so deriving the split from it printed CGST/SGST/
+  // IGST as ₹0 even when totalTax was correctly nonzero. CGST/SGST/IGST
+  // together must always equal totalTax, so they're derived from the same
+  // per-line tax this document's totalTax was itself built from.
+  let cgstAmount = 0, sgstAmount = 0, igstAmount = 0;
+  items.forEach((item) => {
+    const itemGstRate = parseFloat(item.gstRate) || 0;
+    if (itemGstRate <= 0) return;
+    const itemGross = (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
+    const itemTaxable = item.taxInclusive ? itemGross / (1 + itemGstRate / 100) : itemGross;
+    const itemTax = itemTaxable * (itemGstRate / 100);
+    if (isIntra) {
+      cgstAmount += itemTax / 2;
+      sgstAmount += itemTax / 2;
+    } else {
+      igstAmount += itemTax;
+    }
+  });
 
   const docLabel = isReturn ? "PURCHASE RETURN" : isPO ? "PURCHASE ORDER" : "PURCHASE";
   const numberLabel = isReturn ? "Return Number" : isPO ? "PO Number" : "Purchase Number";
@@ -264,14 +279,13 @@ function buildHtml(doc, orgDetails, vendor, type) {
       <div class="totals">
         <div class="totals-row"><span>Subtotal:</span><span class="mono">₹ ${money(subtotal)}</span></div>
         ${
-          !isPO && gstRate > 0
+          totalTax > 0
             ? isIntra
-              ? `<div class="totals-row"><span>CGST @ ${halfRate}%:</span><span class="mono">₹ ${money(cgstAmount)}</span></div>
-                 <div class="totals-row"><span>SGST @ ${halfRate}%:</span><span class="mono">₹ ${money(sgstAmount)}</span></div>`
-              : `<div class="totals-row"><span>IGST @ ${gstRate}%:</span><span class="mono">₹ ${money(igstAmount)}</span></div>`
+              ? `<div class="totals-row"><span>CGST:</span><span class="mono">₹ ${money(cgstAmount)}</span></div>
+                 <div class="totals-row"><span>SGST:</span><span class="mono">₹ ${money(sgstAmount)}</span></div>`
+              : `<div class="totals-row"><span>IGST:</span><span class="mono">₹ ${money(igstAmount)}</span></div>`
             : ""
         }
-        ${isPO && gstRate > 0 ? `<div class="totals-row"><span>Tax (${gstRate}%):</span><span class="mono">₹ ${money(totalTax)}</span></div>` : ""}
         <div class="totals-grand"><span>Grand Total:</span><span class="mono">₹ ${money(grandTotal)}</span></div>
         <div class="words"><span class="b">Amount in words:</span> ${escapeHtml(convertNumberToWords(Math.floor(grandTotal)))}</div>
       </div>

@@ -33,7 +33,7 @@ const Checkbox = ({
 
   return (
     <label
-      className={`inline-flex items-center justify-center flex-shrink-0 ${
+      className={`relative inline-flex items-center justify-center flex-shrink-0 ${
         disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
       } ${wrapperClassName}`}
     >
@@ -42,10 +42,10 @@ const Checkbox = ({
         checked={checked}
         onChange={onChange}
         disabled={disabled}
-        className="sr-only"
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer m-0 p-0 z-10"
         {...props}
       />
-      <Icon className={`${className} ${colorClass} ${iconClassName}`} />
+      <Icon className={`${className} ${colorClass} ${iconClassName} relative z-0`} />
     </label>
   );
 };

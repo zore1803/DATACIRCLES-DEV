@@ -614,13 +614,14 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
         showError && missing ? "border-red-500" : "border-[#1F2937]/10"
       }`;
     return (
-      <fieldset disabled={disabled} className={`space-y-3 ${disabled ? "opacity-70" : ""}`}>
+      <div className={`space-y-3 ${disabled ? "opacity-70 pointer-events-none" : ""}`}>
         <input
           type="text"
           value={address.addressLine1}
           onChange={(e) => onFieldChange("addressLine1", e.target.value)}
           className={inputCls(!address.addressLine1?.trim())}
           placeholder="Address Line 1 *"
+          disabled={disabled}
         />
         <input
           type="text"
@@ -628,6 +629,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
           onChange={(e) => onFieldChange("addressLine2", e.target.value)}
           className={inputCls(false)}
           placeholder="Address Line 2"
+          disabled={disabled}
         />
         <div className="grid grid-cols-2 gap-3">
           <CustomDropdown
@@ -637,6 +639,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
             placeholder="Country *"
             searchable
             buttonClassName={ddCls(address.country, !address.country?.trim())}
+            disabled={disabled}
           />
           {(() => {
             const statesForCountry = getStatesForCountry(address.country);
@@ -651,6 +654,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                 placeholder="State *"
                 searchable
                 buttonClassName={ddCls(address.state, !address.state?.trim())}
+                disabled={disabled}
               />
             ) : (
               <input
@@ -659,6 +663,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                 onChange={(e) => onFieldChange("state", e.target.value)}
                 className={inputCls(!address.state?.trim())}
                 placeholder="State / Province *"
+                disabled={disabled}
               />
             );
           })()}
@@ -675,6 +680,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                 placeholder="City *"
                 searchable
                 buttonClassName={ddCls(address.city, !address.city?.trim())}
+                disabled={disabled}
               />
             ) : (
               <input
@@ -683,6 +689,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                 onChange={(e) => onFieldChange("city", e.target.value)}
                 className={inputCls(!address.city?.trim())}
                 placeholder="City *"
+                disabled={disabled}
               />
             );
           })()}
@@ -707,12 +714,13 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
             }}
             className={inputCls(!address.pincode?.trim())}
             placeholder="Pincode *"
+            disabled={disabled}
           />
         </div>
         {showError && !disabled && (
           <p className="text-xs text-red-600">All fields marked * are required</p>
         )}
-      </fieldset>
+      </div>
     );
   };
 
@@ -773,7 +781,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
           ${isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}
         `}
       >
-        <form onSubmit={handleSubmit} noValidate className="flex flex-col h-full min-h-0">
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col flex-1 min-h-0">
           {/* Sticky header — matches the CompanyForm header spec */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
             <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">

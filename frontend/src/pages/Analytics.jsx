@@ -242,6 +242,27 @@ const Analytics = () => {
     amount: item.total,
   }));
 
+  const invoicePaymentData = [
+    {
+      name: "Paid",
+      value: invoiceStatusData
+        .filter((item) => ["paid", "accepted"].includes(item.name.toLowerCase()))
+        .reduce((total, item) => total + item.value, 0),
+      color: "#00C950",
+    },
+    {
+      name: "Unpaid",
+      value: invoiceStatusData
+        .filter((item) => !["paid", "accepted"].includes(item.name.toLowerCase()))
+        .reduce((total, item) => total + item.value, 0),
+      color: "#F04444",
+    },
+  ];
+  const invoiceTotalCount = invoicePaymentData.reduce(
+    (total, item) => total + item.value,
+    0
+  );
+
   const dealStatusData = deals.byStatus.map((item) => ({
     name: item._id
       ? item._id.charAt(0).toUpperCase() + item._id.slice(1)
@@ -516,29 +537,30 @@ const Analytics = () => {
             </h2>
             <p className="text-sm text-gray-500 mt-1">Distribution by status</p>
           </div>
-          {invoiceStatusData.length > 0 ? (
-            <>
-              <ResponsiveContainer width="100%" height={250}>
+          {invoiceTotalCount > 0 ? (
+            <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
+              <div className="relative h-[190px] w-[190px] shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={invoiceStatusData}
+                    data={invoicePaymentData.filter((item) => item.value > 0)}
                     cx="50%"
                     cy="50%"
-                    labelLine={{
-                      stroke: "#9CA3AF",
-                      strokeWidth: 1,
-                    }}
-                    label={renderCustomLabel}
-                    outerRadius={70}
-                    fill="#8884d8"
+                    innerRadius={58}
+                    outerRadius={86}
+                    paddingAngle={invoicePaymentData.filter((item) => item.value > 0).length > 1 ? 3 : 0}
                     dataKey="value"
+                    stroke="#fff"
+                    strokeWidth={2}
                   >
-                    {invoiceStatusData.map((entry, index) => (
+                    {invoicePaymentData
+                      .filter((item) => item.value > 0)
+                      .map((entry) => (
                       <Cell
-                        key={`cell-${index}`}
-                        fill={STATUS_COLORS[index % STATUS_COLORS.length]}
+                        key={entry.name}
+                        fill={entry.color}
                       />
-                    ))}
+                      ))}
                   </Pie>
                   <Tooltip
                     contentStyle={{
@@ -547,37 +569,41 @@ const Analytics = () => {
                       borderRadius: "8px",
                       fontSize: "12px",
                     }}
+                    formatter={(value, name) => [`${value} invoices`, name]}
                   />
                 </PieChart>
-              </ResponsiveContainer>
-              <div className="mt-4 space-y-2">
-                {invoiceStatusData.map((item, index) => (
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-2xl font-bold leading-none text-gray-900">
+                    {invoiceTotalCount}
+                  </span>
+                  <span className="mt-1 text-xs font-medium text-gray-500">
+                    Total
+                  </span>
+                </div>
+              </div>
+              <div className="w-full space-y-3">
+                {invoicePaymentData.map((item) => (
                   <div
-                    key={index}
-                    className="flex items-center justify-between text-sm"
+                    key={item.name}
+                    className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50/80 px-4 py-3"
                   >
-                    <div className="flex items-center">
-                      <div
-                        className="w-3 h-3 rounded-full mr-2"
-                        style={{
-                          backgroundColor:
-                            STATUS_COLORS[index % STATUS_COLORS.length],
-                        }}
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: item.color }}
                       />
-                      <span className="text-gray-700">{item.name}</span>
+                      <span className="text-sm font-medium text-gray-600">
+                        {item.name}
+                      </span>
                     </div>
-                    <div className="text-right">
-                      <div className="font-semibold text-gray-900">
-                        {item.value}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        ₹{formatNumberToIndian(item.amount || 0)}
-                      </div>
-                    </div>
+                    <span className="text-lg font-bold leading-none text-gray-900">
+                      {item.value}
+                    </span>
                   </div>
                 ))}
               </div>
-            </>
+            </div>
           ) : (
             <div className="flex items-center justify-center h-48 text-gray-400">
               No invoice data

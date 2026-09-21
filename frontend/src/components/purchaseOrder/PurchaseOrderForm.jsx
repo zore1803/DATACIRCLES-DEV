@@ -13,6 +13,7 @@ import SearchableDropdown from "../contact/SearchableDropdown";
 import QuickVendorForm from "../vendor/QuickVendorForm";
 import API from "../../services/api";
 import { formatNumberFixed } from "../../utils/numberFormatter";
+import { resolveTransactionType } from "../../utils/placeOfSupply";
 import toast from "react-hot-toast";
 import ReactQuill from "react-quill-new";
 
@@ -24,72 +25,6 @@ const API_BASE = `${import.meta.env.VITE_APP_API_URL}/api`;
 // PurchaseForm.jsx/InvoiceForm.jsx's own stripHtml) — strip the markup
 // before it lands in the plain <input> below, which was showing raw tags.
 const stripHtml = (html) => String(html || "").replace(/<[^>]*>/g, "").trim();
-
-const SingleSelectDropdown = ({ options, value, onChange, disabled }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null);
-  const selectedOption = options.find(opt => opt.value?.toLowerCase() === value?.toLowerCase()) || options[0];
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    };
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
-
-  return (
-    <div className="relative" ref={dropdownRef}>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsOpen(!isOpen);
-        }}
-        className={`w-full flex items-center justify-between px-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-      >
-        <div className="flex items-center gap-1.5">
-          <div className={`p-1 rounded-full ${selectedOption.className} border-none`}>
-            {selectedOption.icon && <selectedOption.icon className="w-3 h-3" />}
-          </div>
-          <span className="font-medium text-[#1F2937] capitalize">{selectedOption.label}</span>
-        </div>
-        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute w-full mt-1 bg-white border border-gray-100 rounded-xl shadow-2xl z-[10003] py-1 overflow-hidden animate-in fade-in zoom-in duration-200">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-gray-50 ${value?.toLowerCase() === option.value?.toLowerCase() ? 'bg-blue-50/50 text-blue-600' : 'text-gray-600'
-                }`}
-            >
-              <div className={`p-1.5 rounded-lg ${option.className} border-none`}>
-                {option.icon && <option.icon className="w-4 h-4" />}
-              </div>
-              <span className="font-medium text-left flex-1">{option.label}</span>
-              {value?.toLowerCase() === option.value?.toLowerCase() && (
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-600 ml-auto" />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
 
 // Helper component for Item Search within the form
 const ItemSearchSelect = ({ value, onSelect, onAddNew, error = null }) => {
@@ -291,7 +226,12 @@ const PurchaseOrderForm = ({
   const [paymentTerms, setPaymentTerms] = useState("Net 30");
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState("Approved");
+  // Auto-derived from vendor state vs. the org's own state (see the effect
+  // below) — never a manual selection, same as the sales-side documents.
   const [transactionType, setTransactionType] = useState("intra");
+  // The org's own GST state, fetched once — same /branding call
+  // InvoiceFormFull.jsx uses to resolve intra vs inter for a customer.
+  const [sellerState, setSellerState] = useState("");
 
   const [localVendors, setLocalVendors] = useState(vendors || []);
   const [showQuickVendorForm, setShowQuickVendorForm] = useState(false);
@@ -309,14 +249,33 @@ const PurchaseOrderForm = ({
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           sku: item.sku || null,
+          gstRate: item.gstRate || 0,
+          taxInclusive: item.taxInclusive || false,
         })) || [],
       );
       setPaymentTerms(editingPO.paymentTerms || "Net 30");
       setNotes(editingPO.notes || "");
       setStatus(editingPO.status || "Pending");
+      // Was never restored on edit — every existing PO reopened for editing
+      // silently reset back to "intra" regardless of what it was actually
+      // saved with, until the vendor-derived effect below overwrote it again.
+      if (editingPO.transactionType) setTransactionType(editingPO.transactionType);
     }
     setLocalVendors(vendors);
+    API.get("/branding").then((r) => setSellerState((r.data?.state || "").trim())).catch(() => {});
   }, [editingPO, vendors]);
+
+  // Vendor state vs. the org's own state decides CGST+SGST (same state) or
+  // IGST (different state) — the user never picks this manually. Re-runs
+  // whenever the vendor selection or the vendor list itself changes (e.g.
+  // right after "+ Add new vendor" hands back a freshly created vendor).
+  useEffect(() => {
+    if (!vendorId) return;
+    const vendor = localVendors.find((v) => v._id === vendorId);
+    const vendorState = vendor?.address?.state || "";
+    const resolved = resolveTransactionType(sellerState, { state: vendorState }, { state: vendorState });
+    if (resolved) setTransactionType(resolved);
+  }, [vendorId, localVendors, sellerState]);
 
   const handleClose = () => {
     setIsOpen(false);
@@ -408,6 +367,10 @@ const PurchaseOrderForm = ({
       paymentTerms,
       notes,
       status, // Include status update if creating/editing?
+      // Was computed into state but never actually sent — every PO saved
+      // with the schema's default ("intra") no matter what vendor/org state
+      // comparison the effect above resolved.
+      transactionType,
     };
 
     try {
@@ -723,16 +686,55 @@ const PurchaseOrderForm = ({
             <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
               Status
             </label>
-            <SingleSelectDropdown
-              options={statusOptions}
-              value={status}
-              onChange={setStatus}
-              disabled={editingPO?.status === "Delivered"}
-            />
+            <div className="relative">
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                disabled={editingPO?.status === "Delivered"}
+                className="w-full appearance-none px-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {statusOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
+                <ChevronDown className="w-4 h-4" />
+              </div>
+            </div>
             {editingPO?.status === "Delivered" && (
               <p className="mt-1.5 text-[11px] text-gray-400">
                 A Delivered Purchase Order can't be changed to another status.
               </p>
+            )}
+          </div>
+
+          {/* Tax Breakdown — CGST+SGST for a same-state vendor, IGST for a
+              different-state one (see the transactionType effect above).
+              CGST/SGST is exactly half of totalTax each: that split holds
+              regardless of how GST rates vary line to line, since every
+              line's own tax is already halved the same way before being
+              summed into totalTax. */}
+          <div className="space-y-1 px-1">
+            <div className="flex justify-between text-[12px] text-gray-500">
+              <span>Subtotal</span>
+              <span>₹{formatNumberFixed(subtotal)}</span>
+            </div>
+            {totalTax <= 0 ? null : transactionType === "inter" ? (
+              <div className="flex justify-between text-[12px] text-gray-500">
+                <span>IGST</span>
+                <span>₹{formatNumberFixed(totalTax)}</span>
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-between text-[12px] text-gray-500">
+                  <span>CGST</span>
+                  <span>₹{formatNumberFixed(totalTax / 2)}</span>
+                </div>
+                <div className="flex justify-between text-[12px] text-gray-500">
+                  <span>SGST</span>
+                  <span>₹{formatNumberFixed(totalTax / 2)}</span>
+                </div>
+              </>
             )}
           </div>
 

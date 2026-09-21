@@ -2,19 +2,22 @@ import CalendarIcon from "../common/CalendarIcon";
 import DeleteIcon from "../common/DeleteIcon";
 import Checkbox from "../common/Checkbox";
 import MoreIcon from "../common/MoreIcon";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useMemo, useState, useRef } from "react";
 import {
   DndContext,
   DragOverlay,
-  closestCorners,
   KeyboardSensor,
+  MeasuringStrategy,
   PointerSensor,
+  pointerWithin,
+  rectIntersection,
   useSensor,
   useSensors,
   useDroppable,
 } from "@dnd-kit/core";
 import {
   SortableContext,
+  defaultAnimateLayoutChanges,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
   useSortable,
@@ -26,8 +29,15 @@ import {
   AlertCircle,
   User,
 } from "lucide-react";
-import toast from "react-hot-toast";
 import EditIcon from "../common/EditIcon";
+
+const TASK_COLUMN_WIDTH = 340;
+const TASK_CARD_WIDTH = 300;
+
+const animateLayoutChanges = (args) =>
+  args.isSorting || args.wasDragging
+    ? defaultAnimateLayoutChanges(args)
+    : true;
 
 // ============================================================================
 // 1. PIXEL-PERFECT CARD COMPONENT FOR TASKS
@@ -199,7 +209,7 @@ const TaskKanbanCard = ({ task, isDragging, onEdit, onDelete, selected = false, 
 // 2. INTERNAL COMPONENTS
 // ============================================================================
 
-const SortableItem = ({ item, itemIdKey, renderItemWrapper, isDragging, selected, onToggleSelect }) => {
+const SortableItem = ({ item, itemIdKey, renderItemWrapper, selected, onToggleSelect }) => {
   const {
     attributes,
     listeners,
@@ -209,6 +219,7 @@ const SortableItem = ({ item, itemIdKey, renderItemWrapper, isDragging, selected
     isDragging: isSortableDragging,
   } = useSortable({
     id: item[itemIdKey].toString(),
+    animateLayoutChanges,
   });
 
   const style = {
@@ -216,6 +227,9 @@ const SortableItem = ({ item, itemIdKey, renderItemWrapper, isDragging, selected
     transition,
     opacity: isSortableDragging ? 0.4 : 1,
     cursor: isSortableDragging ? "grabbing" : "grab",
+    width: `${TASK_CARD_WIDTH}px`,
+    flexShrink: 0,
+    willChange: "transform",
   };
 
   return (
@@ -227,7 +241,7 @@ const SortableItem = ({ item, itemIdKey, renderItemWrapper, isDragging, selected
 
 const DroppableColumn = ({
   column,
-  items,
+  columnItems,
   itemIdKey,
   renderItemWrapper,
   isDragging,
@@ -236,7 +250,6 @@ const DroppableColumn = ({
   onToggleColumnSelect,
 }) => {
   const { setNodeRef, isOver } = useDroppable({ id: column });
-  const columnItems = items.filter((item) => item.column === column);
   const itemIds = columnItems.map((item) => item[itemIdKey].toString());
 
   // Header select-all state for this column: ticked when every card here is
@@ -248,7 +261,7 @@ const DroppableColumn = ({
     <div
       ref={setNodeRef}
       className={`h-full border border-[#E1E4EA] rounded-lg flex-shrink-0 overflow-hidden flex flex-col ${isOver ? "bg-gray-50" : ""}`}
-      style={{ width: "340px" }}
+      style={{ width: `${TASK_COLUMN_WIDTH}px` }}
     >
       {/* --- Column Header (plain bar + count badge, matching Contacts) --- */}
       <div
@@ -279,15 +292,21 @@ const DroppableColumn = ({
       </div>
 
       {/* --- Cards List --- */}
-      <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-3 custom-scrollbar">
-        <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+      <div
+        className="flex-1 overflow-y-auto flex flex-col custom-scrollbar"
+        style={{ padding: "12px 18px 18px", gap: "14px" }}
+      >
+        <SortableContext
+          id={column}
+          items={itemIds}
+          strategy={verticalListSortingStrategy}
+        >
           {columnItems.map((item) => (
             <SortableItem
               key={item[itemIdKey]}
               item={item}
               itemIdKey={itemIdKey}
               renderItemWrapper={renderItemWrapper}
-              isDragging={isDragging}
               selected={selectedItems.includes(item[itemIdKey].toString())}
               onToggleSelect={onToggleSelect}
             />
@@ -322,6 +341,8 @@ const TaskKanbanBoard = ({
   onToggleColumnSelect,
 }) => {
   const [activeItem, setActiveItem] = useState(null);
+  const [dragOverColumn, setDragOverColumn] = useState(null);
+  const dragOverColumnRef = useRef(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -330,26 +351,59 @@ const TaskKanbanBoard = ({
     }),
   );
 
+  const collisionDetectionStrategy = (args) => {
+    const pointerCollisions = pointerWithin(args);
+    if (pointerCollisions.length > 0) return pointerCollisions;
+    return rectIntersection(args);
+  };
+
+  const resolveColumnFromOverId = (overId) => {
+    if (columns.includes(overId)) return overId;
+
+    const droppedOnItem = items.find(
+      (i) => i[itemIdKey].toString() === overId,
+    );
+    return droppedOnItem ? getItemColumn(droppedOnItem) : null;
+  };
+
   const handleDragStart = ({ active }) => {
     const item = items.find(
       (i) => i[itemIdKey].toString() === active.id.toString(),
     );
-    setActiveItem(item);
+    setActiveItem(item ? { ...item } : null);
+    dragOverColumnRef.current = null;
+    setDragOverColumn(null);
   };
 
-  const handleDragEnd = async ({ active, over }) => {
-    setActiveItem(null);
+  const handleDragOver = ({ active, over }) => {
     if (!over) return;
 
     const itemId = active.id.toString();
     const overId = over.id.toString();
-    let newColumn = overId;
+    if (itemId === overId) return;
 
-    // Check if dropped on an item
-    const droppedOnItem = items.find((i) => i[itemIdKey].toString() === overId);
-    if (droppedOnItem) {
-      newColumn = getItemColumn(droppedOnItem);
+    const item = items.find((i) => i[itemIdKey].toString() === itemId);
+    if (!item) return;
+
+    const oldColumn = getItemColumn(item);
+    const newColumn = resolveColumnFromOverId(overId);
+    const nextColumn = newColumn && newColumn !== oldColumn ? newColumn : null;
+    if (dragOverColumnRef.current !== nextColumn) {
+      dragOverColumnRef.current = nextColumn;
+      setDragOverColumn(nextColumn);
     }
+  };
+
+  const handleDragEnd = async ({ active, over }) => {
+    setActiveItem(null);
+    dragOverColumnRef.current = null;
+    setDragOverColumn(null);
+    if (!over) return;
+
+    const itemId = active.id.toString();
+    const overId = over.id.toString();
+    const newColumn = resolveColumnFromOverId(overId);
+    if (!newColumn) return;
 
     const item = items.find((i) => i[itemIdKey].toString() === itemId);
     if (!item) return;
@@ -360,10 +414,27 @@ const TaskKanbanBoard = ({
     }
   };
 
-  const itemsWithColumn = items.map((item) => ({
-    ...item,
-    column: getItemColumn(item),
-  }));
+  const itemsByColumn = useMemo(() => {
+    const map = {};
+    columns.forEach((column) => {
+      map[column] = [];
+    });
+
+    items.forEach((item) => {
+      const itemId = item[itemIdKey].toString();
+      const column =
+        activeItem &&
+        dragOverColumn &&
+        itemId === activeItem[itemIdKey].toString()
+          ? dragOverColumn
+          : getItemColumn(item);
+
+      if (!map[column]) map[column] = [];
+      map[column].push(item);
+    });
+
+    return map;
+  }, [items, columns, activeItem, dragOverColumn, getItemColumn, itemIdKey]);
 
   const renderWrapper = (item, isDragging, selected, toggleSelect) => {
     if (renderItem) return renderItem(item, isDragging);
@@ -382,9 +453,16 @@ const TaskKanbanBoard = ({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={collisionDetectionStrategy}
+      measuring={{ droppable: { strategy: MeasuringStrategy.BeforeDragging } }}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
+      onDragCancel={() => {
+        setActiveItem(null);
+        dragOverColumnRef.current = null;
+        setDragOverColumn(null);
+      }}
     >
       <div className="h-full w-full overflow-x-auto overflow-y-visible bg-white">
         <div className="flex gap-4 h-full min-w-max">
@@ -392,7 +470,7 @@ const TaskKanbanBoard = ({
             <DroppableColumn
               key={col}
               column={col}
-              items={itemsWithColumn}
+              columnItems={itemsByColumn[col] || []}
               itemIdKey={itemIdKey}
               renderItemWrapper={renderWrapper}
               isDragging={!!activeItem}
@@ -406,7 +484,7 @@ const TaskKanbanBoard = ({
 
       <DragOverlay dropAnimation={null}>
         {activeItem ? (
-          <div style={{ width: "340px", cursor: "grabbing" }}>
+          <div style={{ width: `${TASK_CARD_WIDTH}px`, cursor: "grabbing" }}>
             {renderWrapper(activeItem, false)}
           </div>
         ) : null}
