@@ -81,8 +81,8 @@ const EntityPickerDropdown = ({ entities, value, onChange, entityLabel, displayK
 
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => onOpenChange(false)} />
-          <div className="absolute left-0 right-0 mt-2 w-full bg-white border border-gray-100 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div className="fixed inset-0 z-[10040]" onClick={() => onOpenChange(false)} />
+          <div className="absolute left-0 right-0 mt-2 w-full bg-white border border-gray-100 rounded-xl shadow-xl z-[10050] animate-in fade-in zoom-in duration-200">
             <div className="p-2 border-b border-gray-100">
               <div className="relative">
                 <SearchIcon className="absolute left-3 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
@@ -574,7 +574,7 @@ const QuickTaskForm = ({
         onClick={handleClose}
       />
       <div
-        className={`fixed dc-panel-card z-[10001] dc-panel-w bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-in-out font-inter ${
+        className={`fixed dc-panel-card z-[10001] dc-panel-w bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out font-inter ${
           isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
         }`}
       >

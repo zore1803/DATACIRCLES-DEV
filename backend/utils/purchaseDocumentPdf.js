@@ -152,13 +152,14 @@ function buildHtml(doc, orgDetails, vendor, type) {
         </td>
         ${!isPO ? `<td class="c">${escapeHtml(item.itemId?.hsnSac || "N/A")}</td>` : ""}
         <td class="r mono">${money(item.unitPrice)}</td>
+        <td class="c">${item.gstRate ? `${item.gstRate}%` : "0%"}</td>
         <td class="c b">${item.quantity}</td>
         <td class="r mono b">${money(item.total || item.quantity * item.unitPrice)}</td>
       </tr>`
     )
     .join("");
 
-  const colSpanBeforeQty = isPO ? 3 : 4;
+  const colSpanBeforeQty = isPO ? 4 : 5;
 
   return `<!doctype html>
 <html>
@@ -245,6 +246,7 @@ function buildHtml(doc, orgDetails, vendor, type) {
           <th>Item Details</th>
           ${!isPO ? "<th>HSN/SAC</th>" : ""}
           <th class="r">Rate (₹)</th>
+          <th class="c">GST (%)</th>
           <th class="c">Qty</th>
           <th class="r">Amount (₹)</th>
         </tr>

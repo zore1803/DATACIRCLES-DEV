@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { X, ChevronDown } from "lucide-react";
+import { X, ChevronDown, Info } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import SearchableDropdown from "../contact/SearchableDropdown";
@@ -13,6 +13,19 @@ const money = (n) =>
   `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const lineKey = (itemId, variantId) => `${itemId || ""}|${variantId || "none"}`;
+
+// Per-line tax helper — mirrors purchaseReturnController.js's calcTotalsFromItems
+// so the preview the user sees in the form matches what the backend saves.
+//   gross    = qty × unitPrice
+//   taxable  = taxInclusive && gstRate > 0  ?  gross / (1 + rate/100)  :  gross
+//   itemTax  = taxable × rate/100
+function calcLineTax(qty, unitPrice, gstRate, taxInclusive) {
+  const gross   = qty * unitPrice;
+  const rate    = parseFloat(gstRate) || 0;
+  const taxable = taxInclusive && rate > 0 ? gross / (1 + rate / 100) : gross;
+  const itemTax = taxable * (rate / 100);
+  return { gross, taxable, itemTax };
+}
 
 /*
  * Right-drawer create/edit form for a Purchase Return.
@@ -41,6 +54,7 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
   const [purchaseId, setPurchaseId] = useState("");
   const [vendorInfo, setVendorInfo] = useState(null); // { _id, name, email, phone }
   const [purchaseNumber, setPurchaseNumber] = useState("");
+  const [transactionType, setTransactionType] = useState("intra"); // auto-derived from Purchase
   const [availableItems, setAvailableItems] = useState([]); // from /purchase-returns/purchase/:id/available
   const [loadingItems, setLoadingItems] = useState(false);
 
@@ -90,6 +104,7 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
       setAvailableItems([]);
       setVendorInfo(null);
       setPurchaseNumber("");
+      setTransactionType("intra");
       return;
     }
     setLoadingItems(true);
@@ -98,6 +113,8 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
       const res = await API.get(`/purchase-returns/purchase/${id}/available${params}`);
       setVendorInfo(res.data.purchase.vendor);
       setPurchaseNumber(res.data.purchase.purchaseNumber);
+      // transactionType is auto-derived from the Purchase — not editable
+      setTransactionType(res.data.purchase.transactionType || "intra");
       setAvailableItems(res.data.items || []);
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to load Purchase items");
@@ -149,18 +166,29 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
     setLines((prev) => ({ ...prev, [key]: { ...(prev[key] || { returnQty: "", reason: "" }), ...patch } }));
   };
 
+  // Selected lines enriched with per-line tax amounts
   const selectedLines = useMemo(() => {
     return availableItems
       .map((item) => {
-        const key = lineKey(item.itemId, item.variantId);
+        const key  = lineKey(item.itemId, item.variantId);
         const line = lines[key];
-        const qty = parseFloat(line?.returnQty) || 0;
-        return { item, key, qty, reason: line?.reason || "" };
+        const qty  = parseFloat(line?.returnQty) || 0;
+        const { gross, taxable, itemTax } = calcLineTax(
+          qty, item.unitPrice, item.gstRate, item.taxInclusive
+        );
+        return { item, key, qty, reason: line?.reason || "", gross, taxable, itemTax };
       })
       .filter((l) => l.qty > 0);
   }, [availableItems, lines]);
 
-  const subtotal = selectedLines.reduce((sum, l) => sum + l.qty * (l.item.unitPrice || 0), 0);
+  // Document-level totals
+  const totalTaxable = selectedLines.reduce((s, l) => s + l.taxable, 0);
+  const totalTax     = selectedLines.reduce((s, l) => s + l.itemTax, 0);
+  const grandTotal   = totalTaxable + totalTax;
+  const isIntra      = transactionType !== "inter";
+  const cgstAmount   = isIntra  ? totalTax / 2 : 0;
+  const sgstAmount   = isIntra  ? totalTax / 2 : 0;
+  const igstAmount   = !isIntra ? totalTax     : 0;
 
   const purchaseOptions = purchases.map((p) => ({
     _id: p._id,
@@ -194,13 +222,17 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
         purchase: purchaseId,
         returnDate,
         items: selectedLines.map((l) => ({
-          itemId: l.item.itemId || undefined,
-          variantId: l.item.variantId || undefined,
-          name: l.item.variantName ? `${l.item.name} (${l.item.variantName})` : l.item.name,
-          sku: l.item.sku,
-          quantity: l.qty,
-          unitPrice: l.item.unitPrice,
-          reason: l.reason,
+          itemId:       l.item.itemId    || undefined,
+          variantId:    l.item.variantId || undefined,
+          name:         l.item.variantName ? `${l.item.name} (${l.item.variantName})` : l.item.name,
+          sku:          l.item.sku,
+          quantity:     l.qty,
+          unitPrice:    l.item.unitPrice,
+          // Preserve original purchase line's GST settings so the backend
+          // recalculates tax at the same rate/mode as the original purchase.
+          gstRate:      l.item.gstRate      || 0,
+          taxInclusive: !!l.item.taxInclusive,
+          reason:       l.reason,
         })),
         mode,
         notes,
@@ -232,7 +264,7 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
         onClick={handleClose}
       />
       <div
-        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
+        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ease-out ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
@@ -282,6 +314,17 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
             </div>
           </div>
 
+          {/* GST Type info banner — auto-derived from Purchase, not editable */}
+          {purchaseId && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-xl">
+              <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+              <span className="text-[11px] text-blue-700 font-medium">
+                GST Type: <b>{isIntra ? "Intra-state (CGST + SGST)" : "Inter-state (IGST)"}</b>
+                {" "}— inherited from the original Purchase. Item GST rates are also preserved.
+              </span>
+            </div>
+          )}
+
           <div>
             <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2 block">
               Items {purchaseNumber && <span className="text-gray-400 font-normal">— {purchaseNumber}</span>}
@@ -321,20 +364,37 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
                   const fullyReturned = item.remaining <= 0;
                   return (
                     <div key={key} className="border border-gray-100 rounded-xl px-3 py-2.5">
-                      <div className="flex items-start justify-between gap-2 mb-2">
+                      {/* Item name + GST badges */}
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
                         <div className="min-w-0">
                           <div className="text-[12px] font-medium text-gray-800 truncate">{item.name}</div>
                           {item.variantName && <div className="text-[10px] text-gray-400 truncate">{item.variantName}</div>}
                         </div>
-                        <span className="text-[12px] font-semibold text-gray-700 flex-shrink-0">
-                          {money(qty * (item.unitPrice || 0))}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {(item.gstRate || 0) > 0 && (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-100">
+                              GST {item.gstRate}%
+                            </span>
+                          )}
+                          <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full border ${
+                            item.taxInclusive
+                              ? "bg-amber-50 text-amber-600 border-amber-100"
+                              : "bg-gray-50 text-gray-500 border-gray-100"
+                          }`}>
+                            {item.taxInclusive ? "Tax Incl." : "Tax Excl."}
+                          </span>
+                          <span className="text-[12px] font-semibold text-gray-700">
+                            {money(qty * (item.unitPrice || 0))}
+                          </span>
+                        </div>
                       </div>
 
+                      {/* Purchased / Returned / Returnable stat row */}
                       <div className="flex items-center gap-3 text-[10px] text-gray-400 mb-2">
                         <span>Purchased <b className="text-gray-600 font-medium">{item.purchasedQuantity}</b></span>
                         <span>Returned <b className="text-gray-600 font-medium">{displayReturned}</b></span>
                         <span>Returnable <b className="text-gray-700 font-semibold">{displayReturnable}</b></span>
+                        <span className="ml-auto font-medium text-gray-600">@ {money(item.unitPrice)}</span>
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -369,16 +429,60 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
                           Maximum returnable quantity is {item.remaining}
                         </p>
                       )}
+
+                      {/* Per-line tax preview (only when qty > 0 and GST > 0) */}
+                      {(() => {
+                        const hasGst = (item.gstRate || 0) > 0;
+                        const { taxable, itemTax } = calcLineTax(qty, item.unitPrice, item.gstRate, item.taxInclusive);
+                        if (qty > 0 && hasGst) {
+                          return (
+                            <div className="mt-2 flex items-center gap-3 text-[10px] text-gray-400 border-t border-dashed border-gray-100 pt-1.5">
+                              <span>Taxable <b className="text-gray-600">{money(taxable)}</b></span>
+                              <span>Tax ({item.gstRate}%) <b className="text-gray-600">{money(itemTax)}</b></span>
+                              <span className="ml-auto font-semibold text-gray-700">Total {money(taxable + itemTax)}</span>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   );
                 })}
               </div>
             )}
 
-            <div className="flex justify-end mt-2 text-sm">
-              <span className="text-gray-500 mr-2">Subtotal</span>
-              <span className="font-bold text-gray-900">{money(subtotal)}</span>
-            </div>
+
+            {/* GST Summary */}
+            {selectedLines.length > 0 && (
+              <div className="mt-2 border border-gray-100 rounded-xl p-3 bg-gray-50/60 space-y-1.5 text-[12px]">
+                <div className="flex justify-between text-gray-500">
+                  <span>Taxable Amount</span>
+                  <span className="font-medium text-gray-700">{money(totalTaxable)}</span>
+                </div>
+                {totalTax > 0 && isIntra && (
+                  <>
+                    <div className="flex justify-between text-gray-500">
+                      <span>CGST</span>
+                      <span className="font-medium text-gray-700">{money(cgstAmount)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-500">
+                      <span>SGST</span>
+                      <span className="font-medium text-gray-700">{money(sgstAmount)}</span>
+                    </div>
+                  </>
+                )}
+                {totalTax > 0 && !isIntra && (
+                  <div className="flex justify-between text-gray-500">
+                    <span>IGST</span>
+                    <span className="font-medium text-gray-700">{money(igstAmount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-1.5">
+                  <span>Grand Total</span>
+                  <span>{money(grandTotal)}</span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>

@@ -268,8 +268,8 @@ const SingleSelectDropdown = ({ options, value, onChange, disabled, isOpen, onOp
 
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => onOpenChange(false)} />
-          <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-xl z-50 py-1 overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div className="fixed inset-0 z-[10040]" onClick={() => onOpenChange(false)} />
+          <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-xl z-[10050] py-1 animate-in fade-in zoom-in duration-200">
             {options.map((option) => (
               <button
                 key={option.value}
@@ -350,8 +350,8 @@ const EntityPickerDropdown = ({ entities, value, onChange, entityType, disabled,
 
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => onOpenChange(false)} />
-          <div className="absolute left-0 right-0 mt-2 w-full bg-white border border-gray-100 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div className="fixed inset-0 z-[10040]" onClick={() => onOpenChange(false)} />
+          <div className="absolute left-0 right-0 mt-2 w-full bg-white border border-gray-100 rounded-xl shadow-xl z-[10050] animate-in fade-in zoom-in duration-200">
             <div className="p-2 border-b border-gray-100">
               <div className="relative">
                 <SearchIcon className="absolute left-3 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
@@ -459,13 +459,14 @@ const MultiSelectDropdown = ({ users, selectedUsers, onSelectionChange, placehol
         </button>
         {isOpen && (
           <>
-          <div className="fixed inset-0 z-40" onClick={() => onOpenChange(false)} />
-          <div className="absolute z-50 w-full mt-2 bg-white border border-gray-300 rounded-xl shadow-xl max-h-64 overflow-hidden">
+          <div className="fixed inset-0 z-[10040]" onClick={() => onOpenChange(false)} />
+          <div className="absolute z-[10050] w-full mt-2 bg-white border border-gray-300 rounded-xl shadow-xl">
             <div className="p-3 border-b border-gray-200">
               <div className="relative">
                 <SearchIcon className="absolute left-3 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
                 <input
                   type="text"
+                  autoFocus
                   placeholder="Search participants..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -1021,7 +1022,7 @@ const AdminMeetingForm = ({
         onClick={onClose}
       />
       <div
-        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl transform transition-transform duration-300 ease-out overflow-hidden ${
+        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl transform transition-transform duration-300 ease-out ${
           isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
         }`}
       >

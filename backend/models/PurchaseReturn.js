@@ -15,8 +15,13 @@ const purchaseReturnItemSchema = new mongoose.Schema(
     name: { type: String, required: true },
     quantity: { type: Number, required: true, min: 0 },
     unitPrice: { type: Number, required: true, min: 0 },
-    total: { type: Number, min: 0 }, // quantity * unitPrice
+    total: { type: Number, min: 0 }, // quantity * unitPrice (gross, before tax extraction)
     sku: { type: String },
+    // Per-line GST fields — copied from the original Purchase line when the
+    // return is created, so tax can be reversed correctly using the same rate
+    // and tax-mode the purchase itself used. Mirrors Purchase.js item schema.
+    gstRate: { type: Number, default: 0, min: 0 },
+    taxInclusive: { type: Boolean, default: false },
     // Why THIS line is coming back — independent of the document-level
     // `reason` free-text field, since different lines in the same return can
     // come back for different reasons (2 defective + 1 wrong item, etc.).

@@ -181,7 +181,7 @@ const MultiSelectDropdown = ({ users, selectedUsers, onSelectionChange, placehol
           <TeamIcon className="w-4 h-4 text-gray-400" />
         </button>
         {isOpen && (
-          <div className="absolute z-50 w-full mt-2 bg-white border border-gray-300 rounded-xl shadow-xl max-h-64 overflow-hidden">
+          <div className="absolute z-[10050] w-full mt-2 bg-white border border-gray-300 rounded-xl shadow-xl">
             <div className="p-3 border-b border-gray-200">
               <div className="relative">
                 <SearchIcon className="absolute left-3 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />

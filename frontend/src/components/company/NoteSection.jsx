@@ -167,7 +167,7 @@ const EntityPickerDropdown = ({ options, value, onChange, displayKey, placeholde
           />
           <div
             ref={popupRef}
-            className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-gray-100 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in duration-200"
+            className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-gray-100 rounded-xl shadow-xl z-[10050] animate-in fade-in zoom-in duration-200"
           >
             <div className="p-2 border-b border-gray-100">
               <div className="relative">

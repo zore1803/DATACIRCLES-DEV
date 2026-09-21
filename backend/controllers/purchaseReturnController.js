@@ -6,21 +6,52 @@ const Branding = require("../models/Branding");
 const purchaseDocumentPdf = require("../utils/purchaseDocumentPdf");
 const { syncDocumentStock } = require("../utils/inventorySync");
 
-// Same math as purchaseController.js — kept in lockstep on purpose so the
-// two document types never silently disagree on how a total is computed.
-const calculateItemTotal = (quantity, unitPrice) => parseFloat(quantity) * parseFloat(unitPrice);
+// ── Tax helpers ────────────────────────────────────────────────────────────
+//
+// Per-line calculation mirrors purchaseDocumentPdf.js's own math exactly so
+// the numbers the controller saves always match what the PDF renders:
+//
+//   gross     = qty × unitPrice
+//   taxable   = taxInclusive ? gross / (1 + gstRate/100) : gross
+//   itemTax   = taxable × gstRate/100
+//
+// Intra-state  → CGST = itemTax/2,  SGST = itemTax/2
+// Inter-state  → IGST = itemTax
+//
+// subtotal  = Σ taxable  (the base amounts before adding tax)
+// totalTax  = Σ itemTax
+// grandTotal = subtotal + totalTax
 
-const calculateSubtotal = (items) =>
-  items.reduce((sum, item) => sum + calculateItemTotal(item.quantity, item.unitPrice), 0);
+function calcTotalsFromItems(items, transactionType) {
+  let subtotal = 0;
+  let totalTax = 0;
 
-const calculateTax = (subtotal, gstRate, transactionType) => {
-  if (parseFloat(gstRate) <= 0) return 0;
-  if (transactionType === "intra") {
-    const halfRate = parseFloat(gstRate) / 2;
-    return subtotal * (halfRate / 100) + subtotal * (halfRate / 100);
+  for (const item of items) {
+    const qty       = parseFloat(item.quantity)  || 0;
+    const price     = parseFloat(item.unitPrice) || 0;
+    const rate      = parseFloat(item.gstRate)   || 0;
+    const inclusive = !!item.taxInclusive;
+
+    const gross    = qty * price;
+    const taxable  = inclusive && rate > 0 ? gross / (1 + rate / 100) : gross;
+    const itemTax  = taxable * (rate / 100);
+
+    subtotal += taxable;
+    totalTax += itemTax;
   }
-  return subtotal * (parseFloat(gstRate) / 100);
-};
+
+  return {
+    subtotal:   parseFloat(subtotal.toFixed(2)),
+    totalTax:   parseFloat(totalTax.toFixed(2)),
+    grandTotal: parseFloat((subtotal + totalTax).toFixed(2)),
+  };
+}
+
+// Gross line total stored on the item (qty × unitPrice, inclusive of any
+// embedded tax if taxInclusive=true) — used only for the item.total field;
+// the document-level subtotal is the sum of TAXABLE amounts, not this.
+const calculateItemGross = (quantity, unitPrice) =>
+  parseFloat((parseFloat(quantity) * parseFloat(unitPrice)).toFixed(2));
 
 // Count-based, "PR-00001" — mirrors Purchase's own generatePurchaseNumber
 // exactly (not the Counter-based resolveDocumentNumber the Invoice family
@@ -182,6 +213,14 @@ exports.getPurchaseItemsForReturn = async (req, res) => {
           name: item.name,
           sku: item.sku,
           unitPrice: item.unitPrice,
+          // ── GST fields from the original purchase line ──────────────────
+          // The return must use the same GST rate and tax-mode the purchase
+          // used — not a new/default rate. The frontend uses these to compute
+          // per-line tax and grand total; the backend uses them for the same
+          // math on save.
+          gstRate: item.gstRate || 0,
+          taxInclusive: !!item.taxInclusive,
+          // ────────────────────────────────────────────────────────────────
           purchasedQuantity: item.quantity,
           alreadyReturned,
           remaining: Math.max(0, item.quantity - alreadyReturned),
@@ -192,6 +231,7 @@ exports.getPurchaseItemsForReturn = async (req, res) => {
       purchase: {
         _id: purchase._id,
         purchaseNumber: purchase.purchaseNumber,
+        transactionType: purchase.transactionType || "intra",
         vendor: purchase.vendor,
       },
       items,
@@ -229,7 +269,7 @@ async function assertQuantitiesWithinPurchase(purchase, items, organization, exc
 
 exports.createPurchaseReturn = async (req, res) => {
   try {
-    const { purchase, items, notes, status, transactionType, gstRate, mode, returnDate } = req.body;
+    const { purchase, items, notes, status, mode, returnDate } = req.body;
 
     if (!purchase) {
       return res.status(400).json({ message: "A Purchase Return must reference an existing Purchase" });
@@ -237,10 +277,11 @@ exports.createPurchaseReturn = async (req, res) => {
     const purchaseDoc = await Purchase.findOne({ _id: purchase, organization: req.user.organization });
     if (!purchaseDoc) return res.status(404).json({ message: "Purchase not found" });
 
-    // Vendor is always derived from the Purchase, never trusted from the
-    // client — a return can't be attributed to a different vendor than the
-    // bill it's actually against.
+    // Vendor and transactionType are always derived from the Purchase —
+    // a return can't be attributed to a different vendor, and the GST type
+    // (intra/inter) must match the original bill so tax is reversed correctly.
     const vendor = purchaseDoc.vendor;
+    const transactionType = purchaseDoc.transactionType || "intra";
 
     if (!items || items.length === 0) {
       return res.status(400).json({ message: "At least one item is required" });
@@ -248,11 +289,10 @@ exports.createPurchaseReturn = async (req, res) => {
 
     await assertQuantitiesWithinPurchase(purchaseDoc, items, req.user.organization);
 
-    const subtotal = calculateSubtotal(items);
-    const calculatedTransactionType = transactionType || "intra";
-    const calculatedGstRate = parseFloat(gstRate) || 0;
-    const totalTax = calculateTax(subtotal, calculatedGstRate, calculatedTransactionType);
-    const grandTotal = subtotal + totalTax;
+    // Per-line tax calculation: each item carries its own gstRate/taxInclusive
+    // (copied from the purchase line by the frontend). subtotal = sum of taxable
+    // amounts (not gross), so grand total = subtotal + totalTax.
+    const { subtotal, totalTax, grandTotal } = calcTotalsFromItems(items, transactionType);
 
     const returnNumber = await generateReturnNumber(req.user.organization);
 
@@ -263,11 +303,15 @@ exports.createPurchaseReturn = async (req, res) => {
       returnDate: returnDate || Date.now(),
       items: items.map((item) => ({
         ...item,
-        total: calculateItemTotal(item.quantity, item.unitPrice),
+        total: calculateItemGross(item.quantity, item.unitPrice),
+        gstRate:      parseFloat(item.gstRate)  || 0,
+        taxInclusive: !!item.taxInclusive,
       })),
       subtotal,
-      transactionType: calculatedTransactionType,
-      gstRate: calculatedGstRate,
+      transactionType,
+      // gstRate at document level is kept for legacy read compatibility but
+      // no longer drives the tax calculation — per-line rates are canonical.
+      gstRate: 0,
       totalTax,
       grandTotal,
       status: status || "Draft",
@@ -412,7 +456,7 @@ exports.updatePurchaseReturn = async (req, res) => {
     });
     if (!purchaseReturn) return res.status(404).json({ message: "Purchase return not found" });
 
-    const { items, notes, status, transactionType, gstRate, mode, reason, returnDate } = req.body;
+    const { items, notes, status, mode, reason, returnDate } = req.body;
 
     // Captured before any field changes below, so the Confirmed stock sync
     // (after save) can tell what actually transitioned.
@@ -432,10 +476,10 @@ exports.updatePurchaseReturn = async (req, res) => {
     // after the fact would silently invalidate the already-returned/
     // remaining-quantity math.
     if (returnDate !== undefined) purchaseReturn.returnDate = returnDate;
-    if (notes !== undefined) purchaseReturn.notes = notes;
-    if (status !== undefined) purchaseReturn.status = status;
-    if (mode !== undefined) purchaseReturn.mode = mode;
-    if (reason !== undefined) purchaseReturn.reason = reason;
+    if (notes    !== undefined) purchaseReturn.notes  = notes;
+    if (status   !== undefined) purchaseReturn.status = status;
+    if (mode     !== undefined) purchaseReturn.mode   = mode;
+    if (reason   !== undefined) purchaseReturn.reason = reason;
 
     // Snapshotted before any item mutation below, so a delta-sync on an
     // already-Confirmed/Paid return (see syncPurchaseReturnStock) has
@@ -462,20 +506,21 @@ exports.updatePurchaseReturn = async (req, res) => {
         quantity: it.quantity,
       }));
 
-      const transactionTypeToUse = transactionType || purchaseReturn.transactionType;
-      const gstRateToUse = gstRate !== undefined ? parseFloat(gstRate) || 0 : purchaseReturn.gstRate;
-      const subtotal = calculateSubtotal(items);
-      const totalTax = calculateTax(subtotal, gstRateToUse, transactionTypeToUse);
+      // transactionType comes from the linked Purchase document (auto-derived,
+      // not from the request body) — ensures GST type can't silently drift.
+      const transactionType = purchaseDoc?.transactionType || purchaseReturn.transactionType || "intra";
+      const { subtotal, totalTax, grandTotal } = calcTotalsFromItems(items, transactionType);
 
       purchaseReturn.items = items.map((item) => ({
         ...item,
-        total: calculateItemTotal(item.quantity, item.unitPrice),
+        total: calculateItemGross(item.quantity, item.unitPrice),
+        gstRate:      parseFloat(item.gstRate)  || 0,
+        taxInclusive: !!item.taxInclusive,
       }));
-      purchaseReturn.subtotal = subtotal;
-      purchaseReturn.transactionType = transactionTypeToUse;
-      purchaseReturn.gstRate = gstRateToUse;
-      purchaseReturn.totalTax = totalTax;
-      purchaseReturn.grandTotal = subtotal + totalTax;
+      purchaseReturn.subtotal        = subtotal;
+      purchaseReturn.transactionType = transactionType;
+      purchaseReturn.totalTax        = totalTax;
+      purchaseReturn.grandTotal      = grandTotal;
     }
 
     await purchaseReturn.save();
