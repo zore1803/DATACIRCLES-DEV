@@ -228,7 +228,7 @@ const PaymentStatusAlert = ({ subscription, onRetryPayment, onResumePayment, onC
             </div>
           )}
           {alertContent.showResume && mandateMethod && (
-            <MandateMethodPicker value={mandateMethod} onChange={onMandateMethodChange} className="mt-3 max-w-sm" />
+            <MandateMethodPicker value={mandateMethod} onChange={onMandateMethodChange} className="mt-4 max-w-md rounded-xl border border-blue-100 bg-white p-4" />
           )}
           {(alertContent.showResume || alertContent.showChangePlan) && (
             <div className="mt-3 flex flex-wrap gap-2">
