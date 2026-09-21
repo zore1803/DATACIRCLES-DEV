@@ -1,4 +1,5 @@
 import CalendarIcon from "../common/CalendarIcon";
+import { resolveField, resolveDiscount, resolveMaxDiscountPercent } from "../../utils/variantResolve";
 import DeleteIcon from "../common/DeleteIcon";
 import PdfIcon from "../common/PdfIcon";
 import PlusIcon from "../common/PlusIcon";
@@ -166,6 +167,8 @@ const ItemSearchSelect = ({
       // Details" -> Discount) — previously always started at 0.
       discountType: item.discount?.type || "amount",
       discount: item.discount?.value || 0,
+        type: item.type,
+        stock: item.stock,
       gstRate: item.gstRate || 0,
       taxInclusive: !!item.taxInclusive,
     });
@@ -350,7 +353,6 @@ const PerformaInvoiceForm = ({
     amount: 0,
     status: "Draft",
     style: "",
-    isTaxInvoice: true,
     transactionType: "intra",
   });
   const [isSliding, setIsSliding] = useState(false);
@@ -430,7 +432,10 @@ const PerformaInvoiceForm = ({
               _id: variant._id,
               displayName: `${item.name} - ${variant.name}`,
               name: variant.name,
-              description: variant.description || item.description || "",
+              description: resolveField(variant, item, "description") || "",
+              barcode: resolveField(variant, item, "barcode") || "",
+              maxDiscountPercent: resolveMaxDiscountPercent(variant, item),
+              discount: resolveDiscount(variant, item),
               sellingPrice: variant.sellingPrice || item.sellingPrice,
               hsnSac: variant.hsnSac || item.hsnSac || "",
               type: item.type,
@@ -575,7 +580,6 @@ const PerformaInvoiceForm = ({
         amount: sourceData.amount || 0,
         status: editingPerformaInvoice ? sourceData.status : "Draft",
         style: sourceData.style || "",
-        isTaxInvoice: true,
         transactionType: sourceData.transactionType || "intra",
       };
       setForm(initialForm);
@@ -611,7 +615,6 @@ const PerformaInvoiceForm = ({
         amount: 0,
         status: "Draft",
         style: "",
-        isTaxInvoice: true,
       };
       setForm(initialForm);
       setHasUnsavedChanges(false);
@@ -970,9 +973,7 @@ const PerformaInvoiceForm = ({
         // Pro Forma form use, so the saved amount honors each item's own
         // gstRate instead of the old calculateTotalAmount(), which never
         // added tax at all.
-        amount: form.isTaxInvoice
-          ? computeDocument(form, "performa").grandTotal
-          : calculateTotalAmount(form.items, form.discount),
+        amount: computeDocument(form, "performa").grandTotal,
         discount: form.discount,
         status: statusValue,
         items: form.items.map((item) => ({
@@ -991,7 +992,6 @@ const PerformaInvoiceForm = ({
           taxInclusive: !!item.taxInclusive,
         })),
         style: form.style,
-        isTaxInvoice: form.isTaxInvoice,
         transactionType: form.transactionType,
       };
 
@@ -1037,7 +1037,6 @@ const PerformaInvoiceForm = ({
         amount: 0,
         status: "Draft",
         style: "",
-        isTaxInvoice: true,
       });
       await fetchData();
       onClose();
@@ -1092,10 +1091,8 @@ const PerformaInvoiceForm = ({
   // use (shared/documentTemplates.js) — honors each item's own gstRate
   // rather than only a document-level rate, so this summary, the saved
   // amount and the PDF can never disagree.
-  const taxDetails = form.isTaxInvoice ? computeDocument(form, "performa") : null;
-  const finalTotal = taxDetails
-    ? taxDetails.grandTotal
-    : subtotalAfterItemDiscounts - invoiceDiscountAmount;
+  const taxDetails = computeDocument(form, "performa");
+  const finalTotal = taxDetails.grandTotal;
   const cgstAmount = taxDetails?.totalCGST || 0;
   const sgstAmount = taxDetails?.totalSGST || 0;
   const igstAmount = taxDetails?.totalIGST || 0;
@@ -1516,8 +1513,6 @@ const PerformaInvoiceForm = ({
                           aria-label="Item quantity"
                         />
                       </div>
-                      {form.isTaxInvoice && (
-                        <>
                           <div className="space-y-2">
                             <label className="text-sm font-medium text-slate-600">
                               Discount
@@ -1618,52 +1613,6 @@ const PerformaInvoiceForm = ({
                               <option value="inclusive">With Tax</option>
                             </select>
                           </div>
-                        </>
-                      )}
-                      {!form.isTaxInvoice && (
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-slate-600">
-                            Discount
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="number"
-                              placeholder="0"
-                              min="0"
-                              step={
-                                item.discountType === "percentage" ? "0.1" : "0.01"
-                              }
-                              value={item.discount}
-                              onChange={(e) => {
-                                handleItemChange(
-                                  index,
-                                  "discount",
-                                  e.target.value
-                                );
-                                setHasUnsavedChanges(true);
-                              }}
-                              className="w-full border border-slate-300 rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all duration-200"
-                              aria-label="Item discount"
-                            />
-                            <select
-                              value={item.discountType}
-                              onChange={(e) => {
-                                handleItemChange(
-                                  index,
-                                  "discountType",
-                                  e.target.value
-                                );
-                                setHasUnsavedChanges(true);
-                              }}
-                              className="border border-slate-300 rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all duration-200"
-                              aria-label="Discount type"
-                            >
-                              <option value="amount">₹</option>
-                              <option value="percentage">%</option>
-                            </select>
-                          </div>
-                        </div>
-                      )}
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-600">
                           Amount
@@ -1932,7 +1881,7 @@ const PerformaInvoiceForm = ({
 
 export default PerformaInvoiceForm;
 
-import { CreateInvoicePanel } from "../invoice/InvoiceForm";
+import { CreateInvoicePanel } from "../invoice/CreateInvoicePanel";
 
 const CreatePerformaPanel = (props) => (
   <CreateInvoicePanel {...props} type="performa" />

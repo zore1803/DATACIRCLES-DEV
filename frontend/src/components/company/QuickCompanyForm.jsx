@@ -7,8 +7,10 @@ import twitterLogo from "../../assets/twitter-logo.png";
 import linkedinLogo from "../../assets/linkedin-logo.png";
 import facebookLogo from "../../assets/facebook-logo.png";
 import { FaWhatsapp } from "react-icons/fa";
+
 import API from "../../services/api";
 import CustomDropdown from "../common/CustomDropdown";
+import { lookupIndianPincode } from "../../utils/pincodeUtils";
 import toast from "react-hot-toast";
 import { Country, State } from "country-state-city";
 import { loadCityModule, useLazyCity } from "../../utils/lazyCityData";
@@ -39,44 +41,6 @@ const getCitiesForState = (City, countryName, stateName) => {
   const stateIso = State.getStatesOfCountry(countryIso).find((s) => s.name === stateName)?.isoCode;
   if (!stateIso) return [];
   return City.getCitiesOfState(countryIso, stateIso).map((c) => c.name);
-};
-
-// Looks up an Indian PIN code via India Post's public API (no key required)
-// to fill state/city automatically — pincode uniquely determines both, so
-// asking the user to also pick them by hand is redundant once it's typed.
-// Country-state-city's own state names are used for the result (not the raw
-// API district name) so the value lands on a real option in the State/City
-// dropdowns above rather than a lookalike string that fails to match.
-const lookupIndianPincode = async (pincode) => {
-  if (!/^\d{6}$/.test(pincode)) return null;
-  try {
-    const [res, City] = await Promise.all([
-      fetch(`https://api.postalpincode.in/pincode/${pincode}`),
-      loadCityModule(),
-    ]);
-    const data = await res.json();
-    const po = data?.[0]?.Status === "Success" ? data[0].PostOffice?.[0] : null;
-    if (!po) return null;
-
-    const countryIso = countryIsoByName["India"];
-    const matchedState = State.getStatesOfCountry(countryIso).find(
-      (s) => s.name.toLowerCase() === po.State?.toLowerCase(),
-    );
-    if (!matchedState) return null;
-
-    const cities = City.getCitiesOfState(countryIso, matchedState.isoCode).map((c) => c.name);
-    const districtOrTaluk = po.District || po.Block || po.Taluk || "";
-    const matchedCity =
-      cities.find((c) => c.toLowerCase() === districtOrTaluk.toLowerCase()) ||
-      cities.find((c) => c.toLowerCase() === po.Name?.toLowerCase()) ||
-      districtOrTaluk ||
-      po.Name ||
-      "";
-
-    return { country: "India", state: matchedState.name, city: matchedCity };
-  } catch (_) {
-    return null; // Non-fatal — the user can still fill state/city by hand.
-  }
 };
 
 const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, editCompany = null }) => {
@@ -117,6 +81,10 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
   const [additionalFields, setAdditionalFields] = useState({});
   const [fieldDefinitions, setFieldDefinitions] = useState([]);
   const [additionalFieldErrors, setAdditionalFieldErrors] = useState({});
+  // Shown next to the footer buttons on a failed submit, so the jump up to
+  // the first invalid field (below) has a visible reason instead of looking
+  // like the panel randomly scrolled.
+  const [submitError, setSubmitError] = useState("");
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [shouldRender, setShouldRender] = useState(true);
@@ -447,9 +415,12 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
           topMost = el;
         }
       }
+      setSubmitError("Please fill in all required fields — see the highlighted fields above.");
       topMost?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
+
+    setSubmitError("");
 
     // One-line summary of the billing address, kept in the legacy `address`
     // field so existing search/filters keep working.
@@ -1236,21 +1207,28 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
           </div>
 
           {/* Sticky footer — compact, matching the note editor card */}
-          <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              type="submit"
-              disabled={loading}
-            >
-              {loading ? "Saving..." : isEditing ? "Update Company" : "Create Company"}
-            </button>
+          <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-between gap-3">
+            {submitError ? (
+              <p className="text-xs font-medium text-red-600">{submitError}</p>
+            ) : (
+              <span />
+            )}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                type="submit"
+                disabled={loading}
+              >
+                {loading ? "Saving..." : isEditing ? "Update Company" : "Create Company"}
+              </button>
+            </div>
           </div>
         </form>
       </div>

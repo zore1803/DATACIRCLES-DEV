@@ -257,17 +257,17 @@ export function splitGst(taxableAmount, gstRate, transactionType = "intra") {
 }
 
 export function computeDocument(doc, type = "tax") {
-  const supportsTax  = type !== "deliveryChallan";
-  const taxFlagKey   = type === "quotation" ? "isTaxQuotation" : "isTaxInvoice";
+  // Tax is purely line-item-driven: each item carries its own gstRate, and
+  // splitGst() naturally produces zero tax for a 0% item. There is no more
+  // document-level GST on/off flag.
   const transactionType = doc.transactionType === "inter" ? "inter" : "intra";
-  const isTax        = supportsTax && !!doc[taxFlagKey];
 
   const baseRows = (doc.items || []).map((it) => {
     const rate     = parseFloat(it.rate) || 0;
     const qty      = parseFloat(it.quantity) || 0;
-    const gstRate  = GST_RATES.includes(Number(it.gstRate))
-      ? Number(it.gstRate)
-      : (GST_RATES.includes(Number(doc.gstRate)) ? Number(doc.gstRate) : 18);
+    // The line's own rate, and nothing else: 0% stays 0%, and a line with no
+    // usable rate is untaxed rather than silently charged a default 18%.
+    const gstRate  = GST_RATES.includes(Number(it.gstRate)) ? Number(it.gstRate) : 0;
     const unitTaxable = it.taxInclusive ? rate / (1 + gstRate / 100) : rate;
     const sub  = unitTaxable * qty;
     const disc = it.discountType === "percentage"
@@ -300,12 +300,12 @@ export function computeDocument(doc, type = "tax") {
 
   const rows = baseRows.map((r) => {
     const taxable = r.taxable * netFactor;
-    const gst = isTax
-      ? splitGst(taxable, r.gstRate, transactionType)
-      : { cgst: 0, sgst: 0, igst: 0, cgstRate: 0, sgstRate: 0, igstRate: 0 };
+    const gst = splitGst(taxable, r.gstRate, transactionType);
     const tax = gst.cgst + gst.sgst + gst.igst;
     return { ...r, taxable, ...gst, tax, amount: taxable + tax };
   });
+
+  const isTax = rows.some((r) => r.tax > 0);
 
   const hsnMap = {};
   rows.forEach((r) => {
@@ -561,6 +561,22 @@ export function buildDocumentHtml(doc, options = {}) {
   const numberKey = NUMBER_KEY[type] || NUMBER_KEY.tax;
 
   const t = computeDocument(doc, type);
+
+  // Round Off, so the printed total matches the rounded amount the form saved. Only when the
+  // document was actually saved rounded (whole-number amount, or no amount yet as in a live
+  // preview): older documents whose stored flag doesn't reflect a real choice keep printing
+  // the exact total they were saved with.
+  const savedAmount = doc.amount;
+  const savedRounded = savedAmount === undefined || savedAmount === null || Number.isInteger(Number(savedAmount));
+  if (doc.isRoundOff === true && savedRounded) {
+    const rounded = Math.round(t.grandTotal);
+    t.roundOff = rounded - t.grandTotal;
+    t.grandTotal = rounded;
+    t.amountInWords = numberToWords(rounded);
+    t.balanceDue = Math.max(0, rounded - t.amountPaid);
+    t.isFullyPaid = t.amountPaid > 0 && t.balanceDue <= 0.01;
+    t.isPartiallyPaid = t.amountPaid > 0.01 && t.balanceDue > 0.01;
+  }
 
   // The party the document is billed to: the deal's customer (company, else
   // contact) takes precedence; the deal's own title is only a fallback for

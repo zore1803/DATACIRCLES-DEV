@@ -6,6 +6,9 @@ const postalAddressSchema = new mongoose.Schema({
   pincode: { type: String, default: '' },
   city: { type: String, default: '' },
   state: { type: String, default: '' },
+  // GST state code for `state` ("Maharashtra" -> "27"), filled in by the form's
+  // address group. Empty for addresses outside India, where no GST code applies.
+  stateCode: { type: String, default: '' },
   country: { type: String, default: '' },
 }, { _id: false });
 
@@ -13,6 +16,9 @@ const invoiceSchema = new mongoose.Schema({
   deal: { type: mongoose.Schema.Types.ObjectId, ref: 'Deal', required: true },
   invoiceNumber: { type: String, required: true },
   date: { type: Date, required: true },
+  // Financial year (starting calendar year, e.g. 2026 for FY 2026-27), derived from `date`.
+  // Invoice numbers are unique per organization within a financial year.
+  financialYear: { type: Number },
   dueDate: { type: Date },
   amount: { type: Number, required: true },
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -20,6 +26,13 @@ const invoiceSchema = new mongoose.Schema({
   status: { type: String, required: true },
   billingAddress: { type: postalAddressSchema, default: () => ({}) },
   shippingAddress: { type: postalAddressSchema, default: () => ({}) },
+  // Place of supply, resolved from the SHIPPING address when the invoice is
+  // saved and stored so reopening it never re-derives it from a customer
+  // address that has changed since. `placeOfSupply` is the printed label
+  // ("Maharashtra (27)") every PDF template already renders; the code is kept
+  // alongside it for the intra/inter-state comparison.
+  placeOfSupply: { type: String, default: '' },
+  placeOfSupplyStateCode: { type: String, default: '' },
   discount: {
     type: {
       type: String,
@@ -32,22 +45,28 @@ const invoiceSchema = new mongoose.Schema({
       min: 0,
     },
   },
+  // Free-text field (e.g. a customer's PO number) -- no bearing on
+  // invoiceNumber/numbering, purely informational. The other three
+  // document models already carry it; without it the form's Reference
+  // input was silently dropped on save.
+  reference: { type: String, default: '' },
   // Free-text footer blocks, printed on the document when present.
   notes: { type: String, default: '' },
   terms: { type: String, default: '' },
   // Bank account printed on this document. Chosen via the invoice form's
   // "Select Bank" dropdown; when unset the org's default bank is used.
   bankDetails: { type: mongoose.Schema.Types.ObjectId, ref: 'BankDetails', default: null },
+  // Round Off chosen on the form. No default: documents saved before this field existed stay
+  // unrounded in their PDF, exactly as before.
+  isRoundOff: { type: Boolean },
   // Editable text shown as the UPI payment note ("tn") on the QR code.
   // Defaults to "Invoice <invoiceNumber>" when left blank — see
   // shared/documentTemplates.js buildUpiUri.
   qrNote: { type: String, default: '' },
-  isTaxInvoice: { type: Boolean, default: false },
   signature: { type: String },
   signatureType: { type: String, enum: ['text', 'upload'], default: 'text' },
   receiverGSTIN: { type: String }, // Added receiverGSTIN field
   transactionType: { type: String, enum: ['intra', 'inter'], default: 'intra' },
-  gstRate: { type: Number, min: 0, max: 100, default: 18 },
   items: [{
     itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item' },
     // Set only for variant lines — itemId above is the parent Item's id
@@ -108,5 +127,25 @@ const invoiceSchema = new mongoose.Schema({
   // trail. Not required — an invoice with no attempts has this null.
   latestEInvoice: { type: mongoose.Schema.Types.ObjectId, ref: 'EInvoice', default: null },
 }, { timestamps: true });
+
+invoiceSchema.pre('validate', function setFinancialYear(next) {
+  if (this.date) {
+    // eslint-disable-next-line global-require
+    this.financialYear = require('../utils/documentNumbering').financialYearOf(this.date);
+  }
+  next();
+});
+
+// Database-level guard against duplicate invoice numbers (e.g. two saves at the same moment).
+// Partial so invoices saved before `financialYear` existed don't block the index until
+// scripts/backfillInvoiceFinancialYear.js has filled it in.
+invoiceSchema.index(
+  { organization: 1, financialYear: 1, invoiceNumber: 1 },
+  { unique: true, partialFilterExpression: { financialYear: { $type: 'number' } } }
+);
+
+// The Deal page asks for one deal's invoices (GET /invoices?deal=<id>), so that
+// lookup is served from an index instead of scanning the organization's invoices.
+invoiceSchema.index({ organization: 1, deal: 1 });
 
 module.exports = mongoose.model('Invoice', invoiceSchema);

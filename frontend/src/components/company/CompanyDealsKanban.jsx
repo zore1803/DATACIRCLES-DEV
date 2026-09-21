@@ -1,4 +1,5 @@
 import CalendarClockIcon from "../common/CalendarClockIcon";
+import EmptyState from "../common/EmptyState";
 import DeleteIcon from "../common/DeleteIcon";
 import AvgDealSizeIcon from "../common/AvgDealSizeIcon";
 import WonDealIcon from "../common/WonDealIcon";
@@ -58,14 +59,15 @@ import {
   User,
   Tag,
   IndianRupee,
-  X, ArrowUp, ArrowDown } from "lucide-react";
+  X, ArrowUp, ArrowDown
+} from "lucide-react";
 import { EditablePaginationButtons } from "../common/EditablePaginationButtons";
 import toast from "react-hot-toast";
 import confetti from "canvas-confetti";
 import API from "../../services/api";
 import QuickDealForm from "../deal/QuickDealForm";
 import FilterIcon from "../common/FilterIcon";
-import CompanyFilterPanel from "./CompanyFilterPanel";
+import ToolbarFilterGroup from "./ToolbarFilterGroup";
 import { applyColumnFilters } from "../../utils/advancedFilters";
 import StatTile from "../common/StatTile";
 import StatTileSkeleton from "../common/StatTileSkeleton";
@@ -95,7 +97,7 @@ const getAmountRangeLabel = (amount) => {
 const DEAL_FILTER_COLUMNS = (statuses) => [
   { key: "stage", label: "Stage", options: statuses },
   { key: "amount", label: "Amount", options: AMOUNT_RANGES.map((r) => r.label) },
-  { key: "lastUpdated", label: "Last Updated", options: DATE_RANGES.map((r) => r.label) },
+  { key: "lastUpdated", label: "Last Updated", placeholder: "All Last Updated", options: DATE_RANGES.map((r) => r.label) },
 ];
 
 const getDealFieldValue = (deal, key) => {
@@ -476,7 +478,7 @@ const KanbanColumn = React.memo(({ status, deals, amountDeals, totalDealsCount, 
           </span>
         </div>
         <button
-          onClick={onAddClick}
+          onClick={() => onAddClick(status)}
           className="flex items-center justify-center cursor-pointer hover:opacity-70 transition-opacity flex-shrink-0"
           title="Add deal"
         >
@@ -594,18 +596,23 @@ export default function CompanyDealsKanban({
   const dragZoomRef = useRef(1);
 
   const [manualDealFormOpen, setManualDealFormOpen] = useState(false);
+  const [initialDealStatus, setInitialDealStatus] = useState("Open");
   // Derived rather than copied into local state on a one-shot effect — a
   // copy raced the initial data load (whichever re-rendered first won) and
   // could get clobbered before ever becoming visible.
   const showDealForm = manualDealFormOpen || autoOpenCreate;
   const closeDealForm = () => {
     setManualDealFormOpen(false);
+    setInitialDealStatus("Open");
     if (autoOpenCreate) onAutoOpenCreateConsumed?.();
   };
   const [statuses, setStatuses] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [selectedFilters, setSelectedFilters] = useState({});
+  // Stable across renders so the filter bar's option lists (memoized on `columns`) aren't
+  // rebuilt on every keystroke or drag.
+  const dealFilterColumns = useMemo(() => DEAL_FILTER_COLUMNS(statuses), [statuses]);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
 
   // An explicit `direction` (from the column menu's Sort Ascending / Sort
@@ -627,7 +634,7 @@ export default function CompanyDealsKanban({
       return { key: null, direction: null };
     });
   };
-  const [localViewMode, setLocalViewMode] = useState("board");
+  const [localViewMode, setLocalViewMode] = useState("list");
   const viewMode = controlledViewMode ?? localViewMode;
   const setViewMode = setControlledViewMode ?? setLocalViewMode;
   // Caps the list-view table at the bottom of the viewport so changing rows-per-page
@@ -916,7 +923,10 @@ export default function CompanyDealsKanban({
     }
     setSelectedDeals((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }, [hasBulkAccess]);
-  const handleAddDealClick = useCallback(() => setManualDealFormOpen(true), []);
+  const handleAddDealClick = useCallback((statusStr) => {
+    setInitialDealStatus(typeof statusStr === "string" ? statusStr : "Open");
+    setManualDealFormOpen(true);
+  }, []);
 
   // Column header select-all: if every card in the column is already selected,
   // clicking clears just those; otherwise it adds them all to the selection.
@@ -1530,8 +1540,12 @@ export default function CompanyDealsKanban({
           onCancel={() => setSelectedDeals([])}
         />
       ) : (
-        <div className="flex items-center gap-4 mb-4" style={{ height: "44px" }}>
-          <div className="relative flex-1 h-full">
+        // Wraps below lg so the filter group can drop onto its own line; one line on desktop.
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
+          {/* Search just fills the space left over: only the filter group animates its width, so
+              the search shrinks by exactly as much as the group grows and the Filter / view / +
+              buttons on the right stay perfectly still. */}
+          <div className="relative flex-1 min-w-[180px] h-[44px]">
             <SearchIcon
               className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#525866]"
             />
@@ -1552,12 +1566,22 @@ export default function CompanyDealsKanban({
               </button>
             )}
           </div>
+          <ToolbarFilterGroup
+            isOpen={showFilterPanel}
+            columns={dealFilterColumns}
+            data={deals}
+            getFieldValue={getDealFieldValue}
+            selected={selectedFilters}
+            onApply={setSelectedFilters}
+          />
           <button
-            onClick={() => setShowFilterPanel(true)}
-            className="relative flex items-center justify-center gap-2 px-3 text-sm font-medium text-gray-800 bg-white border rounded-full hover:bg-gray-50 flex-shrink-0"
+            onClick={() => setShowFilterPanel((open) => !open)}
+            aria-expanded={showFilterPanel}
+            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+              }`}
             style={{
               height: "44px",
-              borderColor: Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
+              borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
             }}
           >
             <FilterIcon size={16} />
@@ -1571,15 +1595,8 @@ export default function CompanyDealsKanban({
           <div className="relative flex items-center gap-1.5 p-1 bg-[#F1F1F5] rounded-full flex-shrink-0 overflow-hidden" style={{ height: "44px" }}>
             <span
               className="absolute top-1 w-9 h-9 rounded-full bg-white shadow-[0px_4px_4px_rgba(0,0,0,0.1)] transition-all duration-300 ease-out pointer-events-none"
-              style={{ left: viewMode === "list" ? 46 : 4 }}
+              style={{ left: viewMode === "board" ? 46 : 4 }}
             />
-            <button
-              onClick={() => setViewMode("board")}
-              className={`relative z-10 w-9 h-9 flex items-center justify-center rounded-full transition-colors ${viewMode === "board" ? "text-blue-600" : "text-gray-500"
-                }`}
-            >
-              <KanbanViewIcon size={16} className="text-current" />
-            </button>
             <button
               onClick={() => setViewMode("list")}
               className={`relative z-10 w-9 h-9 flex items-center justify-center rounded-full transition-colors ${viewMode === "list" ? "text-blue-600" : "text-gray-500"
@@ -1587,10 +1604,17 @@ export default function CompanyDealsKanban({
             >
               <TableViewIcon size={16} className="text-current" />
             </button>
+            <button
+              onClick={() => setViewMode("board")}
+              className={`relative z-10 w-9 h-9 flex items-center justify-center rounded-full transition-colors ${viewMode === "board" ? "text-blue-600" : "text-gray-500"
+                }`}
+            >
+              <KanbanViewIcon size={16} className="text-current" />
+            </button>
           </div>
           <button
             type="button"
-            onClick={() => setManualDealFormOpen(true)}
+            onClick={() => { setInitialDealStatus("Open"); setManualDealFormOpen(true); }}
             className="flex items-center justify-center rounded-full border hover:bg-gray-50 flex-shrink-0"
             style={{ width: "44px", height: "44px", borderColor: "#E1E4EA" }}
             title="Add Deal"
@@ -1605,22 +1629,12 @@ export default function CompanyDealsKanban({
           companies={company ? [company] : []}
           contacts={contacts}
           initialCompanyId={companyId}
+          initialStatus={initialDealStatus}
           onDealCreated={handleDealCreated}
           onRequestClose={closeDealForm}
         />
       )}
 
-      <CompanyFilterPanel
-        isOpen={showFilterPanel}
-        onClose={() => setShowFilterPanel(false)}
-        columns={DEAL_FILTER_COLUMNS(statuses)}
-        data={deals}
-        getFieldValue={getDealFieldValue}
-        selected={selectedFilters}
-        onApply={setSelectedFilters}
-        title="Filter Deals"
-        subtitle="Filter this list by column"
-      />
 
       {viewMode === "board" ? (
         isLoading || statuses.length === 0 ? (
@@ -1700,16 +1714,8 @@ export default function CompanyDealsKanban({
           </DndContext>
         )
       ) : !isLoading && deals.length === 0 ? (
-        <div className="flex flex-col items-center justify-center w-full min-h-[300px] bg-gray-50 border border-gray-200 rounded-xl text-gray-500">
-          <Handshake size={28} className="mb-3 text-gray-400" />
-          <button
-            type="button"
-            onClick={() => setManualDealFormOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            <PlusIcon className="w-4 h-4" />
-            Add new deal
-          </button>
+        <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
+          <EmptyState icon={Handshake} noun="Deal" onCreate={() => { setInitialDealStatus("Open"); setManualDealFormOpen(true); }} />
         </div>
       ) : (
         <>
@@ -1735,7 +1741,7 @@ export default function CompanyDealsKanban({
                         "Select All", which spans every record across all pages. */}
                     <th style={{ width: 44, height: 56 }} className="px-3 py-2.5 border-r border-b border-[#E1E4EA]">
                       <div className="flex justify-center items-center w-full">
-                        <Checkbox checked={selectedDeals.length > 0 && selectedDeals.length === paginatedDeals.length} onChange={handleSelectAllDeals}  uncheckedColor="text-[#525866]"/>
+                        <Checkbox checked={selectedDeals.length > 0 && selectedDeals.length === paginatedDeals.length} onChange={handleSelectAllDeals} uncheckedColor="text-[#525866]" />
                       </div>
                     </th>
                     {(() => {
@@ -1899,8 +1905,8 @@ export default function CompanyDealsKanban({
                 <tbody className="bg-white">
                   {paginatedDeals.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-gray-500 font-medium">
-                        No deals found.
+                      <td colSpan={7}>
+                        <EmptyState icon={Handshake} noun="Deal" isFiltered />
                       </td>
                     </tr>
                   ) : (

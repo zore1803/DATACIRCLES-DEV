@@ -83,7 +83,6 @@ async function seedTrialData({ organization, user }) {
       status: pick(["Draft", "Sent", "Paid"], i),
       discount: { type: "percentage", value: 0 },
       style: "",
-      isTaxInvoice: false,
       items: invoiceLineItem(i),
       organization,
       user,

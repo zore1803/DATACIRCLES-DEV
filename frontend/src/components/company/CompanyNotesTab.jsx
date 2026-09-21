@@ -1,4 +1,5 @@
 import DeleteIcon from "../common/DeleteIcon";
+import EmptyState from "../common/EmptyState";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import MoreIcon from "../common/MoreIcon";
@@ -22,14 +23,15 @@ import {
   ChevronDown,
   EyeOff,
   X,
-  Copy, ArrowUp, ArrowDown } from "lucide-react";
+  Copy, ArrowUp, ArrowDown
+} from "lucide-react";
 import { EditablePaginationButtons } from "../common/EditablePaginationButtons";
 import toast from "react-hot-toast";
 import API from "../../services/api";
 import { NoteEditor, NoteViewer, NoteCard } from "./NoteSection";
 import FilterIcon from "../common/FilterIcon";
 import HighlightText from "../common/HighlightText";
-import CompanyFilterPanel from "./CompanyFilterPanel";
+
 import TableSkeletonRows from "../common/TableSkeletonRows";
 import NoteCardSkeleton from "../common/NoteCardSkeleton";
 import StatTile from "../common/StatTile";
@@ -38,6 +40,7 @@ import Skeleton from "../common/Skeleton";
 import BulkActionBar from "../common/BulkActionBar";
 import { useBulkSelection, useBulkStrip } from "../../hooks/useBulkSelection";
 import { exportToCSV } from "../../utils/exportToCSV";
+import ToolbarFilterGroup from "./ToolbarFilterGroup";
 import { bulkDelete } from "../../utils/bulkOperations";
 import useFillToBottom from "../../hooks/useFillToBottom";
 import { applyColumnFilters } from "../../utils/advancedFilters";
@@ -138,12 +141,12 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
   const [viewingNote, setViewingNote] = useState(null);
   const [loading, setLoading] = useState(false);
   const [manualEditorOpen, setManualEditorOpen] = useState(false);
-  
+
   const { noteTypes } = useSystemSettings();
-  
+
   const NOTE_FILTER_COLUMNS = useMemo(() => [
     { key: "type", label: "Type", options: noteTypes },
-    { key: "year", label: "Visibility To", options: NOTE_VISIBILITY_OPTIONS },
+    { key: "year", label: "Visibility To", placeholder: "All Visibility", options: NOTE_VISIBILITY_OPTIONS },
     { key: "contacts", label: "Author" },
   ], [noteTypes]);
 
@@ -243,7 +246,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
     const startY = e.clientY;
     const DRAG_THRESHOLD = 5;
     let dragStarted = false;
-    let positionGhost = () => {};
+    let positionGhost = () => { };
 
     const beginDrag = () => {
       dragStarted = true;
@@ -251,7 +254,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
       window.getSelection?.()?.removeAllRanges();
       const rect = th.getBoundingClientRect();
       const label = BASE_COLUMNS.find((vc) => vc.id === colId)?.label || colId;
-    
+
       const previewRows = (notes || []).slice(0, 10).map((n) => {
         let val = n[colId];
         if (colId === 'contacts') val = n.author?.name || "—";
@@ -854,8 +857,8 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
               Array.from({ length: 4 }).map((_, i) => <StatTileSkeleton key={i} />)
             ) : (
               kpiTiles.map((tile) => (
-              <StatTile key={tile.label} tile={tile} />
-            )))}
+                <StatTile key={tile.label} tile={tile} />
+              )))}
           </div>
 
           <div className="-mx-6" style={{ marginTop: 24, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
@@ -883,79 +886,89 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
           onCancel={clearSelection}
         />
       ) : (
-      <div className="flex items-center gap-4 mb-4" style={{ height: "44px" }}>
-        <div className="relative flex-1 h-full">
-          <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by note by name, deal..."
-            className="w-full h-full pl-11 pr-3.5 border border-[rgba(31,41,55,0.1)] rounded-full text-sm focus:outline-none focus:border-[#0085FF]"
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
+          <div className="relative flex-1 min-w-[180px] h-[44px]">
+            <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search by note by name, deal..."
+              className="w-full h-full pl-11 pr-3.5 border border-[rgba(31,41,55,0.1)] rounded-full text-sm focus:outline-none focus:border-[#0085FF]"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-900 focus:outline-none"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+          <ToolbarFilterGroup
+            isOpen={showFilterPanel}
+            columns={NOTE_FILTER_COLUMNS}
+            data={notes}
+            getFieldValue={getNoteFieldValue}
+            selected={selectedFilters}
+            onApply={setSelectedFilters}
           />
-          {searchTerm && (
+          <button
+            onClick={() => setShowFilterPanel((open) => !open)}
+            aria-expanded={showFilterPanel}
+            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+              }`}
+            style={{
+              height: "44px",
+              borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
+            }}
+          >
+            <FilterIcon size={16} />
+            Filter
+            {Object.values(selectedFilters).flat().length > 0 && (
+              <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full ring-2 ring-white">
+                {Object.values(selectedFilters).flat().length}
+              </span>
+            )}
+          </button>
+          
+          <div className="relative flex items-center gap-1.5 p-1 bg-[#F1F1F5] rounded-full flex-shrink-0 overflow-hidden" style={{ height: "44px" }}>
+            <span
+              className="absolute top-1 w-9 h-9 rounded-full bg-white shadow-[0px_4px_4px_rgba(0,0,0,0.1)] transition-all duration-300 ease-out pointer-events-none"
+              style={{ left: viewMode === "list" ? 46 : 4 }}
+            />
             <button
-              type="button"
-              onClick={() => setSearchTerm("")}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-900 focus:outline-none"
+              onClick={() => setViewMode("grid")}
+              title="Grid view"
+              className={`relative z-10 w-9 h-9 flex items-center justify-center rounded-full transition-colors ${viewMode === "grid"
+                  ? "text-[#0085FF]"
+                  : "text-gray-500 hover:text-gray-700"
+                }`}
             >
-              <X size={16} />
+              <GridViewIcon size={18} />
             </button>
-          )}
-        </div>
-        <div className="relative flex items-center gap-1.5 p-1 bg-[#F1F1F5] rounded-full flex-shrink-0 overflow-hidden" style={{ height: "44px" }}>
-          <span
-            className="absolute top-1 w-9 h-9 rounded-full bg-white shadow-[0px_4px_4px_rgba(0,0,0,0.1)] transition-all duration-300 ease-out pointer-events-none"
-            style={{ left: viewMode === "list" ? 46 : 4 }}
-          />
+            <button
+              onClick={() => setViewMode("list")}
+              title="List view"
+              className={`relative z-10 w-9 h-9 flex items-center justify-center rounded-full transition-colors ${viewMode === "list"
+                  ? "text-[#0085FF]"
+                  : "text-gray-500 hover:text-gray-700"
+                }`}
+            >
+              <ListViewIcon size={18} />
+            </button>
+          </div>
+          
           <button
-            onClick={() => setViewMode("grid")}
-            title="Grid view"
-            className={`relative z-10 w-9 h-9 flex items-center justify-center rounded-full transition-colors ${
-              viewMode === "grid"
-                ? "text-[#0085FF]"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
+            onClick={() => setManualEditorOpen(true)}
+            className="flex items-center justify-center rounded-full border hover:bg-gray-50 flex-shrink-0"
+            style={{ width: "44px", height: "44px", borderColor: "#E1E4EA" }}
+            title="Add Note"
           >
-            <GridViewIcon size={18} />
-          </button>
-          <button
-            onClick={() => setViewMode("list")}
-            title="List view"
-            className={`relative z-10 w-9 h-9 flex items-center justify-center rounded-full transition-colors ${
-              viewMode === "list"
-                ? "text-[#0085FF]"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            <ListViewIcon size={18} />
+            <PlusIcon className="w-4 h-4" />
           </button>
         </div>
-        <button
-          onClick={() => setShowFilterPanel(true)}
-          className="relative flex items-center justify-center gap-2 px-3 text-sm font-medium text-gray-800 bg-white border rounded-full hover:bg-gray-50 flex-shrink-0"
-          style={{
-            height: "44px",
-            borderColor: Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
-          }}
-        >
-          <FilterIcon size={16} />
-          Filter
-          {Object.values(selectedFilters).flat().length > 0 && (
-            <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full ring-2 ring-white">
-              {Object.values(selectedFilters).flat().length}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => setManualEditorOpen(true)}
-          className="flex items-center justify-center rounded-full border hover:bg-gray-50 flex-shrink-0"
-          style={{ width: "44px", height: "44px", borderColor: "#E1E4EA" }}
-          title="Add Note"
-        >
-          <PlusIcon className="w-4 h-4" />
-        </button>
-      </div>
       )}
 
       {/* Notes list, skeleton, or empty state.
@@ -998,20 +1011,12 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
           </div>
         )
       ) : notes.length === 0 ? (
-        <div className="flex flex-col items-center justify-center w-full min-h-[300px] bg-gray-50 border border-gray-200 rounded-xl text-gray-500">
-          <StickyNote size={28} className="mb-3 text-gray-400" />
-          <button
-            type="button"
-            onClick={() => setManualEditorOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            <PlusIcon className="w-4 h-4" />
-            Add new note
-          </button>
+        <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
+          <EmptyState icon={StickyNote} noun="Note" onCreate={() => setManualEditorOpen(true)} />
         </div>
       ) : viewMode === "grid" && filteredNotes.length === 0 ? (
-        <div className="flex items-center justify-center w-full min-h-[300px] bg-gray-50 border border-gray-200 rounded-xl text-gray-500 text-sm font-medium">
-          No notes found.
+        <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
+          <EmptyState icon={StickyNote} noun="Note" isFiltered />
         </div>
       ) : viewMode === "grid" ? (
         <div
@@ -1045,7 +1050,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
             ...fillStyle,
             border: "1px solid #E1E4EA",
             borderRadius: 8,
-            }}
+          }}
         >
           <table
             className="text-sm text-left border-collapse"
@@ -1072,7 +1077,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
                   className="px-3 py-2.5"
                 >
                   <div className="flex justify-center items-center w-full">
-                    <Checkbox checked={selectedItems.length > 0 && selectedItems.length === paginatedNotes.length} onChange={(e) => e.target.checked ? selectAll(paginatedNotes) : clearSelection()}  uncheckedColor="text-[#525866]"/>
+                    <Checkbox checked={selectedItems.length > 0 && selectedItems.length === paginatedNotes.length} onChange={(e) => e.target.checked ? selectAll(paginatedNotes) : clearSelection()} uncheckedColor="text-[#525866]" />
                   </div>
                 </th>
                 {orderedColumns.map((col) => {
@@ -1238,8 +1243,8 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
             <tbody className="divide-y divide-[#E1E4EA] bg-white">
               {paginatedNotes.length === 0 ? (
                 <tr>
-                  <td colSpan={orderedColumns.length + 1} className="px-6 py-12 text-center text-gray-500 font-medium border-b border-[#E1E4EA]">
-                    No notes found.
+                  <td colSpan={orderedColumns.length + 1}>
+                    <EmptyState icon={StickyNote} noun="Note" isFiltered />
                   </td>
                 </tr>
               ) : (
@@ -1247,77 +1252,77 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
                   const isSelected = selectedItems.includes(note._id);
                   const cells = {
                     title: (
-                        <td key="title" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
-                          <span className="text-sm font-medium text-gray-900 truncate block">
-                            <HighlightText text={note.title || "Untitled Note"} query={searchTerm} />
-                          </span>
-                        </td>
+                      <td key="title" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
+                        <span className="text-sm font-medium text-gray-900 truncate block">
+                          <HighlightText text={note.title || "Untitled Note"} query={searchTerm} />
+                        </span>
+                      </td>
                     ),
                     type: (
-                        <td key="type" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
-                          <span
-                            className="inline-flex items-center justify-center text-xs font-medium"
-                            style={{ padding: "4px 10px", borderRadius: 53, backgroundColor: "rgba(0, 133, 255, 0.1)", color: "#0085FF" }}
-                          >
-                            {note.noteType || "General Note"}
-                          </span>
-                        </td>
+                      <td key="type" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
+                        <span
+                          className="inline-flex items-center justify-center text-xs font-medium"
+                          style={{ padding: "4px 10px", borderRadius: 53, backgroundColor: "rgba(0, 133, 255, 0.1)", color: "#0085FF" }}
+                        >
+                          {note.noteType || "General Note"}
+                        </span>
+                      </td>
                     ),
                     description: (
-                        <td key="description" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
-                          <span className="text-xs text-gray-500 truncate block">{note.company?.name || "{Deal Name/Activity/Invoice}"}</span>
-                        </td>
+                      <td key="description" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
+                        <span className="text-xs text-gray-500 truncate block">{note.company?.name || "{Deal Name/Activity/Invoice}"}</span>
+                      </td>
                     ),
                     contacts: (
-                        <td key="contacts" style={{ height: 64 }} className="px-3 border-r border-b border-[#E1E4EA]">
-                          <div className="flex items-center justify-start gap-1.5">
-                            <div
-                              className="rounded-full bg-gray-200 flex items-center justify-center text-[9px] font-semibold text-gray-600 flex-shrink-0"
-                              style={{ width: 18, height: 18 }}
-                            >
-                              {(typeof note.user === "object" ? note.user?.name : null)?.charAt(0)?.toUpperCase() || "?"}
-                            </div>
-                            <span className="text-xs font-medium text-gray-700 truncate">
-                              {typeof note.user === "object" ? note.user?.name || "Unknown" : "Unknown"}
-                            </span>
+                      <td key="contacts" style={{ height: 64 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                        <div className="flex items-center justify-start gap-1.5">
+                          <div
+                            className="rounded-full bg-gray-200 flex items-center justify-center text-[9px] font-semibold text-gray-600 flex-shrink-0"
+                            style={{ width: 18, height: 18 }}
+                          >
+                            {(typeof note.user === "object" ? note.user?.name : null)?.charAt(0)?.toUpperCase() || "?"}
                           </div>
-                        </td>
+                          <span className="text-xs font-medium text-gray-700 truncate">
+                            {typeof note.user === "object" ? note.user?.name || "Unknown" : "Unknown"}
+                          </span>
+                        </div>
+                      </td>
                     ),
                     company: (
-                        <td key="company" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
-                          <div className="flex items-center justify-start gap-1 flex-wrap">
-                            {note.taggedContacts?.length ? (
-                              note.taggedContacts.slice(0, 3).map((c) => (
-                                <span
-                                  key={c._id}
-                                  className="inline-flex items-center justify-center text-[10px] font-medium"
-                                  style={{ padding: "3px 8px", borderRadius: 53, backgroundColor: "rgba(0, 133, 255, 0.1)", color: "#0085FF" }}
-                                >
-                                  {c.name}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="text-xs text-gray-400">—</span>
-                            )}
-                          </div>
-                        </td>
+                      <td key="company" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
+                        <div className="flex items-center justify-start gap-1 flex-wrap">
+                          {note.taggedContacts?.length ? (
+                            note.taggedContacts.slice(0, 3).map((c) => (
+                              <span
+                                key={c._id}
+                                className="inline-flex items-center justify-center text-[10px] font-medium"
+                                style={{ padding: "3px 8px", borderRadius: 53, backgroundColor: "rgba(0, 133, 255, 0.1)", color: "#0085FF" }}
+                              >
+                                {c.name}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                        </div>
+                      </td>
                     ),
                     date: (
-                        <td key="date" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
-                          <div className="flex flex-col">
-                            <span className="text-xs font-medium text-gray-700 leading-tight">
-                              {formatNoteDate(note.createdAt)}
-                            </span>
-                            <span className="text-[11px] text-gray-400 leading-tight">
-                              {formatNoteTime(note.createdAt)}
-                            </span>
-                          </div>
-                        </td>
+                      <td key="date" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium text-gray-700 leading-tight">
+                            {formatNoteDate(note.createdAt)}
+                          </span>
+                          <span className="text-[11px] text-gray-400 leading-tight">
+                            {formatNoteTime(note.createdAt)}
+                          </span>
+                        </div>
+                      </td>
                     ),
                     year: (
-                        <td key="year" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
-                          <span className="text-xs text-gray-500">Team</span>
-                        </td>
+                      <td key="year" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
+                        <span className="text-xs text-gray-500">Team</span>
+                      </td>
                     ),
                   };
                   const isActionsOpen = openRowActionsId === note._id;
@@ -1543,17 +1548,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
         </div>
       )}
 
-      <CompanyFilterPanel
-        isOpen={showFilterPanel}
-        onClose={() => setShowFilterPanel(false)}
-        columns={NOTE_FILTER_COLUMNS}
-        data={notes}
-        getFieldValue={getNoteFieldValue}
-        selected={selectedFilters}
-        onApply={setSelectedFilters}
-        title="Filter Notes"
-        subtitle="Filter this list by column"
-      />
+
 
       {noteToDelete && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10005] p-4">

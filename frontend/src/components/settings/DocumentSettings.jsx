@@ -1,4 +1,5 @@
 import DeleteIcon from "../common/DeleteIcon";
+import NotesTermsDrawer from "../invoice/NotesTermsDrawer";
 import PdfIcon from "../common/PdfIcon";
 import PlusIcon from "../common/PlusIcon";
 import React, { useEffect, useRef, useState } from "react";
@@ -127,6 +128,9 @@ function DocumentSettings() {
   const [signatures, setSignatures] = useState([]);
   const [isSigModalOpen, setIsSigModalOpen] = useState(false);
   const [editingSignature, setEditingSignature] = useState(null);
+  // Saved Notes/Terms library — the same drawer the document forms use, so
+  // there is one place that owns named blocks instead of two competing ones.
+  const [footerDrawer, setFooterDrawer] = useState(null); // null | "notes" | "terms"
   const [newValues, setNewValues] = useState({
     invoice: { prefix: "", suffix: "" },
     quote: { prefix: "", suffix: "" },
@@ -216,25 +220,19 @@ function DocumentSettings() {
         setSmsTemplates(rawSms.map(templateFieldsToFriendly));
         setEmailTemplates(rawEmail.map(templateFieldsToFriendly));
 
-        // Seed sensible copy for any document type that has neither a
-        // per-type value nor the legacy flat default — so a fresh org sees
-        // ready-to-use text instead of blank boxes, without us silently
-        // overwriting anything the org already saved.
+        // Sample copy is NOT seeded into these fields any more. It used to be,
+        // which made an org that had configured nothing look fully configured --
+        // and, now that saving mirrors these values into the shared Notes/Terms
+        // library, pressing Save would have turned that sample text into real
+        // saved library entries the user never wrote. The samples remain as the
+        // textarea placeholders below, so they still show what good copy looks
+        // like while staying visibly unset.
         const incomingNotesByType = res.data?.defaultNotesByType || {};
         const incomingTermsByType = res.data?.defaultTermsByType || {};
         const flatNotes = res.data?.defaultNotes || "";
         const flatTerms = res.data?.defaultTerms || "";
         const seededNotesByType = { ...incomingNotesByType };
         const seededTermsByType = { ...incomingTermsByType };
-        Object.keys(FOOTER_TYPE_KEY).forEach((tabKey) => {
-          const footerKey = FOOTER_TYPE_KEY[tabKey];
-          if (incomingNotesByType[footerKey] === undefined && !flatNotes) {
-            seededNotesByType[footerKey] = PREDEFINED_NOTES[footerKey] || "";
-          }
-          if (incomingTermsByType[footerKey] === undefined && !flatTerms) {
-            seededTermsByType[footerKey] = PREDEFINED_TERMS[footerKey] || "";
-          }
-        });
 
         setForm({
           nextInvoiceNumber: res.data?.nextInvoiceNumber || 1,
@@ -622,23 +620,56 @@ function DocumentSettings() {
 
               return (
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-4">
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-800">Default Notes &amp; Terms — {activeLabel}</h4>
-                    <p className="text-sm text-gray-500">
-                      Saved per document type, then inserted with one click while creating a {activeLabel.toLowerCase()}.
-                    </p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-800">Default Notes &amp; Terms — {activeLabel}</h4>
+                      <p className="text-sm text-gray-500">
+                        Saved per document type, then inserted with one click while creating a {activeLabel.toLowerCase()}.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFooterDrawer("notes")}
+                      className="flex-shrink-0 text-[13px] font-semibold text-[#0085FF] hover:underline"
+                    >
+                      Manage saved blocks
+                    </button>
                   </div>
 
                   <label className="flex flex-col gap-2 text-sm">
-                    <span className="font-medium text-gray-700">Notes</span>
+                    <span className="flex items-center justify-between font-medium text-gray-700">
+                      Notes
+                      <button
+                        type="button"
+                        onClick={() => setFooterDrawer("notes")}
+                        className="text-[12px] font-semibold text-[#0085FF] hover:underline"
+                      >
+                        + Add / choose saved note
+                      </button>
+                    </span>
                     <textarea
                       rows={3}
                       value={notesValue}
                       onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Thank you for the business!"
+                      placeholder={PREDEFINED_NOTES[footerKey] || "Thank you for the business!"}
                       className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500 resize-y"
                     />
                   </label>
+
+                  {/* One library, shared with the document forms. Applying copies the
+                      chosen block into the field above; Save then persists it as this
+                      document type's default. */}
+                  <NotesTermsDrawer
+                    isOpen={footerDrawer !== null}
+                    onClose={() => setFooterDrawer(null)}
+                    focus={footerDrawer || "notes"}
+                    type={footerKey}
+                    docName={activeLabel}
+                    onApplyNotes={(body) => setNotes(body)}
+                    onApplyTerms={(body) => setTerms(body)}
+                    currentNotes={notesValue}
+                    currentTerms={termsValue}
+                  />
                   <label className="flex flex-col gap-1.5">
                     <span className="font-medium text-gray-700">Default Due Date (Days)</span>
                     {(() => {
@@ -682,12 +713,21 @@ function DocumentSettings() {
                   </label>
 
                   <label className="flex flex-col gap-1.5">
-                    <span className="font-medium text-gray-700">Terms and Conditions</span>
+                    <span className="flex items-center justify-between font-medium text-gray-700">
+                      Terms and Conditions
+                      <button
+                        type="button"
+                        onClick={() => setFooterDrawer("terms")}
+                        className="text-[12px] font-semibold text-[#0085FF] hover:underline"
+                      >
+                        + Add / choose saved terms
+                      </button>
+                    </span>
                     <textarea
                       rows={4}
                       value={termsValue}
                       onChange={(e) => setTerms(e.target.value)}
-                      placeholder={"1. Goods once sold cannot be taken back or exchanged.\n2. Subject to local jurisdiction."}
+                      placeholder={PREDEFINED_TERMS[footerKey] || "1. Goods once sold cannot be taken back or exchanged.\n2. Subject to local jurisdiction."}
                       className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500 resize-y"
                     />
                   </label>

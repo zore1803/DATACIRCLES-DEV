@@ -248,7 +248,7 @@ const CompanyProfilePage = () => {
   const [pendingCreate, setPendingCreate] = useState(null);
   const [showStats, setShowStats] = useState(true);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
-  const [dealsViewMode, setDealsViewMode] = useState("board");
+  const [dealsViewMode, setDealsViewMode] = useState("list");
   const [activityFeedFilter, setActivityFeedFilter] = useState("All");
   const newEntryRef = useRef(null);
   const actionsMenuRef = useRef(null);
@@ -1959,6 +1959,12 @@ const CompanyProfilePage = () => {
               refreshInvoices={fetchInvoices}
               autoOpenCreate={pendingCreate === "invoice"}
               onAutoOpenCreateConsumed={() => setPendingCreate(null)}
+              companyId={id}
+              // A deal added from the invoice panel shows up in this page's Deals tab straight
+              // away. The tab only reports deals that belong to this company.
+              onDealCreated={(newDeal) =>
+                setDeals((prev) => (prev.some((d) => d._id === newDeal._id) ? prev : [...prev, newDeal]))
+              }
             />
           )}
           {activeTab === "Notes" && (

@@ -6,6 +6,7 @@ import { Paperclip, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { Country, State } from "country-state-city";
 import CustomDropdown from "../common/CustomDropdown";
+import { getStateCode, canonicalStateName } from "../../utils/gstStateCode";
 import { loadCityModule, useLazyCity } from "../../utils/lazyCityData";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
@@ -35,12 +36,24 @@ const getCitiesForState = (City, countryName, stateName) => {
   return City.getCitiesOfState(countryIso, stateIso).map((c) => c.name);
 };
 
-// Mirrors QuickCompanyForm.jsx's pincode lookup — see the comment there.
-const lookupIndianPincode = async (pincode) => {
+
+// Pincode lookups already made this session. India Post's API is slow (often a second or more),
+// so re-typing or correcting a pincode, or opening the form again, shouldn't wait on it twice.
+const pincodeCache = new Map();
+
+// Mirrors QuickCompanyForm.jsx's pincode lookup — see the comment there — plus, for this form:
+//  - India Post spells some states differently from the state list ("Chattisgarh",
+//    "Pondicherry", "Daman & Diu", "Andaman & Nicobar"); an exact name match found nothing for
+//    those, so they're matched through their GST state code instead.
+//  - returns the GST `stateCode` for the State Code field.
+//  - accepts an AbortSignal, so a lookup for a pincode the user has since changed is cancelled.
+//  - results are cached per pincode (only successful ones).
+const lookupIndianPincode = async (pincode, signal) => {
   if (!/^\d{6}$/.test(pincode)) return null;
+  if (pincodeCache.has(pincode)) return pincodeCache.get(pincode);
   try {
     const [res, City] = await Promise.all([
-      fetch(`https://api.postalpincode.in/pincode/${pincode}`),
+      fetch(`https://api.postalpincode.in/pincode/${pincode}`, { signal }),
       loadCityModule(),
     ]);
     const data = await res.json();
@@ -48,9 +61,9 @@ const lookupIndianPincode = async (pincode) => {
     if (!po) return null;
 
     const countryIso = countryIsoByName["India"];
-    const matchedState = State.getStatesOfCountry(countryIso).find(
-      (s) => s.name.toLowerCase() === po.State?.toLowerCase(),
-    );
+    const states = State.getStatesOfCountry(countryIso);
+    const stateName = canonicalStateName(po.State || "", states.map((s) => s.name));
+    const matchedState = states.find((s) => s.name.toLowerCase() === stateName.toLowerCase());
     if (!matchedState) return null;
 
     const cities = City.getCitiesOfState(countryIso, matchedState.isoCode).map((c) => c.name);
@@ -62,9 +75,17 @@ const lookupIndianPincode = async (pincode) => {
       po.Name ||
       "";
 
-    return { country: "India", state: matchedState.name, city: matchedCity };
-  } catch (_) {
-    return null;
+    const result = {
+      country: "India",
+      state: matchedState.name,
+      city: matchedCity,
+      stateCode: getStateCode(matchedState.name) || "",
+    };
+    pincodeCache.set(pincode, result);
+    return result;
+  } catch (err) {
+    if (err?.name === "AbortError") throw err; // caller distinguishes a cancelled lookup
+    return null; // Non-fatal — the user can still fill state/city by hand.
   }
 };
 
@@ -82,6 +103,7 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
       line2: "",
       city: "",
       state: "",
+      stateCode: "",
       pincode: "",
       country: "India",
     },
@@ -144,6 +166,7 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
         line2: editVendor.address?.line2 || "",
         city: editVendor.address?.city || "",
         state: editVendor.address?.state || "",
+        stateCode: editVendor.address?.stateCode || "",
         pincode: editVendor.address?.pincode || "",
         country: editVendor.address?.country || "India",
       },
@@ -453,7 +476,15 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
       const addressKey = key.split(".")[1];
       setForm((prev) => ({
         ...prev,
-        address: { ...prev.address, [addressKey]: value },
+        address: {
+          ...prev.address,
+          [addressKey]: value,
+          // Picking a state by hand fills its GST code too, same as pincode autofill does. A
+          // state with no known code leaves whatever code was already there.
+          ...(addressKey === "state" && getStateCode(value)
+            ? { stateCode: getStateCode(value) }
+            : {}),
+        },
       }));
       if (addressError) setAddressError(false);
     } else {
@@ -461,6 +492,63 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
       if (key === "name" && nameError) setNameError(false);
     }
     setIsFormDirty(true);
+  };
+
+  // Only the latest lookup may fill the form: editing the pincode while a slower request for
+  // the previous value is still out cancels that request instead of letting it land later.
+  const pincodeRequestRef = useRef(null);
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+
+  // One update instead of one per field, so city/state/country/code all appear together.
+  const applyPincodeMatch = (match) => {
+    setForm((prev) => ({
+      ...prev,
+      address: {
+        ...prev.address,
+        country: match.country,
+        state: match.state,
+        city: match.city,
+        stateCode: match.stateCode || prev.address.stateCode || "",
+      },
+    }));
+    if (addressError) setAddressError(false);
+    setIsFormDirty(true);
+  };
+
+  const handlePincodeChange = async (e) => {
+    const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+    handleFormChange("address.pincode", val);
+
+    pincodeRequestRef.current?.abort();
+    pincodeRequestRef.current = null;
+    if (val.length !== 6) {
+      setPincodeLoading(false);
+      return;
+    }
+
+    if (pincodeCache.has(val)) {
+      applyPincodeMatch(pincodeCache.get(val));
+      return;
+    }
+
+    const controller = new AbortController();
+    pincodeRequestRef.current = controller;
+    setPincodeLoading(true);
+    try {
+      const match = await lookupIndianPincode(val, controller.signal);
+      if (pincodeRequestRef.current !== controller) return;
+      if (match) {
+        applyPincodeMatch(match);
+        toast.success("Address fetched from pincode");
+      }
+    } catch (error) {
+      if (error.name !== "AbortError") console.error("Failed to fetch pincode details", error);
+    } finally {
+      if (pincodeRequestRef.current === controller) {
+        pincodeRequestRef.current = null;
+        setPincodeLoading(false);
+      }
+    }
   };
 
   // Address is compulsory: line1, city, state, pincode, country (line2 optional).
@@ -639,7 +727,7 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
       />
 
       <div
- className={`fixed dc-panel-card dc-panel-w z-[10002] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-in-out font-inter ${isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
+        className={`fixed dc-panel-card dc-panel-w z-[10002] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-in-out font-inter ${isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
           }`}
       >
         <form onSubmit={handleSubmit} noValidate className="flex flex-col h-full min-h-0">
@@ -906,24 +994,28 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
                           />
                         );
                       })()}
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={form.address.pincode}
+                          onChange={handlePincodeChange}
+                          className={inputCls(!form.address.pincode?.trim())}
+                          placeholder="Pincode *"
+                        />
+                        {pincodeLoading && (
+                          <span
+                            className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-[#0085FF] border-t-transparent rounded-full animate-spin"
+                            aria-label="Looking up pincode"
+                          />
+                        )}
+                      </div>
                       <input
                         type="text"
-                        inputMode="numeric"
-                        value={form.address.pincode}
-                        onChange={async (e) => {
-                          const pincode = e.target.value.replace(/\D/g, "").slice(0, 6);
-                          handleFormChange("address.pincode", pincode);
-                          if (pincode.length === 6) {
-                            const match = await lookupIndianPincode(pincode);
-                            if (match) {
-                              handleFormChange("address.country", match.country);
-                              handleFormChange("address.state", match.state);
-                              handleFormChange("address.city", match.city);
-                            }
-                          }
-                        }}
-                        className={inputCls(!form.address.pincode?.trim())}
-                        placeholder="Pincode *"
+                        value={form.address.stateCode || ""}
+                        onChange={(e) => handleFormChange("address.stateCode", e.target.value)}
+                        className={inputCls(false)}
+                        placeholder="State Code"
                       />
                     </div>
                     {addressError && (

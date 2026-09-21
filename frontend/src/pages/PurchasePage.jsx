@@ -427,7 +427,13 @@ const PurchasePage = () => {
     }
   };
 
+  // Latest-request guard, same as Vendors.jsx: every fetch takes an id, and a response is only
+  // applied if no newer fetch has started since. Without it an older, slower response (a
+  // previous keystroke's search, or the page-2 request fired just before a search reset the
+  // list to page 1) could land last and overwrite the newer results.
+  const fetchRequestIdRef = useRef(0);
   const fetchPurchases = async () => {
+    const requestId = ++fetchRequestIdRef.current;
     try {
       setLoading(true);
       const params = new URLSearchParams({
@@ -444,6 +450,7 @@ const PurchasePage = () => {
       if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
 
       const res = await API.get(`/purchases/pagination?${params.toString()}`);
+      if (requestId !== fetchRequestIdRef.current) return;
       setPurchases(res.data.purchases || []);
       setPagination((prev) => ({
         ...prev,
@@ -451,10 +458,13 @@ const PurchasePage = () => {
       }));
       hasLoadedOnceRef.current = true;
     } catch (err) {
+      if (requestId !== fetchRequestIdRef.current) return;
       toast.error(err.response?.data?.error || "Failed to load purchases");
       setPurchases([]);
     } finally {
-      setLoading(false);
+      if (requestId === fetchRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -1937,7 +1947,7 @@ const PurchasePage = () => {
                             <EmptyState
                               icon={ShoppingCart}
                               noun="Purchase"
-                              isFiltered={!!(searchTerm || activeFilters?.length)}
+                              isFiltered={!!(debouncedSearchTerm || activeFilters?.length)}
                               onCreate={() => {
                                 setEditingPurchase(null);
                                 setShowForm(true);

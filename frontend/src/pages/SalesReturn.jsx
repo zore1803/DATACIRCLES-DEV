@@ -251,7 +251,13 @@ const SalesReturn = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, statusFilter]);
 
+  // Latest-request guard, same as Vendors.jsx: every fetch takes an id, and a response is only
+  // applied if no newer fetch has started since. Without it an older, slower response (a
+  // previous keystroke's search, or the page-2 request fired just before a search reset the
+  // list to page 1) could land last and overwrite the newer results.
+  const fetchRequestIdRef = useRef(0);
   const fetchRows = async () => {
+    const requestId = ++fetchRequestIdRef.current;
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -268,14 +274,18 @@ const SalesReturn = () => {
       if (debouncedSearch) params.append("search", debouncedSearch);
       if (statusFilter) params.append("status", statusFilter);
       const res = await API.get(`/sales-returns/pagination?${params.toString()}`);
+      if (requestId !== fetchRequestIdRef.current) return;
       setRows(res.data.salesReturns || []);
       setPagination((prev) => ({ ...prev, ...res.data.pagination }));
       hasLoadedOnceRef.current = true;
     } catch (err) {
+      if (requestId !== fetchRequestIdRef.current) return;
       toast.error(err.response?.data?.error || "Failed to load sales returns");
       setRows([]);
     } finally {
-      setLoading(false);
+      if (requestId === fetchRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -1855,7 +1865,7 @@ const SalesReturn = () => {
                             <EmptyState
                               icon={ClipboardList}
                               noun="Return"
-                              isFiltered={!!(searchTerm || activeFilters?.length)}
+                              isFiltered={!!(debouncedSearch || activeFilters?.length)}
                               onCreate={openCreate}
                               buttonLabel="Create your first return"
                             />

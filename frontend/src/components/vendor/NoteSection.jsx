@@ -28,7 +28,7 @@ import RowActionsMenu from "../common/RowActionsMenu";
 import BulkActionBar from "../common/BulkActionBar";
 import { exportToCSV } from "../../utils/exportToCSV";
 import TablePaginationFooter from "../common/TablePaginationFooter";
-import CompanyFilterPanel from "../company/CompanyFilterPanel";
+import ToolbarFilterGroup from "../company/ToolbarFilterGroup";
 import FilterIcon from "../common/FilterIcon";
 import SearchIcon from "../common/SearchIcon";
 import { useRef } from "react";
@@ -543,7 +543,6 @@ const NoteSection = ({ showKPIs = true, autoOpenCreate = false, onAutoOpenCreate
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [columnSizing, setColumnSizing] = useState({});
   const [isDeleting, setIsDeleting] = useState(false);
-  const filterButtonRef = useRef(null);
 
   // "New Entry" menu on the vendor header (VendorDetailsPageNew.jsx) sets
   // autoOpenCreate + switches to this tab in the same click — same
@@ -1035,8 +1034,8 @@ const NoteSection = ({ showKPIs = true, autoOpenCreate = false, onAutoOpenCreate
           isDeleting={isDeleting}
         />
         ) : (
-        <div className="flex items-center gap-4 mb-2" style={{ height: "44px" }}>
-          <div className="relative flex-1 h-full">
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-2" style={{ minHeight: "44px" }}>
+          <div className="relative flex-1 min-w-[180px] h-[44px]">
             <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
             <input
               type="text"
@@ -1083,13 +1082,23 @@ const NoteSection = ({ showKPIs = true, autoOpenCreate = false, onAutoOpenCreate
               <ListViewIcon size={18} />
             </button>
           </div>
+          <ToolbarFilterGroup
+            isOpen={showFilterPanel}
+            columns={NOTE_FILTER_COLUMNS}
+            data={notes}
+            getFieldValue={getNoteFieldValue}
+            selected={selectedFilters}
+            onApply={setSelectedFilters}
+          />
           <button
-            ref={filterButtonRef}
-            onClick={() => setShowFilterPanel(true)}
-            className="relative flex items-center justify-center gap-2 px-3 text-sm font-medium text-gray-800 bg-white border rounded-full hover:bg-gray-50 flex-shrink-0"
+            onClick={() => setShowFilterPanel((open) => !open)}
+            aria-expanded={showFilterPanel}
+            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${
+              showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+            }`}
             style={{
               height: "44px",
-              borderColor: activeFilterCount > 0 ? "#0085FF" : "#E1E4EA",
+              borderColor: showFilterPanel || activeFilterCount > 0 ? "#0085FF" : "#E1E4EA",
             }}
           >
             <FilterIcon size={16} />
@@ -1231,17 +1240,6 @@ const NoteSection = ({ showKPIs = true, autoOpenCreate = false, onAutoOpenCreate
           </div>
         </div>
       )}
-
-      <CompanyFilterPanel
-        isOpen={showFilterPanel}
-        onClose={() => setShowFilterPanel(false)}
-        columns={NOTE_FILTER_COLUMNS}
-        data={notes}
-        getFieldValue={getNoteFieldValue}
-        selected={selectedFilters}
-        onApply={setSelectedFilters}
-        triggerRef={filterButtonRef}
-      />
 
       <NoteEditor
         isOpen={isEditorOpen}

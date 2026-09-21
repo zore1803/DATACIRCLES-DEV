@@ -83,7 +83,6 @@ async function run() {
     status: pick(["Draft", "Sent", "Paid", "Overdue"], i),
     discount: { type: "percentage", value: 0 },
     style: "",
-    isTaxInvoice: false,
     items: [{ name: "Service Fee", description: "Standard service", rate: d.amount, quantity: 1, discountType: "percentage", discount: 0 }],
   }));
   const invoices = await Invoice.insertMany(invoicesData);

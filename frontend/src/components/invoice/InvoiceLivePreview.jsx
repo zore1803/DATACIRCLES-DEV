@@ -5,6 +5,7 @@ import {
   buildUpiUri,
   DEFAULT_TEMPLATE,
 } from "../../../../shared/documentTemplates.js";
+import { placeOfSupplyFields } from "../../utils/placeOfSupply";
 
 /*
  * Live, on-screen render of the document the user is editing.
@@ -31,15 +32,17 @@ const InvoiceLivePreview = ({
   copyType = "original",
 }) => {
   const html = useMemo(() => {
-    // The edit form keeps a single `isTaxInvoice` flag regardless of document
-    // type, while saved documents store the quotation flag separately. Feed
-    // both so the shared template reads the right one for this type.
-    const taxOn = supportsTax && !!form.isTaxInvoice;
-    const doc = {
-      ...form,
-      isTaxInvoice: taxOn,
-      isTaxQuotation: taxOn,
-    };
+    // Tax is line-item-driven: computeDocument() derives it from each item's
+    // own gstRate, so the form object is passed straight through.
+    //
+    // Place of supply is not part of form state -- it is resolved from the
+    // shipping address when the document is saved. Derive it here too, from the
+    // same addresses, so the preview shows what the saved PDF will print
+    // instead of a dash. All four document types store it.
+    const doc = { ...form };
+    if (!doc.placeOfSupply) {
+      Object.assign(doc, placeOfSupplyFields(form?.shippingAddress, form?.billingAddress));
+    }
 
     // Same encoder settings the PDF uses, so the preview shows the identical
     // QR the customer will scan off the printed page.

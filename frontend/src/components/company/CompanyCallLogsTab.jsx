@@ -1,4 +1,5 @@
 import DeleteIcon from "../common/DeleteIcon";
+import EmptyState from "../common/EmptyState";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import AddCallIcon from "../common/AddCallIcon";
@@ -20,7 +21,8 @@ import {
   Clock,
   Table2,
   List as ListIcon,
-  User, ArrowUp, ArrowDown } from "lucide-react";
+  User, ArrowUp, ArrowDown
+} from "lucide-react";
 import { EditablePaginationButtons } from "../common/EditablePaginationButtons";
 import toast from "react-hot-toast";
 import API from "../../services/api";
@@ -28,7 +30,7 @@ import CallLogForm from "./CallLogForm";
 import CallLogDetailView from "./CallLogDetailView";
 import FilterIcon from "../common/FilterIcon";
 import HighlightText from "../common/HighlightText";
-import CompanyFilterPanel from "./CompanyFilterPanel";
+import ToolbarFilterGroup from "./ToolbarFilterGroup";
 import { applyColumnFilters } from "../../utils/advancedFilters";
 import TableSkeletonRows from "../common/TableSkeletonRows";
 import Skeleton from "../common/Skeleton";
@@ -54,7 +56,7 @@ const CALL_STATUS_LABELS = {
 const CALL_LOG_FILTER_COLUMNS = [
   { key: "callType", label: "Type", options: Object.values(CALL_TYPE_LABELS) },
   { key: "status", label: "Status", options: Object.values(CALL_STATUS_LABELS) },
-  { key: "dateTime", label: "Date & Time", options: DATE_RANGES.map((r) => r.label) },
+  { key: "dateTime", label: "Date & Time", placeholder: "All Dates", options: DATE_RANGES.map((r) => r.label) },
 ];
 
 const stripHtml = (html) => (html || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
@@ -173,7 +175,7 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
     const startY = e.clientY;
     const DRAG_THRESHOLD = 5;
     let dragStarted = false;
-    let positionGhost = () => {};
+    let positionGhost = () => { };
 
     const beginDrag = () => {
       dragStarted = true;
@@ -653,8 +655,8 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
           onCancel={clearSelection}
         />
       ) : (
-        <div className="flex items-center gap-4 mb-4" style={{ height: "44px" }}>
-          <div className="relative flex-1 h-full">
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
+          <div className="relative flex-1 min-w-[180px] h-[44px]">
             <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
             <input
               type="text"
@@ -673,10 +675,20 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
               </button>
             )}
           </div>
+          <ToolbarFilterGroup
+            isOpen={showFilterPanel}
+            columns={CALL_LOG_FILTER_COLUMNS}
+            data={callLogs}
+            getFieldValue={getCallLogFieldValue}
+            selected={selectedFilters}
+            onApply={setSelectedFilters}
+          />
           <button
-            onClick={() => setShowFilterPanel(true)}
-            className="relative flex items-center justify-center gap-2 px-3 text-sm font-medium text-gray-800 bg-white border rounded-full hover:bg-gray-50 flex-shrink-0"
-            style={{ height: "44px", borderColor: Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA" }}
+            onClick={() => setShowFilterPanel((open) => !open)}
+            aria-expanded={showFilterPanel}
+            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+              }`}
+            style={{ height: "44px", borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA" }}
           >
             <FilterIcon size={16} />
             Filter
@@ -741,23 +753,14 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
 
       {/* Call log table or empty state */}
       {!isLoading && callLogs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center w-full min-h-[300px] bg-gray-50 border border-gray-200 rounded-xl text-gray-500">
-          <CellphoneIcon className="w-7 h-7 mb-3 text-gray-400" />
-          <button
-            type="button"
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            <AddCallIcon className="w-4 h-4" />
-            Add new call log
-          </button>
+        <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
+          <EmptyState icon={CellphoneIcon} noun="Call log" onCreate={() => setShowForm(true)} />
         </div>
       ) : viewMode === "card" ? (
         <div className="space-y-3">
           {paginatedLogs.length === 0 ? (
-            <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
-              <CellphoneIcon className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-              <p className="text-sm text-gray-600">No matching calls</p>
+            <div className="bg-white rounded-lg border border-[#E1E4EA]">
+              <EmptyState icon={CellphoneIcon} noun="Call log" isFiltered />
             </div>
           ) : (
             paginatedLogs.map((log) => {
@@ -862,7 +865,7 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
                   className="px-3 py-2.5"
                 >
                   <div className="flex justify-center items-center w-full">
-                    <Checkbox checked={selectedItems.length > 0 && selectedItems.length === paginatedLogs.length} onChange={(e) => (e.target.checked ? selectAll(paginatedLogs) : clearSelection())}  uncheckedColor="text-[#525866]"/>
+                    <Checkbox checked={selectedItems.length > 0 && selectedItems.length === paginatedLogs.length} onChange={(e) => (e.target.checked ? selectAll(paginatedLogs) : clearSelection())} uncheckedColor="text-[#525866]" />
                   </div>
                 </th>
                 {orderedColumns.map((col) => {
@@ -1009,8 +1012,8 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
                 <TableSkeletonRows columns={orderedColumns.map((c) => colWidths[c.id])} hasCheckbox numRows={listLimit} rowHeight={54} />
               ) : paginatedLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={orderedColumns.length + 1} className="px-6 py-12 text-center text-gray-500 font-medium border-b border-[#E1E4EA]">
-                    No call logs found.
+                  <td colSpan={orderedColumns.length + 1}>
+                    <EmptyState icon={CellphoneIcon} noun="Call log" isFiltered />
                   </td>
                 </tr>
               ) : (
@@ -1294,17 +1297,7 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
         </div>
       )}
 
-      <CompanyFilterPanel
-        isOpen={showFilterPanel}
-        onClose={() => setShowFilterPanel(false)}
-        columns={CALL_LOG_FILTER_COLUMNS}
-        data={callLogs}
-        getFieldValue={getCallLogFieldValue}
-        selected={selectedFilters}
-        onApply={setSelectedFilters}
-        title="Filter Call Logs"
-        subtitle="Filter this list by column"
-      />
+
 
       {logToDelete && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10005] p-4">

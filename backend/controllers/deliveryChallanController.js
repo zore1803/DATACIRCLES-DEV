@@ -1,13 +1,14 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const DeliveryChallan = require("../models/deliveryChallan");
 const getDefaultBankDetails = require("../utils/getDefaultBankDetails");
+const resolveBankDetails = require("../utils/resolveBankDetails");
 const Branding = require("../models/Branding");
 const htmlDocumentPdf = require("../utils/htmlDocumentPdf");
 const sendGridMail = require("../utils/sendGridMail");
 const { renderEmail } = require("../utils/emailLayout");
 const mongoose = require("mongoose");
 const Deal = require("../models/Deal");
-const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
+const { getDocumentSettingsForOrganization, resolveDocumentNumber, raiseInvoiceSeriesTo } = require("../utils/documentNumbering");
 const { getOwnedDealIds } = require("../utils/ownedCompanies");
 
 // A user with own-only permission may only touch delivery challans they
@@ -54,11 +55,18 @@ exports.createDeliveryChallan = async (req, res) => {
       signature,
       signatureType,
       discount,
+      bankDetails,
+      isRoundOff,
+      transactionType,
+      placeOfSupply,
+      placeOfSupplyStateCode,
+      receiverGSTIN,
       billingAddress,
       shippingAddress,
       deliveryChallanPrefix,
       deliveryChallanSuffix,
       deliveryChallanNumber: clientDeliveryChallanNumber,
+      reference,
     } = req.body;
 
     // Validate required fields
@@ -140,9 +148,20 @@ exports.createDeliveryChallan = async (req, res) => {
       items,
       notes: notes || "",
       terms: terms || "",
+      reference: reference || "",
       signature,
       signatureType: signatureType || "text",
       discount: discount || { type: "fixed", value: 0 },
+      // Bank account chosen on the form; the PDF prints it (utils/resolveBankDetails.js).
+      bankDetails: bankDetails || null,
+      ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
+      // Tax data, same shape as an invoice (see models/deliveryChallan.js).
+      transactionType: transactionType === "inter" ? "inter" : "intra",
+      // Resolved on the form from the shipping address and stored as sent, so the
+      // saved document keeps the place of supply it was issued with.
+      placeOfSupply: placeOfSupply || '',
+      placeOfSupplyStateCode: placeOfSupplyStateCode || '',
+      receiverGSTIN: receiverGSTIN || "",
       billingAddress: finalBillingAddress,
       shippingAddress: finalShippingAddress,
       user: req.user.id,
@@ -222,9 +241,16 @@ exports.duplicateDeliveryChallan = async (req, res) => {
       items: source.items,
       notes: source.notes,
       terms: source.terms,
+      reference: source.reference,
       signature: source.signature,
       signatureType: normalizedSignatureType,
       discount: source.discount,
+      bankDetails: source.bankDetails || null,
+      isRoundOff: source.isRoundOff,
+      placeOfSupply: source.placeOfSupply,
+      placeOfSupplyStateCode: source.placeOfSupplyStateCode,
+      transactionType: source.transactionType || "intra",
+      receiverGSTIN: source.receiverGSTIN || "",
       billingAddress: source.billingAddress,
       shippingAddress: source.shippingAddress,
       user: req.user.id,
@@ -391,7 +417,7 @@ exports.downloadDeliveryChallan = async (req, res) => {
       return res.status(404).json({ error: "Delivery Challan not found" });
     }
 
-    const bankDetails = await getDefaultBankDetails(req.user.organization);
+    const bankDetails = await resolveBankDetails(deliveryChallan, req.user.organization);
     const orgDetails = await Branding.findOne({
       organization: req.user.organization,
     }).sort({ updatedAt: -1 });
@@ -458,8 +484,15 @@ exports.updateDeliveryChallan = async (req, res) => {
       signature,
       signatureType,
       discount,
+      bankDetails,
+      isRoundOff,
+      transactionType,
+      placeOfSupply,
+      placeOfSupplyStateCode,
+      receiverGSTIN,
       billingAddress,
       shippingAddress,
+      reference,
     } = req.body;
 
     const requiredFields = ["deal", "date", "amount", "status", "discount"];
@@ -523,9 +556,18 @@ exports.updateDeliveryChallan = async (req, res) => {
         items,
         notes,
         terms,
+        reference: reference || "",
         signature,
         signatureType,
         discount,
+        // Only written when sent, so an update without them leaves the saved values alone.
+        ...(bankDetails !== undefined && { bankDetails: bankDetails || null }),
+        ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
+        // Only written when sent, so an update without tax fields leaves them unchanged.
+        ...(transactionType !== undefined && { transactionType: transactionType === "inter" ? "inter" : "intra" }),
+        ...(placeOfSupply !== undefined && { placeOfSupply }),
+        ...(placeOfSupplyStateCode !== undefined && { placeOfSupplyStateCode }),
+        ...(receiverGSTIN !== undefined && { receiverGSTIN: receiverGSTIN || "" }),
         billingAddress: finalBillingAddress,
         shippingAddress: finalShippingAddress,
       },
@@ -593,7 +635,7 @@ exports.sendDeliveryChallanEmail = async (req, res) => {
       return res.status(404).json({ error: "Delivery Challan not found" });
     }
 
-    const bankDetails = await getDefaultBankDetails(req.user.organization);
+    const bankDetails = await resolveBankDetails(deliveryChallan, req.user.organization);
     const orgDetails = await Branding.findOne({
       organization: req.user.organization,
     }).sort({ updatedAt: -1 });
@@ -687,6 +729,18 @@ exports.updateDeliveryChallanNumber = async (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: "Delivery Challan not found" });
     }
+
+    // A number set by hand still belongs to its series: move the counter past it so
+    // later auto numbers continue after it instead of colliding with it.
+    const numberSettings = await getDocumentSettingsForOrganization(req.user.organization);
+    await raiseInvoiceSeriesTo({
+      organization: req.user.organization,
+      documentTypeKey: "deliveryChallan",
+      prefix: numberSettings.documentTypeSettings?.deliveryChallan?.prefix,
+      suffix: numberSettings.documentTypeSettings?.deliveryChallan?.suffix,
+      date: updated.date,
+      number: updated.deliveryChallanNumber,
+    });
 
     res.json({
       message: "Delivery Challan number updated successfully",

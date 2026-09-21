@@ -2,7 +2,7 @@ import DeleteIcon from "../common/DeleteIcon";
 import Checkbox from "../common/Checkbox";
 import SearchIcon from "../common/SearchIcon";
 import DownloadIcon from "../common/DownloadIcon";
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Skeleton from "../common/Skeleton";
 import StatTile from "../common/StatTile";
 import API from "../../services/api";
@@ -29,7 +29,7 @@ import DataTable from "../common/DataTable";
 import RowActionsMenu from "../common/RowActionsMenu";
 import BulkActionBar from "../common/BulkActionBar";
 import TablePaginationFooter from "../common/TablePaginationFooter";
-import CompanyFilterPanel from "../company/CompanyFilterPanel";
+import ToolbarFilterGroup from "../company/ToolbarFilterGroup";
 import FilterIcon from "../common/FilterIcon";
 import { useBulkSelection, useBulkStrip } from "../../hooks/useBulkSelection";
 import { useTopLoadingSignal } from "../common/TopLoadingBar";
@@ -44,7 +44,7 @@ import EditIcon from "../common/EditIcon";
    so a value stays filterable even when no current row uses it. */
 const PAYMENT_FILTER_COLUMNS = [
   { key: "direction", label: "Direction", options: ["IN", "OUT"] },
-  { key: "paymentType", label: "Mode", options: ["Card", "Cash", "Cheque", "EMI", "Net Banking", "UPI"] },
+  { key: "paymentType", label: "Mode", placeholder: "All Modes", options: ["Card", "Cash", "Cheque", "EMI", "Net Banking", "UPI"] },
   { key: "bank", label: "Bank" },
 ];
 
@@ -95,8 +95,6 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
   const [hiddenColumns, setHiddenColumns] = useState(new Set());
   const [pinnedColumns, setPinnedColumns] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
-
-  const filterButtonRef = useRef(null);
 
   const handleColumnReorder = (draggedKey, targetKey) => {
     setColumnOrder((prev) => {
@@ -706,8 +704,8 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
           isDeleting={isDeleting}
         />
       ) : (
-        <div className="flex items-center gap-4 mb-3" style={{ height: "44px" }}>
-          <div className="relative flex-1 h-full">
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-3" style={{ minHeight: "44px" }}>
+          <div className="relative flex-1 min-w-[180px] h-[44px]">
             <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
             <input
               type="text"
@@ -726,13 +724,23 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
               </button>
             )}
           </div>
+          <ToolbarFilterGroup
+            isOpen={showFilterPanel}
+            columns={PAYMENT_FILTER_COLUMNS}
+            data={localPayments}
+            getFieldValue={getPaymentFieldValue}
+            selected={selectedFilters}
+            onApply={setSelectedFilters}
+          />
           <button
-            ref={filterButtonRef}
-            onClick={() => setShowFilterPanel(true)}
-            className="relative flex items-center justify-center gap-2 px-3 text-sm font-medium text-gray-800 bg-white border rounded-full hover:bg-gray-50 flex-shrink-0"
+            onClick={() => setShowFilterPanel((open) => !open)}
+            aria-expanded={showFilterPanel}
+            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${
+              showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+            }`}
             style={{
               height: "44px",
-              borderColor: activeFilterCount > 0 ? "#0085FF" : "#E1E4EA",
+              borderColor: showFilterPanel || activeFilterCount > 0 ? "#0085FF" : "#E1E4EA",
             }}
           >
             <FilterIcon size={16} />
@@ -838,17 +846,6 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
         </div>
       </div>
       )}
-
-      <CompanyFilterPanel
-        isOpen={showFilterPanel}
-        onClose={() => setShowFilterPanel(false)}
-        columns={PAYMENT_FILTER_COLUMNS}
-        data={localPayments}
-        getFieldValue={getPaymentFieldValue}
-        selected={selectedFilters}
-        onApply={setSelectedFilters}
-        triggerRef={filterButtonRef}
-      />
 
       {/* Modals */}
       <VendorPaymentForm

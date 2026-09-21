@@ -1,11 +1,12 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const PerformaInvoice = require("../models/ProformaInvoice");
 const getDefaultBankDetails = require("../utils/getDefaultBankDetails");
+const resolveBankDetails = require("../utils/resolveBankDetails");
 const htmlDocumentPdf = require("../utils/htmlDocumentPdf");
 const mongoose = require("mongoose");
 const Branding = require("../models/Branding");
 const Deal = require("../models/Deal");
-const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
+const { getDocumentSettingsForOrganization, resolveDocumentNumber, raiseInvoiceSeriesTo } = require("../utils/documentNumbering");
 const sendGridMail = require("../utils/sendGridMail");
 const { renderEmail } = require("../utils/emailLayout");
 const { getOwnedDealIds } = require("../utils/ownedCompanies");
@@ -31,20 +32,24 @@ const createPerformaInvoice = async (req, res) => {
       amount,
       status,
       items,
-      style,
       notes,
       terms,
-      isTaxInvoice,
       transactionType,
+      placeOfSupply,
+      placeOfSupplyStateCode,
       signature,
       signatureType,
       discount,
+      bankDetails,
+      isRoundOff,
       receiverGSTIN,
       billingAddress,
       shippingAddress,
       performaInvoicePrefix,
       performaInvoiceSuffix,
       performaInvoiceNumber: clientPerformaInvoiceNumber,
+      reference,
+      digitalSignature,
     } = req.body;
 
     // Validate required fields
@@ -125,14 +130,21 @@ const createPerformaInvoice = async (req, res) => {
       amount,
       status,
       items,
-      style: style || "",
       notes: notes || "",
       terms: terms || "",
-      isTaxInvoice: isTaxInvoice || false,
+      reference: reference || "",
       transactionType: transactionType || 'intra',
+      // Resolved on the form from the shipping address and stored as sent, so the
+      // saved document keeps the place of supply it was issued with.
+      placeOfSupply: placeOfSupply || '',
+      placeOfSupplyStateCode: placeOfSupplyStateCode || '',
       signature,
       signatureType: signatureType || "text",
+      ...(digitalSignature !== undefined && { digitalSignature }),
       discount: discount || { type: "fixed", value: 0 },
+      // Bank account chosen on the form; the PDF prints it (utils/resolveBankDetails.js).
+      bankDetails: bankDetails || null,
+      ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
       receiverGSTIN: finalReceiverGSTIN,
       billingAddress: finalBillingAddress,
       shippingAddress: finalShippingAddress,
@@ -212,14 +224,18 @@ const duplicatePerformaInvoice = async (req, res) => {
       amount: source.amount,
       status: "Draft",
       items: source.items,
-      style: source.style,
       notes: source.notes,
       terms: source.terms,
-      isTaxInvoice: source.isTaxInvoice,
+      reference: source.reference,
+      placeOfSupply: source.placeOfSupply,
+      placeOfSupplyStateCode: source.placeOfSupplyStateCode,
       transactionType: source.transactionType,
       signature: source.signature,
       signatureType: normalizedSignatureType,
+      digitalSignature: source.digitalSignature,
       discount: source.discount,
+      bankDetails: source.bankDetails || null,
+      isRoundOff: source.isRoundOff,
       receiverGSTIN: source.receiverGSTIN,
       billingAddress: source.billingAddress,
       shippingAddress: source.shippingAddress,
@@ -412,12 +428,11 @@ const downloadPerformaInvoice = async (req, res) => {
     if (!performaInvoice) {
       return res.status(404).json({ error: "proformaInvoice not found" });
     }
-    const bankDetails = await getDefaultBankDetails(req.user.organization);
+    const bankDetails = await resolveBankDetails(performaInvoice, req.user.organization);
     const OrgDetails = await Branding.findOne({
       organization: req.user.organization,
     }).sort({ updatedAt: -1 });
-        // The template comes from the document's own `style` when it has one,
-    // otherwise from the organization's document settings — resolved inside
+        // The template is the organization's per-type choice, resolved inside
     // htmlDocumentPdf, which renders the same markup as the live preview.
     const copyType = ["original", "duplicate", "triplicate"].includes(req.query.copyType)
       ? req.query.copyType
@@ -494,17 +509,21 @@ const updatePerformaInvoice = async (req, res) => {
       amount,
       status,
       items,
-      style,
       notes,
       terms,
-      isTaxInvoice,
       transactionType,
+      placeOfSupply,
+      placeOfSupplyStateCode,
       signature,
       signatureType,
       discount,
+      bankDetails,
+      isRoundOff,
       receiverGSTIN,
       billingAddress,
       shippingAddress,
+      reference,
+      digitalSignature,
     } = req.body;
 
     // Validate required fields
@@ -572,14 +591,20 @@ const updatePerformaInvoice = async (req, res) => {
         amount,
         status,
         items,
-        style,
         notes,
         terms,
-        isTaxInvoice,
+        reference: reference || "",
         transactionType,
+        // Only written when sent, so an update without them leaves the saved values alone.
+        ...(placeOfSupply !== undefined && { placeOfSupply }),
+        ...(placeOfSupplyStateCode !== undefined && { placeOfSupplyStateCode }),
         signature,
         signatureType,
+        ...(digitalSignature !== undefined && { digitalSignature }),
         discount,
+        // Only written when sent, so an update without them leaves the saved values alone.
+        ...(bankDetails !== undefined && { bankDetails: bankDetails || null }),
+        ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
         receiverGSTIN: finalReceiverGSTIN,
         billingAddress: finalBillingAddress,
         shippingAddress: finalShippingAddress,
@@ -674,6 +699,18 @@ const updatePerformaInvoiceNumber = async (req, res) => {
       return res.status(404).json({ message: "Performa Invoice not found" });
     }
 
+    // A number set by hand still belongs to its series: move the counter past it so
+    // later auto numbers continue after it instead of colliding with it.
+    const numberSettings = await getDocumentSettingsForOrganization(req.user.organization);
+    await raiseInvoiceSeriesTo({
+      organization: req.user.organization,
+      documentTypeKey: "proformaInvoice",
+      prefix: numberSettings.documentTypeSettings?.proformaInvoice?.prefix,
+      suffix: numberSettings.documentTypeSettings?.proformaInvoice?.suffix,
+      date: updated.date,
+      number: updated.performaInvoiceNumber,
+    });
+
     return res.json({
       message: "Performa Invoice number updated",
       performaInvoice: updated,
@@ -700,7 +737,7 @@ const sendPerformaInvoiceEmail = async (req, res) => {
       return res.status(404).json({ error: "Proforma invoice not found" });
     }
 
-    const bankDetails = await getDefaultBankDetails(req.user.organization);
+    const bankDetails = await resolveBankDetails(pi, req.user.organization);
     const orgDetails = await Branding.findOne({ organization: req.user.organization }).sort({ updatedAt: -1 });
     const pdfBuffer = await htmlDocumentPdf(pi, bankDetails, orgDetails, "performa");
 

@@ -1,13 +1,14 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const Quotation = require("../models/quotation");
 const getDefaultBankDetails = require("../utils/getDefaultBankDetails");
+const resolveBankDetails = require("../utils/resolveBankDetails");
 const Branding = require("../models/Branding");
 const htmlDocumentPdf = require("../utils/htmlDocumentPdf");
 const sendGridMail = require("../utils/sendGridMail");
 const { renderEmail } = require("../utils/emailLayout");
 const mongoose = require("mongoose");
 const Deal = require("../models/Deal");
-const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
+const { getDocumentSettingsForOrganization, resolveDocumentNumber, raiseInvoiceSeriesTo } = require("../utils/documentNumbering");
 const { getOwnedDealIds } = require("../utils/ownedCompanies");
 
 // A user with own-only permission may only touch quotations they own.
@@ -51,11 +52,14 @@ exports.createQuotation = async (req, res) => {
       items,
       notes,
       terms,
-      isTaxQuotation,
       transactionType,
+      placeOfSupply,
+      placeOfSupplyStateCode,
       signature,
       signatureType,
       discount,
+      bankDetails,
+      isRoundOff,
       receiverGSTIN,
       billingAddress,
       shippingAddress,
@@ -150,11 +154,17 @@ exports.createQuotation = async (req, res) => {
       items,
       notes: notes || "",
       terms: terms || "",
-      isTaxQuotation: isTaxQuotation || false,
       transactionType: transactionType || "intra",
+      // Resolved on the form from the shipping address and stored as sent, so the
+      // saved document keeps the place of supply it was issued with.
+      placeOfSupply: placeOfSupply || '',
+      placeOfSupplyStateCode: placeOfSupplyStateCode || '',
       signature,
       signatureType: signatureType || "text",
       discount: discount || { type: "fixed", value: 0 },
+      // Bank account chosen on the form; the PDF prints it (utils/resolveBankDetails.js).
+      bankDetails: bankDetails || null,
+      ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
       receiverGSTIN: finalReceiverGSTIN,
       billingAddress: finalBillingAddress,
       shippingAddress: finalShippingAddress,
@@ -237,12 +247,14 @@ exports.duplicateQuotation = async (req, res) => {
       items: source.items,
       notes: source.notes,
       terms: source.terms,
-      isTaxQuotation: source.isTaxQuotation,
       isRoundOff: source.isRoundOff,
+      placeOfSupply: source.placeOfSupply,
+      placeOfSupplyStateCode: source.placeOfSupplyStateCode,
       transactionType: source.transactionType,
       signature: source.signature,
       signatureType: normalizedSignatureType,
       discount: source.discount,
+      bankDetails: source.bankDetails || null,
       receiverGSTIN: source.receiverGSTIN,
       billingAddress: source.billingAddress,
       shippingAddress: source.shippingAddress,
@@ -412,7 +424,7 @@ exports.downloadQuotation = async (req, res) => {
       return res.status(404).json({ error: "Quotation not found" });
     }
 
-    const bankDetails = await getDefaultBankDetails(req.user.organization);
+    const bankDetails = await resolveBankDetails(quotation, req.user.organization);
     const orgDetails = await Branding.findOne({
       organization: req.user.organization,
     }).sort({ updatedAt: -1 });
@@ -476,11 +488,14 @@ exports.updateQuotation = async (req, res) => {
       items,
       notes,
       terms,
-      isTaxQuotation,
       transactionType,
+      placeOfSupply,
+      placeOfSupplyStateCode,
       signature,
       signatureType,
       discount,
+      bankDetails,
+      isRoundOff,
       receiverGSTIN,
       billingAddress,
       shippingAddress,
@@ -552,11 +567,15 @@ exports.updateQuotation = async (req, res) => {
         items,
         notes,
         terms,
-        isTaxQuotation,
         transactionType,
+        ...(placeOfSupply !== undefined && { placeOfSupply }),
+        ...(placeOfSupplyStateCode !== undefined && { placeOfSupplyStateCode }),
         signature,
         signatureType,
         discount,
+        // Only written when sent, so an update without them leaves the saved values alone.
+        ...(bankDetails !== undefined && { bankDetails: bankDetails || null }),
+        ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
         receiverGSTIN: finalReceiverGSTIN,
         billingAddress: finalBillingAddress,
         shippingAddress: finalShippingAddress,
@@ -620,7 +639,7 @@ exports.sendQuotationEmail = async (req, res) => {
       return res.status(404).json({ error: "Quotation not found" });
     }
 
-    const bankDetails = await getDefaultBankDetails(req.user.organization);
+    const bankDetails = await resolveBankDetails(quotation, req.user.organization);
     const orgDetails = await Branding.findOne({
       organization: req.user.organization,
     }).sort({ updatedAt: -1 });
@@ -732,6 +751,18 @@ exports.updateQuotationNumber = async (req, res) => {
     if (!updatedQuotation) {
       return res.status(404).json({ error: "Quotation not found" });
     }
+
+    // A number set by hand still belongs to its series: move the counter past it so
+    // later auto numbers continue after it instead of colliding with it.
+    const numberSettings = await getDocumentSettingsForOrganization(req.user.organization);
+    await raiseInvoiceSeriesTo({
+      organization: req.user.organization,
+      documentTypeKey: "quote",
+      prefix: numberSettings.documentTypeSettings?.quote?.prefix,
+      suffix: numberSettings.documentTypeSettings?.quote?.suffix,
+      date: updatedQuotation.date,
+      number: updatedQuotation.quotationNumber,
+    });
 
     return res.json({
       message: "Quotation number updated successfully",

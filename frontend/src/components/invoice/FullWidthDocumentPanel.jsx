@@ -11,8 +11,9 @@ import {
   emptyAddress,
   isAddressEmpty,
 } from "./formPrimitives.jsx";
-import AddressBookDrawer from "./AddressBookDrawer";
-import { computeDocument, GST_RATES, splitGst } from "../../../../shared/documentTemplates.js";
+import AddressBookDrawer from "./AddressBookDrawer";
+import { resolveTransactionType } from "../../utils/placeOfSupply";
+import { computeDocument } from "../../../../shared/documentTemplates.js";
 
 const money = (n) =>
   `₹${(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -38,7 +39,10 @@ const FullWidthDocumentPanel = ({
   type,
   docName,
   supportsGSTIN,
-  supportsTax,
+  supportsTax,
+  // The organization's own state — the supplier side of the intra/inter
+  // comparison. Without it the tax type is left exactly as it is.
+  sellerState,
   sectionNo,
   form,
   setField,
@@ -55,10 +59,20 @@ const FullWidthDocumentPanel = ({
   // "billing" | "shipping" | null — which field group opened the saved
   // address book (AddressBookDrawer).
   const [addressDrawer, setAddressDrawer] = useState(null);
-  const taxOn = supportsTax && !!form.isTaxInvoice;
-  const doc = { ...form, isTaxInvoice: taxOn, isTaxQuotation: taxOn };
-  const t = computeDocument(doc, type);
+  // The tax columns/sections are driven by the supportsTax prop; the body
+  // has always called it taxOn.
+  const taxOn = supportsTax;
+  const t = computeDocument(form, type);
   const totalTax = t.totalCGST + t.totalSGST + t.totalIGST;
+  // The GST rates actually present on this document's lines. Tax is per
+  // line, so there can be more than one -- these readouts report what the
+  // lines carry and never stand in for a document-wide rate.
+  const lineGstRates = [...new Set((t.rows || []).map((r) => Number(r.gstRate) || 0))]
+    .sort((a, b) => a - b);
+  const fmtRates = (half = false) =>
+    lineGstRates.length === 0
+      ? "--"
+      : lineGstRates.map((r) => `${+(half ? r / 2 : r).toFixed(2)}%`).join(", ");
 
   const inputClass =
     "w-full h-10 px-2.5 rounded-lg border border-[#E1E4EA] bg-white text-[13px] text-[#1F2937] placeholder:text-[#99A0AE] focus:outline-none focus:border-[#0085FF] transition-colors";
@@ -93,13 +107,20 @@ const FullWidthDocumentPanel = ({
                   company && !isAddressEmpty(company.shippingAddresses?.[0])
                     ? { ...emptyAddress(), ...company.shippingAddresses[0] }
                     : emptyAddress();
-                setForm((p) => ({
-                  ...p,
-                  deal: o.value,
-                  receiverGSTIN: supportsGSTIN ? company?.gstin || "" : p.receiverGSTIN,
-                  billingAddress: nextBilling,
-                  shippingAddress: p.sameAsBilling ? nextBilling : nextShipping,
-                }));
+                setForm((p) => {
+                  const shipping = p.sameAsBilling ? nextBilling : nextShipping;
+                  // Goods: place of supply is the shipping state, so it decides
+                  // CGST+SGST vs IGST — same rule as the other two layouts.
+                  const autoType = resolveTransactionType(sellerState, shipping, nextBilling);
+                  return {
+                    ...p,
+                    deal: o.value,
+                    receiverGSTIN: supportsGSTIN ? company?.gstin || "" : p.receiverGSTIN,
+                    billingAddress: nextBilling,
+                    shippingAddress: shipping,
+                    transactionType: supportsTax && autoType ? autoType : p.transactionType,
+                  };
+                });
               }}
             />
             <button
@@ -180,32 +201,6 @@ const FullWidthDocumentPanel = ({
 
       </div>
 
-      {/* Own row below Details, not squeezed beside Due Date — it kept
-          landing at a different height than Due Date's field depending on
-          whether the quick-set row pushed that cell taller, which read as
-          misaligned. */}
-      {supportsTax && (
-        <div className="flex items-center gap-2.5 h-10 w-full mt-2">
-          <button
-            type="button"
-            onClick={() => setField("isTaxInvoice", !form.isTaxInvoice)}
-            className="flex-shrink-0"
-          >
-            <span
-              className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${form.isTaxInvoice ? "bg-[#0085FF]" : "bg-[#E1E4EA]"}`}
-            >
-              <span
-                className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isTaxInvoice ? "translate-x-4" : "translate-x-0"}`}
-              />
-            </span>
-          </button>
-          <div className="flex flex-col">
-            <span className="text-[12px] font-medium text-[#1F2937]">Enable Tax Invoice</span>
-            <span className="text-[10px] text-[#99A0AE]">Include GST and tax details</span>
-          </div>
-        </div>
-      )}
-
       {/* 02 — Billing & Shipping Address, side by side.
           Flex, not grid: AddressFieldsGroup carries its own `@md:col-span-2`
           (meant for the default view's single-column details grid, where it
@@ -222,10 +217,13 @@ const FullWidthDocumentPanel = ({
           onClick={() =>
             setForm((p) => {
               const nowSame = !p.sameAsBilling;
+              const shipping = nowSame ? p.billingAddress : p.shippingAddress;
+              const autoType = resolveTransactionType(sellerState, shipping, p.billingAddress);
               return {
                 ...p,
                 sameAsBilling: nowSame,
-                shippingAddress: nowSame ? p.billingAddress : p.shippingAddress,
+                shippingAddress: shipping,
+                transactionType: supportsTax && autoType ? autoType : p.transactionType,
               };
             })
           }
@@ -250,11 +248,16 @@ const FullWidthDocumentPanel = ({
             value={form.billingAddress}
             onUseSaved={() => setAddressDrawer("billing")}
             onChange={(next) =>
-              setForm((p) => ({
-                ...p,
-                billingAddress: next,
-                shippingAddress: p.sameAsBilling ? next : p.shippingAddress,
-              }))
+              setForm((p) => {
+                const shipping = p.sameAsBilling ? next : p.shippingAddress;
+                const autoType = resolveTransactionType(sellerState, shipping, next);
+                return {
+                  ...p,
+                  billingAddress: next,
+                  shippingAddress: shipping,
+                  transactionType: supportsTax && autoType ? autoType : p.transactionType,
+                };
+              })
             }
           />
         </div>
@@ -264,7 +267,16 @@ const FullWidthDocumentPanel = ({
             value={form.shippingAddress}
             disabled={!!form.sameAsBilling}
             onUseSaved={() => setAddressDrawer("shipping")}
-            onChange={(next) => setField("shippingAddress", next)}
+            onChange={(next) =>
+              setForm((p) => {
+                const autoType = resolveTransactionType(sellerState, next, p.billingAddress);
+                return {
+                  ...p,
+                  shippingAddress: next,
+                  transactionType: supportsTax && autoType ? autoType : p.transactionType,
+                };
+              })
+            }
           />
         </div>
       </div>
@@ -301,20 +313,10 @@ const FullWidthDocumentPanel = ({
                 className={inputClass}
               />
             </div>
-            {taxOn && (
-              <div className="flex flex-col gap-1">
-                <FieldLabel required>GST Rate</FieldLabel>
-                <select
-                  value={form.gstRate}
-                  onChange={(e) => setField("gstRate", Number(e.target.value))}
-                  className={inputClass}
-                >
-                  {GST_RATES.map((r) => (
-                    <option key={r} value={r}>{r}%</option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {/* No document-level GST Rate control here: GST is strictly
+                item/variant-level. computeDocument() reads each line's own
+                gstRate and nothing else, so a document-wide selector would
+                change no total. */}
           </div>
 
           {taxOn && (
@@ -345,23 +347,23 @@ const FullWidthDocumentPanel = ({
               <div className="grid grid-cols-3 gap-4 w-full mt-2">
                 <div className="flex flex-col gap-1">
                   <FieldLabel>CGST Rate</FieldLabel>
-                  <div className={readOnlyClass}>{t.isInterState ? "0%" : `${t.gstRate / 2}%`}</div>
+                  <div className={readOnlyClass}>{t.isInterState ? "0%" : fmtRates(true)}</div>
                 </div>
                 <div className="flex flex-col gap-1">
                   <FieldLabel>SGST Rate</FieldLabel>
-                  <div className={readOnlyClass}>{t.isInterState ? "0%" : `${t.gstRate / 2}%`}</div>
+                  <div className={readOnlyClass}>{t.isInterState ? "0%" : fmtRates(true)}</div>
                 </div>
                 <div className="flex flex-col gap-1">
                   <FieldLabel>IGST Rate</FieldLabel>
-                  <div className={readOnlyClass}>{t.isInterState ? `${t.gstRate}%` : "0%"}</div>
+                  <div className={readOnlyClass}>{t.isInterState ? fmtRates() : "0%"}</div>
                 </div>
               </div>
 
               <div className="flex items-start gap-2 w-full mt-2 p-2.5 rounded-lg bg-[#F0F6FF] text-[12px] text-[#1F2937]">
                 <Info className="w-4 h-4 text-[#0085FF] flex-shrink-0 mt-0.5" />
                 {t.isInterState
-                  ? `Inter-state selected: IGST ${t.gstRate}% will be applied.`
-                  : `Intra-state selected: CGST ${t.gstRate / 2}% + SGST ${t.gstRate / 2}% (Total GST ${t.gstRate}%) will be applied.`}
+                  ? `Inter-state selected: IGST is applied per line (${fmtRates()}).`
+                  : `Intra-state selected: each line is split into CGST + SGST (${fmtRates(true)} each).`}
               </div>
             </>
           )}
@@ -423,6 +425,13 @@ const FullWidthDocumentPanel = ({
                               // whatever the blank row started with (0).
                               discountType: picked.discount?.type || "amount",
                               discount: picked.discount?.value || 0,
+                              // Same tax info the normal split view's add-item copies, so both
+                              // layouts calculate identically (this used to keep the blank
+                              // row's 0% GST and Without Tax).
+                              // Per-line rate only: 0% stays 0%, and an unset
+                              // product rate means untaxed, not 18%.
+                              gstRate: picked.gstRate ?? 0,
+                              taxInclusive: !!picked.taxInclusive,
                             });
                           }}
                         />
@@ -536,7 +545,7 @@ const FullWidthDocumentPanel = ({
                     <td className="px-2 py-2 text-right font-medium text-[#1F2937]">
                       {money(row?.taxable ?? 0)}
                     </td>
-                    {taxOn && <td className="px-2 py-2 text-right text-[#525866]">{t.gstRate}%</td>}
+                    {taxOn && <td className="px-2 py-2 text-right text-[#525866]">{row?.gstRate ?? 0}%</td>}
                     {taxOn && (
                       <td className="px-2 py-2 text-right text-[#525866]">
                         {money((row?.cgst ?? 0) + (row?.sgst ?? 0) + (row?.igst ?? 0))}

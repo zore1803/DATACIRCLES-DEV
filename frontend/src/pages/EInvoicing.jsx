@@ -188,7 +188,13 @@ export default function EInvoicing() {
   // (page/limit/sortBy/sortOrder/search params against /e-invoices/pagination)
   // so the top loading bar actually animates on page/sort/search changes
   // instead of the whole dataset being fetched once and paginated in memory.
+  // Latest-request guard, same as Vendors.jsx: every fetch takes an id, and a response is only
+  // applied if no newer fetch has started since. Without it an older, slower response (a
+  // previous keystroke's search, or the page-2 request fired just before a search reset the
+  // list to page 1) could land last and overwrite the newer results.
+  const fetchRequestIdRef = useRef(0);
   const fetchRows = async () => {
+    const requestId = ++fetchRequestIdRef.current;
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -201,15 +207,19 @@ export default function EInvoicing() {
       }
       if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
       const res = await API.get(`/e-invoices/pagination?${params.toString()}`);
+      if (requestId !== fetchRequestIdRef.current) return;
       setEInvoices(res.data.eInvoices || EMPTY_LIST);
       setPagination((prev) => ({ ...prev, ...res.data.pagination }));
     } catch (err) {
+      if (requestId !== fetchRequestIdRef.current) return;
       console.error("Error fetching e-invoices:", err);
       toast.error(err.response?.data?.message || "Failed to load e-invoices");
       setEInvoices(EMPTY_LIST);
     } finally {
-      setLoading(false);
-      hasLoadedOnceRef.current = true;
+      if (requestId === fetchRequestIdRef.current) {
+        setLoading(false);
+        hasLoadedOnceRef.current = true;
+      }
     }
   };
 

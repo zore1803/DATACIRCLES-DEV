@@ -457,7 +457,7 @@ const VendorDetailsPageNew = () => {
       address.line2,
       address.city,
       address.state && address.pincode
-        ? `${address.state} ${address.pincode}`
+        ? `${address.state}${address.stateCode ? ` (${address.stateCode})` : ""} ${address.pincode}`
         : address.state || address.pincode,
       address.country,
     ].filter(Boolean);
@@ -474,7 +474,7 @@ const VendorDetailsPageNew = () => {
       company: vendor.company || "",
       website: vendor.website || "",
       address: vendor.address || {
-        line1: "", line2: "", city: "", state: "", pincode: "", country: "",
+        line1: "", line2: "", city: "", state: "", stateCode: "", pincode: "", country: "",
       },
       avatar: vendor.avatar || vendor.logo || "",
       // All 5 fields — see the matching comment in Vendors.jsx:handleEditVendor.

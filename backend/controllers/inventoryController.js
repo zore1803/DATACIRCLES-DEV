@@ -29,6 +29,42 @@ function baseInventoryQuery(organization) {
 const STOCK = { $ifNull: ["$inventory.currentStock", 0] };
 const THRESHOLD = { $ifNull: ["$inventory.lowStockThreshold", 0] };
 
+// Active variants of the current item, or [] for an item that has none.
+const ACTIVE_VARIANTS = {
+  $filter: {
+    input: { $ifNull: ["$variants", []] },
+    as: "v",
+    cond: { $ne: ["$$v.isActive", false] },
+  },
+};
+const HAS_VARIANTS = { $gt: [{ $size: ACTIVE_VARIANTS }, 0] };
+
+// Low-stock for a variant-bearing item can't be judged from `inventory.currentStock`: that's the
+// SUM across variants, so a product whose Small is at 0 and Large at 100 looks perfectly healthy
+// (100 > threshold) while the size a customer wants is unavailable. Such an item is low as soon
+// as ANY active variant is at or below its own threshold — falling back to the parent's
+// threshold for a variant that doesn't set one, matching utils/variantResolve.js.
+const ANY_VARIANT_LOW = {
+  $anyElementTrue: {
+    $map: {
+      input: ACTIVE_VARIANTS,
+      as: "v",
+      in: {
+        $lte: [
+          { $ifNull: ["$$v.stock", 0] },
+          { $ifNull: ["$$v.lowStockThreshold", THRESHOLD] },
+        ],
+      },
+    },
+  },
+};
+
+// "At or below threshold", variant-aware. Items without variants keep the exact parent-level
+// comparison they had before.
+const AT_OR_BELOW_THRESHOLD = {
+  $cond: [HAS_VARIANTS, ANY_VARIANT_LOW, { $lte: [STOCK, THRESHOLD] }],
+};
+
 // Sort keys the client may pass, mapped to real document paths. An allow-list rather than a
 // pass-through so a caller can't sort by an arbitrary (or non-indexed) field.
 const SORTABLE = {
@@ -68,6 +104,9 @@ const getInventory = async (req, res) => {
         { category: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
         { hsnSac: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
         { barcode: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
+        // Variants carry their own barcode/SKU, so scanning one must find its parent item here.
+        { "variants.barcode": { $regex: buildFuzzySearchPattern(search), $options: "i" } },
+        { "variants.sku": { $regex: buildFuzzySearchPattern(search), $options: "i" } },
       ];
     }
 
@@ -81,9 +120,9 @@ const getInventory = async (req, res) => {
     if (stockStatus === "out") {
       query.$expr = { $lte: [STOCK, 0] };
     } else if (stockStatus === "low") {
-      query.$expr = { $and: [{ $gt: [STOCK, 0] }, { $lte: [STOCK, THRESHOLD] }] };
+      query.$expr = { $and: [{ $gt: [STOCK, 0] }, AT_OR_BELOW_THRESHOLD] };
     } else if (stockStatus === "in") {
-      query.$expr = { $gt: [STOCK, THRESHOLD] };
+      query.$expr = { $not: AT_OR_BELOW_THRESHOLD };
     }
 
     // Select-all-across-pages, same contract as itemController's paginated list.
@@ -113,8 +152,8 @@ const getInventory = async (req, res) => {
             },
             positiveStockItems: { $sum: { $cond: [{ $gt: [STOCK, 0] }, 1, 0] } },
             positiveStockQty: { $sum: { $cond: [{ $gt: [STOCK, 0] }, STOCK, 0] } },
-            lowStockItems: { $sum: { $cond: [{ $lte: [STOCK, THRESHOLD] }, 1, 0] } },
-            lowStockQty: { $sum: { $cond: [{ $lte: [STOCK, THRESHOLD] }, STOCK, 0] } },
+            lowStockItems: { $sum: { $cond: [AT_OR_BELOW_THRESHOLD, 1, 0] } },
+            lowStockQty: { $sum: { $cond: [AT_OR_BELOW_THRESHOLD, STOCK, 0] } },
             totalItems: { $sum: 1 },
           },
         },

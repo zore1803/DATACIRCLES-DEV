@@ -17,13 +17,14 @@ const QuickDealForm = ({
   onDealUpdated,
   onRequestClose,
   initialCompanyId = "",
+  initialStatus = "Open",
   editDeal = null,
 }) => {
   const isEditing = !!editDeal;
   const [form, setForm] = useState({
     title: "",
     amount: "",
-    status: "Open",
+    status: initialStatus,
     company: initialCompanyId,
     contact: "",
   });
@@ -65,6 +66,14 @@ const QuickDealForm = ({
       setIsOpen(false);
     };
   }, [companies, contacts]);
+
+  // If a default company is provided, auto-generate the deal name on mount
+  useEffect(() => {
+    if (!editDeal && initialCompanyId && localCompanies.length > 0) {
+      suggestDealName(initialCompanyId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCompanyId, editDeal, localCompanies.length]);
 
   // Pre-fill when editing so edit and create share one form.
   useEffect(() => {
@@ -318,7 +327,7 @@ const QuickDealForm = ({
       // Falling back to 1 is fine — the name is a starting point the user can
       // edit, not an identifier anything depends on.
     }
-    setForm((prev) => (prev.title ? prev : { ...prev, title: `${company.name} - New Deal ${next}` }));
+    setForm((prev) => ({ ...prev, title: `${company.name} - New Deal ${next}` }));
   };
 
   const handleFormChange = (key, value) => {

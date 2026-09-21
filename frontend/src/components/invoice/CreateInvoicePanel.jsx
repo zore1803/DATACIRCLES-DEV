@@ -1,21 +1,21 @@
+// CreateInvoicePanel — extracted from InvoiceForm.jsx (previously defined in
+// the same file as the InvoiceForm component). Pure move: no logic changed.
+// Shared two-pane create/edit form used by all document types (Invoice,
+// Quotation, Pro Forma Invoice, Delivery Challan) via the `type` prop.
+import { resolveDiscount } from "../../utils/variantResolve";
 import DeleteIcon from "../common/DeleteIcon";
-import PdfIcon from "../common/PdfIcon";
-import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import SearchIcon from "../common/SearchIcon";
-import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { Link } from "react-router-dom";
 import { createPortal } from "react-dom";
-import { formatNumberToIndian, formatNumberFixed } from "../../utils/numberFormatter";
 import {
-  IndianRupeeIcon,
   X,
   Check,
   ChevronDown,
   PenLine,
-  CheckCircle2,
   Printer,
   ChevronUp,
-  ChevronLeft,
   ChevronRight,
   Maximize2,
   Minimize2,
@@ -23,10 +23,7 @@ import {
   Inbox,
 } from "lucide-react";
 import API from "../../services/api";
-import ItemForm from "../item/ItemForm";
 import QuickItemDrawer from "../item/QuickItemDrawer";
-import QuickDealForm from "../deal/QuickDealForm";
-import SearchableDropdown from "../contact/SearchableDropdown";
 import toast from "react-hot-toast";
 import { PREDEFINED_NOTES, PREDEFINED_TERMS } from "../../utils/documentDefaultText";
 
@@ -34,10 +31,11 @@ import SettingsIcon from "../common/SettingsIcon";
 import InvoiceLivePreview from "./InvoiceLivePreview";
 import BankSelect from "./BankSelect";
 import InsufficientStockDialog from "../common/InsufficientStockDialog";
+import SuccessModal from "../common/SuccessModal";
 import TemplateDrawer from "./TemplateDrawer";
 import NotesTermsDrawer from "./NotesTermsDrawer";
 import AddressBookDrawer from "./AddressBookDrawer";
-import { buildDocumentHtml, computeDocument, GST_RATES, DOCUMENT_TEMPLATES } from "../../../../shared/documentTemplates.js";
+import { buildDocumentHtml, computeDocument, GST_RATES } from "../../../../shared/documentTemplates.js";
 import {
   SectionHeader,
   FieldLabel,
@@ -49,8 +47,14 @@ import {
   blankItem,
 } from "./formPrimitives.jsx";
 import FullWidthDocumentPanel from "./FullWidthDocumentPanel.jsx";
+import { resolveTransactionType, placeOfSupplyFields } from "../../utils/placeOfSupply";
 import EyeIcon from "../common/EyeIcon";
 import EditIcon from "../common/EditIcon";
+
+// numberToWords and stockBlockReason below are duplicated from
+// InvoiceForm.jsx (also used there) rather than moved to a shared file, so
+// this extraction stays a pure move with no changes to InvoiceForm.jsx's own
+// behavior or to any shared component.
 // Function to convert number to words
 function numberToWords(num) {
   const ones = [
@@ -133,198 +137,6 @@ function numberToWords(num) {
   words += " Only";
   return words;
 }
-
-// Item Search Component
-const ItemSearchSelect = ({
-  value,
-  onSelect,
-  onAddNew,
-  fetchItems,
-  items,
-  setItems,
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [loading, setLoading] = useState(false);
-  const dropdownRef = useRef(null);
-  const inputRef = useRef(null);
-  const debounceTimeout = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const debouncedFetchItems = useCallback(
-    (search) => {
-      clearTimeout(debounceTimeout.current);
-      debounceTimeout.current = setTimeout(() => {
-        Promise.resolve(fetchItems(search)).finally(() => setLoading(false));
-      }, 300);
-    },
-    [fetchItems]
-  );
-
-  const handleSearchChange = (e) => {
-    const value = e.target.value;
-    setSearchTerm(value);
-    if (value.length >= 2 || value === "") {
-      setLoading(true);
-      debouncedFetchItems(value);
-    }
-  };
-
-  const handleItemSelect = (item) => {
-    onSelect({
-      _id: item._id,
-      name: item.displayName,
-      description: item.description || "",
-      rate: item.sellingPrice,
-      quantity: 1,
-      hsn: item.hsn || "",
-      isVariant: item.isVariant || false,
-      parentItemId: item.parentItemId || null,
-      // The product's own default discount (set in QuickItemDrawer's "More
-      // Details" -> Discount) — previously always started at 0, ignoring
-      // whatever default the product was configured with.
-      discountType: item.discount?.type || "amount",
-      discount: item.discount?.value || 0,
-    });
-    setIsOpen(false);
-    setSearchTerm("");
-  };
-
-  const handleInputFocus = () => {
-    setIsOpen(true);
-    if (items.length === 0) {
-      setLoading(true);
-      Promise.resolve(fetchItems()).finally(() => setLoading(false));
-    }
-  };
-
-  const selectedItem = items.find((item) => item._id === value?._id);
-
-  return (
-    <div className="relative" ref={dropdownRef}>
-      <div className="relative">
-        <SearchIcon className="absolute left-3 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
-        <input
-          ref={inputRef}
-          type="text"
-          placeholder={
-            selectedItem
-              ? selectedItem.displayName
-              : "Search items or variants..."
-          }
-          value={selectedItem ? selectedItem.displayName : searchTerm}
-          onChange={handleSearchChange}
-          onFocus={handleInputFocus}
-          className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all duration-200 bg-white"
-          aria-label="Search items or variants"
-        />
-      </div>
-
-      {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-          {loading ? (
-            <div className="p-4 text-center text-slate-500">Loading...</div>
-          ) : (
-            <>
-              <div className="p-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onAddNew();
-                    setIsOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2 p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                  aria-label="Add new item"
-                >
-                  <PlusIcon className="w-4 h-4" />
-                  Add New Item
-                </button>
-              </div>
-              <div className="border-t border-slate-100"></div>
-              {items.length === 0 ? (
-                <div className="p-4 text-center text-slate-500">
-                  {searchTerm
-                    ? "No items or variants found"
-                    : "No items or variants available"}
-                </div>
-              ) : (
-                <div className="max-h-48 overflow-y-auto">
-                  {items.map((item) => (
-                    <button
-                      key={item._id}
-                      type="button"
-                      onClick={() => handleItemSelect(item)}
-                      className="w-full text-left p-3 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-b-0"
-                      aria-label={`Select ${item.displayName}`}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="font-medium text-slate-900">
-                            {item.displayName}
-                          </div>
-                          {item.description && (
-                            <div
-                              className="text-sm text-slate-500 mt-1"
-                              dangerouslySetInnerHTML={{
-                                __html: item.description,
-                              }}
-                            ></div>
-                          )}
-                          <div className="flex items-center gap-2 mt-2">
-                            <span
-                              className={`text-xs px-2 py-1 rounded-full ${item.isVariant
-                                  ? "bg-purple-100 text-purple-800"
-                                  : item.type === "product"
-                                    ? "bg-blue-100 text-blue-800"
-                                    : "bg-green-100 text-green-800"
-                                }`}
-                            >
-                              {item.isVariant ? "Variant" : item.type}
-                            </span>
-                            {item.category && (
-                              <span className="text-xs text-slate-500">
-                                {item.category}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-right ml-4">
-                          <div className="font-semibold text-slate-900">
-                            ₹{item.sellingPrice}
-                          </div>
-                          <div className="text-xs text-slate-500">
-                            {item.primaryUnit}
-                            {item.type === "product" && (
-                              <span className="ml-1 font-medium text-slate-600">
-                                • Stock: {item.stock ?? 0}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-
-
 // Stock is only enforced server-side at save, which meant a sold-out product
 // could sit in the bill until the very end. Products (and their variants)
 // carry a numeric stock; services don't, and are never blocked.
@@ -337,1913 +149,6 @@ const stockBlockReason = (item, qty) => {
   if (qty > stock) return `Only ${stock} left in stock for ${name}.`;
   return null;
 };
-
-const InvoiceForm = ({
-  deals,
-  isOpen,
-  onClose,
-  fetchData,
-  editingInvoice,
-  conversionData,
-  onPreview,
-  defaultDueDateDays = null,
-  defaultNotesByType = {},
-  defaultTermsByType = {},
-  defaultNotesFlat = "",
-  defaultTermsFlat = "",
-}) => {
-  const defaultNotesForNew = defaultNotesByType.tax !== undefined
-    ? defaultNotesByType.tax
-    : (defaultNotesFlat || PREDEFINED_NOTES.tax || "");
-  const defaultTermsForNew = defaultTermsByType.tax !== undefined
-    ? defaultTermsByType.tax
-    : (defaultTermsFlat || PREDEFINED_TERMS.tax || "");
-  const [form, setForm] = useState({
-    deal: "",
-    date: "",
-    dueDate: "",
-    receiverGSTIN: "",
-    transactionType: "intra",
-    gstRate: 18,
-    items: [
-      {
-        _id: null,
-        name: "",
-        description: "",
-        rate: "",
-        quantity: 1,
-        hsn: "",
-        isVariant: false,
-        parentItemId: null,
-        discountType: "amount",
-        discount: 0,
-      },
-    ],
-    discount: {
-      type: "fixed",
-      value: 0,
-    },
-    amount: 0,
-    status: "Draft",
-    style: "",
-    isTaxInvoice: true,
-    isRoundOff: false,
-    hideTotals: false,
-    billingAddress: emptyAddress(),
-    shippingAddress: emptyAddress(),
-    sameAsBilling: true,
-    notes: defaultNotesForNew,
-    terms: defaultTermsForNew,
-    bankDetails: "",
-    // UPI QR payment note ("tn") — left blank so it defaults to
-    // "Invoice <number>" (see buildUpiUri); editable so the user can
-    // override it.
-    qrNote: "",
-    signature: "",
-  });
-  const [savedSignatures, setSavedSignatures] = useState([]);
-  const [signaturesLoading, setSignaturesLoading] = useState(false);
-  // Bank accounts saved under Settings → Bank Details. A brand-new invoice
-  // adopts the org's default; an edit keeps whatever account it was saved
-  // with. The chosen id rides on the payload as `bankDetails`.
-  const [banks, setBanks] = useState([]);
-  const [isSliding, setIsSliding] = useState(false);
-  const [shouldRender, setShouldRender] = useState(true);
-  const [showItemForm, setShowItemForm] = useState(false);
-  const [showQuickDealForm, setShowQuickDealForm] = useState(false);
-  const [localDeals, setLocalDeals] = useState(deals);
-  const [sellerState, setSellerState] = useState("");
-  const [companies, setCompanies] = useState([]);
-  const [contacts, setContacts] = useState([]);
-  const [itemForm, setItemForm] = useState({
-    type: "product",
-    name: "",
-    description: "",
-    purchasePrice: 0,
-    sellingPrice: 0,
-    taxInclusive: true,
-    hsnSac: "",
-    barcode: "",
-    category: "",
-    primaryUnit: "OTH OTHERS",
-    images: [],
-    isActive: true,
-  });
-  const [itemFormLoading, setItemFormLoading] = useState(false);
-  const [itemFormError, setItemFormError] = useState("");
-  const [itemFormSuccess, setItemFormSuccess] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
-
-  // Mongoose hands back e.g.
-  //   "Invoice validation failed: items.0.name: Path `name` is required.,
-  //    items.0.rate: Path `rate` is required."
-  // which is a database error read out loud. This turns it into the same
-  // information as a sentence about the row the user is looking at.
-  const humanizeServerError = (raw) => {
-    if (!raw || typeof raw !== "string") return raw;
-    if (!/validation failed:/i.test(raw)) return raw;
-
-    const detail = raw.split(/validation failed:/i)[1] || "";
-    const byRow = new Map();
-    const others = [];
-
-    detail.split(/,\s*(?=[A-Za-z0-9_.]+:)/).forEach((part) => {
-      const field = (part.split(":")[0] || "").trim();
-      const itemMatch = field.match(/^items\.(\d+)\.(.+)$/);
-      if (itemMatch) {
-        const row = Number(itemMatch[1]) + 1;
-        if (!byRow.has(row)) byRow.set(row, []);
-        byRow.get(row).push(itemMatch[2]);
-      } else if (field) {
-        others.push(field);
-      }
-    });
-
-    const list = (arr) =>
-      arr.length > 1 ? `${arr.slice(0, -1).join(", ")} and ${arr[arr.length - 1]}` : arr[0];
-
-    const parts = [];
-    byRow.forEach((fields, row) => parts.push(`item ${row} is missing ${list(fields)}`));
-    if (others.length) parts.push(`${list(others)} ${others.length > 1 ? "are" : "is"} required`);
-
-    return parts.length ? `Can't save yet — ${parts.join("; ")}.` : raw;
-  };
-  const [items, setItems] = useState([]);
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  // "notes" | "terms" | null — opens NotesTermsDrawer so an existing
-  // invoice can pull in a saved/updated Notes or Terms template. Without
-  // this the form's own notes/terms fields showed only whatever was baked
-  // in when the invoice was created, with no way to bring in a later
-  // change from Settings short of retyping it by hand.
-  const [notesDrawer, setNotesDrawer] = useState(null);
-  // "billing" | "shipping" | null — same idea as notesDrawer, for the saved
-  // address book (AddressBookDrawer).
-  const [addressDrawer, setAddressDrawer] = useState(null);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [quickAddItem, setQuickAddItem] = useState(null);
-  const [quickAddQty, setQuickAddQty] = useState(1);
-  const formRef = useRef(null);
-
-  useEffect(() => {
-    if (showItemForm) {
-      // Disable scroll on the invoice form when ItemForm is open
-      if (formRef.current) {
-        formRef.current.style.overflow = "hidden";
-      }
-
-      // Also prevent body scroll
-      document.body.style.overflow = "hidden";
-
-      return () => {
-        // Re-enable scroll when ItemForm closes
-        if (formRef.current) {
-          formRef.current.style.overflow = "auto";
-        }
-        document.body.style.overflow = "";
-      };
-    }
-  }, [showItemForm]);
-
-  // GSTIN validation regex (Indian GSTIN format: 2 digits, 5 alphanumeric, 4 digits, 1 alphanumeric, 1 digit, 1 alphanumeric)
-  const gstinRegex =
-    /^[0-9]{2}[A-Z0-9]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1}$/;
-
-  // Fetch items and variants for ItemSearchSelect
-  const fetchItems = useCallback(async (search = "") => {
-    try {
-      setItemFormLoading(true);
-      const res = await API.get(`/items?search=${search}&includeVariants=true`);
-      const itemsWithVariants = res.data
-        .filter((item) => item.isActive)
-        .flatMap((item) => {
-          // Same variant-only logic as PurchaseForm.jsx/PurchaseOrderForm.jsx:
-          // if the item has variants, only the variants are selectable (the
-          // parent is just a grouping, not something you'd actually bill);
-          // otherwise fall back to the item itself.
-          if (item.variants && item.variants.length > 0) {
-            return item.variants.map((variant) => ({
-              _id: variant._id,
-              displayName: `${item.name} - ${variant.name}`,
-              name: variant.name,
-              description: variant.description || item.description || "",
-              sellingPrice: variant.sellingPrice || item.sellingPrice,
-              hsnSac: variant.hsnSac || item.hsnSac || "",
-              // Discount only lives on the parent Item (variants have no
-              // discount field of their own) — same catalog default for
-              // every variant of a product.
-              discount: item.discount || { type: "percentage", value: 0 },
-              type: item.type,
-              category: item.category || "",
-              primaryUnit:
-                variant.primaryUnit || item.primaryUnit || "OTH OTHERS",
-              isVariant: true,
-              parentItemId: item._id,
-            }));
-          }
-          return [
-            {
-              _id: item._id,
-              displayName: item.name,
-              name: item.name,
-              description: item.description || "",
-              sellingPrice: item.sellingPrice,
-              hsnSac: item.hsnSac || "",
-              discount: item.discount || { type: "percentage", value: 0 },
-              type: item.type,
-              category: item.category || "",
-              primaryUnit: item.primaryUnit || "OTH OTHERS",
-              isVariant: false,
-              parentItemId: null,
-            },
-          ];
-        });
-      setItems(itemsWithVariants);
-    } catch (error) {
-      console.error("Error fetching items:", error);
-      setToastMessage("Failed to fetch items.");
-      setTimeout(() => setToastMessage(""), 3000);
-    } finally {
-      setItemFormLoading(false);
-    }
-  }, []);
-
-  // Fetch companies and contacts for QuickDealForm
-  const fetchCompanies = useCallback(async () => {
-    try {
-      const res = await API.get("/companies");
-      setCompanies(res.data);
-    } catch (error) {
-      console.error("Error fetching companies:", error);
-      toast.error("Failed to fetch companies.");
-    }
-  }, []);
-
-  const fetchContacts = useCallback(async () => {
-    try {
-      const res = await API.get("/contacts");
-      setContacts(res.data);
-    } catch (error) {
-      console.error("Error fetching contacts:", error);
-      toast.error("Failed to fetch contacts.");
-    }
-  }, []);
-
-  const calculateItemAmount = (item) => {
-    const rate = parseFloat(item.rate) || 0;
-    const quantity = parseInt(item.quantity) || 0;
-    const subtotal = rate * quantity;
-    const discount = parseFloat(item.discount) || 0;
-    if (item.discountType === "percentage") {
-      return subtotal * (1 - discount / 100);
-    }
-    return subtotal - discount;
-  };
-
-  const calculateSubtotal = (items) =>
-    items.reduce(
-      (total, item) =>
-        total + (parseFloat(item.rate) || 0) * (parseInt(item.quantity) || 0),
-      0
-    );
-
-  const calculateTotalItemDiscounts = (items) =>
-    items.reduce((total, item) => {
-      const subtotal =
-        (parseFloat(item.rate) || 0) * (parseInt(item.quantity) || 0);
-      const discount = parseFloat(item.discount) || 0;
-      if (item.discountType === "percentage") {
-        return total + (subtotal * discount) / 100;
-      }
-      return total + discount;
-    }, 0);
-
-  const calculateSubtotalAfterItemDiscounts = (items) =>
-    calculateSubtotal(items) - calculateTotalItemDiscounts(items);
-
-  const calculateInvoiceDiscountAmount = (
-    subtotalAfterItemDiscounts,
-    discount
-  ) => {
-    if (discount && discount.value > 0) {
-      if (discount.type === "percentage") {
-        return (subtotalAfterItemDiscounts * discount.value) / 100;
-      }
-      return parseFloat(discount.value) || 0;
-    }
-    return 0;
-  };
-
-  // Mirrors computeDocument()'s own item-rate resolution (shared/
-  // documentTemplates.js): the item's rate when it is a real GST slab,
-  // otherwise the document-level rate.
-  const effectiveGstRate = (item) => {
-    const itemRate = Number(item.gstRate);
-    if (GST_RATES.includes(itemRate)) return itemRate;
-    const docRate = Number(form.gstRate);
-    return GST_RATES.includes(docRate) ? docRate : 18;
-  };
-
-  const calculateTotalAmount = useCallback(
-    (items, discount, gstRate, transactionType) => {
-      const subtotalAfterItemDiscounts =
-        calculateSubtotalAfterItemDiscounts(items);
-      const invoiceDiscountAmount = calculateInvoiceDiscountAmount(
-        subtotalAfterItemDiscounts,
-        discount
-      );
-      const netTaxable = subtotalAfterItemDiscounts - invoiceDiscountAmount;
-      const totalTax = netTaxable * (gstRate / 100);
-      return netTaxable + totalTax;
-    },
-    []
-  );
-
-  const handleItemChange = (index, field, value) => {
-    setForm((prev) => {
-      const newItems = [...prev.items];
-      let newValue = value;
-
-      // Validate item discount to ensure it doesn't exceed item subtotal
-      if (field === "discount") {
-        const item = newItems[index];
-        const rate = parseFloat(item.rate) || 0;
-        const quantity = parseInt(item.quantity) || 0;
-        const subtotal = rate * quantity;
-        const parsedDiscount = parseFloat(value) || 0;
-
-        if (item.discountType === "amount" && parsedDiscount > subtotal) {
-          newValue = subtotal;
-          toast.error("Item discount cannot exceed item total price.");
-        } else if (item.discountType === "percentage" && parsedDiscount > 100) {
-          newValue = 100;
-          toast.error("Percentage discount cannot exceed 100%.");
-        }
-      }
-
-      newItems[index][field] = newValue;
-      return {
-        ...prev,
-        items: newItems,
-        amount: calculateTotalAmount(
-          newItems,
-          prev.discount,
-          prev.gstRate,
-          prev.transactionType
-        ),
-      };
-    });
-    setHasUnsavedChanges(true);
-  };
-
-  const handleDiscountChange = (field, value) => {
-    setForm((prev) => {
-      const subtotalAfterItemDiscounts = calculateSubtotalAfterItemDiscounts(
-        prev.items
-      );
-      let newValue = value;
-
-      // Validate discount to ensure it doesn't exceed subtotal
-      if (field === "value") {
-        const parsedValue = parseFloat(value) || 0;
-        if (
-          prev.discount.type === "fixed" &&
-          parsedValue > subtotalAfterItemDiscounts
-        ) {
-          newValue = subtotalAfterItemDiscounts;
-          setToastMessage(
-            "Invoice discount cannot exceed subtotal after item discounts."
-          );
-          setTimeout(() => setToastMessage(""), 3000);
-        } else if (prev.discount.type === "percentage" && parsedValue > 100) {
-          newValue = 100;
-          setToastMessage("Percentage discount cannot exceed 100%.");
-          setTimeout(() => setToastMessage(""), 3000);
-        }
-      }
-
-      const newDiscount = { ...prev.discount, [field]: newValue };
-      const invoiceDiscountAmount = calculateInvoiceDiscountAmount(
-        subtotalAfterItemDiscounts,
-        newDiscount
-      );
-
-      if (invoiceDiscountAmount > subtotalAfterItemDiscounts) {
-        newDiscount.value = subtotalAfterItemDiscounts;
-        if (newDiscount.type === "percentage") {
-          newDiscount.value = 100;
-        }
-        setToastMessage(
-          "Invoice discount cannot exceed subtotal after item discounts."
-        );
-        setTimeout(() => setToastMessage(""), 3000);
-      }
-
-      return {
-        ...prev,
-        discount: newDiscount,
-        amount: calculateTotalAmount(
-          prev.items,
-          newDiscount,
-          prev.gstRate,
-          prev.transactionType
-        ),
-      };
-    });
-    setHasUnsavedChanges(true);
-  };
-
-  const handleItemSelect = (index, itemData) => {
-    setForm((prev) => {
-      const newItems = [...prev.items];
-      newItems[index] = {
-        ...itemData,
-        quantity: newItems[index].quantity || 1,
-        hsn: itemData.hsn || "",
-        // Use the picked product's own discount (itemData already carries
-        // it from the catalog) — this used to fall back to the stale blank
-        // row's discount, which always overwrote it with 0.
-        discountType: itemData.discountType || "amount",
-        discount: itemData.discount || 0,
-      };
-      return {
-        ...prev,
-        items: newItems,
-        amount: calculateTotalAmount(
-          newItems,
-          prev.discount,
-          prev.gstRate,
-          prev.transactionType
-        ),
-      };
-    });
-    setHasUnsavedChanges(true);
-  };
-
-  const handleAddItem = () => {
-    setForm((prev) => ({
-      ...prev,
-      items: [
-        ...prev.items,
-        {
-          _id: null,
-          name: "",
-          description: "",
-          rate: "",
-          quantity: 1,
-          hsn: "",
-          isVariant: false,
-          parentItemId: null,
-          discountType: "amount",
-          discount: 0,
-        },
-      ],
-      amount: calculateTotalAmount(
-        [
-          ...prev.items,
-          {
-            _id: null,
-            name: "",
-            description: "",
-            rate: "",
-            quantity: 1,
-            hsn: "",
-            isVariant: false,
-            parentItemId: null,
-            discountType: "amount",
-            discount: 0,
-          },
-        ],
-        prev.discount,
-        prev.gstRate,
-        prev.transactionType
-      ),
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const handleRemoveItem = (index) => {
-    setForm((prev) => {
-      const newItems = prev.items.filter((_, i) => i !== index);
-      return {
-        ...prev,
-        items: newItems,
-        amount: calculateTotalAmount(
-          newItems,
-          prev.discount,
-          prev.gstRate,
-          prev.transactionType
-        ),
-      };
-    });
-    setHasUnsavedChanges(true);
-  };
-
-  const handleAddToBill = () => {
-    if (!quickAddItem) {
-      toast.error("Search and select a product first.");
-      return;
-    }
-    const qty = parseInt(quickAddQty) || 1;
-    const blocked = stockBlockReason(quickAddItem, qty);
-    if (blocked) {
-      toast.error(blocked);
-      return;
-    }
-    const newItem = { ...quickAddItem, quantity: qty };
-    setForm((prev) => {
-      const isBlankStarterRow =
-        prev.items.length === 1 && !prev.items[0].name && !prev.items[0]._id;
-      const newItems = isBlankStarterRow ? [newItem] : [...prev.items, newItem];
-      return {
-        ...prev,
-        items: newItems,
-        amount: calculateTotalAmount(newItems, prev.discount, prev.gstRate, prev.transactionType),
-      };
-    });
-    setQuickAddItem(null);
-    setQuickAddQty(1);
-    setHasUnsavedChanges(true);
-  };
-
-  const handleOpenItemForm = () => {
-    // Instantly scroll to top
-    if (formRef.current) {
-      formRef.current.scrollTop = 0;
-    }
-
-    // Open ItemForm immediately
-    setShowItemForm(true);
-  };
-
-  const handleDealCreated = (newDeal) => {
-    setLocalDeals((prev) => [...prev, newDeal]);
-    setForm((prev) => ({ ...prev, deal: newDeal._id }));
-    setHasUnsavedChanges(true);
-    setShowQuickDealForm(false);
-  };
-
-  const resetItemForm = () => {
-    setItemForm({
-      type: "product",
-      name: "",
-      description: "",
-      purchasePrice: 0,
-      sellingPrice: 0,
-      taxInclusive: true,
-      hsnSac: "",
-      barcode: "",
-      category: "",
-      primaryUnit: "OTH OTHERS",
-      images: [],
-      isActive: true,
-    });
-  };
-
-  const validateGSTIN = (gstin) => {
-    if (!gstin) return true; // GSTIN is optional
-    return gstinRegex.test(gstin);
-  };
-
-  const submitInvoice = async (statusValue) => {
-    setIsSubmitting(true);
-    const isDraft = statusValue === "Draft";
-
-    // Validate required fields
-    if (!form.deal) {
-      setToastMessage("Deal is required.");
-      setTimeout(() => setToastMessage(""), 3000);
-      setIsSubmitting(false);
-      return;
-    }
-    if (!form.style) {
-      form.style = "Classic";
-    }
-    if (!form.date) {
-      setToastMessage("Invoice Date is required.");
-      setTimeout(() => setToastMessage(""), 3000);
-      setIsSubmitting(false);
-      return;
-    }
-
-    // A quick draft only needs enough to identify the document; full GSTIN and
-    // item validation apply once it's actually being created for real.
-    if (!isDraft) {
-      // Validate GSTIN format
-      if (form.receiverGSTIN && !validateGSTIN(form.receiverGSTIN)) {
-        setToastMessage(
-          "Invalid GSTIN format. It should be 15 characters (e.g., 22AAAAA0000A1Z5)."
-        );
-        setTimeout(() => setToastMessage(""), 3000);
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Validate items
-      const invalidItems = form.items.filter(
-        (item) =>
-          !item.name ||
-          !item.rate ||
-          !item.quantity ||
-          (form.isTaxInvoice && !item.hsn) ||
-          (item.discountType === "percentage" && item.discount > 100)
-      );
-      if (invalidItems.length > 0) {
-        setToastMessage(`Item not found`);
-        setTimeout(() => setToastMessage(""), 3000);
-        setIsSubmitting(false);
-        return;
-      }
-
-      const subtotalAfterItemDiscounts = calculateSubtotalAfterItemDiscounts(
-        form.items
-      );
-      const invoiceDiscountAmount = calculateInvoiceDiscountAmount(
-        subtotalAfterItemDiscounts,
-        form.discount
-      );
-      if (invoiceDiscountAmount > subtotalAfterItemDiscounts) {
-        setToastMessage(
-          "Invoice discount cannot exceed subtotal after item discounts."
-        );
-        setTimeout(() => setToastMessage(""), 3000);
-        setIsSubmitting(false);
-        return;
-      }
-    }
-
-    try {
-      const payload = {
-        ...form,
-        status: statusValue,
-        billingAddress: form.billingAddress,
-        shippingAddress: form.sameAsBilling ? form.billingAddress : form.shippingAddress,
-        // Same computeDocument() the live preview/PDF use, so the saved
-        // amount can never disagree with what the totals card just showed —
-        // and, unlike the old calculateTotalAmount() call, this honors each
-        // item's own gstRate instead of only the document-level rate.
-        amount: (() => {
-          const t = computeDocument(form, "tax").grandTotal;
-          return form.isRoundOff ? Math.round(t) : t;
-        })(),
-        items: form.items.map((item) => ({
-          itemId: item.isVariant ? item.parentItemId : item._id,
-          variantId: item.isVariant ? item._id : null,
-          name: item.name,
-          description: item.description,
-          rate: parseFloat(item.rate),
-          quantity: parseInt(item.quantity),
-          hsn: item.hsn,
-          isVariant: item.isVariant,
-          parentItemId: item.parentItemId,
-          discountType: item.discountType,
-          discount: parseFloat(item.discount),
-          // The rate the document was actually priced at, not a blind
-          // parseFloat. computeDocument() falls back to the document-level
-          // gstRate when an item has no valid rate of its own — but
-          // `parseFloat(undefined) || 0` collapsed that "unset" into an
-          // explicit 0%, which IS a valid GST rate, so the saved invoice
-          // rendered 0% CGST/SGST while its stored amount still carried the
-          // 18% the preview had charged. Persist the effective rate so the
-          // PDF reproduces the total that was saved.
-          gstRate: effectiveGstRate(item),
-          taxInclusive: !!item.taxInclusive,
-        })),
-      };
-
-      if (editingInvoice) {
-        await API.put(`/invoices/${editingInvoice._id}`, payload);
-        toast.success("Invoice updated successfully!");
-      } else {
-        await API.post("/invoices", payload);
-        toast.success("Invoice created successfully!");
-      }
-
-      setHasUnsavedChanges(false);
-      setForm({
-        deal: "",
-        date: "",
-        dueDate: "",
-        receiverGSTIN: "",
-        transactionType: "intra",
-        gstRate: 18,
-        items: [
-          {
-            _id: null,
-            name: "",
-            description: "",
-            rate: "",
-            quantity: 1,
-            hsn: "",
-            isVariant: false,
-            parentItemId: null,
-            discountType: "amount",
-            discount: 0,
-          },
-        ],
-        discount: { type: "fixed", value: 0 },
-        amount: 0,
-        status: "Draft",
-        style: "",
-        isTaxInvoice: true,
-        billingAddress: emptyAddress(),
-        shippingAddress: emptyAddress(),
-        sameAsBilling: true,
-        notes: "",
-        terms: "",
-        signature: "",
-      });
-      await fetchData();
-      onClose();
-    } catch (err) {
-      if (err.response?.status === 402) {
-        setToastMessage(err.response?.data?.message || "An active subscription is required to make changes.");
-      } else {
-        setToastMessage(
-          humanizeServerError(err.response?.data?.error) ||
-          (editingInvoice
-            ? "Failed to update invoice"
-            : "Failed to create invoice")
-        );
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleConfirmExit = () => {
-    setHasUnsavedChanges(false);
-    setShowConfirmDialog(false);
-    onClose();
-  };
-
-  const handleSaveAndExit = async () => {
-    await submitInvoice("Pending");
-    if (!toastMessage.includes("Failed")) {
-      setShowConfirmDialog(false);
-      onClose();
-    }
-  };
-
-  const handleSaveDraft = () => submitInvoice("Draft");
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    submitInvoice(form.status || "Draft");
-  };
-
-  const handleClose = () => {
-    if (hasUnsavedChanges) {
-      setShowConfirmDialog(true);
-    } else {
-      onClose();
-    }
-  };
-
-  useEffect(() => {
-    if (editingInvoice || conversionData) {
-      const sourceData = editingInvoice || conversionData;
-      const initialForm = {
-        deal: sourceData.deal?._id || sourceData.deal || "",
-        date: sourceData.date ? sourceData.date.slice(0, 10) : "",
-        dueDate: sourceData.dueDate
-          ? sourceData.dueDate.slice(0, 10)
-          : "",
-        receiverGSTIN: sourceData.receiverGSTIN || "",
-        transactionType: sourceData.transactionType || "intra",
-        gstRate: sourceData.gstRate || 18,
-        items: (sourceData.items || []).map((item) => ({
-          _id: (item.isVariant ? item.variantId : item.itemId) || item.itemId || item._id || null,
-          name: item.name || "",
-          description: item.description || "",
-          rate: item.rate || "",
-          quantity: item.quantity || 1,
-          hsn: item.hsn || "",
-          isVariant: item.isVariant || false,
-          parentItemId: item.parentItemId || null,
-          discountType: item.discountType || "amount",
-          discount: item.discount || 0,
-        })),
-        discount: sourceData.discount || { type: "fixed", value: 0 },
-        isRoundOff: sourceData.isRoundOff !== undefined ? sourceData.isRoundOff : true,
-        amount: sourceData.amount || 0,
-        status: editingInvoice ? sourceData.status : "Draft",
-        style: sourceData.style || "",
-        isTaxInvoice: true,
-        billingAddress: { ...emptyAddress(), ...(sourceData.billingAddress || {}) },
-        shippingAddress: { ...emptyAddress(), ...(sourceData.shippingAddress || {}) },
-        sameAsBilling:
-          isAddressEmpty(sourceData.shippingAddress) ||
-          JSON.stringify({ ...emptyAddress(), ...(sourceData.billingAddress || {}) }) ===
-            JSON.stringify({ ...emptyAddress(), ...(sourceData.shippingAddress || {}) }),
-        notes: sourceData.notes || "",
-        terms: sourceData.terms || "",
-        bankDetails: sourceData.bankDetails?._id || sourceData.bankDetails || "",
-        // Only an actual edit keeps the source's note — Convert/Duplicate
-        // starts blank since a custom note almost always references the old
-        // invoice's own number.
-        qrNote: editingInvoice ? (sourceData.qrNote || "") : "",
-        signature: sourceData.signature || "",
-      };
-      setForm(initialForm);
-      setHasUnsavedChanges(false);
-    } else {
-      const initialForm = {
-        deal: "",
-        date: "",
-        dueDate: "",
-        receiverGSTIN: "",
-        transactionType: "intra",
-        gstRate: 18,
-        items: [
-          {
-            _id: null,
-            name: "",
-            description: "",
-            rate: "",
-            quantity: 1,
-            hsn: "",
-            isVariant: false,
-            parentItemId: null,
-            discountType: "amount",
-            discount: 0,
-          },
-        ],
-        discount: { type: "fixed", value: 0 },
-        amount: 0,
-        status: "Draft",
-        style: "",
-        isTaxInvoice: true,
-        billingAddress: emptyAddress(),
-        shippingAddress: emptyAddress(),
-        sameAsBilling: true,
-        notes: "",
-        terms: "",
-        bankDetails: "",
-        qrNote: "",
-        signature: "",
-      };
-      setForm(initialForm);
-      setHasUnsavedChanges(false);
-    }
-  }, [editingInvoice]);
-
-  useEffect(() => {
-    if (isOpen) {
-      setShouldRender(true);
-      setTimeout(() => setIsSliding(true), 10);
-      fetchItems();
-      fetchCompanies();
-      fetchContacts();
-      setLocalDeals(deals);
-      API.get("/branding").then(r => setSellerState((r.data?.state || "").trim().toLowerCase())).catch(() => {});
-
-      // Fetch saved signatures and auto-select default for new invoices
-      const fetchSignatures = async () => {
-        setSignaturesLoading(true);
-        try {
-          const res = await API.get("/document-settings/signatures");
-          const sigs = Array.isArray(res.data) ? res.data : [];
-          setSavedSignatures(sigs);
-
-          // Auto-apply default signature only when creating a new invoice
-          if (!editingInvoice) {
-            const defaultSig = sigs.find((s) => s.isDefault);
-            if (defaultSig) {
-              setForm((prev) => ({ ...prev, signature: defaultSig.dataUrl || "" }));
-            }
-          }
-        } catch (err) {
-          console.error("Failed to fetch signatures:", err);
-          setSavedSignatures([]);
-        } finally {
-          setSignaturesLoading(false);
-        }
-      };
-      fetchSignatures();
-
-      // Fetch saved bank accounts and auto-select the org default for new
-      // invoices; an edit keeps whatever account it was saved with.
-      const fetchBanks = async () => {
-        try {
-          const res = await API.get("/bank-details/all");
-          const list = Array.isArray(res.data) ? res.data : [];
-          setBanks(list);
-          if (!editingInvoice) {
-            const fallback = list.find((b) => b.isDefault) || list[0];
-            if (fallback) {
-              setForm((prev) =>
-                prev.bankDetails ? prev : { ...prev, bankDetails: fallback._id }
-              );
-            }
-          }
-        } catch (err) {
-          console.error("Failed to fetch bank accounts:", err);
-          setBanks([]);
-        }
-      };
-      fetchBanks();
-    } else {
-      setIsSliding(false);
-      setTimeout(() => setShouldRender(false), 300);
-    }
-  }, [isOpen, deals]);
-
-  if (!shouldRender) return null;
-
-  const subtotal = calculateSubtotal(form.items);
-  const totalItemDiscounts = calculateTotalItemDiscounts(form.items);
-  const subtotalAfterItemDiscounts = subtotal - totalItemDiscounts;
-  const invoiceDiscountAmount = calculateInvoiceDiscountAmount(
-    subtotalAfterItemDiscounts,
-    form.discount
-  );
-  // Same shared engine the live preview/PDF use (shared/documentTemplates.js)
-  // — honors each item's own gstRate instead of a single document-level
-  // rate, so this summary can never disagree with what actually saves/prints.
-  const taxDetails = form.isTaxInvoice ? computeDocument(form, "tax") : null;
-  let finalTotal = taxDetails
-    ? taxDetails.grandTotal
-    : subtotalAfterItemDiscounts - invoiceDiscountAmount;
-  let roundOffAmount = 0;
-  if (form.isRoundOff) {
-    const rounded = Math.round(finalTotal);
-    roundOffAmount = rounded - finalTotal;
-    finalTotal = rounded;
-  }
-
-  const cgstAmount = taxDetails?.totalCGST || 0;
-  const sgstAmount = taxDetails?.totalSGST || 0;
-  const igstAmount = taxDetails?.totalIGST || 0;
-
-  // format deals with company name
-  const formattedDeals = localDeals.map((deal) => ({
-    ...deal,
-    label: `${deal.title} — ${deal.company?.name || "No Company"}`,
-  }));
-
-  return createPortal(
-    <>
-      {toastMessage && (
-        // Red: every message set on this toast is a failure or a validation
-        // warning (successes use toast.success). It was green, so "Invoice
-        // validation failed..." arrived looking like a confirmation.
-        <div className="fixed top-4 right-4 z-[10002] max-w-md bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg animate-fade-in-out">
-          {toastMessage}
-        </div>
-      )}
-
-      {showQuickDealForm && (
-        <QuickDealForm
-          companies={companies}
-          contacts={contacts}
-          onDealCreated={handleDealCreated}
-          onRequestClose={() => setShowQuickDealForm(false)}
-        />
-      )}
-
-      {/* Confirmation Dialog */}
-      {showConfirmDialog && (
-        <div className="fixed inset-0 bg-black/50 z-[10004] flex items-center justify-center">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-sm sm:max-w-lg mx-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Unsaved Changes
-            </h3>
-            <p className="text-sm text-gray-600 mb-6">
-              You have unsaved changes. Are you sure you want to exit without
-              saving?
-            </p>
-            <div className="flex justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => setShowConfirmDialog(false)}
-                className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors cursor-pointer hidden sm:block"
-              >
-                Cancel
-              </button>
-              <div className="flex space-x-1">
-                <button
-                  type="button"
-                  onClick={handleConfirmExit}
-                  className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors cursor-pointer"
-                >
-                  Exit Without Saving
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveAndExit}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors cursor-pointer"
-                >
-                  Save and Exit
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div
-        ref={formRef}
-        className={`fixed inset-0 z-[10000] w-full h-full bg-white overflow-y-auto transform transition-transform duration-300 ease-in-out ${isSliding ? "translate-y-0" : "translate-y-full"
-          }`}
-      >
-        <form onSubmit={handleSubmit} className="h-full flex flex-col bg-[#F8F9FA] w-full min-h-screen">
-          {/* Sticky Header */}
-          <div className="flex justify-between items-center px-6 py-4 bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
-            <div className="flex items-center gap-6">
-              <button
-                type="button"
-                onClick={handleClose}
-                className="text-gray-500 hover:text-gray-800 transition-colors flex items-center gap-1"
-                aria-label="Close form"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <div className="flex flex-col">
-                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-1">
-                  {editingInvoice ? "Edit Invoice" : "Create Invoice"}
-                </h2>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {form.style && (
-                <button
-                  type="button"
-                  onClick={() => onPreview(form)}
-                  className="h-8 px-4 flex items-center gap-1.5 bg-white border border-[#E1E4EA] rounded-lg text-[13px] font-medium text-[#1F2937] hover:bg-gray-50 transition-colors shadow-sm flex-shrink-0"
-                  aria-label="Preview invoice"
-                >
-                  <EyeIcon className="w-3.5 h-3.5 text-[#525866]" />
-                  Preview
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                disabled={isSubmitting}
-                className="h-8 px-4 flex items-center gap-1.5 rounded-lg bg-[#0085FF] hover:bg-blue-600 text-white text-[13px] font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex-shrink-0"
-              >
-                {isSubmitting ? (
-                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <PdfIcon className="w-4 h-4" />
-                )}
-                Save as Draft
-              </button>
-            </div>
-          </div>
-
-          {/* Type Row */}
-          <div className="flex items-center px-6 py-3 bg-white border-b border-gray-100 text-sm">
-            <span className="text-gray-500 mr-2">Type</span>
-            <select
-              value={form.style}
-              onChange={(e) => {
-                setForm((prev) => ({ ...prev, style: e.target.value }));
-                setHasUnsavedChanges(true);
-              }}
-              className="font-medium text-gray-800 bg-transparent border-none focus:ring-0 cursor-pointer p-0"
-              aria-label="Select invoice style"
-            >
-              <option value="">Select style...</option>
-              {DOCUMENT_TEMPLATES.map((s, idx) => (
-                <option key={idx} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="p-6 space-y-6 flex-1 overflow-y-auto">
-            {/* Section 1: Invoice Details */}
-            <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(15,23,42,0.06),0_8px_20px_-12px_rgba(15,23,42,0.12)] border border-slate-200 p-6">
-              <SectionHeader number="01" title="Invoice Details" />
-              <div className="h-px bg-slate-100 -mx-6 my-4" />
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                <div className="md:col-span-4 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <label className="text-sm font-semibold text-gray-700">Select Deal <span className="text-red-500">*</span></label>
-                    <button
-                      type="button"
-                      onClick={() => setShowQuickDealForm(true)}
-                      className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center"
-                    >
-                      + Create Customer
-                    </button>
-                  </div>
-                  <div className="bg-blue-50/50 rounded-lg">
-                    <SearchableDropdown
-                      options={formattedDeals}
-                      value={form.deal}
-                      onChange={(value) => {
-                        const selectedDeal = localDeals.find((d) => d._id === value);
-                        const company = selectedDeal?.company;
-                        const customerState = (company?.billingAddress?.state || '').trim().toLowerCase();
-                        const autoType = (sellerState && customerState && sellerState !== customerState) ? 'inter' : 'intra';
-                        setForm((prev) => ({ ...prev, deal: value, transactionType: autoType }));
-                        setHasUnsavedChanges(true);
-                      }}
-                      placeholder="Search and select deal"
-                      valueKey="_id"
-                      className="w-full"
-                      displayKey="label"
-                    />
-                  </div>
-                </div>
-
-                <div className="md:col-span-2 space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Invoice Date <span className="text-red-500">*</span></label>
-                  <input
-                    type="date"
-                    className="w-full pl-3 pr-8 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    required
-                    value={form.date}
-                    onChange={(e) => {
-                      const newDate = e.target.value;
-                      setForm((prev) => {
-                        let newDueDate = prev.dueDate;
-                        if (!editingInvoice && !prev.dueDate && newDate) {
-                          const d = new Date(newDate);
-                          d.setDate(d.getDate() + (defaultDueDateDays ?? 30));
-                          newDueDate = d.toISOString().split("T")[0];
-                        }
-                        return { ...prev, date: newDate, dueDate: newDueDate };
-                      });
-                      setHasUnsavedChanges(true);
-                    }}
-                  />
-                </div>
-
-                <div className="md:col-span-3 space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Due Date</label>
-                  <input
-                    type="date"
-                    className="w-full pl-3 pr-8 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    value={form.dueDate}
-                    min={new Date().toISOString().split("T")[0]}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, dueDate: e.target.value }));
-                      setHasUnsavedChanges(true);
-                    }}
-                  />
-                  <div className="flex gap-2 mt-1">
-                    {[7, 15, 30].map(days => (
-                      <button
-                        key={days}
-                        type="button"
-                        className="text-[11px] font-medium px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200 transition-colors"
-                        onClick={() => {
-                          const newDate = new Date();
-                          newDate.setDate(newDate.getDate() + days);
-                          setForm(prev => ({ ...prev, dueDate: newDate.toISOString().split('T')[0] }));
-                          setHasUnsavedChanges(true);
-                        }}
-                      >
-                        +{days} Days
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            {/* Section 2: Billing & Shipping Address */}
-            <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(15,23,42,0.06),0_8px_20px_-12px_rgba(15,23,42,0.12)] border border-slate-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <SectionHeader number="02" title="Billing & Shipping Address" />
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setForm((prev) => {
-                        const nowSame = !prev.sameAsBilling;
-                        setHasUnsavedChanges(true);
-                        return {
-                          ...prev,
-                          sameAsBilling: nowSame,
-                          shippingAddress: nowSame ? prev.billingAddress : prev.shippingAddress,
-                        };
-                      })
-                    }
-                    className="flex-shrink-0"
-                  >
-                    <span
-                      className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${form.sameAsBilling ? "bg-blue-600" : "bg-gray-200"}`}
-                    >
-                      <span
-                        className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${form.sameAsBilling ? "translate-x-4" : "translate-x-0"}`}
-                      />
-                    </span>
-                  </button>
-                  <span className="text-sm font-medium text-gray-700">
-                    Shipping address same as billing
-                  </span>
-                </div>
-              </div>
-              <div className="h-px bg-slate-100 -mx-6 mb-5" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 w-full md:divide-x md:divide-slate-100">
-                <div className="md:pr-8">
-                <AddressFieldsGroup
-                  label="Billing address"
-                  value={form.billingAddress}
-                  onUseSaved={() => setAddressDrawer("billing")}
-                  onChange={(next) => {
-                    // Editing the billing state here (not just picking a new
-                    // Deal) should re-classify intra/inter the same way deal
-                    // selection does, so overriding the address on this one
-                    // document actually changes CGST/SGST vs IGST instead of
-                    // silently keeping whatever the deal's company implied.
-                    const customerState = (next.state || "").trim().toLowerCase();
-                    const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
-                    setForm((prev) => ({
-                      ...prev,
-                      billingAddress: next,
-                      shippingAddress: prev.sameAsBilling ? next : prev.shippingAddress,
-                      transactionType: customerState ? autoType : prev.transactionType,
-                    }));
-                    setHasUnsavedChanges(true);
-                  }}
-                />
-                </div>
-                <div className="md:pl-8">
-                <AddressFieldsGroup
-                  label="Shipping address"
-                  value={form.shippingAddress}
-                  disabled={!!form.sameAsBilling}
-                  onUseSaved={() => setAddressDrawer("shipping")}
-                  onChange={(next) => {
-                    setForm((prev) => ({ ...prev, shippingAddress: next }));
-                    setHasUnsavedChanges(true);
-                  }}
-                />
-                </div>
-              </div>
-            </div>
-
-            {/* Tax Invoice toggle — lives outside the conditional GST card
-                below so it stays visible with the card hidden, letting the
-                user turn it back on. OFF renders the document titled
-                "Invoice" instead of "Tax Invoice" (shared/templates/
-                Professional.js reads this same form.isTaxInvoice via
-                computeDocument's `t.isTax`), and hides GST-specific fields
-                like Receiver GSTIN and per-item tax rate/HSN. */}
-            <div className="flex items-center gap-2.5 h-10 w-full">
-              <button
-                type="button"
-                onClick={() => {
-                  setForm((prev) => ({ ...prev, isTaxInvoice: !prev.isTaxInvoice }));
-                  setHasUnsavedChanges(true);
-                }}
-                className="flex-shrink-0"
-              >
-                <span
-                  className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${form.isTaxInvoice ? "bg-[#0085FF]" : "bg-[#E1E4EA]"}`}
-                >
-                  <span
-                    className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isTaxInvoice ? "translate-x-4" : "translate-x-0"}`}
-                  />
-                </span>
-              </button>
-              <div className="flex flex-col">
-                <span className="text-[12px] font-medium text-[#1F2937]">Enable Tax Invoice</span>
-                <span className="text-[10px] text-[#99A0AE]">Include GST and tax details</span>
-              </div>
-            </div>
-
-            {/* Section 3: GST & Tax Details (conditional) — GST rate is set
-                per item below (Products & Services → More Details), matching
-                the full-width form; there's no document-level rate here
-                since a single rate can't represent a mixed-rate item list. */}
-            {form.isTaxInvoice && (
-              <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(15,23,42,0.06),0_8px_20px_-12px_rgba(15,23,42,0.12)] border border-slate-200 p-6">
-                <SectionHeader number="03" title="GST & Tax Details" />
-                <div className="h-px bg-slate-100 -mx-6 my-4" />
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                  <div className="md:col-span-4 space-y-2">
-                    <label className="text-sm font-semibold text-gray-700">Receiver GSTIN <span className="text-red-500">*</span></label>
-                    <input
-                      type="text"
-                      placeholder="Enter Receiver GSTIN (e.g., 22AAAAA0000A1Z5)"
-                      className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                      value={form.receiverGSTIN}
-                      onChange={(e) => {
-                        setForm((prev) => ({
-                          ...prev,
-                          receiverGSTIN: e.target.value.toUpperCase(),
-                        }));
-                        setHasUnsavedChanges(true);
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Section 4: Products & Services — the primary work area, so it
-                gets stronger visual weight than the other cards. */}
-            <div className="bg-white rounded-xl shadow-[0_2px_6px_rgba(15,23,42,0.07),0_10px_28px_-14px_rgba(0,133,255,0.28)] border border-blue-100/80 p-6 lg:p-7">
-              <div className="flex justify-between items-center mb-5">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex items-center justify-center w-6 h-6 rounded-full bg-[#0085FF] text-white text-[11px] font-bold flex-shrink-0 shadow-sm">
-                    04
-                  </div>
-                  <h3 className="text-[15px] font-semibold text-slate-900">Products & Services</h3>
-                  <button
-                    type="button"
-                    onClick={handleOpenItemForm}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-800 ml-2"
-                  >
-                    + Add new Product?
-                  </button>
-                </div>
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 text-sm text-gray-600">
-                    <input type="checkbox" className="rounded text-blue-600 focus:ring-blue-500" defaultChecked />
-                    Show description
-                  </label>
-                </div>
-              </div>
-              <div className="h-px bg-slate-100 -mx-6 lg:-mx-7 mb-5" />
-
-              {/* Quick-add bar */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-3 mb-5 bg-blue-50/60 border border-blue-100 rounded-xl">
-                <div className="flex-1 min-w-0">
-                  <ItemSearchSelect
-                    value={quickAddItem}
-                    onSelect={(itemData) => setQuickAddItem(itemData)}
-                    onAddNew={handleOpenItemForm}
-                    allowAddNew={false}
-                    showSelectedValue={false}
-                    excludeIds={form.items.map((i) => i._id).filter(Boolean)}
-                    fetchItems={fetchItems}
-                    items={items}
-                    setItems={setItems}
-                  />
-                </div>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="Qty"
-                    value={quickAddQty}
-                    onChange={(e) => setQuickAddQty(e.target.value)}
-                    className="w-20 h-[42px] text-center text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 flex-shrink-0"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddToBill}
-                    className="h-[42px] px-4 flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors whitespace-nowrap"
-                  >
-                    <PlusIcon className="w-4 h-4" />
-                    Add to Bill
-                  </button>
-                </div>
-              </div>
-
-              {form.items.length === 0 || (form.items.length === 1 && !form.items[0].name && !form.items[0]._id) ? (
-                <div className="flex flex-col items-center justify-center py-14 text-center">
-                  <Inbox className="w-12 h-12 text-gray-300 mb-4" strokeWidth={1.5} />
-                  <p className="text-gray-500 text-sm mb-4">
-                    Search existing products to add to this list or add new product to get started.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleOpenItemForm}
-                    className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white font-semibold text-sm rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    <PlusIcon className="w-4 h-4" />
-                    Add New Product
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {/* Column Headers */}
-                  <div className="grid grid-cols-12 gap-4 pb-2 border-b border-gray-100 text-xs font-semibold text-gray-500">
-                    <div className="col-span-3">Product Name</div>
-                    <div className="col-span-2 text-center">Quantity</div>
-                    <div className="col-span-2 text-right">Unit Price</div>
-                    <div className="col-span-1 text-center">GST %</div>
-                    <div className="col-span-2 text-center">Discount</div>
-                    <div className="col-span-2 text-right">Total</div>
-                  </div>
-
-                  {/* Item Rows */}
-                  <div className="space-y-4 mt-4">
-                    {form.items.map((item, index) => {
-                      const rowTotal = calculateItemAmount(item);
-                      return (
-                        <div key={index} className="group relative py-3 border-b border-gray-100 last:border-b-0">
-                          <div className="grid grid-cols-12 gap-4 items-start">
-                            {/* Product Name */}
-                            <div className="col-span-3">
-                              <input
-                                type="text"
-                                value={item.name || ""}
-                                onChange={(e) => {
-                                  handleItemChange(index, "name", e.target.value);
-                                  setHasUnsavedChanges(true);
-                                }}
-                                className="w-full text-sm font-medium text-gray-900 bg-transparent px-1 py-1.5 focus:outline-none focus:bg-gray-50 focus:ring-1 focus:ring-gray-200 rounded transition-colors"
-                                placeholder="Product Name"
-                                required
-                              />
-                            </div>
-
-                            {/* Quantity */}
-                            <div className="col-span-2">
-                              <input
-                                type="number"
-                                placeholder="1"
-                                min="1"
-                                value={item.quantity}
-                                onChange={(e) => {
-                                  handleItemChange(index, "quantity", e.target.value);
-                                  setHasUnsavedChanges(true);
-                                }}
-                                className="w-full text-center text-sm border border-gray-200 rounded-lg px-2 py-2.5 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                                required
-                              />
-                            </div>
-
-                            {/* Rate */}
-                            <div className="col-span-2">
-                              <input
-                                type="number"
-                                placeholder="0.00"
-                                min="0"
-                                step="0.01"
-                                value={item.rate}
-                                onChange={(e) => {
-                                  handleItemChange(index, "rate", e.target.value);
-                                  setHasUnsavedChanges(true);
-                                }}
-                                className="w-full text-right text-sm border border-gray-200 rounded-lg px-2 py-2.5 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                                required
-                              />
-                            </div>
-
-                            {/* GST % */}
-                            <div className="col-span-1">
-                              <select
-                                value={item.gstRate ?? 0}
-                                onChange={(e) => {
-                                  handleItemChange(index, "gstRate", parseFloat(e.target.value));
-                                  setHasUnsavedChanges(true);
-                                }}
-                                className="w-full text-center text-sm border border-gray-200 rounded-lg px-1 py-2.5 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                              >
-                                <option value={0}>0%</option>
-                                <option value={5}>5%</option>
-                                <option value={12}>12%</option>
-                                <option value={18}>18%</option>
-                                <option value={28}>28%</option>
-                              </select>
-                            </div>
-
-                            {/* Discount */}
-                            <div className="col-span-2">
-                              <div className="flex items-center gap-1 border border-gray-200 rounded-lg bg-gray-50 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-colors overflow-hidden">
-                                <input
-                                  type="number"
-                                  placeholder="0"
-                                  min="0"
-                                  step="0.01"
-                                  value={item.discount}
-                                  onChange={(e) => {
-                                    handleItemChange(index, "discount", e.target.value);
-                                    setHasUnsavedChanges(true);
-                                  }}
-                                  className="w-full min-w-0 text-center text-sm px-2 py-2.5 bg-transparent focus:outline-none"
-                                />
-                                <select
-                                  value={item.discountType}
-                                  onChange={(e) => {
-                                    handleItemChange(index, "discountType", e.target.value);
-                                    setHasUnsavedChanges(true);
-                                  }}
-                                  className="w-12 text-xs font-medium border-l border-gray-200 bg-gray-100 py-3 focus:outline-none cursor-pointer"
-                                >
-                                  <option value="percentage">%</option>
-                                  <option value="amount">₹</option>
-                                </select>
-                              </div>
-                            </div>
-
-                            {/* Total & Delete */}
-                            <div className="col-span-2 flex items-center justify-end gap-3 pt-2">
-                              <span className="font-semibold text-gray-900 tabular-nums">
-                                ₹{formatNumberToIndian(rowTotal)}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveItem(index)}
-                                className="p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                aria-label="Remove item"
-                              >
-                                <DeleteIcon className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* More Details (Expandable) */}
-                          <details className="mt-3 group/details">
-                            <summary className="text-xs font-semibold text-blue-600 cursor-pointer list-none flex items-center gap-1 w-max select-none">
-                              <ChevronRight className="w-3.5 h-3.5 transition-transform group-open/details:rotate-90" />
-                              More Details
-                            </summary>
-                            <div className="pt-3">
-                              <div className="space-y-1">
-                                <label className="text-xs text-gray-500 font-medium">Item Description</label>
-                                <textarea
-                                  placeholder="Enter item description..."
-                                  value={item.description}
-                                  rows={2}
-                                  onChange={(e) => {
-                                    handleItemChange(index, "description", e.target.value);
-                                    setHasUnsavedChanges(true);
-                                  }}
-                                  className="w-full resize-none text-sm text-gray-700 border-b border-gray-200 px-1 py-1.5 focus:outline-none focus:border-blue-400 bg-transparent"
-                                />
-                              </div>
-                            </div>
-                          </details>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                </>
-              )}
-            </div>
-
-            {/* Section 5+: Notes, Terms, Signature, Totals — 2-column grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-
-              {/* Left Column: Notes, Terms, Attachments */}
-              <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(15,23,42,0.06),0_8px_20px_-12px_rgba(15,23,42,0.12)] border border-slate-200 p-6 space-y-5">
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <SectionHeader number="05" title="Notes" />
-                    <OpenNotesTermsButton label="Add Notes" onClick={() => setNotesDrawer("notes")} />
-                  </div>
-                  <textarea
-                    placeholder="Enter your notes, say thanks, or anything else"
-                    rows={3}
-                    value={form.notes}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, notes: e.target.value }));
-                      setHasUnsavedChanges(true);
-                    }}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 resize-y"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <SectionHeader number="06" title="Terms & Conditions" />
-                    <OpenNotesTermsButton label="Add Terms" onClick={() => setNotesDrawer("terms")} />
-                  </div>
-                  <textarea
-                    placeholder="Enter terms & conditions"
-                    rows={3}
-                    value={form.terms}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, terms: e.target.value }));
-                      setHasUnsavedChanges(true);
-                    }}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 resize-y"
-                  />
-                </div>
-
-                {/* E-Waybill & Attachments */}
-                <div className="pt-4 space-y-4">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <div className="relative">
-                      <input type="checkbox" className="sr-only peer" />
-                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                    </div>
-                    <span className="text-sm font-semibold text-gray-700">Create E-Waybill</span>
-                  </label>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm font-semibold text-gray-700">Attach files</span>
-                    </div>
-                    <button type="button" className="flex items-center justify-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 border-dashed rounded-lg hover:border-gray-400 transition-colors">
-                      <span className="text-lg">↑</span> Attach Files (Max: 5)
-                    </button>
-                  </div>
-
-                  <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer">
-                    <div className="w-4 h-4 rounded-full border border-gray-300 flex items-center justify-center">
-                    </div>
-                    Use Coupons
-                  </label>
-                </div>
-              </div>
-
-              {/* Right Column: Totals, Bank, Signature */}
-              <div className="space-y-6 lg:sticky lg:top-4">
-
-                {/* Math Card — Invoice Summary, styled as a sticky summary panel */}
-                <div className="bg-[#EBF5EE] rounded-xl p-5 shadow-[0_2px_8px_-2px_rgba(16,94,54,0.18)] border border-[#BFE3CE] space-y-4 relative">
-                  <div className="flex justify-end gap-2 items-center mb-2">
-                    <span className="text-xs text-gray-500 font-medium">Extra Discount</span>
-                    <div className="flex items-center border border-gray-200 bg-white rounded-lg overflow-hidden h-8">
-                      <select
-                        value={form.discount.type}
-                        onChange={(e) => {
-                          handleDiscountChange("type", e.target.value);
-                          setHasUnsavedChanges(true);
-                        }}
-                        className="text-xs font-medium text-gray-600 bg-transparent border-r border-gray-200 pl-3 pr-2 py-1 focus:outline-none cursor-pointer"
-                      >
-                        <option value="fixed">₹</option>
-                        <option value="percentage">%</option>
-                      </select>
-                      <input
-                        type="number"
-                        placeholder="0"
-                        min="0"
-                        step="0.01"
-                        value={form.discount.value}
-                        onWheel={(e) => e.target.blur()}
-                        onChange={(e) => {
-                          handleDiscountChange("value", e.target.value);
-                          setHasUnsavedChanges(true);
-                        }}
-                        className="w-16 text-right text-xs pr-3 pl-1 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-600 font-medium">Taxable Amount</span>
-                      <span className="text-gray-900 font-semibold">₹{formatNumberFixed(subtotalAfterItemDiscounts)}</span>
-                    </div>
-
-                    <div className="flex justify-between items-center text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="text-gray-600 font-medium">Round Off</span>
-                        <label className="relative cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="sr-only peer"
-                            checked={form.isRoundOff}
-                            onChange={(e) => {
-                              setForm((p) => ({ ...p, isRoundOff: e.target.checked }));
-                              setHasUnsavedChanges(true);
-                            }}
-                          />
-                          <div className="w-7 h-4 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                      </div>
-                      <span className={`font-semibold ${roundOffAmount !== 0 ? (roundOffAmount > 0 ? "text-green-600" : "text-red-500") : "text-gray-900"}`}>
-                        {roundOffAmount > 0 ? "+" : ""}{formatNumberFixed(roundOffAmount)}
-                      </span>
-                    </div>
-
-                    {taxDetails && !taxDetails.isInterState && (
-                      <>
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-600 font-medium">CGST</span>
-                          <span className="text-gray-900 font-medium">₹{formatNumberFixed(cgstAmount)}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-600 font-medium">SGST</span>
-                          <span className="text-gray-900 font-medium">₹{formatNumberFixed(sgstAmount)}</span>
-                        </div>
-                      </>
-                    )}
-                    {taxDetails && taxDetails.isInterState && (
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-600 font-medium">IGST</span>
-                        <span className="text-gray-900 font-medium">₹{formatNumberFixed(igstAmount)}</span>
-                      </div>
-                    )}
-
-                    <div className="flex justify-between items-center pt-2">
-                      <span className="text-lg font-bold text-gray-900">Total Amount</span>
-                      <span className="text-lg font-bold text-gray-900">₹{formatNumberFixed(finalTotal)}</span>
-                    </div>
-
-                    <div className="flex justify-between items-center text-sm pt-1">
-                      <span className="text-gray-500">Total Discount</span>
-                      <span className="text-gray-600 font-medium">₹{formatNumberFixed(totalItemDiscounts + invoiceDiscountAmount - roundOffAmount)}</span>
-                    </div>
-
-                    <div className="flex justify-end gap-2 text-xs pt-1">
-                      <label className="flex items-center gap-1.5 cursor-pointer text-gray-500">
-                        Hide Totals
-                        <Checkbox checked={form.hideTotals} onChange={(e) => {
-                            setForm((p) => ({ ...p, hideTotals: e.target.checked }));
-                            setHasUnsavedChanges(true);
-                          }} />
-                      </label>
-                    </div>
-
-                    <div className="text-xs text-gray-400 italic text-right mt-1">
-                      {numberToWords(finalTotal)}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Select Bank */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1">
-                    <label className="text-sm font-semibold text-gray-700">Select Bank</label>
-                  </div>
-                  <BankSelect
-                    banks={banks}
-                    value={form.bankDetails || ""}
-                    onChange={(id) => {
-                      setForm((prev) => ({ ...prev, bankDetails: id }));
-                      setHasUnsavedChanges(true);
-                    }}
-                  />
-                  <p className="text-xs text-gray-400">
-                    {banks.length === 0
-                      ? "No bank accounts yet — add them in Settings → Bank Details."
-                      : "The default is applied to every invoice unless you pick another here."}
-                  </p>
-                </div>
-
-                {/* Payment Note — the "note"/"tn" shown in the payer's UPI
-                    app when they scan the QR. Defaults to "Invoice <number>"
-                    when left blank (see buildUpiUri in
-                    shared/documentTemplates.js), but is fully editable. */}
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Payment Note (QR)</label>
-                  <input
-                    type="text"
-                    value={form.qrNote}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, qrNote: e.target.value }));
-                      setHasUnsavedChanges(true);
-                    }}
-                    placeholder="Invoice INV-..."
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    maxLength={50}
-                  />
-                  <p className="text-xs text-gray-400">
-                    Shown as the payment note when the QR is scanned. Leave blank to use "Invoice &lt;number&gt;" automatically.
-                  </p>
-                </div>
-
-                {/* Signature */}
-                <div className="bg-white rounded-xl shadow-[0_1px_3px_rgba(15,23,42,0.06),0_8px_20px_-12px_rgba(15,23,42,0.12)] border border-slate-200 p-5">
-                  <SectionHeader number="07" title="Signature" />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="flex flex-col gap-1">
-                      <div className="relative flex items-center h-10 rounded-lg border border-gray-200 focus-within:border-blue-500 overflow-hidden">
-                        <select
-                          value={form.signature}
-                          onChange={(e) => {
-                            setForm((prev) => ({ ...prev, signature: e.target.value }));
-                            setHasUnsavedChanges(true);
-                          }}
-                          disabled={signaturesLoading}
-                          className="flex-1 min-w-0 h-full pl-3 pr-8 text-[13px] bg-transparent appearance-none focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                          <option value="">No signature</option>
-                          {savedSignatures.map((sig) => (
-                            <option key={sig.id} value={sig.dataUrl}>
-                              {sig.name}
-                              {sig.isDefault ? " (Default)" : ""}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      </div>
-                      <p className="text-xs text-gray-400">
-                        {signaturesLoading
-                          ? "Loading signatures…"
-                          : savedSignatures.length === 0
-                            ? "No saved signatures yet — add them in Settings → Document Settings → Signatures."
-                            : "The default is applied to every invoice unless you pick another here."}
-                      </p>
-                    </div>
-                    <div className="h-[72px] flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50">
-                      {form.signature ? (
-                        <img
-                          src={form.signature}
-                          alt="Selected signature"
-                          className="max-h-16 max-w-full object-contain"
-                        />
-                      ) : (
-                        <span className="text-xs text-gray-400">No signature selected</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Sticky Footer */}
-            <div className="sticky bottom-0 z-20 w-full pt-3 pb-1 -mx-6 mt-12 flex justify-center pointer-events-none">
-              <div className="pointer-events-auto flex w-full max-w-2xl items-center justify-between gap-5 rounded-2xl border border-[#E1E4EA] bg-white/95 backdrop-blur-sm pl-6 pr-2.5 py-2.5 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.22)]">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold tracking-wide text-[#99A0AE] uppercase leading-none">
-                    Total
-                  </p>
-                  <p className="text-[18px] font-bold text-[#1F2937] leading-tight truncate">
-                    ₹{formatNumberToIndian(finalTotal)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {}}
-                    className="h-9 px-4 flex items-center gap-1.5 bg-white border border-[#E1E4EA] rounded-lg text-[13px] font-medium text-[#1F2937] hover:bg-gray-50 transition-colors whitespace-nowrap"
-                  >
-                    <Printer className="w-3.5 h-3.5 text-[#525866]" />
-                    Print
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="h-9 px-4 flex items-center gap-1.5 rounded-lg bg-[#0085FF] hover:bg-blue-600 text-white text-[13px] font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
-                  >
-                    {isSubmitting
-                      ? editingInvoice
-                        ? "Updating..."
-                        : "Creating..."
-                      : editingInvoice
-                        ? "Update Invoice"
-                        : "Create Invoice"}
-                    {!isSubmitting && <ChevronRight className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </form>
-
-        {showItemForm && (
-          <ItemForm
-            form={itemForm}
-            setForm={setItemForm}
-            loading={itemFormLoading}
-            setLoading={setItemFormLoading}
-            setError={setItemFormError}
-            setSuccess={setItemFormSuccess}
-            fetchItems={fetchItems}
-            onRequestClose={() => {
-              resetItemForm();
-              setShowItemForm(false);
-            }}
-          />
-        )}
-      </div>
-
-      <NotesTermsDrawer
-        isOpen={notesDrawer !== null}
-        focus={notesDrawer || "notes"}
-        onClose={() => setNotesDrawer(null)}
-        type="tax"
-        docName="Invoice"
-        onApplyNotes={(v) => {
-          setForm((prev) => ({ ...prev, notes: v }));
-          setHasUnsavedChanges(true);
-        }}
-        onApplyTerms={(v) => {
-          setForm((prev) => ({ ...prev, terms: v }));
-          setHasUnsavedChanges(true);
-        }}
-      />
-
-      <AddressBookDrawer
-        isOpen={addressDrawer !== null}
-        onClose={() => setAddressDrawer(null)}
-        currentAddress={addressDrawer === "billing" ? form.billingAddress : form.shippingAddress}
-        onApply={(next) => {
-          if (addressDrawer === "billing") {
-            const customerState = (next.state || "").trim().toLowerCase();
-            const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
-            setForm((prev) => ({
-              ...prev,
-              billingAddress: next,
-              shippingAddress: prev.sameAsBilling ? next : prev.shippingAddress,
-              transactionType: customerState ? autoType : prev.transactionType,
-            }));
-          } else {
-            setForm((prev) => ({ ...prev, shippingAddress: next }));
-          }
-          setHasUnsavedChanges(true);
-        }}
-      />
-    </>,
-    document.body
-  );
-};
-
-
-// ============================================================================
-// CreateInvoicePanel — moved here from Accounting.jsx
-// Shared two-pane create/edit form used by all document types.
-// ============================================================================
-
 const OpenNotesTermsButton = ({ label, onClick }) => (
   <button
     type="button"
@@ -2283,10 +188,6 @@ const docNameFor = (type) =>
         ? "Quotation"
         : "Delivery Challan";
 
-// Single source of truth for the template list — the same one the renderer and
-// the PDF generator use, so a template added there shows up here automatically.
-/* The "Add Invoice" experience for the Invoices tab: details on the left,
-   live preview on the right. */
 const CreateInvoicePanel = ({
   deals,
   onClose,
@@ -2310,6 +211,12 @@ const CreateInvoicePanel = ({
   defaultNotesFlat = "",
   defaultTermsFlat = "",
   documentTypeSettings = {},
+  // Optional. A deal to select on a NEW document as if the user had picked it — used when the
+  // panel is opened from a context that already implies the deal (Company Profile / Deal page).
+  // Goes through the same applyDealSelection as a manual pick, so the GSTIN, addresses and
+  // transaction type are filled exactly as they would be; changing it later (e.g. after "Add
+  // Deal") selects the new deal. Accounting doesn't pass it, so its behaviour is unchanged.
+  preselectDealId = null,
 }) => {
   const isEditing = !!initialDoc;
   // Same "per-type value, else flat default, else the built-in copy"
@@ -2325,10 +232,9 @@ const CreateInvoicePanel = ({
     : (defaultTermsFlat || PREDEFINED_TERMS[type] || "");
   // Per-type capabilities. Delivery challans have no GSTIN / tax / HSN; the
   // quotation tax flag is stored under a different key.
-  const isChallan = type === "deliveryChallan";
-  const supportsTax = !isChallan;
-  const supportsGSTIN = !isChallan;
-  const taxFlagKey = type === "quotation" ? "isTaxQuotation" : "isTaxInvoice";
+  // Delivery Challan uses the same GST on/off, GSTIN and tax calculation as a Tax Invoice.
+  const supportsTax = true;
+  const supportsGSTIN = true;
   const docName = docNameFor(type);
   // Document Settings is the single source of truth for the numbering
   // prefix. Each document type's backend expects its own request field name
@@ -2349,7 +255,6 @@ const CreateInvoicePanel = ({
     const base = sourceDoc
       ? {
           deal: sourceDoc.deal?._id || sourceDoc.deal || "",
-          style: sourceDoc.style || "",
           date: sourceDoc.date ? sourceDoc.date.slice(0, 10) : "",
           dueDate: sourceDoc.dueDate ? sourceDoc.dueDate.slice(0, 10) : "",
           receiverGSTIN: sourceDoc.receiverGSTIN || "",
@@ -2359,11 +264,9 @@ const CreateInvoicePanel = ({
             isAddressEmpty(sourceDoc.shippingAddress) ||
             JSON.stringify({ ...emptyAddress(), ...(sourceDoc.billingAddress || {}) }) ===
               JSON.stringify({ ...emptyAddress(), ...(sourceDoc.shippingAddress || {}) }),
-          isTaxInvoice:
-            sourceDoc[type === "quotation" ? "isTaxQuotation" : "isTaxInvoice"] ||
-            false,
           transactionType: sourceDoc.transactionType || "intra",
-          gstRate: sourceDoc.gstRate || 18,
+          // No document-level gstRate: GST comes only from each line's
+          // product/variant, so there is nothing document-wide to carry over.
           // Only an actual edit (initialDoc/editingInvoice) should keep the
           // source's own number — conversionData covers both Convert (a
           // different doc type, where the source's number field usually
@@ -2389,7 +292,8 @@ const CreateInvoicePanel = ({
                   discountType: item.discountType || "amount",
                   discount: item.discount || 0,
                   showDescription: !!item.description,
-                  gstRate: item.gstRate || 18,
+                  // Carried over as saved, including 0%; never re-defaulted to 18%.
+                  gstRate: item.gstRate ?? 0,
                   taxInclusive: !!item.taxInclusive,
                 }))
               : [blankItem()],
@@ -2407,16 +311,13 @@ const CreateInvoicePanel = ({
         }
       : {
           deal: "",
-          style: "",
           date: "",
           dueDate: "",
           receiverGSTIN: "",
           billingAddress: emptyAddress(),
           shippingAddress: emptyAddress(),
           sameAsBilling: true,
-          isTaxInvoice: true,
           transactionType: "intra",
-          gstRate: 18,
           invoicePrefix: configuredPrefix,
           invoiceSuffix: configuredSuffix,
           invoiceNumber: "",
@@ -2438,7 +339,7 @@ const CreateInvoicePanel = ({
     const pad = (v) => String(v).padStart(2, "0");
     const out = { details: pad(n++) };
     out.address = pad(n++);
-    if (supportsGSTIN && form.isTaxInvoice) out.billing = pad(n++);
+    if (supportsGSTIN) out.billing = pad(n++);
     out.items = pad(n++);
     out.notes = pad(n++);
     out.terms = pad(n++);
@@ -2450,6 +351,8 @@ const CreateInvoicePanel = ({
   const [catalogue, setCatalogue] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [stockErrorMessage, setStockErrorMessage] = useState(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
   // Required/invalid fields are marked red in place instead of popping a
   // toast — clears itself the moment the field is actually filled in/fixed.
   const [fieldErrors, setFieldErrors] = useState({});
@@ -2480,6 +383,15 @@ const CreateInvoicePanel = ({
       invoice: { prefix: "INV-", suffix: "", prefixes: ["INV-"], suffixes: [] },
     },
   });
+  // Numbering options for THIS document type. docSettings flattens the
+  // invoice ones into invoicePrefixes/invoiceSuffixes for the legacy fields,
+  // but the pickers must offer the current type's own list -- otherwise a
+  // quotation is offered INV-/TAX- and can be saved with an invoice prefix.
+  const typeNumbering =
+    docSettings.documentTypeSettings?.[SETTINGS_KEY_BY_TYPE[type]] || {};
+  const prefixOptions = typeNumbering.prefixes || [];
+  const suffixOptions = typeNumbering.suffixes || [];
+
   // Live preview of the number this document will actually get on save
   // (from the same persistent per-org, per-type counter resolveDocumentNumber
   // uses on the backend) — shown as the number box's placeholder instead of
@@ -2668,51 +580,69 @@ const CreateInvoicePanel = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Builds the product picker list from GET /items. Shared by the initial load and the reload
+  // after "Create product", so both carry the same fields (price, GST, With/Without Tax, stock,
+  // discount). The reload used to be a separate copy without gstRate/taxInclusive/stock, so any
+  // product added after creating one fell back to 18% tax-on-top.
+  const buildCatalogue = (data) =>
+    (data || [])
+      .filter((item) => item.isActive)
+      .flatMap((item) => {
+        // Same variant-only logic as PurchaseForm.jsx/PurchaseOrderForm.jsx
+        // (and the other fetchItems in this file): variants only when
+        // present, otherwise the item itself.
+        const variants = item.variants || [];
+        if (variants.length > 0) {
+          return variants.map((v) => ({
+            _id: v._id,
+            displayName: `${item.name} - ${v.name}`,
+            name: v.name,
+            description: v.description || item.description || "",
+            sellingPrice: v.sellingPrice || item.sellingPrice,
+            hsnSac: v.hsnSac || item.hsnSac || "",
+            isVariant: true,
+            parentItemId: item._id,
+            type: item.type,
+            stock: v.stock ?? item.inventory?.currentStock ?? 0,
+            // Variant-first: the variant's own discount when it sets one, otherwise the parent
+            // item's (utils/variantResolve.js), same as the full-width forms. `v.discount ||`
+            // never fell back: every variant has a discount object, even when its value is unset.
+            discount: resolveDiscount(v, item),
+            // The product's own GST rate and With/Without Tax setting. These were never
+            // copied into the catalogue, so picking a product fell back to a flat 18% added
+            // on top. Same variant-then-parent resolution as the full-width forms
+            // (InvoiceFormFull/QuotationForm/PerformaInvoiceFormFull).
+            // The variant's own GST rate, with no fall back to the parent product: an
+            // unset variant rate means 0%, and a variant set to 0% stays 0%. Inheriting
+            // the parent silently taxed variants that were meant to be GST-free.
+            gstRate: v.gstRate ?? 0,
+            taxInclusive: !!(v.taxInclusive ?? item.taxInclusive),
+          }));
+        }
+        return [
+          {
+            _id: item._id,
+            displayName: item.name,
+            name: item.name,
+            description: item.description || "",
+            sellingPrice: item.sellingPrice,
+            hsnSac: item.hsnSac || "",
+            isVariant: false,
+            parentItemId: null,
+            type: item.type,
+            stock: item.inventory?.currentStock ?? 0,
+            discount: item.discount,
+            gstRate: item.gstRate ?? 0,
+            taxInclusive: !!item.taxInclusive,
+          },
+        ];
+      });
+
   useEffect(() => {
     const fetchItems = async () => {
       try {
         const res = await API.get("/items?search=&includeVariants=true");
-        const flattened = (res.data || [])
-          .filter((item) => item.isActive)
-          .flatMap((item) => {
-            // Same variant-only logic as PurchaseForm.jsx/PurchaseOrderForm.jsx
-            // (and the other fetchItems in this file): variants only when
-            // present, otherwise the item itself.
-            const variants = item.variants || [];
-            if (variants.length > 0) {
-              return variants.map((v) => ({
-                _id: v._id,
-                displayName: `${item.name} - ${v.name}`,
-                name: v.name,
-                description: v.description || item.description || "",
-                sellingPrice: v.sellingPrice || item.sellingPrice,
-                hsnSac: v.hsnSac || item.hsnSac || "",
-                isVariant: true,
-                parentItemId: item._id,
-                type: item.type,
-                stock: v.stock ?? item.inventory?.currentStock ?? 0,
-                // Discount only lives on the parent Item (variants have no
-                // discount field of their own) — same catalog default for
-                // every variant of a product.
-                discount: v.discount || item.discount,
-              }));
-            }
-            return [
-              {
-                _id: item._id,
-                displayName: item.name,
-                name: item.name,
-                description: item.description || "",
-                sellingPrice: item.sellingPrice,
-                hsnSac: item.hsnSac || "",
-                isVariant: false,
-                parentItemId: null,
-                type: item.type,
-                stock: item.inventory?.currentStock ?? 0,
-                discount: item.discount,
-              },
-            ];
-          });
+        const flattened = buildCatalogue(res.data);
         setCatalogue(flattened);
       } catch (err) {
         console.error("Fetch items error:", err);
@@ -2838,7 +768,10 @@ const CreateInvoicePanel = ({
     if (resolvedId) {
       const picked = catalogue.find((c) => c._id === resolvedId);
       if (!picked) return toast.error("Product not found in catalogue.");
-      const blocked = stockBlockReason(picked, parseInt(quickAddQty) || 1);
+      // Only a Tax Invoice actually moves stock, so only it can be blocked by
+      // availability. A Quotation/Pro Forma/Delivery Challan may quote goods
+      // that aren't in hand yet.
+      const blocked = type === "tax" ? stockBlockReason(picked, parseInt(quickAddQty) || 1) : null;
       if (blocked) return toast.error(blocked);
       newItem = {
         _id: picked._id,
@@ -2857,7 +790,9 @@ const CreateInvoicePanel = ({
         discountType: picked.discount?.type || "amount",
         discount: picked.discount?.value || 0,
         showDescription: false,
-        gstRate: picked.gstRate || form.gstRate || 18,
+        // `??`, not `||`: a product at 0% GST is a real rate, not a missing one.
+        // No fall back to a document-level rate either — GST is per line.
+        gstRate: picked.gstRate ?? 0,
         taxInclusive: !!picked.taxInclusive,
       };
     } else {
@@ -2874,7 +809,9 @@ const CreateInvoicePanel = ({
         discountType: "amount",
         discount: 0,
         showDescription: false,
-        gstRate: form.gstRate || 18,
+        // A typed-in line has no product behind it and GST is strictly
+        // product/variant-level, so it starts untaxed at 0%.
+        gstRate: 0,
         taxInclusive: false,
       };
     }
@@ -2891,8 +828,18 @@ const CreateInvoicePanel = ({
 
   // Same breakdown as InvoiceForm.jsx: line total -> per-item discount ->
   // subtotal after item discounts -> invoice-level discount -> GST -> final.
-  const lineTotal = (item) =>
-    (parseFloat(item.rate) || 0) * (parseInt(item.quantity) || 0);
+  // Mirrors computeDocument()'s own line base (shared/documentTemplates.js):
+  // a tax-inclusive rate has its GST divided out first, so this summary's
+  // Subtotal is the same taxable base the preview and the PDF print. Adding
+  // the gross rate here instead made Subtotal + GST disagree with Total on
+  // any tax-inclusive line.
+  const lineTotal = (item) => {
+    const rate = parseFloat(item.rate) || 0;
+    const qty = parseInt(item.quantity) || 0;
+    const gstRate = GST_RATES.includes(Number(item.gstRate)) ? Number(item.gstRate) : 0;
+    const unitTaxable = item.taxInclusive ? rate / (1 + gstRate / 100) : rate;
+    return unitTaxable * qty;
+  };
 
   const itemDiscountAmount = (item) => {
     const base = lineTotal(item);
@@ -2916,12 +863,7 @@ const CreateInvoicePanel = ({
   // computeDocument → splitGst, in shared/documentTemplates.js) — honors
   // each item's own gstRate rather than only a document-level rate, so this
   // summary, the preview pane and the saved amount can never disagree.
-  // ("quotation" maps to "tax" here only for computeDocument's internal
-  // isTaxQuotation/isTaxInvoice lookup — this panel's own state field is
-  // always named form.isTaxInvoice regardless of document type.)
-  const taxDetails = form.isTaxInvoice
-    ? computeDocument(form, type === "quotation" ? "tax" : type)
-    : null;
+  const taxDetails = computeDocument(form, type === "quotation" ? "tax" : type);
   const gstSplit = taxDetails
     ? { isInterState: taxDetails.isInterState, cgst: taxDetails.totalCGST, sgst: taxDetails.totalSGST, igst: taxDetails.totalIGST }
     : { cgst: 0, sgst: 0, igst: 0, isInterState: false };
@@ -2950,7 +892,7 @@ const CreateInvoicePanel = ({
     // requiring it here left submit silently doing nothing: fieldErrors got
     // set on a field with no DOM node to show the red border on, and
     // scrollIntoView on a null ref was a no-op.
-    if (!isDraft && supportsGSTIN && form.isTaxInvoice) {
+    if (!isDraft && supportsGSTIN) {
       if (!form.receiverGSTIN.trim()) nextErrors.receiverGSTIN = true;
       else if (!GSTIN_REGEX.test(form.receiverGSTIN.trim().toUpperCase()))
         nextErrors.receiverGSTIN = true;
@@ -2974,11 +916,22 @@ const CreateInvoicePanel = ({
     // A quick draft only needs enough to identify the document; full GSTIN and
     // item validation apply once it's actually being created for real.
     if (!isDraft) {
+      // Same rule the full-width screen enforces, so a document cannot pass
+      // validation in one layout and fail it in the other: a line that carries
+      // GST must also carry an HSN/SAC, and a percentage discount cannot
+      // exceed 100%.
       const badItem = form.items.find(
-        (it) => !it.name || !it.rate || !it.quantity
+        (it) =>
+          !it.name ||
+          !it.rate ||
+          !it.quantity ||
+          (parseFloat(it.gstRate) > 0 && !it.hsn) ||
+          (it.discountType === "percentage" && it.discount > 100)
       );
       if (badItem)
-        return toast.error("Every item needs a name, rate and quantity.");
+        return toast.error(
+          "Every item needs a name, rate and quantity — plus an HSN/SAC for any item with a GST rate — and percentage discounts cannot exceed 100%."
+        );
     }
 
     try {
@@ -2988,9 +941,11 @@ const CreateInvoicePanel = ({
         date: form.date,
         dueDate: form.dueDate,
         status: statusValue,
-        style: previewTemplate,
         transactionType: form.transactionType,
-        gstRate: form.gstRate,
+        // Resolved now and stored, so reopening never re-derives it from a
+        // customer address that has changed since. All four document models
+        // carry these fields.
+        ...placeOfSupplyFields(form.shippingAddress, form.billingAddress),
         discount: form.discount,
         isRoundOff: form.isRoundOff,
         notes: form.notes,
@@ -3026,9 +981,6 @@ const CreateInvoicePanel = ({
       payload.shippingAddress = form.sameAsBilling
         ? form.billingAddress
         : form.shippingAddress;
-      if (supportsTax) {
-        payload[taxFlagKey] = form.isTaxInvoice;
-      }
       // Each document type's create/update endpoint expects its own field
       // name for the prefix/number (invoicePrefix, quotationPrefix,
       // performaInvoicePrefix, deliveryChallanPrefix) — sending the generic
@@ -3052,13 +1004,13 @@ const CreateInvoicePanel = ({
       const path = apiPathFor(type);
       if (isEditing) {
         await API.put(`/${path}/${initialDoc._id}`, payload);
-        toast.success(isDraft ? "Saved as draft!" : `${docName} updated successfully!`);
+        setSuccessMessage(isDraft ? "Saved as draft!" : `${docName} updated successfully!`);
       } else {
         await API.post(`/${path}`, payload);
-        toast.success(isDraft ? "Saved as draft!" : `${docName} created successfully!`);
+        setSuccessMessage(isDraft ? "Saved as draft!" : `${docName} created successfully!`);
       }
       onCreated();
-      onClose();
+      setShowSuccessModal(true);
     } catch (err) {
       const serverMessage = err.response?.data?.error || "";
       if (/insufficient stock/i.test(serverMessage)) {
@@ -3096,7 +1048,12 @@ const CreateInvoicePanel = ({
   // the live preview (and print window) shows the chosen number immediately.
   const previewDocNumber = (() => {
     if (isEditing) return docNumber;
-    const num = form.invoiceNumber?.toString().trim();
+    // On a new document the number is allocated on save, so fall back to the
+    // server's own peek at the next number in this series -- the preview should
+    // show the number the document will get, not a dash.
+    const num =
+      form.invoiceNumber?.toString().trim() ||
+      (nextNumberPreview != null ? String(nextNumberPreview) : "");
     if (!num) return docNumber || "";
     const pfx = (form.invoicePrefix?.trim() || configuredPrefix);
     const sep = pfx && !pfx.endsWith("-") ? "-" : "";
@@ -3132,8 +1089,9 @@ const CreateInvoicePanel = ({
     const html = buildDocumentHtml(
       {
         ...form,
-        isTaxInvoice: supportsTax && !!form.isTaxInvoice,
-        isTaxQuotation: supportsTax && !!form.isTaxInvoice,
+        // Same derivation the live preview and the save payload use, so an
+        // unsaved document prints the place of supply rather than a dash.
+        ...placeOfSupplyFields(form.shippingAddress, form.billingAddress),
       },
       {
         type,
@@ -3211,6 +1169,79 @@ const CreateInvoicePanel = ({
       dealOptions.find((o) => o.value === dealId)?.label
     );
   };
+  // Selecting a deal, whether picked by the user or preselected by the caller.
+  const applyDealSelection = (dealId) => {
+    setFieldErrors((prev) => ({ ...prev, deal: false }));
+    // Switching the deal always replaces the Receiver GSTIN
+    // and billing/shipping address with whatever the new
+    // deal's company has — including clearing them to empty
+    // when that company doesn't have them saved. Carrying
+    // over the previous deal's company data would attach it
+    // to a company it was never actually collected for.
+    const selectedDeal = deals.find((d) => d._id === dealId);
+    const company = selectedDeal?.company;
+    const nextBilling =
+      company && !isAddressEmpty(company.billingAddress)
+        ? { ...emptyAddress(), ...company.billingAddress }
+        : emptyAddress();
+    const nextShipping =
+      company && !isAddressEmpty(company.shippingAddresses?.[0])
+        ? { ...emptyAddress(), ...company.shippingAddresses[0] }
+        : emptyAddress();
+    // Same seller-state vs. customer-state comparison the
+    // full-width form uses (InvoiceFormFull.jsx) — kept here
+    // instead of a manual Transaction Type dropdown so both
+    // views classify a given deal identically.
+    setForm((p) => {
+      const shipping = p.sameAsBilling ? nextBilling : nextShipping;
+      // Goods: place of supply is the shipping state, so the tax type follows it.
+      const autoType = resolveTransactionType(orgDetails?.state, shipping, nextBilling);
+      return {
+        ...p,
+        deal: dealId,
+        receiverGSTIN: supportsGSTIN ? company?.gstin || "" : p.receiverGSTIN,
+        billingAddress: nextBilling,
+        shippingAddress: shipping,
+        transactionType: supportsTax && autoType ? autoType : p.transactionType,
+      };
+    });
+  };
+
+  // Applies `preselectDealId` to a new document. Re-runs when the org details arrive, because
+  // the inter/intra-state transaction type is derived from the org's state: a selection made
+  // before that load would otherwise lock in "intra" for an out-of-state customer. It only
+  // re-applies while the form still holds that same deal (or none), so a deal the user has
+  // since picked by hand is never overwritten.
+  const preselectAppliedRef = useRef({ started: false, dealId: null, withOrg: false });
+  useEffect(() => {
+    // First run: a form handed back from the full-width screen (or already holding a deal) keeps
+    // the deal it has — it was applied there and its addresses may have been edited since. The
+    // current preselect is recorded as handled, so only a LATER, different id (a deal just
+    // created via "Add Deal") is applied.
+    if (!preselectAppliedRef.current.started) {
+      const handedOff = !!(formOverride || form.deal);
+      preselectAppliedRef.current = {
+        started: true,
+        dealId: handedOff ? preselectDealId : null,
+        withOrg: handedOff,
+      };
+      if (handedOff) return;
+    }
+    if (isEditing || !preselectDealId) return;
+    if (!deals.some((d) => d._id === preselectDealId)) return;
+    const last = preselectAppliedRef.current;
+    const withOrg = !!orgDetails;
+    if (last.dealId === preselectDealId) {
+      // Same deal as last time: only worth re-applying to pick up the org state, and only if
+      // the user hasn't switched to a different deal in the meantime.
+      if (last.withOrg || !withOrg || form.deal !== preselectDealId) return;
+    }
+    preselectAppliedRef.current = { started: true, dealId: preselectDealId, withOrg };
+    applyDealSelection(preselectDealId);
+    // applyDealSelection is recreated each render; keyed on the inputs that matter instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselectDealId, deals, orgDetails, isEditing, formOverride]);
+
   const inputClass =
     "w-full h-[38px] px-3.5 rounded-full border border-[#1F2937]/10 bg-white text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all";
 
@@ -3227,9 +1258,7 @@ const CreateInvoicePanel = ({
   // Grid template for the wide (row/list) item layout — includes an HSN column
   // only for tax invoices. Card layout ignores this and stacks fields.
   // Description isn't a column any more — it's an optional box under each row.
-  const itemRowCols = form.isTaxInvoice
-    ? "@2xl:grid-cols-[1.9fr_0.7fr_0.7fr_0.55fr_1.1fr_0.9fr_32px]"
-    : "@2xl:grid-cols-[2.2fr_0.8fr_0.6fr_1.2fr_0.9fr_32px]";
+  const itemRowCols = "@2xl:grid-cols-[1.9fr_0.7fr_0.7fr_0.55fr_1.1fr_0.9fr_32px]";
 
   return (
     <div
@@ -3354,34 +1383,62 @@ const CreateInvoicePanel = ({
                       phone screen; document numbering is still reachable via
                       Settings. */}
                   {!isEditing && (
-                    <div className="hidden lg:flex items-center border border-[#E1E4EA] rounded-full overflow-hidden h-9 bg-white flex-shrink-0">
-                      <input
-                        type="text"
-                        value={form.invoicePrefix}
-                        onChange={(e) => setForm((prev) => ({ ...prev, invoicePrefix: e.target.value }))}
-                        title={`${docName} number prefix`}
-                        aria-label={`${docName} number prefix`}
-                        className="w-16 h-full pl-3.5 pr-2 text-sm font-semibold text-[#1F2937] bg-[#F8F9FB] border-r border-[#E1E4EA] rounded-l-full focus:outline-none focus:bg-white"
-                      />
-                      <input
-                        type="text"
-                        placeholder={nextNumberPreview ? String(nextNumberPreview) : "Auto"}
-                        value={form.invoiceNumber}
-                        onChange={(e) => setForm((prev) => ({ ...prev, invoiceNumber: e.target.value }))}
-                        title={`${docName} number (leave blank to auto-generate)`}
-                        aria-label={`${docName} number`}
-                        className="w-20 h-full px-2 text-sm font-semibold text-[#1F2937] border-r border-[#E1E4EA] focus:outline-none"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Suffix"
-                        value={form.invoiceSuffix}
-                        onChange={(e) => setForm((prev) => ({ ...prev, invoiceSuffix: e.target.value }))}
-                        title={`${docName} number suffix (optional)`}
-                        aria-label={`${docName} number suffix`}
-                        className="w-16 h-full pl-2 pr-3.5 text-sm font-semibold text-[#1F2937] bg-[#F8F9FB] rounded-r-full focus:outline-none focus:bg-white"
-                      />
-                    </div>
+                      <div className="hidden lg:flex items-center gap-2">
+                        <div className="flex items-center border border-[#E1E4EA] rounded-full overflow-hidden h-9 bg-white flex-shrink-0">
+                          <div className="relative h-full border-r border-[#E1E4EA] bg-[#F8F9FB] flex items-center">
+                            <select
+                              value={form.invoicePrefix}
+                              onChange={(e) => setForm((prev) => ({ ...prev, invoicePrefix: e.target.value }))}
+                              title={`${docName} number prefix`}
+                              aria-label={`${docName} number prefix`}
+                              className="h-full pl-3.5 pr-7 text-sm font-semibold text-[#1F2937] bg-transparent focus:outline-none appearance-none cursor-pointer"
+                            >
+                              {prefixOptions.length > 0 ? (
+                                prefixOptions.map(pfx => (
+                                  <option key={pfx} value={pfx}>{pfx}</option>
+                                ))
+                              ) : (
+                                <option value={form.invoicePrefix}>{form.invoicePrefix || "None"}</option>
+                              )}
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
+                          </div>
+                          {/* Read-only while creating: the number comes from this
+                              series' counter and is allocated on save, so it can't be
+                              typed over. It stays renameable afterwards through the
+                              pencil beside the saved number. */}
+                          <input
+                            type="text"
+                            value={nextNumberPreview != null ? String(nextNumberPreview) : "Auto"}
+                            readOnly
+                            title={`${docName} number is allocated automatically on save`}
+                            aria-label={`${docName} number`}
+                            className="w-20 h-full px-2 text-sm font-semibold text-[#1F2937] bg-[#F8F9FB] border-r border-[#E1E4EA] focus:outline-none cursor-default"
+                          />
+                          <div className="relative h-full bg-[#F8F9FB] flex items-center">
+                            <select
+                              value={form.invoiceSuffix}
+                              onChange={(e) => setForm((prev) => ({ ...prev, invoiceSuffix: e.target.value }))}
+                              title={`${docName} number suffix (optional)`}
+                              aria-label={`${docName} number suffix`}
+                              className="h-full pl-2.5 pr-7 text-sm font-semibold text-[#1F2937] bg-transparent focus:outline-none appearance-none cursor-pointer"
+                            >
+                              <option value="">None</option>
+                              {suffixOptions.map(sfx => (
+                                <option key={sfx} value={sfx}>{sfx}</option>
+                              ))}
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
+                          </div>
+                        </div>
+                        <Link
+                          to="/settings/document-settings"
+                          title="Manage Document Numbering"
+                          className="flex items-center justify-center w-7 h-7 rounded-full bg-white border border-[#E1E4EA] hover:bg-gray-50 text-gray-600 transition-colors shrink-0 shadow-sm"
+                        >
+                          <SettingsIcon className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
                   )}
                 </div>
               )}
@@ -3507,6 +1564,7 @@ const CreateInvoicePanel = ({
               docName={docName}
               supportsGSTIN={supportsGSTIN}
               supportsTax={supportsTax}
+              sellerState={orgDetails?.state}
               sectionNo={sectionNo}
               form={form}
               setField={setField}
@@ -3534,40 +1592,7 @@ const CreateInvoicePanel = ({
                   icon={SearchIcon}
                   invalid={fieldErrors.deal}
                   triggerClassName="h-[38px] rounded-full"
-                  onSelect={(o) => {
-                    setFieldErrors((prev) => ({ ...prev, deal: false }));
-                    // Switching the deal always replaces the Receiver GSTIN
-                    // and billing/shipping address with whatever the new
-                    // deal's company has — including clearing them to empty
-                    // when that company doesn't have them saved. Carrying
-                    // over the previous deal's company data would attach it
-                    // to a company it was never actually collected for.
-                    const selectedDeal = deals.find((d) => d._id === o.value);
-                    const company = selectedDeal?.company;
-                    const nextBilling =
-                      company && !isAddressEmpty(company.billingAddress)
-                        ? { ...emptyAddress(), ...company.billingAddress }
-                        : emptyAddress();
-                    const nextShipping =
-                      company && !isAddressEmpty(company.shippingAddresses?.[0])
-                        ? { ...emptyAddress(), ...company.shippingAddresses[0] }
-                        : emptyAddress();
-                    // Same seller-state vs. customer-state comparison the
-                    // full-width form uses (InvoiceFormFull.jsx) — kept here
-                    // instead of a manual Transaction Type dropdown so both
-                    // views classify a given deal identically.
-                    const sellerState = (orgDetails?.state || "").trim().toLowerCase();
-                    const customerState = (company?.billingAddress?.state || "").trim().toLowerCase();
-                    const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
-                    setForm((p) => ({
-                      ...p,
-                      deal: o.value,
-                      receiverGSTIN: supportsGSTIN ? company?.gstin || "" : p.receiverGSTIN,
-                      billingAddress: nextBilling,
-                      shippingAddress: p.sameAsBilling ? nextBilling : nextShipping,
-                      transactionType: supportsTax ? autoType : p.transactionType,
-                    }));
-                  }}
+                  onSelect={(o) => applyDealSelection(o.value)}
                 />
                 <button
                   type="button"
@@ -3693,15 +1718,16 @@ const CreateInvoicePanel = ({
                 // picker above runs, so editing the billing state directly
                 // on this document also flips CGST/SGST vs IGST instead of
                 // freezing whatever the deal's company implied.
-                const sellerState = (orgDetails?.state || "").trim().toLowerCase();
-                const customerState = (next.state || "").trim().toLowerCase();
-                const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
-                setForm((p) => ({
-                  ...p,
-                  billingAddress: next,
-                  shippingAddress: p.sameAsBilling ? next : p.shippingAddress,
-                  transactionType: supportsTax && customerState ? autoType : p.transactionType,
-                }));
+                setForm((p) => {
+                  const shipping = p.sameAsBilling ? next : p.shippingAddress;
+                  const autoType = resolveTransactionType(orgDetails?.state, shipping, next);
+                  return {
+                    ...p,
+                    billingAddress: next,
+                    shippingAddress: shipping,
+                    transactionType: supportsTax && autoType ? autoType : p.transactionType,
+                  };
+                });
               }}
             />
             {fieldErrors.billingAddress && (
@@ -3714,10 +1740,15 @@ const CreateInvoicePanel = ({
                 onClick={() =>
                   setForm((p) => {
                     const nowSame = !p.sameAsBilling;
+                    // Shipping drives the place of supply, so mirroring (or
+                    // un-mirroring) billing can change CGST/SGST vs IGST.
+                    const shipping = nowSame ? p.billingAddress : p.shippingAddress;
+                    const autoType = resolveTransactionType(orgDetails?.state, shipping, p.billingAddress);
                     return {
                       ...p,
                       sameAsBilling: nowSame,
-                      shippingAddress: nowSame ? p.billingAddress : p.shippingAddress,
+                      shippingAddress: shipping,
+                      transactionType: supportsTax && autoType ? autoType : p.transactionType,
                     };
                   })
                 }
@@ -3742,40 +1773,21 @@ const CreateInvoicePanel = ({
               value={form.shippingAddress}
               disabled={!!form.sameAsBilling}
               onUseSaved={() => setAddressDrawer("shipping")}
-              onChange={(next) => setField("shippingAddress", next)}
+              onChange={(next) =>
+                setForm((p) => {
+                  const autoType = resolveTransactionType(orgDetails?.state, next, p.billingAddress);
+                  return {
+                    ...p,
+                    shippingAddress: next,
+                    transactionType: supportsTax && autoType ? autoType : p.transactionType,
+                  };
+                })
+              }
             />
           </div>
 
-          {/* Tax Invoice toggle — CreateInvoicePanel (the "Update Invoice"
-              edit flow) never exposed this, unlike the split-view panel
-              above, so GST fields and the "Tax Invoice" title were forced on
-              for every document. OFF renders the doc titled "Invoice"
-              instead of "Tax Invoice" (Professional.js reads this same
-              form.isTaxInvoice via computeDocument's `t.isTax`) and hides
-              Receiver GSTIN / per-item GST%. */}
-          {supportsTax && (
-            <div className="flex items-center gap-2.5 h-10 w-full">
-              <button
-                type="button"
-                onClick={() => setField("isTaxInvoice", !form.isTaxInvoice)}
-                className="flex-shrink-0"
-              >
-                <span
-                  className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${form.isTaxInvoice ? "bg-[#0085FF]" : "bg-[#E1E4EA]"}`}
-                >
-                  <span
-                    className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isTaxInvoice ? "translate-x-4" : "translate-x-0"}`}
-                  />
-                </span>
-              </button>
-              <div className="flex flex-col">
-                <span className="text-[12px] font-medium text-[#1F2937]">Enable Tax Invoice</span>
-                <span className="text-[10px] text-[#99A0AE]">Include GST and tax details</span>
-              </div>
-            </div>
-          )}
 
-          {supportsGSTIN && form.isTaxInvoice && (
+          {supportsGSTIN && (
           <>
           <SectionHeader number={sectionNo.billing} title="Billing & Tax Information" />
           <div className="grid grid-cols-1 @md:grid-cols-2 gap-x-6 gap-y-2 w-full">
@@ -3827,6 +1839,11 @@ const CreateInvoicePanel = ({
                 </button>
               </div>
             </div>
+
+            {/* The items section owns sectionNo.items; without this header that
+                number was allocated but never shown, leaving a gap in the
+                sidebar's 01..09 sequence. */}
+            <SectionHeader number={sectionNo.items} title={`${docName} Items`} />
 
             {/* Quick-add bar */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-3 mb-4 bg-blue-50/60 border border-blue-100 rounded-xl">
@@ -4402,20 +2419,7 @@ const CreateInvoicePanel = ({
           onSaved={async () => {
             try {
               const res = await API.get("/items?search=&includeVariants=true");
-              const flattened = (res.data || []).filter((i) => i.isActive).flatMap((item) => {
-                const variants = item.variants || [];
-                if (variants.length > 0) {
-                  return variants.map((v) => ({
-                    _id: v._id, displayName: `${item.name} - ${v.name}`, name: v.name,
-                    description: v.description || item.description || "", sellingPrice: v.sellingPrice || item.sellingPrice,
-                    hsnSac: v.hsnSac || item.hsnSac || "", isVariant: true, parentItemId: item._id,
-                    discount: v.discount || item.discount,
-                  }));
-                }
-                return [{ _id: item._id, displayName: item.name, name: item.name, description: item.description || "",
-                  sellingPrice: item.sellingPrice, hsnSac: item.hsnSac || "", isVariant: false, parentItemId: null, discount: item.discount }];
-              });
-              setCatalogue(flattened);
+              setCatalogue(buildCatalogue(res.data));
             } catch (err) { console.error(err); }
             setShowQuickItemDrawer(false);
           }}
@@ -4489,6 +2493,8 @@ const CreateInvoicePanel = ({
         docName={docName}
         onApplyNotes={(v) => setField("notes", v)}
         onApplyTerms={(v) => setField("terms", v)}
+        currentNotes={form.notes}
+        currentTerms={form.terms}
       />
 
       <AddressBookDrawer
@@ -4496,19 +2502,20 @@ const CreateInvoicePanel = ({
         onClose={() => setAddressDrawer(null)}
         currentAddress={addressDrawer === "billing" ? form.billingAddress : form.shippingAddress}
         onApply={(next) => {
-          if (addressDrawer === "billing") {
-            const sellerState = (orgDetails?.state || "").trim().toLowerCase();
-            const customerState = (next.state || "").trim().toLowerCase();
-            const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
-            setForm((p) => ({
+          setForm((p) => {
+            const billing = addressDrawer === "billing" ? next : p.billingAddress;
+            const shipping =
+              addressDrawer === "billing" ? (p.sameAsBilling ? next : p.shippingAddress) : next;
+            const autoType = resolveTransactionType(orgDetails?.state, shipping, billing);
+            return {
               ...p,
-              billingAddress: next,
-              shippingAddress: p.sameAsBilling ? next : p.shippingAddress,
-              transactionType: supportsTax && customerState ? autoType : p.transactionType,
-            }));
+              billingAddress: billing,
+              shippingAddress: shipping,
+              transactionType: supportsTax && autoType ? autoType : p.transactionType,
+            };
+          });
+          if (addressDrawer === "billing") {
             setFieldErrors((prev) => ({ ...prev, billingAddress: false }));
-          } else {
-            setField("shippingAddress", next);
           }
         }}
       />
@@ -4569,10 +2576,18 @@ const CreateInvoicePanel = ({
         message={stockErrorMessage}
         onClose={() => setStockErrorMessage(null)}
       />
+
+      <SuccessModal
+        isOpen={showSuccessModal}
+        title="Success"
+        message={successMessage}
+        onClose={() => {
+          setShowSuccessModal(false);
+          onClose();
+        }}
+      />
     </div>
   );
 };
 
 export { CreateInvoicePanel };
-
-export default InvoiceForm;

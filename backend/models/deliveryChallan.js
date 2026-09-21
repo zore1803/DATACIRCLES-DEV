@@ -6,6 +6,9 @@ const postalAddressSchema = new mongoose.Schema({
   pincode: { type: String, default: '' },
   city: { type: String, default: '' },
   state: { type: String, default: '' },
+  // GST state code for `state` ("Maharashtra" -> "27"), filled in by the form's
+  // address group. Empty for addresses outside India, where no GST code applies.
+  stateCode: { type: String, default: '' },
   country: { type: String, default: '' },
 }, { _id: false });
 
@@ -21,6 +24,11 @@ const itemSchema = new mongoose.Schema({
   parentItemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', default: null },
   discountType: { type: String, enum: ['amount', 'percentage'], default: 'amount' },
   discount: { type: Number, default: 0, min: 0 },
+  // Line tax data, same as Invoice lines, so a GST challan calculates like an invoice
+  // (₹118 With Tax @18% -> ₹100 + ₹9 CGST + ₹9 SGST) on screen, on save, on reopen and in the PDF.
+  hsn: { type: String, default: '' },
+  gstRate: { type: Number, default: 0, min: 0, max: 100 },
+  taxInclusive: { type: Boolean, default: false },
 });
 
 const deliveryChallanSchema = new mongoose.Schema({
@@ -29,6 +37,9 @@ const deliveryChallanSchema = new mongoose.Schema({
   date: { type: Date, required: true },
   dueDate: { type: Date },
   amount: { type: Number, required: true },
+  transactionType: { type: String, enum: ['intra', 'inter'], default: 'intra' },
+  receiverGSTIN: { type: String, default: '' },
+  reference: { type: String, default: '' },
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true },
   status: {
@@ -38,6 +49,12 @@ const deliveryChallanSchema = new mongoose.Schema({
   },
   billingAddress: { type: postalAddressSchema, default: () => ({}) },
   shippingAddress: { type: postalAddressSchema, default: () => ({}) },
+  // Place of supply, resolved from the SHIPPING address on save and stored so
+  // reopening never re-derives it from a customer address that changed since.
+  // `placeOfSupply` is the printed label ("Maharashtra (27)") the PDF templates
+  // already render; the code sits alongside for the intra/inter comparison.
+  placeOfSupply: { type: String, default: '' },
+  placeOfSupplyStateCode: { type: String, default: '' },
   discount: {
     type: { type: String, enum: ['fixed', 'percentage'], required: true },
     value: { type: Number, required: true, min: 0 },
@@ -46,6 +63,9 @@ const deliveryChallanSchema = new mongoose.Schema({
   notes: { type: String, default: '' },
   terms: { type: String, default: '' },
   bankDetails: { type: mongoose.Schema.Types.ObjectId, ref: 'BankDetails', default: null },
+  // Round Off chosen on the form. No default: documents saved before this field existed stay
+  // unrounded in their PDF, exactly as before.
+  isRoundOff: { type: Boolean },
   signature: { type: String },
   signatureType: { type: String, enum: ['text', 'upload'], default: 'text' },
   items: [itemSchema],
@@ -59,7 +79,6 @@ const deliveryChallanSchema = new mongoose.Schema({
   // Set when this delivery challan was created via the "Duplicate" action,
   // pointing at the source challan it was cloned from.
   duplicatedFrom: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryChallan' },
-  stockMovementStatus: { type: String, enum: ['pending', 'applied', 'reversed'], default: 'pending' },
 }, { timestamps: true });
 
 module.exports = mongoose.model('DeliveryChallan', deliveryChallanSchema);

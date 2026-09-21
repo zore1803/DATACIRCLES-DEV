@@ -19,7 +19,6 @@ import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
 import Contacts from "./pages/Contacts";
 import Deals from "./pages/Deals";
-import Invoices from "./pages/Invoices";
 import Proforma from "./pages/PerformaInvoice";
 import Tasks from "./pages/Tasks";
 import Login from "./pages/UserLogin";

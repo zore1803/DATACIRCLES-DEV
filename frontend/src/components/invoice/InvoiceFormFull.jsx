@@ -1,7 +1,9 @@
 import DeleteIcon from "../common/DeleteIcon";
+import { resolveField, resolveDiscount, resolveMaxDiscountPercent } from "../../utils/variantResolve";
 import PdfIcon from "../common/PdfIcon";
 import PlusIcon from "../common/PlusIcon";
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { formatNumberToIndian, formatNumberFixed } from "../../utils/numberFormatter";
 import {
   IndianRupeeIcon,
@@ -20,9 +22,13 @@ import TemplateDrawer from "./TemplateDrawer";
 import BankSelect from "./BankSelect";
 import { AddressFieldsGroup, emptyAddress, isAddressEmpty, SectionHeader } from "../invoice/formPrimitives";
 import AddressBookDrawer from "./AddressBookDrawer";
+import NotesTermsDrawer from "./NotesTermsDrawer";
+import EditIcon from "../common/EditIcon";
+import { resolveTransactionType, placeOfSupplyFields } from "../../utils/placeOfSupply";
 import QuickDealForm from "../deal/QuickDealForm";
 import SearchableDropdown from "../contact/SearchableDropdown";
 import InsufficientStockDialog from "../common/InsufficientStockDialog";
+import SuccessModal from "../common/SuccessModal";
 import toast from "react-hot-toast";
 import { computeDocument, GST_RATES } from "../../../../shared/documentTemplates";
 import { PREDEFINED_NOTES, PREDEFINED_TERMS } from "../../utils/documentDefaultText";
@@ -200,6 +206,8 @@ const ItemSearchSelect = ({
       // whatever default the product was configured with.
       discountType: item.discount?.type || "amount",
       discount: item.discount?.value || 0,
+      type: item.type,
+      stock: item.stock,
     });
     setIsOpen(false);
     setSearchTerm(item.displayName);
@@ -391,6 +399,15 @@ const InvoiceFormFull = ({
   defaultNotesFlat = "",
   defaultTermsFlat = "",
   documentTypeSettings = {},
+  // --- Optional, for callers that already imply the customer (Company Profile / Deal page).
+  // Accounting passes none of these, so its behaviour is unchanged. ---
+  // A deal to select on a NEW invoice, applied through the same handler as a manual pick.
+  preselectDealId = null,
+  // Company preselected in "+ Create Deal", and the company this flow is scoped to: a deal
+  // created for any other company is not added to or selected on this invoice.
+  initialCompanyId = null,
+  // Reports a deal created here back to the caller so its own deal list stays current.
+  onDealCreated,
 }) => {
   const defaultNotesForNew = defaultNotesByType.tax !== undefined
     ? defaultNotesByType.tax
@@ -418,12 +435,10 @@ const InvoiceFormFull = ({
     discount: { type: "fixed", value: 0 },
     amount: 0,
     status: "Draft",
-    style: "Regular",
-    isTaxInvoice: true,
-    gstRate: 18,
     transactionType: "intra",
-    isRoundOff: false,
-    hideTotals: false,
+    // Same default as the shared split-view panel, so a document does not
+    // round differently depending on which layout created it.
+    isRoundOff: true,
     notes: defaultNotesForNew,
     terms: defaultTermsForNew,
     attachments: [],
@@ -438,6 +453,8 @@ const InvoiceFormFull = ({
   const [shouldRender, setShouldRender] = useState(true);
   const [showItemForm, setShowItemForm] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
   const [nextNumberPreview, setNextNumberPreview] = useState(null);
   const [quickAddItem, setQuickAddItem] = useState(null);
   const [quickAddQty, setQuickAddQty] = useState(1);
@@ -449,11 +466,46 @@ const InvoiceFormFull = ({
   // "billing" | "shipping" | null — which field group opened the saved
   // address book (AddressBookDrawer).
   const [addressDrawer, setAddressDrawer] = useState(null);
+  // Saved Notes/Terms library — the same drawer, the same DocumentFooterTemplate
+  // store the split view and Settings use, so a block created in any of the three
+  // is immediately available in the other two.
+  const [notesDrawer, setNotesDrawer] = useState(null); // null | "notes" | "terms"
+  // Renaming a saved document's number, same flow as the split-view panel:
+  // the prefix stays fixed and only the numeric part is editable.
+  const [docNumber, setDocNumber] = useState(editingInvoice?.invoiceNumber || "");
+  const [numberDraft, setNumberDraft] = useState(null); // null = not renaming
+  const [savingNumber, setSavingNumber] = useState(false);
+  const numberPrefix = docNumber.includes("-")
+    ? docNumber.slice(0, docNumber.lastIndexOf("-") + 1)
+    : "";
+  const numberSuffix = docNumber.slice(numberPrefix.length);
+
+  const saveDocNumber = async () => {
+    const suffix = (numberDraft || "").trim();
+    if (!suffix) return toast.error("Invoice number cannot be empty.");
+    const next = `${numberPrefix}${suffix}`;
+    if (next === docNumber) return setNumberDraft(null);
+    try {
+      setSavingNumber(true);
+      await API.patch(`/invoices/number/${editingInvoice._id}`, { invoiceNumber: next });
+      setDocNumber(next);
+      setNumberDraft(null);
+      toast.success("Invoice number updated.");
+      fetchData?.();
+    } catch (err) {
+      toast.error(
+        err?.response?.status === 409
+          ? `${next} already exists.`
+          : err?.response?.data?.error || "Failed to update the number."
+      );
+    } finally {
+      setSavingNumber(false);
+    }
+  };
   const [companies, setCompanies] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [stockErrorMessage, setStockErrorMessage] = useState(null);
-  const [toastMessage, setToastMessage] = useState("");
   const [items, setItems] = useState([]);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -501,17 +553,21 @@ const InvoiceFormFull = ({
               _id: variant._id,
               displayName: `${item.name} - ${variant.name}`,
               name: variant.name,
-              description: variant.description || item.description || "",
+              description: resolveField(variant, item, "description") || "",
+              barcode: resolveField(variant, item, "barcode") || "",
+              maxDiscountPercent: resolveMaxDiscountPercent(variant, item),
               sellingPrice: variant.sellingPrice || item.sellingPrice,
               hsnSac: variant.hsnSac || item.hsnSac || "",
               // Variant's own rate falls back to the parent item's, same as
               // sellingPrice/hsnSac above.
-              gstRate: variant.gstRate ?? item.gstRate ?? 0,
+              // The variant's own GST rate, with no fall back to the parent product: an
+              // unset variant rate means 0%, and a variant set to 0% stays 0%. Inheriting
+              // the parent silently taxed variants that were meant to be GST-free.
+              gstRate: variant.gstRate ?? 0,
               taxInclusive: !!(variant.taxInclusive ?? item.taxInclusive),
-              // Discount only lives on the parent Item (variants have no
-              // discount field of their own) — same catalog default for
-              // every variant of a product.
-              discount: item.discount || { type: "percentage", value: 0 },
+              // Variant-first: the variant's own discount when it sets one, otherwise the
+              // parent item's catalog default (see utils/variantResolve.js).
+              discount: resolveDiscount(variant, item),
               type: item.type,
               category: item.category || "",
               primaryUnit:
@@ -638,10 +694,9 @@ const InvoiceFormFull = ({
         discount: sourceData.discount || { type: "fixed", value: 0 },
         amount: sourceData.amount || 0,
         status: sourceData.status || "Draft",
-        style: sourceData.style || "Regular",
-        isRoundOff: sourceData.isRoundOff !== undefined ? sourceData.isRoundOff : false,
-        hideTotals: sourceData.hideTotals || false,
-        isTaxInvoice: true,
+        isRoundOff: sourceData.isRoundOff !== undefined ? sourceData.isRoundOff : true,
+        // Keep the saved GST on/off (a document saved with GST off must reopen with it off).
+        // Only a source that never stored the flag falls back to on.
         transactionType: sourceData.transactionType || "intra",
         notes: sourceData.notes || "",
         terms: sourceData.terms || "",
@@ -671,9 +726,6 @@ const InvoiceFormFull = ({
         discount: { type: "fixed", value: 0 },
         amount: 0,
         status: "Draft",
-        style: "Regular",
-        isTaxInvoice: true,
-        gstRate: 18,
         transactionType: "intra",
         notes: defaultNotesForNew,
         terms: defaultTermsForNew,
@@ -809,26 +861,21 @@ const InvoiceFormFull = ({
   };
 
   // Mirrors computeDocument()'s own item-rate resolution (shared/
-  // documentTemplates.js): the item's rate when it is a real GST slab,
-  // otherwise the document-level rate.
+  // documentTemplates.js): the line's own rate when it is a real GST slab,
+  // otherwise untaxed. GST is per line — there is no document-level rate here.
   const effectiveGstRate = (item) => {
     const itemRate = Number(item.gstRate);
-    if (GST_RATES.includes(itemRate)) return itemRate;
-    const docRate = Number(form.gstRate);
-    return GST_RATES.includes(docRate) ? docRate : 18;
+    return GST_RATES.includes(itemRate) ? itemRate : 0;
   };
 
-  const calculateTotalAmount = useCallback((items, discount, gstRate = 18, transactionType = "intra") => {
-    const subtotalAfterItemDiscounts =
-      calculateSubtotalAfterItemDiscounts(items);
-    const invoiceDiscountAmount = calculateInvoiceDiscountAmount(
-      subtotalAfterItemDiscounts,
-      discount
-    );
-    const netTaxable = subtotalAfterItemDiscounts - invoiceDiscountAmount;
-    const totalTax = netTaxable * (gstRate / 100);
-    return netTaxable + totalTax;
-  }, []);
+  // Single source of truth for the document total: the same engine the live
+  // preview, the PDF and the submit payload already use. This used to hold a
+  // second formula that charged one flat document-wide rate (defaulting to
+  // 18%), which could only ever contradict the per-line GST rates.
+  const calculateTotalAmount = useCallback(
+    (nextForm) => computeDocument(nextForm, "invoice").grandTotal,
+    []
+  );
 
   const handleItemChange = (index, field, value) => {
     setForm((prev) => {
@@ -886,7 +933,7 @@ const InvoiceFormFull = ({
       return {
         ...prev,
         items: newItems,
-        amount: calculateTotalAmount(newItems, prev.discount),
+        amount: calculateTotalAmount({ ...prev, items: newItems }),
       };
     });
     setHasUnsavedChanges(true);
@@ -933,7 +980,7 @@ const InvoiceFormFull = ({
       return {
         ...prev,
         discount: newDiscount,
-        amount: calculateTotalAmount(prev.items, newDiscount),
+        amount: calculateTotalAmount({ ...prev, discount: newDiscount }),
       };
     });
     setHasUnsavedChanges(true);
@@ -954,7 +1001,7 @@ const InvoiceFormFull = ({
       return {
         ...prev,
         items: newItems,
-        amount: calculateTotalAmount(newItems, prev.discount),
+        amount: calculateTotalAmount({ ...prev, items: newItems }),
       };
     });
     setHasUnsavedChanges(true);
@@ -987,6 +1034,7 @@ const InvoiceFormFull = ({
       // path below — the quick-add path was previously hardcoding 0.
       discountType: item.discount?.type || "amount",
       discount: item.discount?.value || 0,
+      type: item.type,
     };
     setForm((prev) => {
       const isBlankStarterRow =
@@ -995,7 +1043,7 @@ const InvoiceFormFull = ({
       return {
         ...prev,
         items: newItems,
-        amount: calculateTotalAmount(newItems, prev.discount),
+        amount: calculateTotalAmount({ ...prev, items: newItems }),
       };
     });
     setHasUnsavedChanges(true);
@@ -1023,7 +1071,7 @@ const InvoiceFormFull = ({
       return {
         ...prev,
         items: newItems,
-        amount: calculateTotalAmount(newItems, prev.discount),
+        amount: calculateTotalAmount({ ...prev, items: newItems }),
       };
     });
     setQuickAddItem(null);
@@ -1037,7 +1085,7 @@ const InvoiceFormFull = ({
       return {
         ...prev,
         items: newItems,
-        amount: calculateTotalAmount(newItems, prev.discount),
+        amount: calculateTotalAmount({ ...prev, items: newItems }),
       };
     });
     setHasUnsavedChanges(true);
@@ -1049,11 +1097,91 @@ const InvoiceFormFull = ({
   };
 
   const handleDealCreated = (newDeal) => {
-    setLocalDeals((prev) => [...prev, newDeal]);
+    setShowQuickDealForm(false);
+    // Scoped callers (initialCompanyId set) keep the invoice with that company: QuickDealForm
+    // lets the company be changed, and a deal for another company is still created but is not
+    // offered or selected here.
+    const newDealCompanyId = newDeal?.company?._id || newDeal?.company || null;
+    if (initialCompanyId && newDealCompanyId && String(newDealCompanyId) !== String(initialCompanyId)) {
+      toast("Deal created for a different company, so it isn't available on this invoice.");
+      return;
+    }
+    setLocalDeals((prev) => (prev.some((d) => d._id === newDeal._id) ? prev : [...prev, newDeal]));
     setForm((prev) => ({ ...prev, deal: newDeal._id }));
     setHasUnsavedChanges(true);
-    setShowQuickDealForm(false);
+    onDealCreated?.(newDeal);
   };
+
+  // Selecting a deal, whether picked by the user or preselected by the caller.
+  // Switching the deal replaces the Receiver GSTIN and
+  // billing/shipping address with whatever the new
+  // deal's company has — same prefetch behavior as the
+  // split-view Invoice panel (InvoiceForm.jsx). Clears
+  // them to empty when that company has none, rather
+  // than carrying over the previous deal's data.
+  const applyDealSelection = (value, { markDirty = true } = {}) => {
+    if (dealError) setDealError(false);
+    const selectedDeal = localDeals.find((d) => d._id === value);
+    const company = selectedDeal?.company;
+    const nextBilling =
+      company && !isAddressEmpty(company.billingAddress)
+        ? { ...emptyAddress(), ...company.billingAddress }
+        : emptyAddress();
+    const nextShipping =
+      company && !isAddressEmpty(company.shippingAddresses?.[0])
+        ? { ...emptyAddress(), ...company.shippingAddresses[0] }
+        : emptyAddress();
+    setForm((prev) => {
+      const shipping = prev.sameAsBilling ? nextBilling : nextShipping;
+      // Goods: place of supply is where they ship to, so the tax type follows
+      // the shipping address, not billing.
+      const autoType = resolveTransactionType(sellerState, shipping, nextBilling);
+      return {
+        ...prev,
+        deal: value,
+        receiverGSTIN: company?.gstin || "",
+        billingAddress: nextBilling,
+        shippingAddress: shipping,
+        transactionType: autoType || prev.transactionType,
+      };
+    });
+    if (markDirty) setHasUnsavedChanges(true);
+  };
+
+  // Applies `preselectDealId` to a new invoice. Never overrides a deal already on the form — in
+  // particular one carried over from the split view via formOverride — except when the caller
+  // hands a DIFFERENT id (a deal just created), which is fresh intent. Re-applies once the
+  // seller's state has loaded, since the inter/intra-state type depends on it, but only while
+  // the form still holds that same deal.
+  const preselectAppliedRef = useRef({ started: false, dealId: null, withSeller: false });
+  useEffect(() => {
+    // First run: a form arriving from the split view keeps the deal it has — the split view
+    // already applied it and the addresses may have been edited since. The formOverride merge
+    // is queued by an earlier effect in this same commit, so `form.deal` can still read "" here;
+    // hence formOverride itself is checked. A deal created afterwards is selected by
+    // handleDealCreated, and a later, different preselect id is still applied below.
+    if (!preselectAppliedRef.current.started) {
+      const handedOff = !!(formOverride || form.deal);
+      preselectAppliedRef.current = {
+        started: true,
+        dealId: handedOff ? preselectDealId : null,
+        withSeller: handedOff,
+      };
+      if (handedOff) return;
+    }
+    if (editingInvoice || !preselectDealId) return;
+    if (!localDeals.some((d) => d._id === preselectDealId)) return;
+    const last = preselectAppliedRef.current;
+    const withSeller = !!sellerState;
+    if (last.dealId === preselectDealId) {
+      if (last.withSeller || !withSeller || form.deal !== preselectDealId) return;
+    }
+    preselectAppliedRef.current = { started: true, dealId: preselectDealId, withSeller };
+    // A preselect isn't a user edit, so it doesn't trigger the unsaved-changes prompt.
+    applyDealSelection(preselectDealId, { markDirty: false });
+    // applyDealSelection is recreated each render; keyed on the inputs that matter instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselectDealId, localDeals, sellerState, editingInvoice, form.deal, formOverride]);
 
   // Hands the current form state to the parent's preview/print modal —
   // same onPreview contract Accounting.jsx wires up for the split-view panel.
@@ -1119,13 +1247,12 @@ const InvoiceFormFull = ({
           !item.name ||
           !item.rate ||
           !item.quantity ||
-          (form.isTaxInvoice && !item.hsn) ||
+          (parseFloat(item.gstRate) > 0 && !item.hsn) ||
           (item.discountType === "percentage" && item.discount > 100)
       );
       if (invalidItems.length > 0) {
         toast.error(
-          `Please fill in all item details (name, rate, quantity${form.isTaxInvoice ? ", and HSN/SAC" : ""
-          }) and ensure percentage discounts are not above 100.`
+          "Please fill in all item details (name, rate, quantity, and HSN/SAC for any item with a GST rate) and ensure percentage discounts are not above 100."
         );
         setIsSubmitting(false);
         return;
@@ -1163,9 +1290,7 @@ const InvoiceFormFull = ({
         qrNote: form.qrNote || "",
         signature: form.signature,
         amount: (() => {
-          let t = form.isTaxInvoice
-            ? computeDocument(form, "invoice").grandTotal
-            : calculateTotalAmount(form.items, form.discount);
+          let t = computeDocument(form, "invoice").grandTotal;
           return form.isRoundOff ? Math.round(t) : t;
         })(),
         isRoundOff: form.isRoundOff,
@@ -1187,28 +1312,26 @@ const InvoiceFormFull = ({
           parentItemId: item.parentItemId,
           discountType: item.discountType,
           discount: parseFloat(item.discount),
-          // The rate the document was actually priced at, not a blind
-          // parseFloat. computeDocument() falls back to the document-level
-          // gstRate when an item has no valid rate of its own — but
-          // `parseFloat(undefined) || 0` collapsed that "unset" into an
-          // explicit 0%, which IS a valid GST rate, so the saved invoice
-          // rendered 0% CGST/SGST while its stored amount still carried the
-          // 18% the preview had charged. Persist the effective rate so the
-          // PDF reproduces the total that was saved.
+          // The rate the line was actually priced at, resolved the same way
+          // computeDocument() resolves it: a real GST slab, otherwise 0%.
+          // A blind parseFloat here would not agree with the engine, and the
+          // saved document would render a different rate than it was totalled
+          // with. Persist the effective rate so the PDF reproduces the total.
           gstRate: effectiveGstRate(item),
           taxInclusive: !!item.taxInclusive,
         })),
-        style: form.style,
-        isTaxInvoice: form.isTaxInvoice,
         transactionType: form.transactionType,
+        // Resolved now and stored, so reopening this invoice never re-derives it
+        // from a customer address that has changed since.
+        ...placeOfSupplyFields(form.shippingAddress, form.billingAddress),
       };
 
       if (editingInvoice) {
         await API.put(`/invoices/${editingInvoice._id}`, payload);
-        toast.success(isDraft ? "Saved as draft!" : "Invoice updated successfully!");
+        setSuccessMessage(isDraft ? "Saved as draft!" : "Invoice updated successfully!");
       } else {
         await API.post("/invoices", payload);
-        toast.success(isDraft ? "Saved as draft!" : "Invoice created successfully!");
+        setSuccessMessage(isDraft ? "Saved as draft!" : "Invoice created successfully!");
       }
 
       setHasUnsavedChanges(false);
@@ -1224,13 +1347,10 @@ const InvoiceFormFull = ({
         discount: { type: "fixed", value: 0 },
         amount: 0,
         status: "Draft",
-        style: "",
-        isTaxInvoice: true,
-        gstRate: 18,
         transactionType: "intra",
       });
       await fetchData();
-      onClose();
+      setShowSuccessModal(true);
     } catch (err) {
       const serverMessage = err.response?.data?.error || "";
       if (/insufficient stock/i.test(serverMessage)) {
@@ -1257,10 +1377,7 @@ const InvoiceFormFull = ({
 
   const handleSaveAndExit = async () => {
     await submitInvoice("Pending");
-    if (!toastMessage.includes("Failed")) {
-      setShowConfirmDialog(false);
-      onClose();
-    }
+    setShowConfirmDialog(false);
   };
 
   const handleSaveDraft = () => submitInvoice("Draft");
@@ -1287,12 +1404,8 @@ const InvoiceFormFull = ({
     form.discount
   );
   
-  let finalTotal = subtotalAfterItemDiscounts - invoiceDiscountAmount;
-  let taxDetails = null;
-  if (form.isTaxInvoice) {
-    taxDetails = computeDocument(form, "invoice");
-    finalTotal = taxDetails.grandTotal;
-  }
+  const taxDetails = computeDocument(form, "invoice");
+  let finalTotal = taxDetails.grandTotal;
   
   let roundOffAmount = 0;
   if (form.isRoundOff) {
@@ -1303,16 +1416,11 @@ const InvoiceFormFull = ({
 
   return (
     <>
-      {toastMessage && (
-        <div className="fixed top-4 right-4 z-[10002] bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg animate-fade-in-out">
-          {toastMessage}
-        </div>
-      )}
-
       {showQuickDealForm && (
         <QuickDealForm
           companies={companies}
           contacts={contacts}
+          initialCompanyId={initialCompanyId || ""}
           onDealCreated={handleDealCreated}
           onRequestClose={() => setShowQuickDealForm(false)}
         />
@@ -1363,7 +1471,7 @@ const InvoiceFormFull = ({
           isSliding ? "translate-y-0" : "translate-y-full"
         }`}
       >
-        <form onSubmit={handleSubmit} noValidate className="h-full flex flex-col bg-[#F8F9FA] w-full min-h-screen">
+        <form onSubmit={handleSubmit} noValidate className="h-full flex flex-col bg-white w-full min-h-screen font-inter">
           {/* Section 1: Header */}
           <div className="flex justify-between items-center px-6 py-4 bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
             <div className="flex items-center gap-6">
@@ -1377,45 +1485,132 @@ const InvoiceFormFull = ({
               </button>
               
               <div className="flex items-center gap-4">
-                <div className="flex flex-col">
-                  <h2 className="text-xl font-bold text-slate-900 flex items-center gap-1 cursor-pointer">
-                    Create Invoice <ChevronDown className="w-5 h-5 text-gray-400" />
-                  </h2>
-                </div>
-                
-                <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden h-10 bg-white">
-                  <input
-                    type="text"
-                    value={form.invoicePrefix}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, invoicePrefix: e.target.value }));
-                      setHasUnsavedChanges(true);
-                    }}
-                    className="w-20 px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 border-r border-gray-300 focus:outline-none focus:bg-white"
-                  />
-                  <input
-                    type="text"
-                    placeholder={nextNumberPreview ? String(nextNumberPreview) : "Auto"}
-                    value={form.invoiceNumber}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, invoiceNumber: e.target.value }));
-                      setHasUnsavedChanges(true);
-                    }}
-                    className="w-24 px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Suffix"
-                    value={form.invoiceSuffix}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, invoiceSuffix: e.target.value }));
-                      setHasUnsavedChanges(true);
-                    }}
-                    title="Invoice number suffix (optional)"
-                    aria-label="Invoice number suffix"
-                    className="w-20 px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 border-l border-gray-300 focus:outline-none focus:bg-white"
-                  />
-                </div>
+                {editingInvoice ? (
+                  <div className="flex flex-col">
+                    {numberDraft === null ? (
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <h2 className="text-xl font-medium text-[#1F2937] truncate">
+                          {docNumber || "Edit Invoice"}
+                        </h2>
+                        {docNumber && (
+                          <button
+                            type="button"
+                            onClick={() => setNumberDraft(numberSuffix)}
+                            title="Rename this invoice"
+                            aria-label="Rename this invoice"
+                            className="p-1 rounded-md text-gray-400 hover:text-[#0085FF] hover:bg-blue-50 transition-colors flex-shrink-0"
+                          >
+                            <EditIcon className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 min-w-0">
+                        <div className="flex items-center h-9 pl-2.5 pr-1 border border-gray-300 rounded-lg focus-within:border-[#0085FF] min-w-0">
+                          <span className="text-xl font-medium text-[#99A0AE] flex-shrink-0">
+                            {numberPrefix}
+                          </span>
+                          <input
+                            autoFocus
+                            value={numberDraft}
+                            disabled={savingNumber}
+                            onChange={(e) => setNumberDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveDocNumber();
+                              if (e.key === "Escape") setNumberDraft(null);
+                            }}
+                            className="w-28 min-w-0 px-1 text-xl font-medium text-[#1F2937] outline-none bg-transparent"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={saveDocNumber}
+                          disabled={savingNumber}
+                          className="h-7 px-2 flex items-center justify-center rounded-full bg-[#0085FF] hover:bg-blue-600 text-white text-xs font-semibold transition-colors disabled:opacity-60 flex-shrink-0"
+                        >
+                          {savingNumber ? "..." : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNumberDraft(null)}
+                          className="h-7 px-2 text-xs font-medium text-gray-500 hover:text-gray-800 flex-shrink-0"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-col">
+                      <h2 className="text-xl font-medium text-[#1F2937] flex items-center gap-1 cursor-pointer">
+                        Create Invoice <ChevronDown className="w-5 h-5 text-gray-400" />
+                      </h2>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden h-10 bg-white flex-shrink-0">
+                        <div className="relative h-full border-r border-gray-300 bg-gray-50 flex items-center">
+                          <select
+                            value={form.invoicePrefix}
+                            onChange={(e) => {
+                              setForm((prev) => ({ ...prev, invoicePrefix: e.target.value }));
+                              setHasUnsavedChanges(true);
+                            }}
+                            title="Invoice number prefix"
+                            aria-label="Invoice number prefix"
+                            className="h-full pl-3.5 pr-7 text-sm font-semibold text-gray-700 bg-transparent focus:outline-none appearance-none cursor-pointer"
+                          >
+                            {(documentTypeSettings?.invoice?.prefixes || []).length > 0 ? (
+                              documentTypeSettings.invoice.prefixes.map(pfx => (
+                                <option key={pfx} value={pfx}>{pfx}</option>
+                              ))
+                            ) : (
+                              <option value={form.invoicePrefix}>{form.invoicePrefix || "None"}</option>
+                            )}
+                          </select>
+                          <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
+                        </div>
+                        {/* Read-only while creating: the number is allocated from this
+                            series' counter on save, so it cannot be typed over. It stays
+                            renameable afterwards from the saved document. */}
+                        <input
+                          type="text"
+                          value={nextNumberPreview != null ? String(nextNumberPreview) : "Auto"}
+                          readOnly
+                          title="Invoice number is allocated automatically on save"
+                          aria-label="Invoice number"
+                          className="w-24 px-3 py-2 text-sm font-semibold text-gray-900 bg-gray-50 focus:outline-none cursor-default"
+                        />
+                        <div className="relative h-full border-l border-gray-300 bg-gray-50 flex items-center">
+                          <select
+                            value={form.invoiceSuffix}
+                            onChange={(e) => {
+                              setForm((prev) => ({ ...prev, invoiceSuffix: e.target.value }));
+                              setHasUnsavedChanges(true);
+                            }}
+                            title="Invoice number suffix (optional)"
+                            aria-label="Invoice number suffix"
+                            className="h-full pl-2.5 pr-7 text-sm font-semibold text-gray-700 bg-transparent focus:outline-none appearance-none cursor-pointer"
+                          >
+                            <option value="">None</option>
+                            {(documentTypeSettings?.invoice?.suffixes || []).map(sfx => (
+                              <option key={sfx} value={sfx}>{sfx}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="w-3.5 h-3.5 absolute right-2 text-gray-500 pointer-events-none" />
+                        </div>
+                      </div>
+                      <Link
+                        to="/settings/document-settings"
+                        title="Manage Document Numbering"
+                        className="flex items-center justify-center w-8 h-8 rounded-full bg-white border border-[#E1E4EA] hover:bg-gray-50 text-gray-600 transition-colors shrink-0 shadow-sm"
+                      >
+                        <SettingsIcon className="w-4 h-4" />
+                      </Link>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -1458,15 +1653,18 @@ const InvoiceFormFull = ({
             </div>
           </div>
 
-          <div className="p-6 space-y-6 flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto">
             {/* Section 2: Customer Details Card */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white px-8 py-6 border-b border-[#E9E9EC]">
+              <div className="mb-5">
+                <SectionHeader number="01" title="Invoice Details" />
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                 
                 {/* Select Customer */}
                 <div className="md:col-span-4 space-y-2">
                   <div className="flex justify-between items-center">
-                    <label className="text-sm font-semibold text-gray-700">Select Deal</label>
+                    <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Select Deal</label>
                     <button
                       type="button"
                       onClick={() => setShowQuickDealForm(true)}
@@ -1480,36 +1678,7 @@ const InvoiceFormFull = ({
                       options={localDeals}
                       value={form.deal}
                       error={dealError ? "Deal is required" : null}
-                      onChange={(value) => {
-                        if (dealError) setDealError(false);
-                        // Switching the deal replaces the Receiver GSTIN and
-                        // billing/shipping address with whatever the new
-                        // deal's company has — same prefetch behavior as the
-                        // split-view Invoice panel (InvoiceForm.jsx). Clears
-                        // them to empty when that company has none, rather
-                        // than carrying over the previous deal's data.
-                        const selectedDeal = localDeals.find((d) => d._id === value);
-                        const company = selectedDeal?.company;
-                        const nextBilling =
-                          company && !isAddressEmpty(company.billingAddress)
-                            ? { ...emptyAddress(), ...company.billingAddress }
-                            : emptyAddress();
-                        const nextShipping =
-                          company && !isAddressEmpty(company.shippingAddresses?.[0])
-                            ? { ...emptyAddress(), ...company.shippingAddresses[0] }
-                            : emptyAddress();
-                        const customerState = (company?.billingAddress?.state || '').trim().toLowerCase();
-                        const autoType = (sellerState && customerState && sellerState !== customerState) ? 'inter' : 'intra';
-                        setForm((prev) => ({
-                          ...prev,
-                          deal: value,
-                          receiverGSTIN: company?.gstin || "",
-                          billingAddress: nextBilling,
-                          shippingAddress: prev.sameAsBilling ? nextBilling : nextShipping,
-                          transactionType: autoType,
-                        }));
-                        setHasUnsavedChanges(true);
-                      }}
+                      onChange={(value) => applyDealSelection(value)}
                       placeholder="Search customers by name, company, GSTIN..."
                       displayKey="title"
                       valueKey="_id"
@@ -1524,7 +1693,7 @@ const InvoiceFormFull = ({
 
                 {/* Invoice Date */}
                 <div className="md:col-span-2 space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Document Date</label>
+                  <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Document Date</label>
                   <div className="relative">
                     <input
                       ref={dateInputRef}
@@ -1555,7 +1724,7 @@ const InvoiceFormFull = ({
                 {/* Validity */}
                 <div className="md:col-span-3 space-y-2">
                   <div className="flex items-center gap-1">
-                    <label className="text-sm font-semibold text-gray-700">Due Date</label>
+                    <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Due Date</label>
                   </div>
                   <div className="relative">
                     <input
@@ -1592,7 +1761,7 @@ const InvoiceFormFull = ({
                 {/* Reference */}
                 <div className="md:col-span-3 space-y-2">
                   <div className="flex items-center gap-1">
-                    <label className="text-sm font-semibold text-gray-700">Reference</label>
+                    <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Reference</label>
                   </div>
                   <input
                     type="text"
@@ -1613,9 +1782,9 @@ const InvoiceFormFull = ({
                 split-view Invoice panel's address section (AddressFieldsGroup
                 from formPrimitives.jsx), so invoices round-trip these the
                 same way invoices do. ── */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white px-8 py-6 border-b border-[#E9E9EC]">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-slate-800">Billing & Shipping Address</h3>
+                <SectionHeader number="02" title="Billing & Shipping Address" />
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -1623,10 +1792,15 @@ const InvoiceFormFull = ({
                       setForm((prev) => {
                         const nowSame = !prev.sameAsBilling;
                         setHasUnsavedChanges(true);
+                        // Shipping drives the place of supply, so mirroring (or
+                        // un-mirroring) billing can change CGST/SGST vs IGST.
+                        const shipping = nowSame ? prev.billingAddress : prev.shippingAddress;
+                        const autoType = resolveTransactionType(sellerState, shipping, prev.billingAddress);
                         return {
                           ...prev,
                           sameAsBilling: nowSame,
-                          shippingAddress: nowSame ? prev.billingAddress : prev.shippingAddress,
+                          shippingAddress: shipping,
+                          transactionType: autoType || prev.transactionType,
                         };
                       })
                     }
@@ -1655,14 +1829,16 @@ const InvoiceFormFull = ({
                     // picker runs, so editing the billing state directly on
                     // this document also flips CGST/SGST vs IGST instead of
                     // freezing whatever the deal's company implied.
-                    const customerState = (next.state || "").trim().toLowerCase();
-                    const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
-                    setForm((prev) => ({
-                      ...prev,
-                      billingAddress: next,
-                      shippingAddress: prev.sameAsBilling ? next : prev.shippingAddress,
-                      transactionType: customerState ? autoType : prev.transactionType,
-                    }));
+                    setForm((prev) => {
+                      const shipping = prev.sameAsBilling ? next : prev.shippingAddress;
+                      const autoType = resolveTransactionType(sellerState, shipping, next);
+                      return {
+                        ...prev,
+                        billingAddress: next,
+                        shippingAddress: shipping,
+                        transactionType: autoType || prev.transactionType,
+                      };
+                    });
                     setHasUnsavedChanges(true);
                   }}
                 />
@@ -1672,39 +1848,70 @@ const InvoiceFormFull = ({
                   disabled={!!form.sameAsBilling}
                   onUseSaved={() => setAddressDrawer("shipping")}
                   onChange={(next) => {
-                    setForm((prev) => ({ ...prev, shippingAddress: next }));
+                    setForm((prev) => {
+                      const autoType = resolveTransactionType(sellerState, next, prev.billingAddress);
+                      return {
+                        ...prev,
+                        shippingAddress: next,
+                        transactionType: autoType || prev.transactionType,
+                      };
+                    });
                     setHasUnsavedChanges(true);
                   }}
                 />
               </div>
             </div>
 
+            {/* Applying copies the chosen block's text into this invoice. The
+                invoice keeps that snapshot: editing it here never writes back to
+                the saved template, and a later change to the template never
+                rewrites an invoice already issued. */}
+            <NotesTermsDrawer
+              isOpen={notesDrawer !== null}
+              focus={notesDrawer || "notes"}
+              onClose={() => setNotesDrawer(null)}
+              type="tax"
+              docName="Invoice"
+              onApplyNotes={(v) => {
+                setForm((prev) => ({ ...prev, notes: v }));
+                setHasUnsavedChanges(true);
+              }}
+              onApplyTerms={(v) => {
+                setForm((prev) => ({ ...prev, terms: v }));
+                setHasUnsavedChanges(true);
+              }}
+              currentNotes={form.notes}
+              currentTerms={form.terms}
+            />
+
             <AddressBookDrawer
               isOpen={addressDrawer !== null}
               onClose={() => setAddressDrawer(null)}
               currentAddress={addressDrawer === "billing" ? form.billingAddress : form.shippingAddress}
               onApply={(next) => {
-                if (addressDrawer === "billing") {
-                  const customerState = (next.state || "").trim().toLowerCase();
-                  const autoType = sellerState && customerState && sellerState !== customerState ? "inter" : "intra";
-                  setForm((prev) => ({
+                setForm((prev) => {
+                  const billing = addressDrawer === "billing" ? next : prev.billingAddress;
+                  const shipping =
+                    addressDrawer === "billing"
+                      ? (prev.sameAsBilling ? next : prev.shippingAddress)
+                      : next;
+                  const autoType = resolveTransactionType(sellerState, shipping, billing);
+                  return {
                     ...prev,
-                    billingAddress: next,
-                    shippingAddress: prev.sameAsBilling ? next : prev.shippingAddress,
-                    transactionType: customerState ? autoType : prev.transactionType,
-                  }));
-                } else {
-                  setForm((prev) => ({ ...prev, shippingAddress: next }));
-                }
+                    billingAddress: billing,
+                    shippingAddress: shipping,
+                    transactionType: autoType || prev.transactionType,
+                  };
+                });
                 setHasUnsavedChanges(true);
               }}
             />
 
             {/* ── Section 3: Products & Services ── */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white px-8 py-6 border-b border-[#E9E9EC]">
               <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-slate-800">Products & Services</h3>
+                  <SectionHeader number="03" title="Products & Services" />
                   <button
                     type="button"
                     onClick={handleOpenItemForm}
@@ -1957,12 +2164,22 @@ const InvoiceFormFull = ({
                 (InvoiceForm.jsx's CreateInvoicePanel) instead of the old
                 collapsible accordions with a decorative, non-functional
                 "AI" button and dead Signature button. ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="bg-white px-8 py-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
 
               {/* Left Column: Notes, Terms, Attachments */}
               <div className="space-y-5">
                 <div>
-                  <SectionHeader number="05" title="Notes" />
+                  <div className="flex items-center justify-between gap-2">
+                    <SectionHeader number="04" title="Notes" />
+                    <button
+                      type="button"
+                      onClick={() => setNotesDrawer("notes")}
+                      title="Add or choose a saved note"
+                      className="inline-flex items-center gap-1 leading-none text-[12px] font-medium text-[#0085FF] hover:underline flex-shrink-0"
+                    >
+                      + Add Notes
+                    </button>
+                  </div>
                   <textarea
                     placeholder="Enter your notes, say thanks, or anything else"
                     rows={3}
@@ -1971,12 +2188,22 @@ const InvoiceFormFull = ({
                       setForm((prev) => ({ ...prev, notes: e.target.value }));
                       setHasUnsavedChanges(true);
                     }}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 resize-y"
+                    className="w-full px-3 py-2.5 rounded-2xl border border-[#1F2937]/10 text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-y"
                   />
                 </div>
 
                 <div>
-                  <SectionHeader number="06" title="Terms & Conditions" />
+                  <div className="flex items-center justify-between gap-2">
+                    <SectionHeader number="05" title="Terms & Conditions" />
+                    <button
+                      type="button"
+                      onClick={() => setNotesDrawer("terms")}
+                      title="Add or choose saved terms"
+                      className="inline-flex items-center gap-1 leading-none text-[12px] font-medium text-[#0085FF] hover:underline flex-shrink-0"
+                    >
+                      + Add Terms
+                    </button>
+                  </div>
                   <textarea
                     placeholder="Enter terms & conditions"
                     rows={3}
@@ -1985,7 +2212,7 @@ const InvoiceFormFull = ({
                       setForm((prev) => ({ ...prev, terms: e.target.value }));
                       setHasUnsavedChanges(true);
                     }}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 resize-y"
+                    className="w-full px-3 py-2.5 rounded-2xl border border-[#1F2937]/10 text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-y"
                   />
                 </div>
 
@@ -2090,7 +2317,7 @@ const InvoiceFormFull = ({
                     left unset, PDF generation falls back to the org's
                     default bank. */}
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Select Bank</label>
+                  <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Select Bank</label>
                   <BankSelect
                     banks={banks}
                     value={form.bankDetails || ""}
@@ -2111,7 +2338,7 @@ const InvoiceFormFull = ({
                     when left blank (see buildUpiUri in
                     shared/documentTemplates.js), but is fully editable. */}
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Payment Note (QR)</label>
+                  <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Payment Note (QR)</label>
                   <input
                     type="text"
                     value={form.qrNote}
@@ -2120,7 +2347,7 @@ const InvoiceFormFull = ({
                       setHasUnsavedChanges(true);
                     }}
                     placeholder={`Invoice ${form.invoiceNumber || "..."}`}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full h-[38px] px-3 border border-[#1F2937]/10 rounded-full bg-white text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
                     maxLength={50}
                   />
                   <p className="text-xs text-gray-400">
@@ -2133,7 +2360,7 @@ const InvoiceFormFull = ({
                     replacing the old decorative button that didn't actually
                     do anything. */}
                 <div>
-                  <SectionHeader number="07" title="Signature" />
+                  <SectionHeader number="06" title="Signature" />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1">
                       <div className="relative flex items-center h-10 rounded-lg border border-gray-200 focus-within:border-blue-500 overflow-hidden">
@@ -2184,7 +2411,7 @@ const InvoiceFormFull = ({
             {/* Running total + primary actions, as a floating pill pinned to
                 the bottom of the form — matched to the split-view Invoice
                 panel's sticky bar (InvoiceForm.jsx's CreateInvoicePanel). */}
-            <div className="sticky bottom-0 z-20 w-full pt-3 pb-1 -mx-6 mt-12 flex justify-center pointer-events-none">
+            <div className="sticky bottom-0 z-20 w-full pt-3 pb-1 mt-12 flex justify-center pointer-events-none">
               <div className="pointer-events-auto flex w-full max-w-2xl items-center justify-between gap-5 rounded-2xl border border-[#E1E4EA] bg-white/95 backdrop-blur-sm pl-6 pr-2.5 py-2.5 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.22)]">
                 <div className="min-w-0">
                   <p className="text-[10px] font-semibold tracking-wide text-[#99A0AE] uppercase leading-none">
@@ -2246,12 +2473,23 @@ const InvoiceFormFull = ({
           message={stockErrorMessage}
           onClose={() => setStockErrorMessage(null)}
         />
+
+        <SuccessModal
+          isOpen={showSuccessModal}
+          title="Success"
+          message={successMessage}
+          onClose={() => {
+            setShowSuccessModal(false);
+            onClose();
+          }}
+        />
       </div>
     </>
   );
 };
 
-export default InvoiceFormFull;
 
 // Thin wrapper around the shared CreateInvoicePanel for invoice type.
 // Used by Accounting.jsx when opening the two-pane create/edit form.
+
+export default InvoiceFormFull;

@@ -1,4 +1,6 @@
 import HistoryIcon from "../components/common/HistoryIcon";
+import EmptyState from "../components/common/EmptyState";
+import { resolveLowStockThreshold } from "../utils/variantResolve";
 import Checkbox from "../components/common/Checkbox";
 import PlusIcon from "../components/common/PlusIcon";
 import MoreIcon from "../components/common/MoreIcon";
@@ -7,7 +9,7 @@ import { createPortal } from "react-dom";
 import {
   X, ChevronDown, ChevronUp, EyeOff, Minus,
   ChevronLeft, ChevronRight, Pin, PinOff, Package,
-  TrendingDown, Boxes, IndianRupee, Wallet, ArrowRight, Check, ArrowUp, ArrowDown } from "lucide-react";
+  TrendingDown, Boxes, IndianRupee, Wallet, ArrowRight, Check, ArrowUp, ArrowDown, Layers } from "lucide-react";
 import * as XLSX from "xlsx";
 import { formatINR } from "../utils/clientExport";
 import BulkActionBar from "../components/common/BulkActionBar";
@@ -109,14 +111,43 @@ const getItemStockValue = (item) => {
   return Math.max(getItemStock(item), 0) * (Number(item.sellingPrice) || 0);
 };
 
-/* Stock level → badge. Mirrors the backend's stockStatus filter exactly, so the badge a row
-   shows and the status you can filter by can never disagree. */
-const stockStatusOf = (item) => {
-  const qty = getItemStock(item);
-  const threshold = Number(item.inventory?.lowStockThreshold) || 0;
+/* Active variants of an item (inactive ones are not sellable, so they don't make a product
+   "low"). Empty array for a product without variants. */
+const activeVariantsOf = (item) => (item.variants || []).filter((v) => v.isActive !== false);
+
+/* Per-variant status, using the variant's own low-stock threshold and falling back to the
+   parent's when it doesn't set one. */
+const variantStatusOf = (variant, item) => {
+  const qty = Number(variant.stock) || 0;
+  const threshold = resolveLowStockThreshold(variant, item);
   if (qty <= 0) return { key: "out", label: "Out of Stock", cls: "bg-[#FCEAEA] text-[#EA4B4B]" };
   if (qty <= threshold) return { key: "low", label: "Low Stock", cls: "bg-[#FDF3E6] text-[#EA9927]" };
   return { key: "in", label: "In Stock", cls: "bg-[#E6F7EF] text-[#1FA971]" };
+};
+
+/* Stock level → badge. Mirrors the backend's stockStatus filter exactly, so the badge a row
+   shows and the status you can filter by can never disagree.
+
+   For a product WITH variants the total is not a usable signal on its own: a T-Shirt holding
+   Small 2 / Medium 6 / Large 1 totals 9, which sails past a threshold of 5 while two of its
+   three sizes are actually low. So a variant product is "Low Stock" as soon as ANY active
+   variant is at or below its own threshold, and only "Out of Stock" when the whole item is
+   empty. `lowCount` drives the "N variants low" hint on the row. */
+const stockStatusOf = (item) => {
+  const qty = getItemStock(item);
+  const variants = activeVariantsOf(item);
+
+  if (variants.length > 0) {
+    if (qty <= 0) return { key: "out", label: "Out of Stock", cls: "bg-[#FCEAEA] text-[#EA4B4B]", lowCount: 0 };
+    const lowCount = variants.filter((v) => variantStatusOf(v, item).key !== "in").length;
+    if (lowCount > 0) return { key: "low", label: "Low Stock", cls: "bg-[#FDF3E6] text-[#EA9927]", lowCount };
+    return { key: "in", label: "In Stock", cls: "bg-[#E6F7EF] text-[#1FA971]", lowCount: 0 };
+  }
+
+  const threshold = Number(item.inventory?.lowStockThreshold) || 0;
+  if (qty <= 0) return { key: "out", label: "Out of Stock", cls: "bg-[#FCEAEA] text-[#EA4B4B]", lowCount: 0 };
+  if (qty <= threshold) return { key: "low", label: "Low Stock", cls: "bg-[#FDF3E6] text-[#EA9927]", lowCount: 0 };
+  return { key: "in", label: "In Stock", cls: "bg-[#E6F7EF] text-[#1FA971]", lowCount: 0 };
 };
 
 const relativeTime = (date) => {
@@ -216,6 +247,9 @@ export default function Inventory() {
   const [openActionMenuId, setOpenActionMenuId] = useState(null);
   const [actionMenuPos, setActionMenuPos] = useState(null);
   const [stockModal, setStockModal] = useState({ open: false, item: null, direction: "in" });
+  // Item whose per-variant stock breakdown is open. The list itself stays one row per product;
+  // this drawer is how the variant detail is reached.
+  const [breakdownItem, setBreakdownItem] = useState(null);
   const [historyFor, setHistoryFor] = useState(null);
   useBodyScrollLock(!!historyFor);
   const [movements, setMovements] = useState([]);
@@ -764,11 +798,21 @@ export default function Inventory() {
               <span className="text-sm font-semibold text-gray-900 truncate">
                 <HighlightText text={item.name} query={searchQuery} />
               </span>
-              {item.hsnSac && (
+              {/* One row per product is preserved — the variant count is a hint that there's a
+                  per-variant breakdown behind it, not a second row. */}
+              {activeVariantsOf(item).length > 0 ? (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setBreakdownItem(item); }}
+                  className="text-[10px] text-blue-600 hover:text-blue-700 hover:underline truncate text-left font-medium"
+                >
+                  {activeVariantsOf(item).length} Variants
+                </button>
+              ) : item.hsnSac ? (
                 <span className="text-[10px] text-gray-400 truncate">
                   HSN <HighlightText text={item.hsnSac} query={searchQuery} />
                 </span>
-              )}
+              ) : null}
             </div>
           </div>
         );
@@ -786,10 +830,23 @@ export default function Inventory() {
       case "status": {
         const s = stockStatusOf(item);
         content = (
-          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
-            {s.label}
-          </span>
+          <div className="flex flex-col items-start gap-0.5">
+            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+              {s.label}
+            </span>
+            {/* Says WHICH part of a variant product is short, so the total ("9 PCS") doesn't
+                have to be reconciled against the badge by hand. */}
+            {s.lowCount > 0 && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setBreakdownItem(item); }}
+                className="text-[10px] text-[#EA9927] hover:underline font-medium"
+              >
+                {s.lowCount} variant{s.lowCount > 1 ? "s" : ""} low
+              </button>
+            )}
+          </div>
         );
         break;
       }
@@ -1116,16 +1173,18 @@ export default function Inventory() {
               />
             ) : filteredItems.length === 0 ? (
               <tr>
-                <td colSpan={orderedColumns.length + 1} className="px-6 py-20 text-center">
-                  <Package className="w-10 h-10 mx-auto text-gray-300 mb-3" />
-                  <p className="text-sm font-medium text-gray-500">No inventory items found.</p>
-                  {/* Every product appears here automatically, so an empty page means either no
-                      products exist yet or the current search/filter excludes them all. */}
-                  <p className="text-xs text-gray-400 mt-1.5 max-w-sm mx-auto">
-                    {searchQuery || stockStatusFilter || activeFilters.length > 0
-                      ? "No products match your current search or filters."
-                      : "Products added in Products & Services appear here automatically."}
-                  </p>
+                <td colSpan={orderedColumns.length + 1}>
+                  {/* No create button: every product appears here automatically, so an empty
+                      page means either no products exist yet or a search/filter excludes them. */}
+                  <EmptyState
+                    icon={Package}
+                    noun="Inventory item"
+                    title="No inventory items yet"
+                    description="Products added in Products & Services appear here automatically."
+                    isFiltered={!!(searchQuery || stockStatusFilter || activeFilters.length > 0)}
+                    filteredTitle="No matching inventory items"
+                    filteredDescription="No products match your current search or filters."
+                  />
                 </td>
               </tr>
             ) : (
@@ -1380,6 +1439,100 @@ export default function Inventory() {
           fetchData();
         }}
       />
+
+      {/* ── Variant stock breakdown ──────────────────────────────────
+          The Inventory list keeps one row per product, so this is where a variant product's
+          per-size stock and low-stock status actually become visible. */}
+      {breakdownItem && (
+        <>
+          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[9996]" onClick={() => setBreakdownItem(null)} />
+          <div className="fixed dc-panel-card dc-panel-w bg-white shadow-2xl z-[9997] flex flex-col overflow-hidden animate-slideInRight">
+            <div className="flex items-center justify-between p-5 border-b border-gray-200 bg-gray-50/50">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Layers className="w-4 h-4 text-blue-600" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold text-gray-900 truncate">{breakdownItem.name}</h2>
+                  <p className="text-xs text-gray-500 truncate">
+                    {activeVariantsOf(breakdownItem).length} variants · Stock breakdown
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setBreakdownItem(null)} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto bg-gray-50/30">
+              <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 px-5 py-2.5 border-b border-gray-200 bg-gray-50 sticky top-0">
+                {["Variant", "Purchase", "Sale", "Stock / Alert", "Status"].map((h) => (
+                  <span key={h} className="text-[10px] font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</span>
+                ))}
+              </div>
+              {/* Every variant is listed, inactive ones included, so the Total below always
+                  reconciles with the Qty shown on the row (which sums them all). Only active
+                  variants count toward "N variants low". */}
+              {(breakdownItem.variants || []).map((v) => {
+                const inactive = v.isActive === false;
+                const st = variantStatusOf(v, breakdownItem);
+                return (
+                  <div key={v._id || v.name} className={`grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 items-center px-5 py-3 border-b border-gray-100 ${inactive ? "bg-gray-50" : "bg-white"}`}>
+                    <span className={`text-sm font-medium truncate ${inactive ? "text-gray-400" : "text-gray-900"}`}>
+                      {v.name}
+                      {inactive && <span className="ml-1.5 text-[10px] font-normal text-gray-400">(inactive)</span>}
+                    </span>
+                    {/* Pricing is per-variant once an item has variants — the parent's own
+                        purchase/selling price stays 0 — so the breakdown is the only place the
+                        actual per-size prices are visible. */}
+                    <span className={`text-xs tabular-nums ${inactive ? "text-gray-400" : "text-gray-600"}`}>
+                      {money(Number(v.purchasePrice) || 0)}
+                    </span>
+                    <span className={`text-xs font-medium tabular-nums ${inactive ? "text-gray-400" : "text-gray-800"}`}>
+                      {money(Number(v.sellingPrice) || 0)}
+                    </span>
+                    <span className="whitespace-nowrap">
+                      <span className={`text-sm font-bold tabular-nums ${inactive ? "text-gray-400" : (Number(v.stock) || 0) <= 0 ? "text-red-600" : "text-gray-900"}`}>
+                        {Number(v.stock) || 0}
+                      </span>
+                      <span className="text-xs text-gray-400 tabular-nums"> / {resolveLowStockThreshold(v, breakdownItem)}</span>
+                    </span>
+                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${inactive ? "bg-gray-100 text-gray-400" : st.cls}`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+                      {inactive ? "Inactive" : st.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="border-t border-gray-200 p-5 bg-white">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-gray-700">Total Stock</span>
+                <span className="text-lg font-bold text-gray-900 tabular-nums">
+                  {getItemStock(breakdownItem)}
+                  <span className="ml-1.5 text-[10px] font-medium text-gray-400 uppercase">
+                    {breakdownItem.primaryUnit || ""}
+                  </span>
+                </span>
+              </div>
+              {/* Same figure the row's Stock Value column shows, so the two reconcile. */}
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-xs text-gray-500">Stock Value</span>
+                <span className="text-xs font-semibold text-gray-700 tabular-nums">
+                  {money(getItemStockValue(breakdownItem))}
+                </span>
+              </div>
+              {stockStatusOf(breakdownItem).lowCount > 0 && (
+                <p className="mt-1 text-xs font-medium text-[#EA9927]">
+                  {stockStatusOf(breakdownItem).lowCount} variant
+                  {stockStatusOf(breakdownItem).lowCount > 1 ? "s" : ""} low in stock
+                </p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── Stock history drawer ─────────────────────────────────────── */}
       {historyFor && (

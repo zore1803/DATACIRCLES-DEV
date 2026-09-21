@@ -50,14 +50,15 @@ async function getBrowser() {
  * ignored so changing the template restyles the whole set at once.
  */
 async function resolveTemplate(doc, organization, DEFAULT_TEMPLATE, type) {
-  if (doc?.style) return doc.style;
-  if (!organization) return DEFAULT_TEMPLATE;
-  try {
-    const templates = await getTemplatesForOrg(organization);
-    return templates?.[type] || DEFAULT_TEMPLATE;
-  } catch {
-    return DEFAULT_TEMPLATE;
+  if (organization) {
+    try {
+      const templates = await getTemplatesForOrg(organization);
+      if (templates?.[type]) return templates[type];
+    } catch {
+      // Fall through to the document's own legacy style / the default.
+    }
   }
+  return doc?.style || DEFAULT_TEMPLATE;
 }
 
 /*

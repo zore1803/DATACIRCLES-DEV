@@ -15,7 +15,9 @@ router.post("/",
   requireAuth,
   subscriptionGate,
   checkPermission("items", "read-write"),
-  uploadMiddlewareS3().array("images", 10),
+  // .any() rather than .array("images"): images now arrive under "images" (the parent's) AND
+  // "variantImages_<index>" (each variant's own). itemController partitions them by fieldname.
+  uploadMiddlewareS3().any(),
   itemController.createItem
 );
 
@@ -56,7 +58,9 @@ router.put("/:id",
   requireAuth,
   subscriptionGate,
   checkPermission("items", "read-write"),
-  uploadMiddlewareS3().array("images", 10),
+  // .any() rather than .array("images"): images now arrive under "images" (the parent's) AND
+  // "variantImages_<index>" (each variant's own). itemController partitions them by fieldname.
+  uploadMiddlewareS3().any(),
   itemController.updateItem
 );
 

@@ -4,7 +4,7 @@ import DeleteIcon from "../common/DeleteIcon";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import SearchIcon from "../common/SearchIcon";
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Skeleton from "../common/Skeleton";
 import StatTileSkeleton from "../common/StatTileSkeleton";
 import StatTile from "../common/StatTile";
@@ -17,7 +17,7 @@ import DataTable from "../common/DataTable";
 import RowActionsMenu from "../common/RowActionsMenu";
 import BulkActionBar from "../common/BulkActionBar";
 import TablePaginationFooter from "../common/TablePaginationFooter";
-import CompanyFilterPanel from "../company/CompanyFilterPanel";
+import ToolbarFilterGroup from "../company/ToolbarFilterGroup";
 import FilterIcon from "../common/FilterIcon";
 import { useBulkSelection, useBulkStrip } from "../../hooks/useBulkSelection";
 import { useTopLoadingSignal } from "../common/TopLoadingBar";
@@ -94,8 +94,6 @@ const VendorMeetingsTable = ({ vendorId, showKPIs = true, autoOpenCreate = false
   const [hiddenColumns, setHiddenColumns] = useState(new Set());
   const [pinnedColumns, setPinnedColumns] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
-
-  const filterButtonRef = useRef(null);
 
   const handleColumnReorder = (draggedKey, targetKey) => {
     setColumnOrder((prev) => {
@@ -589,8 +587,8 @@ const VendorMeetingsTable = ({ vendorId, showKPIs = true, autoOpenCreate = false
           isDeleting={isDeleting}
         />
       ) : (
-        <div className="flex items-center gap-4 mb-2" style={{ height: "44px" }}>
-          <div className="relative flex-1 h-full">
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-2" style={{ minHeight: "44px" }}>
+          <div className="relative flex-1 min-w-[180px] h-[44px]">
             <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
             <input
               type="text"
@@ -609,13 +607,23 @@ const VendorMeetingsTable = ({ vendorId, showKPIs = true, autoOpenCreate = false
               </button>
             )}
           </div>
+          <ToolbarFilterGroup
+            isOpen={showFilterPanel}
+            columns={MEETING_FILTER_COLUMNS}
+            data={meetings}
+            getFieldValue={getMeetingFieldValue}
+            selected={selectedFilters}
+            onApply={setSelectedFilters}
+          />
           <button
-            ref={filterButtonRef}
-            onClick={() => setShowFilterPanel(true)}
-            className="relative flex items-center justify-center gap-2 px-3 text-sm font-medium text-gray-800 bg-white border rounded-full hover:bg-gray-50 flex-shrink-0"
+            onClick={() => setShowFilterPanel((open) => !open)}
+            aria-expanded={showFilterPanel}
+            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${
+              showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+            }`}
             style={{
               height: "44px",
-              borderColor: activeFilterCount > 0 ? "#0085FF" : "#E1E4EA",
+              borderColor: showFilterPanel || activeFilterCount > 0 ? "#0085FF" : "#E1E4EA",
             }}
           >
             <FilterIcon size={16} />
@@ -710,17 +718,6 @@ const VendorMeetingsTable = ({ vendorId, showKPIs = true, autoOpenCreate = false
         </div>
       </div>
       )}
-
-      <CompanyFilterPanel
-        isOpen={showFilterPanel}
-        onClose={() => setShowFilterPanel(false)}
-        columns={MEETING_FILTER_COLUMNS}
-        data={meetings}
-        getFieldValue={getMeetingFieldValue}
-        selected={selectedFilters}
-        onApply={setSelectedFilters}
-        triggerRef={filterButtonRef}
-      />
 
       {showMeetingForm && (
         <VendorMeetingForm

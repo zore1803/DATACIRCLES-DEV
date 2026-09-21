@@ -3,6 +3,11 @@ import { ChevronDown, MapPin } from "lucide-react";
 import { createPortal } from "react-dom";
 import { getAncestorZoom } from "../../utils/domUtils";
 import { INDIA_STATES, CITIES_BY_STATE, ALL_CITIES, COUNTRIES } from "../../constants/addressOptions";
+import { canonicalStateName, getStateCode } from "../../utils/gstStateCode";
+import toast from "react-hot-toast";
+
+// Module-level cache — avoids re-fetching a pincode already looked up this session.
+const pincodeCache = new Map();
 
 /*
  * Small building blocks shared by Accounting.jsx's CreateInvoicePanel (the
@@ -49,29 +54,30 @@ export const emptyAddress = () => ({
   pincode: "",
   city: "",
   state: "",
+  // GST state code for `state` ("Maharashtra" -> "27"), kept in step with it by
+  // AddressFieldsGroup. Empty for anything getStateCode() can't resolve (i.e.
+  // outside India) -- a code is never invented for a non-Indian address.
+  stateCode: "",
   country: "",
 });
 
 export const isAddressEmpty = (addr) =>
   !addr || Object.values(addr).every((v) => !v || !String(v).trim());
 
-// Looks up an Indian PIN code via India Post's public API (no key required)
-// to fill State/City automatically — a pincode uniquely determines both, so
-// asking the user to also pick them by hand is redundant once it's typed.
-// Matched against this module's own INDIA_STATES/CITIES_BY_STATE (not the
-// raw API district name) so the result lands on a real option in the
-// State/City dropdowns above rather than a lookalike string that fails to
-// match. Same approach as QuickCompanyForm's lookupIndianPincode.
-const lookupIndianPincode = async (pincode) => {
+// Looks up an Indian PIN code via India Post's public API.
+// - Results cached per pincode so re-typing the same code is instant.
+// - Accepts an AbortSignal so a superseded lookup is cancelled cleanly.
+const lookupIndianPincode = async (pincode, signal) => {
   if (!/^\d{6}$/.test(pincode)) return null;
+  if (pincodeCache.has(pincode)) return pincodeCache.get(pincode);
   try {
-    const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
+    const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`, { signal });
     const data = await res.json();
     const po = data?.[0]?.Status === "Success" ? data[0].PostOffice?.[0] : null;
     if (!po) return null;
 
-    const matchedState = INDIA_STATES.find((s) => s.toLowerCase() === po.State?.toLowerCase());
-    if (!matchedState) return null;
+    const matchedState = canonicalStateName(po.State, INDIA_STATES);
+    if (!matchedState || !INDIA_STATES.includes(matchedState)) return null;
 
     const cities = CITIES_BY_STATE[matchedState] || [];
     const districtOrTaluk = po.District || po.Block || po.Taluk || "";
@@ -82,13 +88,23 @@ const lookupIndianPincode = async (pincode) => {
       po.Name ||
       "";
 
-    return { country: "India", state: matchedState, city: matchedCity };
-  } catch (_) {
-    return null; // Non-fatal — the user can still fill state/city by hand.
+    const result = {
+      country: "India",
+      state: matchedState,
+      stateCode: getStateCode(matchedState) || "",
+      city: matchedCity,
+    };
+    pincodeCache.set(pincode, result);
+    return result;
+  } catch (err) {
+    if (err?.name === "AbortError") throw err;
+    return null;
   }
 };
 
 export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, required = false, invalid = false, onUseSaved }) => {
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+  const pincodeReqRef = useRef(null);
   const safeValue = value || emptyAddress();
   const fieldBorder = invalid
     ? "border-red-400 focus:ring-red-500/20 focus:border-red-500"
@@ -151,7 +167,10 @@ export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, r
         </div>
         {/* Country/State first row, City/Pincode second — state and city
             stay adjacent since the city list is scoped to the chosen state. */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* Country | State | State Code on the first row, City | Pincode on
+            the second: state and its GST code stay adjacent, and the city
+            list is scoped to the state chosen just above it. */}
+        <div className="grid grid-cols-2 @md:grid-cols-3 gap-3">
           <PickerSelect
             value={safeValue.country || ""}
             options={countryOptions}
@@ -172,6 +191,10 @@ export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, r
               onChange({
                 ...safeValue,
                 state: o.value,
+                // Never let the code drift from the state it describes: an
+                // unrecognised (non-Indian) state clears it rather than keeping
+                // the previous state's code.
+                stateCode: getStateCode(o.value) || "",
                 // A city from the previous state would be wrong under the new
                 // one, so it's cleared — unless it also exists in the new
                 // state's list (several city names repeat across states).
@@ -181,6 +204,21 @@ export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, r
               })
             }
           />
+          {/* GST state code for the state above. Read-only: it is derived from
+              the state (and from the pincode lookup), so the two can never
+              disagree. Shows "--" outside India, where no GST code applies. */}
+          <div className="relative">
+            <input
+              type="text"
+              value={safeValue.stateCode || ""}
+              readOnly
+              disabled={disabled}
+              title="GST state code (set automatically from the state)"
+              aria-label="GST state code"
+              placeholder="State code"
+              className={`${inputCls} bg-slate-50 text-slate-500 cursor-default`}
+            />
+          </div>
           <PickerSelect
             value={safeValue.city || ""}
             options={cityOptions}
@@ -190,23 +228,61 @@ export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, r
             triggerClassName={pickerTriggerCls}
             onSelect={(o) => onChange({ ...safeValue, city: o.value })}
           />
-          <input
-            type="text"
-            value={safeValue.pincode || ""}
-            disabled={disabled}
-            onChange={async (e) => {
-              const pincode = e.target.value.replace(/\D/g, "").slice(0, 6);
-              onChange({ ...safeValue, pincode });
-              // Only fire once a full 6-digit code is typed — a request per
-              // keystroke would spam pincodes India Post will 404 on anyway.
-              if (pincode.length === 6) {
-                const match = await lookupIndianPincode(pincode);
-                if (match) onChange({ ...safeValue, pincode, ...match });
-              }
-            }}
-            placeholder="Pincode"
-            className={inputCls}
-          />
+          <div className="relative">
+            <input
+              type="text"
+              value={safeValue.pincode || ""}
+              disabled={disabled}
+              onChange={async (e) => {
+                const pincode = e.target.value.replace(/\D/g, "").slice(0, 6);
+                onChange({ ...safeValue, pincode });
+
+                // Cancel any in-flight request for the previous value.
+                pincodeReqRef.current?.abort();
+                pincodeReqRef.current = null;
+
+                if (pincode.length !== 6) {
+                  setPincodeLoading(false);
+                  return;
+                }
+
+                // Cache hit — no network call needed.
+                if (pincodeCache.has(pincode)) {
+                  const cached = pincodeCache.get(pincode);
+                  onChange({ ...safeValue, pincode, ...cached });
+                  return;
+                }
+
+                const controller = new AbortController();
+                pincodeReqRef.current = controller;
+                setPincodeLoading(true);
+                try {
+                  const match = await lookupIndianPincode(pincode, controller.signal);
+                  if (pincodeReqRef.current !== controller) return;
+                  if (match) {
+                    onChange({ ...safeValue, pincode, ...match });
+                    toast.success("Address auto-filled from pincode", { duration: 2500 });
+                  }
+                } catch (err) {
+                  if (err?.name !== "AbortError") console.error("Pincode lookup failed", err);
+                } finally {
+                  if (pincodeReqRef.current === controller) {
+                    pincodeReqRef.current = null;
+                    setPincodeLoading(false);
+                  }
+                }
+              }}
+              placeholder="Pincode"
+              className={inputCls}
+            />
+            {pincodeLoading && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0085FF" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                </svg>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
