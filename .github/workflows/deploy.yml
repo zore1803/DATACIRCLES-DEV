@@ -35,7 +35,7 @@ jobs:
           command_timeout: 20m
           script: |
             set -e
-            cd /home/ubuntu/datacircles-crm
+            cd /root/datacircles-crm
 
             # BuildKit reuses unchanged layers far more aggressively than the
             # legacy builder (and skips stages nothing depends on), which is
