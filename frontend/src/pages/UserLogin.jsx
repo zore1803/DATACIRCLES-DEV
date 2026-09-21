@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
 import API from "../services/api";
+import usePageBackground from "../hooks/usePageBackground";
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
@@ -87,6 +88,8 @@ export default function Login() {
       console.error("Login error:", error);
     }
   };
+
+  usePageBackground("#EAEAEA");
 
   return (
     <div className="h-screen w-full bg-[#EAEAEA] p-0 font-inter overflow-hidden flex items-center justify-center">

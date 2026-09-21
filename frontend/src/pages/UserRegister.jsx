@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import API from "../services/api";
+import usePageBackground from "../hooks/usePageBackground";
 
 export default function Register() {
   const location = useLocation();
@@ -154,6 +155,8 @@ export default function Register() {
   // ==================================================
   // RETURN
   // ==================================================
+
+  usePageBackground("#EAEAEA");
 
   return (
     <div className="h-screen w-full bg-[#EAEAEA] p-0 font-inter overflow-hidden flex items-center justify-center">
