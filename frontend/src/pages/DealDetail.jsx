@@ -25,6 +25,7 @@ import {
   XCircle,
 } from "lucide-react";
 import BasicDetails from "../components/deal/BasicDetails";
+import DealSummaryCard from "../components/deal/DealSummaryCard";
 import CompanyInvoicesTab from "../components/company/CompanyInvoicesTab";
 import CompanyNotesTab from "../components/company/CompanyNotesTab";
 import CompanyTasksTab from "../components/company/CompanyTasksTab";
@@ -618,11 +619,14 @@ function DealDetail() {
         {/* Summary Stats Row — on Overview, mirroring the company page's
             Overview-only KPI strip. */}
         {showStats && activeTab === "Overview" && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-            {statsLoading || invoicesLoading
-              ? Array.from({ length: 6 }).map((_, i) => <StatTileSkeleton key={i} />)
-              : statTiles.map((tile) => <StatTile key={tile.label} tile={tile} />)}
-          </div>
+          <>
+            {!statsLoading && <DealSummaryCard deal={deal} />}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+              {statsLoading || invoicesLoading
+                ? Array.from({ length: 6 }).map((_, i) => <StatTileSkeleton key={i} />)
+                : statTiles.map((tile) => <StatTile key={tile.label} tile={tile} />)}
+            </div>
+          </>
         )}
 
         {/* Tab Content */}

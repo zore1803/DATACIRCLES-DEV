@@ -718,7 +718,21 @@ const AdminMeetingForm = ({
         .then((res) => setGoogleStatus(res.data))
         .catch(() => setGoogleStatus(null));
       API.get("/deals")
-        .then((res) => setLinkableDeals(res.data || []))
+        .then((res) => {
+          const dealsList = res.data || [];
+          setLinkableDeals(dealsList);
+          
+          // Auto-set the companyId if a meeting is opened from a Deal
+          // but missing the explicit initialCompanyId prop.
+          if (initialDealId && !initialCompanyId) {
+            const linkedDeal = dealsList.find(d => d._id === initialDealId);
+            if (linkedDeal && linkedDeal.company) {
+              const cid = linkedDeal.company._id || linkedDeal.company;
+              setForm(f => ({ ...f, companyId: cid }));
+              fetchCompanyContacts(cid);
+            }
+          }
+        })
         .catch(() => setLinkableDeals([]));
       API.get("/invoices")
         .then((res) => setLinkableInvoices(res.data || []))
@@ -798,6 +812,18 @@ const AdminMeetingForm = ({
       if (key === "companyId" && val) {
         fetchCompanyContacts(val);
         newForm.participants = [];
+      }
+
+      if (key === "linkedDealId" && val) {
+        const deal = linkableDeals.find(d => d._id === val);
+        if (deal && deal.company) {
+          const cid = deal.company._id || deal.company;
+          newForm.companyId = cid;
+          fetchCompanyContacts(cid);
+          if (newForm.linkedTo !== "company") {
+            newForm.linkedTo = "company";
+          }
+        }
       }
 
       return newForm;
