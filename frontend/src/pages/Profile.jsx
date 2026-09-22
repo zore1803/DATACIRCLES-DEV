@@ -100,6 +100,7 @@ const Profile = () => {
   const [accountRequestOrgInput, setAccountRequestOrgInput] = useState("");
   const [organizationName, setOrganizationName] = useState("");
   const [connectingGoogle, setConnectingGoogle] = useState(false);
+  const [googleLinkError, setGoogleLinkError] = useState("");
   const [disconnectingGoogle, setDisconnectingGoogle] = useState(false);
 
   // Locks the page behind whichever modal/panel is open so only that
@@ -193,6 +194,8 @@ const Profile = () => {
   // to the backend; nothing from it touches app-wide auth state.
   const handleConnectGoogle = async () => {
     setConnectingGoogle(true);
+    setGoogleLinkError("");
+    const wrongAccountMessage = `Please connect the Google account for ${user.email} only.`;
     try {
       const linkClient = await createAuth0Client({
         domain: import.meta.env.VITE_APP_AUTH0_DOMAIN,
@@ -212,6 +215,15 @@ const Profile = () => {
           ...(user.email ? { login_hint: user.email } : {}),
         },
       });
+      // Stop a wrong account HERE, before any API call: the popup also
+      // switches the browser's Auth0 session to that Google account, so a
+      // request made now could go out as it and hit userSync's
+      // REGISTRATION_REQUIRED instead of linkGoogleAccount's own match check.
+      const googleUser = await linkClient.getUser();
+      if (user.email && googleUser?.email?.toLowerCase() !== user.email.toLowerCase()) {
+        setGoogleLinkError(wrongAccountMessage);
+        return;
+      }
       const accessToken = await linkClient.getTokenSilently();
       const res = await API.post("/auth/link-google", { accessToken });
       setUser(res.data.user);
@@ -222,7 +234,12 @@ const Profile = () => {
         // User just closed the Google popup — not a real failure, no toast.
         return;
       }
-      toast.error(err.response?.data?.error || "Failed to connect Google account. Please try again.");
+      const data = err.response?.data;
+      setGoogleLinkError(
+        data?.error === "REGISTRATION_REQUIRED"
+          ? wrongAccountMessage
+          : data?.error || "Failed to connect Google account. Please try again."
+      );
     } finally {
       setConnectingGoogle(false);
     }
@@ -1066,6 +1083,9 @@ const Profile = () => {
                 </button>
               )}
             </div>
+            {googleLinkError && (
+              <p className="mt-2 text-xs font-medium text-red-600">{googleLinkError}</p>
+            )}
 
             {/* Changing the LOGIN credential itself (email for an
                 email/Google-login account, phone for a phone-login one) is
