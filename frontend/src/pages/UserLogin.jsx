@@ -35,6 +35,11 @@ export default function Login() {
         authorizationParams: {
           connection: AUTH0_GOOGLE_CONNECTION,
           redirect_uri: AUTH0_REDIRECT_URI,
+          // Always show Google's account chooser. Without it Auth0 silently
+          // reused whichever Google account was last used in this browser —
+          // e.g. a wrong one tried in Profile's Connect with Google — and
+          // login got stuck on 428 REGISTRATION_REQUIRED.
+          prompt: "select_account",
           ...(AUTH0_AUDIENCE && { audience: AUTH0_AUDIENCE }),
         },
       });
