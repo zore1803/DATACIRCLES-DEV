@@ -46,10 +46,29 @@ function computeMandateMaxAmountRupees(_firstInvoiceRupees) {
 // So a method is always sent: the customer's pick from checkout, else UPI
 // Autopay (what most Indian customers expect; ₹15,000 ceiling fits UPI's cap).
 // No 'emandate': Razorpay requires amount 0 on an e-mandate link, but ours
-// charges the first invoice during authorization.
-const MANDATE_METHODS = ['upi', 'card'];
+// charges the first invoice during authorization. 'manual' is not a mandate
+// at all — see createCheckoutLink below.
+const MANDATE_METHODS = ['upi', 'card', 'manual'];
 function resolveMandateMethod(requested) {
   return MANDATE_METHODS.includes(requested) ? requested : 'upi';
+}
+
+// Creates the link the customer pays their first invoice on. For autopay
+// methods it's a Registration Link (charge now + set up the mandate). For
+// 'manual' it's the same request minus subscription_registration, sent to
+// the plain Invoices API: a normal payment link offering every method. Both
+// are Razorpay invoices, so the resulting payment.captured carries this
+// link's id as invoice_id either way and the same webhook correlation works.
+async function createCheckoutLink(params, mandateMethod) {
+  const method = resolveMandateMethod(mandateMethod);
+  if (method === 'manual') {
+    const { subscription_registration, ...plainParams } = params;
+    return razorpay.invoices.create(plainParams);
+  }
+  return razorpay.subscriptions.createRegistrationLink({
+    ...params,
+    subscription_registration: { ...params.subscription_registration, method },
+  });
 }
 
 // Fix (found via live QA): the stored phone is always a bare 10-digit
@@ -111,7 +130,6 @@ async function createRegistrationLinkForOrg({
     description: `${planId.charAt(0).toUpperCase() + planId.slice(1)} Plan - ${billingCycle}`,
     subscription_registration: {
       max_amount: mandateMaxAmountPaise,
-      method: resolveMandateMethod(mandateMethod),
     },
     // Razorpay caps `receipt` at 40 chars — same constraint as
     // createSubscription's identical receipt construction.
@@ -128,7 +146,7 @@ async function createRegistrationLinkForOrg({
     registrationLinkParams.expire_by = Math.floor(Date.now() / 1000) + Number(expirySeconds);
   }
 
-  const registrationLink = await razorpay.subscriptions.createRegistrationLink(registrationLinkParams);
+  const registrationLink = await createCheckoutLink(registrationLinkParams, mandateMethod);
   return { registrationLink, mandateMaxAmountRupees };
 }
 
@@ -138,4 +156,5 @@ module.exports = {
   computeMandateMaxAmountRupees,
   formatContactForRazorpay,
   resolveMandateMethod,
+  createCheckoutLink,
 };

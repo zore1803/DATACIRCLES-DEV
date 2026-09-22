@@ -1,12 +1,13 @@
-import { X, ChevronRight, CreditCard, ShieldCheck } from "lucide-react";
+import { X, ChevronRight, CreditCard, ShieldCheck, Landmark } from "lucide-react";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 // Autopay method chooser shown before a Razorpay Registration Link is
 // created. A link shows only ONE method on Razorpay's page (omitting it
 // showed Cards only), so the pick happens here, styled after Razorpay's own
-// checkout so the hand-off feels continuous. No Net Banking: Razorpay
-// rejects an e-mandate link with a non-zero amount ("The amount should be
-// 0."), and ours charges the first invoice during authorization.
+// checkout so the hand-off feels continuous. Net Banking/wallets can't be an
+// autopay here (Razorpay requires a ₹0 e-mandate link, ours charges the
+// first invoice), so they live under "manual": a plain payment link now and
+// a new one emailed each renewal (backend utils/manualRenewal.js).
 
 const UpiMark = () => (
   <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
@@ -51,6 +52,25 @@ const METHODS = [
   },
 ];
 
+const MANUAL_METHOD = {
+  value: "manual",
+  label: "Net Banking, Wallets & more",
+  icon: <Landmark className="h-5 w-5 text-[#2b83ea]" />,
+};
+
+const MethodRow = ({ value, label, icon, chips, onSelect, bordered }) => (
+  <button
+    type="button"
+    onClick={() => onSelect(value)}
+    className={`flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-gray-50 ${bordered ? "border-t border-gray-200" : ""}`}
+  >
+    <span className="flex w-6 justify-center">{icon}</span>
+    <span className="text-[15px] font-medium text-gray-900">{label}</span>
+    {chips && <span className="flex items-center gap-1">{chips}</span>}
+    <ChevronRight className="ml-auto h-4 w-4 flex-shrink-0 text-gray-500" />
+  </button>
+);
+
 const PaymentMethodModal = ({ isOpen, onSelect, onClose }) => {
   useBodyScrollLock(isOpen);
   if (!isOpen) return null;
@@ -70,25 +90,19 @@ const PaymentMethodModal = ({ isOpen, onSelect, onClose }) => {
 
         <div className="px-5 pb-5 pt-5">
           <h3 className="text-lg font-semibold text-gray-900">Payment Options</h3>
-          <p className="mb-3 mt-4 text-sm font-medium text-gray-600">All Payment Options</p>
+          <p className="mb-1 mt-4 text-sm font-medium text-gray-600">Autopay</p>
+          <p className="mb-2.5 text-xs text-gray-500">Pays today and renews automatically until you cancel.</p>
           <div className="overflow-hidden rounded-lg border border-gray-200">
-            {METHODS.map(({ value, label, icon, chips }, i) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => onSelect(value)}
-                className={`flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-gray-50 ${i > 0 ? "border-t border-gray-200" : ""}`}
-              >
-                <span className="flex w-6 justify-center">{icon}</span>
-                <span className="text-[15px] font-medium text-gray-900">{label}</span>
-                <span className="flex items-center gap-1">{chips}</span>
-                <ChevronRight className="ml-auto h-4 w-4 text-gray-500" />
-              </button>
+            {METHODS.map((m, i) => (
+              <MethodRow key={m.value} {...m} onSelect={onSelect} bordered={i > 0} />
             ))}
           </div>
-          <p className="mt-4 text-xs leading-relaxed text-gray-500">
-            The method you choose pays today&apos;s amount and is used for future automatic renewals until you cancel.
-          </p>
+
+          <p className="mb-1 mt-5 text-sm font-medium text-gray-600">Pay manually</p>
+          <p className="mb-2.5 text-xs text-gray-500">Pay today with any method. We&apos;ll email a payment link at each renewal.</p>
+          <div className="overflow-hidden rounded-lg border border-gray-200">
+            <MethodRow {...MANUAL_METHOD} onSelect={onSelect} />
+          </div>
         </div>
 
         <div className="flex items-center justify-center gap-1.5 border-t border-gray-100 bg-gray-50 py-2.5 text-xs text-gray-500">

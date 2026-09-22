@@ -32,7 +32,7 @@ const { validateAndPriceCoupon, recordRedemption, buildCouponModifierForLineItem
 // "redeemed" condition is always already true at these call sites too;
 // reusing this exact function needs no modification, just a second caller.
 const { isCouponStillEligibleForRenewal } = require('../utils/couponRenewalEligibility');
-const { createRegistrationLinkForOrg, formatContactForRazorpay, resolveMandateMethod } = require('../utils/cawAcquisition');
+const { createRegistrationLinkForOrg, formatContactForRazorpay, resolveMandateMethod, createCheckoutLink } = require('../utils/cawAcquisition');
 const { calculateInvoice, toPricingBreakdown, calculateCommercialAdjustments } = require('../utils/invoiceEngine');
 const BillingInvoice = require('../models/BillingInvoice');
 const CommercialTransaction = require('../models/CommercialTransaction');
@@ -541,10 +541,10 @@ exports.createSubscription = async (req, res) => {
     // per the Razorpay SDK's own type definitions (RazorpaySubscriptionRegistrationUpi
     // extends the base request body with nothing extra — confirmed by reading
     // node_modules/razorpay/dist/types/subscriptions.d.ts, not assumed):
-    //   - method: ALWAYS sent — see resolveMandateMethod (cawAcquisition.js).
+    //   - method: ALWAYS sent — see createCheckoutLink (cawAcquisition.js).
     //     Omitting it made Razorpay's hosted page show Cards only, not every
     //     enabled method. The customer picks it at checkout (mandateMethod);
-    //     anything missing/unknown falls back to UPI Autopay.
+    //     'manual' drops the mandate entirely for a plain payment link.
     //   - expire_at: also omitted — no documented default exists to override,
     //     and there is no product requirement yet for a specific mandate
     //     validity horizon. Only max_amount has a documented Razorpay default
@@ -575,7 +575,6 @@ exports.createSubscription = async (req, res) => {
       description: `${planId.charAt(0).toUpperCase() + planId.slice(1)} Plan - ${billingCycle}`,
       subscription_registration: {
         max_amount: mandateMaxAmountPaise,
-        method: resolveMandateMethod(req.body.mandateMethod),
       },
       // Razorpay caps `receipt` at 40 chars (confirmed live: "The receipt may
       // not be greater than 40 characters."). A full org ObjectId (24 chars)
@@ -596,7 +595,7 @@ exports.createSubscription = async (req, res) => {
       registrationLinkParams.expire_by = Math.floor(Date.now() / 1000) + Number(process.env.CAW_REGISTRATION_LINK_EXPIRY_SECONDS);
     }
 
-    const registrationLink = await razorpay.subscriptions.createRegistrationLink(registrationLinkParams);
+    const registrationLink = await createCheckoutLink(registrationLinkParams, req.body.mandateMethod);
 
     // Subscription created in a pending-mandate state. mandateStatus stays
     // 'pending' until the Phase 3 token.confirmed webhook fires (idempotent
@@ -642,6 +641,7 @@ exports.createSubscription = async (req, res) => {
       mandateStatus: 'pending',
       mandateInitiatedAt: new Date(),
       mandateMaxAmount: mandateMaxAmountRupees,
+      billingMode: resolveMandateMethod(req.body.mandateMethod) === 'manual' ? 'manual' : 'autopay',
       planName: planId,
       status: "created",
       paymentStatus: "pending_payment",
@@ -2366,6 +2366,7 @@ exports.updateSubscription = async (req, res) => {
       // stale" copy always reflects THIS attempt, not a much older one.
       subscription.mandateInitiatedAt = new Date();
       subscription.mandateMaxAmount = mandateMaxAmountRupees;
+      subscription.billingMode = resolveMandateMethod(req.body.mandateMethod) === 'manual' ? 'manual' : 'autopay';
       subscription.planName = planId;
       subscription.status = "created";
       subscription.paymentStatus = "pending_payment";
@@ -3301,7 +3302,11 @@ async function reconcileMandate(subscription) {
     subscription.cancelAtPeriodEnd = true;
   }
 
-  if (subscription.paymentStatus === 'payment_completed' && (subscription.mandateStatus === 'confirmed' || paidWithoutMandate)) {
+  // Manual billing has no mandate to wait for: the captured payment alone
+  // activates it, and its renewals go out as payment links (manualRenewal.js).
+  const isManual = subscription.billingMode === 'manual';
+  if (subscription.paymentStatus === 'payment_completed' && (subscription.mandateStatus === 'confirmed' || paidWithoutMandate || isManual)) {
+    if (isManual && subscription.mandateStatus === 'pending') subscription.mandateStatus = 'none';
     subscription.isPaymentConfirmed = true;
     // Regression fix (found via live QA — real money-affecting bug): this
     // AND-gate is THE activation moment for every CAW (Registration-Link)
@@ -3954,6 +3959,10 @@ exports.handleWebhook = async (req, res) => {
     const razorpayEventId = req.headers['x-razorpay-event-id'];
     switch (event.event) {
       case "payment.captured":
+        // A manual-billing renewal link is settled on its own path and must
+        // not also reach the first-payment handlers below (the CAW one's
+        // organization fallback would treat it as a superseded signup link).
+        if (await require('../utils/manualRenewal').settleManualRenewalPayment(event.payload.payment.entity)) break;
         await handlePaymentCaptured(event.payload.payment.entity);
         // CAW (Phase 3A) — additive, independent of the legacy handler above.
         // No-ops if this payment isn't tied to a CAW subscription.

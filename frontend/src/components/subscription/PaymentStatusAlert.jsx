@@ -12,10 +12,52 @@ import { hasValidPendingUpdate, deriveSubscriptionUIState, SUBSCRIPTION_UI_STATE
 // it never implies anything is "currently happening" the way the old
 // full-screen fallback incorrectly did.
 const RECENT_MANDATE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+// Mirrors GRACE_DAYS in backend utils/manualRenewal.js.
+const MANUAL_GRACE_DAYS = 7;
 
 const PaymentStatusAlert = ({ subscription, onRetryPayment, onResumePayment, onChangePlan, processing }) => {
   // Don't show if no subscription exists
   if (!subscription) return null;
+
+  // Manual billing (no autopay): an open renewal link means this period is
+  // due. Shown ahead of every other case — the subscription is still
+  // payment-confirmed from its last period, which would otherwise hide it.
+  const manualRenewal = subscription.billingMode === 'manual' ? subscription.manualRenewal : null;
+  if (manualRenewal?.shortUrl) {
+    const suspended = subscription.appStatus === 'suspended';
+    const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const graceEnds = new Date(new Date(manualRenewal.dueAt).getTime() + MANUAL_GRACE_DAYS * 24 * 60 * 60 * 1000);
+    const amount = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(manualRenewal.amount);
+    const tone = suspended ? 'bg-red-50 border-red-200 text-red-800' : 'bg-amber-50 border-amber-200 text-amber-800';
+    return (
+      <div className={`${tone} border rounded-lg p-4 mb-6`}>
+        <div className="flex">
+          <div className="flex-shrink-0">
+            {suspended ? <XCircle className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
+          </div>
+          <div className="ml-3 flex-1">
+            <h3 className="text-sm font-medium">
+              {suspended ? 'Workspace is read-only — renewal unpaid' : 'Renewal payment due'}
+            </h3>
+            <p className="mt-1 text-sm">
+              {suspended
+                ? `Your renewal of ${amount} due on ${fmt(manualRenewal.dueAt)} hasn't been paid. Pay now to restore full access immediately.`
+                : `Your renewal of ${amount} is due on ${fmt(manualRenewal.dueAt)}. Pay before ${fmt(graceEnds)} with UPI, card, net banking or wallet to keep full access.`}
+            </p>
+            <a
+              href={manualRenewal.shortUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex items-center bg-[#0085FF] text-white px-4 h-[38px] rounded-full text-sm font-medium hover:bg-blue-600 transition-colors"
+            >
+              <CreditCard className="w-4 h-4 mr-2" />
+              Pay {amount} now
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const uiState = deriveSubscriptionUIState(subscription);
 

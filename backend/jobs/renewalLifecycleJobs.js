@@ -80,4 +80,25 @@ cron.schedule('0 * * * *', async () => {
   }
 });
 
+// ------------------------------------------------------------------
+// Manual-billing renewals — hourly. Sends the payment link on the renewal
+// date, then reminders (grace days 3 and 6) and suspension (day 7). Both
+// steps are idempotent per subscription (see utils/manualRenewal.js), so an
+// hourly tick only ever acts once per link/reminder.
+// ------------------------------------------------------------------
+let manualJobRunning = false;
+cron.schedule('0 * * * *', async () => {
+  if (manualJobRunning) return;
+  manualJobRunning = true;
+  try {
+    const { runManualRenewalJob, runManualGraceJob } = require('../utils/manualRenewal');
+    await runManualRenewalJob();
+    await runManualGraceJob();
+  } catch (err) {
+    console.error('[renewalLifecycleJobs] Manual renewal job error:', err);
+  } finally {
+    manualJobRunning = false;
+  }
+});
+
 module.exports = {};
