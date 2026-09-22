@@ -1,5 +1,6 @@
 import { X, ChevronRight, CreditCard, ShieldCheck, Landmark } from "lucide-react";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { GooglePayLogo, PhonePeLogo, PaytmLogo, VisaLogo } from "./PaymentBrandLogos";
 
 // Autopay method chooser shown before a Razorpay Registration Link is
 // created. A link shows only ONE method on Razorpay's page (omitting it
@@ -17,7 +18,7 @@ const UpiMark = () => (
 );
 
 const Chip = ({ children, className = "" }) => (
-  <span className={`inline-flex h-5 items-center rounded border border-gray-200 bg-white px-1 text-[9px] font-bold leading-none ${className}`}>
+  <span className={`inline-flex h-6 min-w-[28px] items-center justify-center rounded border border-gray-200 bg-white px-1 text-[9px] font-bold leading-none ${className}`}>
     {children}
   </span>
 );
@@ -29,9 +30,9 @@ const METHODS = [
     icon: <UpiMark />,
     chips: (
       <>
-        <Chip className="text-[#5f6368]">GPay</Chip>
-        <Chip className="text-[#5f259f]">PhonePe</Chip>
-        <Chip className="text-[#00baf2]">Paytm</Chip>
+        <Chip><GooglePayLogo /></Chip>
+        <Chip><PhonePeLogo /></Chip>
+        <Chip><PaytmLogo /></Chip>
       </>
     ),
   },
@@ -41,7 +42,7 @@ const METHODS = [
     icon: <CreditCard className="h-5 w-5 text-[#2b83ea]" />,
     chips: (
       <>
-        <Chip className="italic text-[#1a1f71]">VISA</Chip>
+        <Chip><VisaLogo /></Chip>
         <Chip>
           <span className="h-2.5 w-2.5 rounded-full bg-[#eb001b]" />
           <span className="-ml-1 h-2.5 w-2.5 rounded-full bg-[#f79e1b] opacity-90" />
