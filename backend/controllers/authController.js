@@ -1332,7 +1332,14 @@ exports.linkGoogleAccount = async (req, res) => {
     // already has one, the Google account must match it. Without this check
     // someone could link an unrelated Gmail and it'd silently become a
     // second front door into an account it has nothing to do with.
-    if (user.email && email && user.email.toLowerCase() !== email.toLowerCase()) {
+    // A missing or unverified Google email must not skip the match — that
+    // would link any Google account whose profile simply omits it.
+    if (user.email && (!email || profile.email_verified === false)) {
+      return res.status(400).json({
+        error: `Couldn't confirm this Google account's email. Please connect the Google account for ${user.email}.`,
+      });
+    }
+    if (user.email && user.email.toLowerCase() !== email.toLowerCase()) {
       return res.status(400).json({
         error: `Please connect the Google account for ${user.email}, not ${email}.`,
       });
