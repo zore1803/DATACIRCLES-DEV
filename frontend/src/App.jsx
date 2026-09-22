@@ -268,6 +268,8 @@ function AppInner() {
   // Define routes where navbar and header should be hidden
   const authRoutes = [
     "/login",
+    "/register",
+    "/phone-login",
     "/super-admin/login",
     "/forgot-password",
     "/reset-password",

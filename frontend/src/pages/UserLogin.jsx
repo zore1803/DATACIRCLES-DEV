@@ -3,7 +3,6 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
 import API from "../services/api";
-import usePageBackground from "../hooks/usePageBackground";
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
@@ -89,8 +88,6 @@ export default function Login() {
     }
   };
 
-  usePageBackground("#EAEAEA");
-
   return (
     <div className="h-screen w-full bg-[#EAEAEA] p-0 font-inter overflow-hidden flex items-center justify-center">
       <div className="flex w-full h-full items-stretch gap-4 flex-col lg:flex-row">
@@ -99,7 +96,7 @@ export default function Login() {
             LEFT SECTION
             ================================================== */}
 
-        <div className="relative h-full w-full lg:w-[clamp(360px,33vw,540px)] shrink-0 overflow-hidden rounded-[18px] bg-[#EAEAEA] hidden lg:block">
+        <div className="relative h-full w-full lg:w-[clamp(360px,33vw,540px)] shrink-0 overflow-hidden rounded-[18px] bg-white hidden lg:block">
 
           {/* TOP TRANSPARENT IMAGE */}
           <img

@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import API from "../services/api";
-import usePageBackground from "../hooks/usePageBackground";
 
 export default function Register() {
   const location = useLocation();
@@ -156,8 +155,6 @@ export default function Register() {
   // RETURN
   // ==================================================
 
-  usePageBackground("#EAEAEA");
-
   return (
     <div className="h-screen w-full bg-[#EAEAEA] p-0 font-inter overflow-hidden flex items-center justify-center">
       <div className="flex w-full h-full items-stretch gap-4 flex-col lg:flex-row">
@@ -166,7 +163,7 @@ export default function Register() {
             LEFT SECTION
             ================================================== */}
 
-        <div className="relative h-full w-full lg:w-[clamp(360px,33vw,540px)] shrink-0 overflow-hidden rounded-[18px] bg-[#EAEAEA] hidden lg:block">
+        <div className="relative h-full w-full lg:w-[clamp(360px,33vw,540px)] shrink-0 overflow-hidden rounded-[18px] bg-white hidden lg:block">
 
           {/* TOP TRANSPARENT IMAGE */}
           <img
