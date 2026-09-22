@@ -3914,6 +3914,7 @@ async function handleUnusableMandate(subscription, { tokenEntity, mandateStatus 
 // "Phase 3B Planning" — the one sweep job, not a family of crons) can call the
 // exact same logic a webhook would have triggered.
 exports.reconcileMandate = reconcileMandate;
+exports.handleUnusableMandate = handleUnusableMandate;
 
 // Webhook handler
 exports.handleWebhook = async (req, res) => {
