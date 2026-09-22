@@ -121,6 +121,23 @@ module.exports = async (req, res, next) => {
   }
 
   // For non-Facebook providers (Google, GitHub)
+  // Access tokens don't always carry the email claim. Without it a social
+  // login can only match by auth0Id — which Profile's Disconnect Google
+  // clears — so an existing account fell through to REGISTRATION_REQUIRED.
+  // Ask Auth0 for it with the same bearer token — only when auth0Id alone
+  // can't find the user, since /userinfo is rate-limited.
+  if (!email && !(await User.exists({ auth0Id: sub }))) {
+    try {
+      const axios = require('axios');
+      const { data } = await axios.get(`https://${process.env.AUTH0_DOMAIN}/userinfo`, {
+        headers: { Authorization: req.headers.authorization },
+        timeout: 5000,
+      });
+      if (data?.email) email = data.email.toLowerCase();
+    } catch (err) {
+      console.error('userSync: /userinfo email lookup failed:', err.message);
+    }
+  }
   // FIX: only search by email if email is actually defined
   // Without this guard, { email: undefined } matches documents with no email field
   let user = await User.findOne({
@@ -167,6 +184,7 @@ module.exports = async (req, res, next) => {
     return next();
   }
 
+  console.warn('userSync: REGISTRATION_REQUIRED', { sub, email: email || null });
   return res.status(428).json({
     error: 'REGISTRATION_REQUIRED',
     message: 'Complete registration by providing a company code to join or organization name to create a new one',
