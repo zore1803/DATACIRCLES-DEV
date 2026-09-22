@@ -3419,7 +3419,13 @@ async function handleCAWPaymentCaptured(paymentEntity, razorpayEventId) {
   }
 
   const recorded = await recordWebhookEventOnce(razorpayEventId, 'payment.captured', paymentEntity, subscription?._id);
-  if (!recorded) return; // duplicate delivery, already processed
+  // A duplicate real delivery is skipped. A reconciliation replay (recon_…,
+  // reconcileSubscriptionPayment) is NOT: its id is fixed per payment, so
+  // once recorded, a later payment.failed that knocked paymentStatus back
+  // made every repair attempt a silent no-op. Everything below is idempotent
+  // (plain field sets + reconcileMandate), so re-applying is safe.
+  const isReplay = typeof razorpayEventId === 'string' && razorpayEventId.startsWith('recon_');
+  if (!recorded && !isReplay) return; // duplicate delivery, already processed
   if (!subscription) return; // not a CAW subscription (or legacy payment) — legacy handler already ran separately
 
   // Re-apply what THIS payment actually authorized, not whatever the

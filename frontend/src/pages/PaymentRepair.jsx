@@ -83,7 +83,9 @@ const PaymentRepair = () => {
       });
       setResult(res.data);
       if (apply) {
-        if (res.data.reconcileResult?.reconciled) {
+        // "reconciled" only means the payment was replayed — activation can
+        // still be blocked (e.g. mandate pending), so check the actual result.
+        if (res.data.subscription?.isPaymentConfirmed) {
           toast.success("Payment reconciled — subscription is now active.");
         } else {
           toast.error(res.data.message || "Could not reconcile this payment.");
