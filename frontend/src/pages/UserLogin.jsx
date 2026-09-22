@@ -17,7 +17,7 @@ export default function Login() {
   // AUTH0
   // ==================================================
 
-  const { loginWithRedirect } = useAuth0();
+  const { loginWithRedirect, error: auth0Error } = useAuth0();
 
   const AUTH0_GOOGLE_CONNECTION =
     import.meta.env.VITE_AUTH0_GOOGLE_CONNECTION || "google-oauth2";
@@ -223,6 +223,14 @@ export default function Login() {
                   Sign in to your account to continue managing your
                   business workflows.
                 </p>
+
+                {/* A failed Google/Auth0 redirect used to land back here
+                    silently — surface Auth0's own reason instead. */}
+                {auth0Error && (
+                  <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
+                    Google sign-in failed: {auth0Error.message || String(auth0Error)}
+                  </p>
+                )}
 
               </div>
 
