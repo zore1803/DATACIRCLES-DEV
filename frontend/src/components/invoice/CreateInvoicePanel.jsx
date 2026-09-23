@@ -944,14 +944,10 @@ const CreateInvoicePanel = ({
     if (!form.deal) nextErrors.deal = true;
     if (!form.date) nextErrors.date = true;
     if (isAddressEmpty(form.billingAddress)) nextErrors.billingAddress = true;
-    // Only required when the GSTIN field is actually shown — with the Tax
-    // Invoice toggle off, that field is unrendered (and its ref is null), so
-    // requiring it here left submit silently doing nothing: fieldErrors got
-    // set on a field with no DOM node to show the red border on, and
-    // scrollIntoView on a null ref was a no-op.
-    if (!isDraft && supportsGSTIN) {
-      if (!form.receiverGSTIN.trim()) nextErrors.receiverGSTIN = true;
-      else if (!GSTIN_REGEX.test(form.receiverGSTIN.trim().toUpperCase()))
+    // Optional — only format-checked when the customer actually entered one,
+    // matching the other document forms (Invoice/Quotation/Performa full-width).
+    if (!isDraft && supportsGSTIN && form.receiverGSTIN.trim()) {
+      if (!GSTIN_REGEX.test(form.receiverGSTIN.trim().toUpperCase()))
         nextErrors.receiverGSTIN = true;
     }
     if (Object.keys(nextErrors).length > 0) {
@@ -1882,7 +1878,7 @@ const CreateInvoicePanel = ({
           <SectionHeader number={sectionNo.billing} title="Billing & Tax Information" />
           <div className="grid grid-cols-1 @md:grid-cols-2 gap-x-6 gap-y-2 w-full">
             <div className="flex flex-col gap-1" ref={gstinFieldRef}>
-              <FieldLabel required>Receiver GSTIN</FieldLabel>
+              <FieldLabel>Receiver GSTIN</FieldLabel>
               {/* Match the Select Deal picker width (reserve the "+" button space). */}
               <div className="flex items-center gap-2">
                 <input
@@ -1898,7 +1894,7 @@ const CreateInvoicePanel = ({
                 <div className="w-10 flex-shrink-0" aria-hidden="true" />
               </div>
               {fieldErrors.receiverGSTIN && (
-                <p className="text-xs text-red-600 mt-1">Valid receiver GSTIN is required</p>
+                <p className="text-xs text-red-600 mt-1">Invalid GSTIN format (e.g., 22AAAAA0000A1Z5)</p>
               )}
             </div>
 

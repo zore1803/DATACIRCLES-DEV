@@ -11,7 +11,7 @@ import {
   emptyAddress,
   isAddressEmpty,
 } from "./formPrimitives.jsx";
-import AddressBookDrawer from "./AddressBookDrawer";
+import AddressBookDrawer from "./AddressBookDrawer";
 import { resolveTransactionType } from "../../utils/placeOfSupply";
 import { computeDocument } from "../../../../shared/documentTemplates.js";
 
@@ -39,9 +39,9 @@ const FullWidthDocumentPanel = ({
   type,
   docName,
   supportsGSTIN,
-  supportsTax,
-  // The organization's own state — the supplier side of the intra/inter
-  // comparison. Without it the tax type is left exactly as it is.
+  supportsTax,
+  // The organization's own state — the supplier side of the intra/inter
+  // comparison. Without it the tax type is left exactly as it is.
   sellerState,
   sectionNo,
   form,
@@ -304,7 +304,7 @@ const FullWidthDocumentPanel = ({
           <SectionHeader number={sectionNo.billing} title="GST & Tax Details" />
           <div className="grid grid-cols-1 @2xl:grid-cols-2 gap-x-6 gap-y-2 w-full">
             <div className="flex flex-col gap-1">
-              <FieldLabel required>Receiver GSTIN</FieldLabel>
+              <FieldLabel>Receiver GSTIN</FieldLabel>
               <input
                 type="text"
                 value={form.receiverGSTIN}
