@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import API from "../../services/api";
 import { formatNumberToIndian } from "../../utils/numberFormatter";
-import toast from "react-hot-toast";
 import {
   User,
   Building2,
@@ -104,13 +103,10 @@ const DonutLabel = ({ cx, cy, value, total, label = "collected" }) => (
 
 // ─── main component ──────────────────────────────────────────────────────────
 
-const BasicDetails = ({ deal, onDealUpdate }) => {
+const BasicDetails = ({ deal }) => {
 
   // ── state ───────────────────────────────────────────────────────────────
   const [showStageDrawer, setShowStageDrawer] = useState(false);
-  const [isOwnerDropdownOpen, setIsOwnerDropdownOpen] = useState(false);
-  const [searchOwnerQuery,    setSearchOwnerQuery]    = useState("");
-  const [availableUsers,      setAvailableUsers]      = useState([]);
 
   const [activities,        setActivities]        = useState([]);
   const [activitiesLoading, setActivitiesLoading] = useState(true);
@@ -128,22 +124,7 @@ const BasicDetails = ({ deal, onDealUpdate }) => {
   // hardcoded Open/Won/Lost, and so it doesn't drift from what Settings shows.
   const [pipelineStatuses, setPipelineStatuses] = useState([]);
 
-  // ── permissions ─────────────────────────────────────────────────────────
-  const currentUser = useMemo(() => {
-    try { return JSON.parse(localStorage.getItem("user")) || null; } catch { return null; }
-  }, []);
-
-  const canEdit = useMemo(() => {
-    if (currentUser?.role === "admin") return true;
-    return currentUser?.permissions?.some(p => p.name.toLowerCase() === "deals" && p.permission === "read-write");
-  }, [currentUser]);
-
   // ── fetches ─────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!canEdit) return;
-    API.get("/auth/all-user").then(r => setAvailableUsers(r.data.allUsers || [])).catch(() => {});
-  }, [canEdit]);
-
   const refreshPipelineStatuses = () => {
     API.get("/kanban").then(r => setPipelineStatuses(r.data?.statuses || [])).catch(() => {});
   };
@@ -176,22 +157,6 @@ const BasicDetails = ({ deal, onDealUpdate }) => {
       setActivities(merged);
     }).finally(() => setActivitiesLoading(false));
   }, [deal?._id]);
-
-  // ── owner change ─────────────────────────────────────────────────────────
-  const handleOwnerChange = async (id) => {
-    if (!canEdit) return;
-    if (deal.user?._id === id) { setIsOwnerDropdownOpen(false); return; }
-    try {
-      const res = await API.put(`/deals/${deal._id}`, { user: id });
-      toast.success("Owner reassigned.");
-      setIsOwnerDropdownOpen(false);
-      onDealUpdate?.(res.data);
-    } catch (err) {
-      toast.error(err.response?.status === 402
-        ? err.response.data.message || "Subscription required."
-        : err.response?.data?.error || "Failed to update owner.");
-    }
-  };
 
   // ── derived ──────────────────────────────────────────────────────────────
   const dealValue       = deal?.amount || 0;

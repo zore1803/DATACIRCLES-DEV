@@ -7,8 +7,21 @@ import { ChevronDown, ArrowUpRight } from "lucide-react";
 // part of the same design language as the KPI row it sits above.
 // `to` (optional) turns the value into a link — e.g. Contact's Company field
 // jumping to that company's own profile page.
-const Field = ({ label, value, to }) => {
+const Field = ({ label, value, to, render }) => {
   const navigate = useNavigate();
+
+  // `render` lets a caller drop a custom interactive node in place of the plain
+  // value text — e.g. Contact's Owner field being a reassign dropdown.
+  if (render) {
+    return (
+      <div className="min-w-0">
+        <p className="text-[10px] sm:text-[11px] text-gray-500 uppercase tracking-wide truncate">
+          {label}
+        </p>
+        {render}
+      </div>
+    );
+  }
 
   if (to && value) {
     return (
@@ -57,7 +70,7 @@ export default function EntitySummaryCard({ collapsedFields, expandedFields = []
 
   const renderField = (field) => {
     const spanFull = fullWidthLabels.includes(field.label);
-    const node = <Field key={field.label} label={field.label} value={field.value} to={field.to} />;
+    const node = <Field key={field.label} label={field.label} value={field.value} to={field.to} render={field.render} />;
     return spanFull ? (
       <div key={field.label} className="col-span-2 sm:col-span-3 lg:col-span-5">
         {node}

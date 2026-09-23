@@ -216,9 +216,6 @@ const LifecycleStages = ({ contact, onContactUpdate }) => {
   });
 
   const currentStageIndex = Math.max(0, allLifecycleStages.indexOf(contact.lifecycleStage));
-  const progressPct = stageConfigs.length > 1
-    ? (currentStageIndex / (stageConfigs.length - 1)) * 100
-    : 0;
 
   const handleStageClick = async (stageIndex, option = null) => {
     if (isUpdating) return;
@@ -273,115 +270,144 @@ const LifecycleStages = ({ contact, onContactUpdate }) => {
     }
   };
 
-  const isLostLike = (status) => /lost|unqualified|churn|reject|cancel/i.test(status || "");
+  const getStageDisplayInfo = (stageIndex) => {
+    const stage = stageConfigs[stageIndex];
+    const isCurrent = stageIndex === currentStageIndex;
+
+    if (isCurrent && contact.stageStatus) {
+      return { ...stage, label: contact.stageStatus };
+    }
+
+    return stage;
+  };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl px-5 py-4">
+    <div className="mb-6">
       <AppToaster />
 
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[13px] text-gray-500">Lifecycle</span>
-          <span className="text-[13px] font-semibold text-gray-900 truncate">{contact.lifecycleStage}</span>
-          {contact.stageStatus && (
-            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${isLostLike(contact.stageStatus) ? "bg-red-50 text-[#EF4444]" : "bg-blue-50 text-[#0085FF]"}`}>
-              {contact.stageStatus}
-            </span>
-          )}
-          {isUpdating && (
-            <span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-          )}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600">Lifecycle:</span>
+          <button
+            className="flex items-center gap-1 text-gray-900 hover:text-gray-700 transition-colors font-medium"
+            onClick={() => setShowLifecycleModal(true)}
+          >
+            <span>{contact.lifecycleStage}</span>
+            <ChevronDown className="w-4 h-4" />
+          </button>
         </div>
 
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-1">
           <button
             onClick={() => setShowLifecycleModal(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-[13px]"
+            className="flex items-center gap-2 px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
           >
-            <EditIcon className="w-3.5 h-3.5" />
+            <EditIcon className="w-3 h-3" />
             <span>Edit</span>
           </button>
           <button
             onClick={() => setShowSettingsDrawer(true)}
             title="Edit lifecycle stages (Settings)"
-            className="flex items-center justify-center w-8 h-8 text-gray-500 hover:text-[#0085FF] hover:bg-blue-50 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
           >
-            <SettingsIcon className="w-4 h-4" />
+            <SettingsIcon className="w-3.5 h-3.5" />
+            <span>Stages</span>
           </button>
         </div>
       </div>
 
-      {/* Progress Flow — connected nodes (blue accent, DataCircles style) */}
-      <div className="relative flex items-start justify-between px-1">
-        <div className="absolute left-4 right-4 top-3.5 sm:top-4 h-[3px] bg-gray-100 -translate-y-1/2 z-0 rounded-full" />
-        <div
-          className="absolute left-4 top-3.5 sm:top-4 h-[3px] -translate-y-1/2 z-0 bg-[#0085FF] rounded-full transition-all duration-500 ease-in-out"
-          style={{ width: `calc((100% - 2rem) * ${progressPct / 100})` }}
-        />
+      {/* Progress Flow */}
+      <div className="relative">
+        <div className="flex items-center">
+          {stageConfigs.map((stageConfig, index) => {
+            const displayInfo = getStageDisplayInfo(index);
+            const isActive = index <= currentStageIndex;
+            const isCurrent = index === currentStageIndex;
+            const isPending = pendingStageIndex === index;
+            const hasOptions = stageConfig.options && stageConfig.options.length > 0;
 
-        {stageConfigs.map((stageConfig, index) => {
-          const isCurrent = index === currentStageIndex;
-          const isPast = index < currentStageIndex;
-          const isPending = pendingStageIndex === index;
-          const hasOptions = stageConfig.options && stageConfig.options.length > 0;
-          const currentIsLost = isCurrent && isLostLike(contact.stageStatus);
+            return (
+              <div key={index} className="relative flex-1">
+                <div className="relative">
+                  <div
+                    className={`
+                      relative px-3 py-2.5 text-xs font-medium text-center cursor-pointer
+                      transition-all duration-300
+                      ${isActive ? displayInfo.bgColor : displayInfo.bgColorLight}
+                      ${isActive ? displayInfo.textColor : displayInfo.textColorDark}
+                      ${index === 0 ? 'rounded-l-lg' : ''}
+                      ${index === stageConfigs.length - 1 ? 'rounded-r-lg' : ''}
+                      ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}
+                    `}
+                    onClick={() => !isUpdating && handleStageClick(index)}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <span className="whitespace-nowrap">{displayInfo.label}</span>
+                      {hasOptions && isCurrent && (
+                        <ChevronDown className={`w-3 h-3 transition-transform ${showStatusDropdown && isPending ? 'rotate-180' : ''}`} />
+                      )}
+                    </div>
+                  </div>
 
-          return (
-            <div key={index} className="relative z-10 flex flex-col items-center flex-1 min-w-0 px-0.5">
-              <button
-                type="button"
-                disabled={isUpdating}
-                onClick={() => handleStageClick(index)}
-                title={stageConfig.label}
-                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all duration-300 border-[3px] bg-white flex-shrink-0
-                  ${currentIsLost ? "border-[#EF4444] ring-4 ring-red-50" :
-                    isCurrent ? "border-[#0085FF] ring-4 ring-blue-50" :
-                    isPast ? "border-[#0085FF] bg-[#0085FF]" :
-                    "border-gray-200 hover:border-gray-300"}
-                  ${isUpdating ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
-              >
-                {isPast ? <Check className="w-3.5 h-3.5 text-white" /> :
-                  <div className={`w-2.5 h-2.5 rounded-full ${currentIsLost ? "bg-[#EF4444]" : isCurrent ? "bg-[#0085FF]" : "bg-gray-200"}`} />}
-              </button>
-
-              <button
-                type="button"
-                disabled={isUpdating}
-                onClick={() => handleStageClick(index)}
-                className={`mt-2 flex items-center gap-0.5 text-[11px] font-semibold text-center leading-tight max-w-full transition-colors
-                  ${isCurrent ? (currentIsLost ? "text-[#EF4444]" : "text-[#0085FF]") : isPast ? "text-gray-700" : "text-gray-400"}
-                  ${isUpdating ? "cursor-not-allowed" : "cursor-pointer hover:text-[#0085FF]"}`}
-              >
-                <span className="truncate">{stageConfig.label}</span>
-                {hasOptions && isCurrent && (
-                  <ChevronDown className={`w-3 h-3 flex-shrink-0 transition-transform ${showStatusDropdown && isPending ? "rotate-180" : ""}`} />
-                )}
-              </button>
-
-              {/* Dropdown Options */}
-              {showStatusDropdown && isPending && stageConfig.options && (
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 min-w-[160px] bg-white border border-gray-200 rounded-lg shadow-lg z-30 overflow-hidden">
-                  {stageConfig.options.map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      disabled={isUpdating}
-                      onClick={(e) => { e.stopPropagation(); if (!isUpdating) handleStageClick(index, option); }}
-                      className={`w-full px-3 py-2 text-[13px] text-left flex items-center gap-2 transition-colors
-                        ${contact.stageStatus === option ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700 hover:bg-gray-50"}
-                        ${isUpdating ? "opacity-50 cursor-not-allowed" : ""}`}
-                    >
-                      <CheckCircle2 className={`w-4 h-4 flex-shrink-0 ${contact.stageStatus === option ? "text-blue-600" : "text-gray-300"}`} />
-                      <span className="truncate">{option}</span>
-                    </button>
-                  ))}
+                  {/* Arrow */}
+                  {index < stageConfigs.length - 1 && isActive && (
+                    <div
+                      className={`
+                        absolute top-0 right-0 w-0 h-0
+                        border-t-[18px] border-b-[18px] border-l-[14px]
+                        border-t-transparent border-b-transparent
+                        ${displayInfo.arrowBorderColor}
+                        transform translate-x-full z-10
+                        transition-all duration-300
+                      `}
+                    />
+                  )}
                 </div>
-              )}
-            </div>
-          );
-        })}
+
+                {/* Dropdown Options */}
+                {showStatusDropdown && isPending && stageConfig.options && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-30 overflow-hidden">
+                    {stageConfig.options.map((option, optIndex) => (
+                      <div
+                        key={option}
+                        className={`
+                          px-3 py-2 text-sm cursor-pointer transition-all
+                          ${contact.stageStatus === option ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}
+                          ${optIndex !== stageConfig.options.length - 1 ? 'border-b border-gray-100' : ''}
+                          ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}
+                          flex items-center gap-2
+                        `}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!isUpdating) {
+                            handleStageClick(index, option);
+                          }
+                        }}
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                        <span>{option}</span>
+                        {contact.stageStatus === option && (
+                          <div className="ml-auto">
+                            <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
+
+      {isUpdating && (
+        <div className="mt-4 flex items-center gap-2 text-gray-600">
+          <div className="w-3 h-3 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-xs">Updating...</span>
+        </div>
+      )}
 
       <LifecycleStageModal
         isOpen={showLifecycleModal}
@@ -453,74 +479,8 @@ const BasicDetails = ({ contact, company, deals, contactFieldList = [], onContac
   const [showEmptyFields, setShowEmptyFields] = useState(false); // 👉 NEW Togle State
   const [showFieldDrawer, setShowFieldDrawer] = useState(false);
 
-  // --- PASTE THIS BLOCK STARTING HERE ---
-  const [isOwnerDropdownOpen, setIsOwnerDropdownOpen] = useState(false);
-  const [searchOwnerQuery, setSearchOwnerQuery] = useState("");
-  const [availableUsers, setAvailableUsers] = useState([]);
-
-  const currentUserStr = localStorage.getItem("user");
-  const currentUser = currentUserStr ? JSON.parse(currentUserStr) : null;
-
-  const hasEditPermission = () => {
-    if (currentUser?.role === 'admin') return true;
-    return currentUser?.permissions?.some(
-      (p) => p.name.toLowerCase() === 'contacts' && p.permission === 'read-write'
-    );
-  };
-
-  useEffect(() => {
-    const fetchTeamUsers = async () => {
-      if (!hasEditPermission()) return;
-      try {
-        const response = await API.get("/auth/all-user");
-        setAvailableUsers(response.data.allUsers || []);
-      } catch (error) {
-        console.error("Unable to load team list:", error);
-      }
-    };
-    fetchTeamUsers();
-  }, []);
-
-  const handleOwnerChange = async (newOwnerId) => {
-    if (!hasEditPermission()) return;
-
-    // VALIDATION 1: Prevent empty/null values
-    if (!newOwnerId) {
-      toast.error("Invalid owner selected.");
-      return;
-    }
-
-    // VALIDATION 2: Prevent re-assigning to the current owner
-    if (contact.user?._id === newOwnerId) {
-      setIsOwnerDropdownOpen(false);
-      return;
-    }
-
-    try {
-      await API.put(`/contacts/${contact._id}`, { user: newOwnerId });
-      toast.success("Owner reassigned successfully.");
-      setIsOwnerDropdownOpen(false);
-      window.location.reload();
-    } catch (err) {
-      if (err.response?.status === 402) {
-        toast.error(err.response?.data?.message || "An active subscription is required to make changes.");
-      } else {
-        toast.error(err.response?.data?.error || "Failed to update owner.");
-      }
-    }
-  };
-
-  const formatDateTime = (dateString) => {
-    if (!dateString) return 'Unknown';
-    return new Date(dateString).toLocaleString('en-US', {
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    });
-  };
+  // Owner reassignment and audit timestamps moved to ContactSummaryCard (above
+  // the KPI row), so the picker state/handlers that used to live here are gone.
 
   // 👉 NEW: Helper functions for custom fields
   const isEmpty = (value) => {
@@ -578,113 +538,49 @@ const BasicDetails = ({ contact, company, deals, contactFieldList = [], onContac
   });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
 
-      {/* Owner + audit strip (compact) */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white px-4 py-2.5 rounded-lg border border-gray-200 relative z-50">
-
-        {/* LEFT SIDE: Owner Dropdown */}
-        <div className="flex items-center gap-2 ">
-          <span className="text-sm font-medium text-gray-500">Owner:</span>
-
-          <div className="relative">
-            <button
-              onClick={() => hasEditPermission() && setIsOwnerDropdownOpen(!isOwnerDropdownOpen)}
-              className={`flex items-center gap-1.5 px-2 py-1 -ml-2 rounded text-sm font-semibold transition-colors ${hasEditPermission() ? 'text-gray-900 hover:bg-gray-50 cursor-pointer' : 'text-gray-900 cursor-default'
-                }`}
-              disabled={!hasEditPermission()}
-            >
-              {contact.user?.name || "Unassigned"}
-              {hasEditPermission() && <ChevronDown className="w-4 h-4 text-gray-400" />}
-            </button>
-
-            {isOwnerDropdownOpen && hasEditPermission() && (
-              <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-md shadow-xl">
-                <div className="p-3 border-b border-gray-100 flex justify-between items-center">
-                  <h4 className="text-xs font-semibold text-gray-700">Assign Owner</h4>
-                  <button onClick={() => setIsOwnerDropdownOpen(false)} className="text-xs text-gray-500 border border-gray-200 px-2 py-1 rounded hover:bg-gray-50">Close</button>
-                </div>
-
-                <div className="p-2">
-                  <div className="relative mb-2">
-                    <input type="text" placeholder="Search..." className="w-full text-sm border border-gray-300 rounded px-3 py-1.5 focus:outline-none focus:border-blue-500" value={searchOwnerQuery} onChange={(e) => setSearchOwnerQuery(e.target.value)} />
-                  </div>
-
-                  <div className="max-h-48 overflow-y-auto">
-                    <button onClick={() => handleOwnerChange(null)} className="w-full text-left flex items-center gap-3 p-2 hover:bg-gray-50 rounded text-sm">
-                      <div className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center font-medium">N</div>
-                      <span className="text-gray-700">None</span>
-                      {!contact.user && <Check className="w-4 h-4 text-green-600 ml-auto" />}
-                    </button>
-
-                    {availableUsers.filter(u => u.name?.toLowerCase().includes(searchOwnerQuery.toLowerCase())).map((mappedUser) => {
-                      const isCurrentOwner = contact.user?._id === mappedUser._id;
-                      const initials = mappedUser.name ? mappedUser.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'U';
-
-                      return (
-                        <button key={mappedUser._id} onClick={() => handleOwnerChange(mappedUser._id)} className="w-full text-left flex items-center gap-3 p-2 hover:bg-gray-50 rounded text-sm">
-                          <div className="w-7 h-7 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-medium text-xs">{initials}</div>
-                          <div className="flex flex-col">
-                            <span className="text-gray-900 font-medium">{mappedUser.name}</span>
-                            <span className="text-gray-500 text-xs">{mappedUser.email}</span>
-                          </div>
-                          {isCurrentOwner && <Check className="w-4 h-4 text-green-600 ml-auto" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* RIGHT SIDE: Audit Timestamps (Hover Reveal) */}
-        <div className="flex flex-col text-xs text-right mt-4 md:mt-0 relative group/audit cursor-default">
-          <div className="flex items-center justify-end gap-1.5 text-gray-500">
-            <Clock className="w-3.5 h-3.5" />
-            <span>Updated: {formatDateTime(contact.updatedAt)}</span>
-          </div>
-          <div className="text-gray-400">by: <span className="font-medium text-gray-600">{contact.lastUpdatedBy?.name || 'Unknown'}</span></div>
-
-          <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 p-4 rounded-md shadow-xl opacity-0 group-hover/audit:opacity-100 transition-opacity pointer-events-none z-40 min-w-[250px] text-left">
-
-            {/* Last Updated */}
-            <div className="mb-3">
-              <div className="flex justify-between items-center text-gray-600 mb-1">
-                <span>Update On:</span>
-                <span className="font-medium">{formatDateTime(contact.updatedAt)}</span>
-              </div>
-              <div className="flex justify-between items-center text-gray-600">
-                <span>Updated by:</span>
-                <span className="font-medium text-gray-900">{contact.lastUpdatedBy?.name || 'Unknown'}</span>
-              </div>
-            </div>
-
-            {/* Separator Line */}
-            <div className="border-t border-gray-200 my-3"></div>
-
-            {/* Original Creation */}
-            <div>
-              <div className="flex justify-between items-center text-gray-600 mb-1">
-                <span>Added on:</span>
-                <span className="font-medium">{formatDateTime(contact.createdAt)}</span>
-              </div>
-              <div className="flex justify-between items-center text-gray-600">
-                <span>Added by:</span>
-                <span className="font-medium text-gray-900">{contact.createdBy?.name || 'Unknown'}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Owner reassign + Last Updated now live in ContactSummaryCard above the
+          KPI row (ContactDetails.jsx), so the standalone owner/audit strip that
+          used to sit here is gone. */}
 
       <AppToaster />
 
       {/* Lifecycle Stages */}
       <LifecycleStages contact={contact} onContactUpdate={onContactUpdate} />
 
-      {/* Removed Contact Information Grid and Custom Fields buttons as requested */}
+      {/* Contact Information Grid moved into ContactSummaryCard above the KPI
+          row (ContactDetails.jsx), mirroring the Deal overview's summary strip
+          — so the same fields aren't repeated here below the lifecycle bar. */}
+
+      {/* --- CUSTOM FIELDS --- quick-drawer entry point (opens ContactFieldDrawer,
+          the same ContactFieldSettings editor Settings -> Contact Fields uses). */}
+      <div className="border-t border-gray-200 pt-4 mt-6">
+        {groupedFields.length === 0 ? (
+          <div className="flex items-center justify-end px-2 text-gray-400">
+            <button
+              type="button"
+              onClick={() => setShowFieldDrawer(true)}
+              className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:underline"
+            >
+              <Plus className="w-3 h-3" /> Add custom fields
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-end gap-3 px-2">
+            <button
+              type="button"
+              onClick={() => setShowFieldDrawer(true)}
+              className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:underline"
+            >
+              <Plus className="w-3 h-3" /> Add Field
+            </button>
+            <button onClick={() => setShowEmptyFields(v => !v)} className="text-[10px] font-medium text-gray-400 hover:text-blue-600 flex items-center gap-1">
+              {showEmptyFields ? <><EyeOff className="w-3 h-3" /> Hide empty fields</> : <><EyeIcon className="w-3 h-3" /> Show all fields</>}
+            </button>
+          </div>
+        )}
+      </div>
 
       <ContactFieldDrawer
         isOpen={showFieldDrawer}
@@ -694,38 +590,18 @@ const BasicDetails = ({ contact, company, deals, contactFieldList = [], onContac
         }}
       />
 
-      {/* Company relationship (compact) */}
-      {company && (
-        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
-          <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1.5">Company</p>
-          <Link
-            to={`/companies/${company._id}`}
-            className="group inline-flex items-center gap-2 min-w-0 max-w-full"
-          >
-            <span className="w-8 h-8 rounded-lg bg-blue-50 text-[#0085FF] flex items-center justify-center flex-shrink-0">
-              <Building2 className="w-4 h-4" />
-            </span>
-            <span className="text-sm font-semibold text-gray-900 group-hover:text-[#0085FF] truncate">
-              {company.name}
-            </span>
-            {(company.industry || company.email) && (
-              <span className="text-xs text-gray-400 truncate hidden sm:inline">
-                · {company.industry || company.email}
-              </span>
-            )}
-            <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-[#0085FF] flex-shrink-0" />
-          </Link>
-        </div>
-      )}
-
-      {/* Associated Deals */}
-      <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
-        <div className="flex items-center gap-2 mb-3">
-          <Target className="w-4 h-4 text-gray-500" />
-          <h3 className="text-sm font-semibold text-gray-900">Associated Deals</h3>
-          <span className="text-xs text-gray-400">
-            {deals?.length || 0} in pipeline
-          </span>
+      {/* Deals Section */}
+      <div className="border-t border-gray-200 pt-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Target className="w-4 h-4 text-gray-600" />
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Associated Deals</h3>
+              <p className="text-sm text-gray-600">
+                {deals?.length || 0} deal{deals?.length !== 1 ? 's' : ''} in pipeline
+              </p>
+            </div>
+          </div>
         </div>
 
         <DealsTable
@@ -735,49 +611,6 @@ const BasicDetails = ({ contact, company, deals, contactFieldList = [], onContac
           onDealCreated={onDealCreated}
         />
       </div>
-
-      {/* Social / Online Presence — only populated values */}
-      {(() => {
-        const sm = contact.socialMedia || {};
-        const links = [
-          { key: "linkedin", label: "LinkedIn", value: sm.linkedin },
-          { key: "twitter", label: "Twitter / X", value: sm.twitter },
-          { key: "instagram", label: "Instagram", value: sm.instagram },
-          { key: "facebook", label: "Facebook", value: sm.facebook },
-          { key: "whatsapp", label: "WhatsApp", value: sm.whatsapp },
-        ].filter((l) => l.value && String(l.value).trim());
-
-        if (links.length === 0) return null;
-
-        const hrefFor = (key, value) => {
-          const v = String(value).trim();
-          if (key === "whatsapp") {
-            const digits = v.replace(/[^\d]/g, "");
-            return digits ? `https://wa.me/${digits}` : v;
-          }
-          return /^https?:\/\//i.test(v) ? v : `https://${v}`;
-        };
-
-        return (
-          <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
-            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-2">Social</p>
-            <div className="flex flex-wrap gap-2">
-              {links.map((l) => (
-                <a
-                  key={l.key}
-                  href={hrefFor(l.key, l.value)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 text-[13px] font-medium text-gray-700 hover:border-[#0085FF] hover:text-[#0085FF] transition-colors"
-                >
-                  {l.label}
-                  <ArrowRight className="w-3 h-3 -rotate-45" />
-                </a>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 };
