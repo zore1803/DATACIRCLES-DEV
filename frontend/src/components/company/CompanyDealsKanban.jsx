@@ -1494,7 +1494,6 @@ export default function CompanyDealsKanban({
     try {
       const res = await API.get("/deals");
       setDeals(res.data.filter((d) => d.company?._id === companyId));
-      toast.success("Deal created successfully!");
     } catch (err) {
       toast.error("Failed to refresh deals list.");
     }

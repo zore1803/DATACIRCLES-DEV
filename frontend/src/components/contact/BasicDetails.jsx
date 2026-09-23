@@ -216,6 +216,9 @@ const LifecycleStages = ({ contact, onContactUpdate }) => {
   });
 
   const currentStageIndex = Math.max(0, allLifecycleStages.indexOf(contact.lifecycleStage));
+  const progressPct = stageConfigs.length > 1
+    ? (currentStageIndex / (stageConfigs.length - 1)) * 100
+    : 0;
 
   const handleStageClick = async (stageIndex, option = null) => {
     if (isUpdating) return;
@@ -270,144 +273,115 @@ const LifecycleStages = ({ contact, onContactUpdate }) => {
     }
   };
 
-  const getStageDisplayInfo = (stageIndex) => {
-    const stage = stageConfigs[stageIndex];
-    const isCurrent = stageIndex === currentStageIndex;
-
-    if (isCurrent && contact.stageStatus) {
-      return { ...stage, label: contact.stageStatus };
-    }
-
-    return stage;
-  };
+  const isLostLike = (status) => /lost|unqualified|churn|reject|cancel/i.test(status || "");
 
   return (
-    <div className="mb-6">
+    <div className="bg-white border border-gray-200 rounded-xl px-5 py-4">
       <AppToaster />
 
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-600">Lifecycle:</span>
-          <button
-            className="flex items-center gap-1 text-gray-900 hover:text-gray-700 transition-colors font-medium"
-            onClick={() => setShowLifecycleModal(true)}
-          >
-            <span>{contact.lifecycleStage}</span>
-            <ChevronDown className="w-4 h-4" />
-          </button>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[13px] text-gray-500">Lifecycle</span>
+          <span className="text-[13px] font-semibold text-gray-900 truncate">{contact.lifecycleStage}</span>
+          {contact.stageStatus && (
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${isLostLike(contact.stageStatus) ? "bg-red-50 text-[#EF4444]" : "bg-blue-50 text-[#0085FF]"}`}>
+              {contact.stageStatus}
+            </span>
+          )}
+          {isUpdating && (
+            <span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+          )}
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={() => setShowLifecycleModal(true)}
-            className="flex items-center gap-2 px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-[13px]"
           >
-            <EditIcon className="w-3 h-3" />
+            <EditIcon className="w-3.5 h-3.5" />
             <span>Edit</span>
           </button>
           <button
             onClick={() => setShowSettingsDrawer(true)}
             title="Edit lifecycle stages (Settings)"
-            className="flex items-center gap-2 px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
+            className="flex items-center justify-center w-8 h-8 text-gray-500 hover:text-[#0085FF] hover:bg-blue-50 rounded-lg transition-colors"
           >
-            <SettingsIcon className="w-3.5 h-3.5" />
-            <span>Stages</span>
+            <SettingsIcon className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Progress Flow */}
-      <div className="relative">
-        <div className="flex items-center">
-          {stageConfigs.map((stageConfig, index) => {
-            const displayInfo = getStageDisplayInfo(index);
-            const isActive = index <= currentStageIndex;
-            const isCurrent = index === currentStageIndex;
-            const isPending = pendingStageIndex === index;
-            const hasOptions = stageConfig.options && stageConfig.options.length > 0;
+      {/* Progress Flow — connected nodes (blue accent, DataCircles style) */}
+      <div className="relative flex items-start justify-between px-1">
+        <div className="absolute left-4 right-4 top-3.5 sm:top-4 h-[3px] bg-gray-100 -translate-y-1/2 z-0 rounded-full" />
+        <div
+          className="absolute left-4 top-3.5 sm:top-4 h-[3px] -translate-y-1/2 z-0 bg-[#0085FF] rounded-full transition-all duration-500 ease-in-out"
+          style={{ width: `calc((100% - 2rem) * ${progressPct / 100})` }}
+        />
 
-            return (
-              <div key={index} className="relative flex-1">
-                <div className="relative">
-                  <div
-                    className={`
-                      relative px-3 py-2.5 text-xs font-medium text-center cursor-pointer
-                      transition-all duration-300
-                      ${isActive ? displayInfo.bgColor : displayInfo.bgColorLight}
-                      ${isActive ? displayInfo.textColor : displayInfo.textColorDark}
-                      ${index === 0 ? 'rounded-l-lg' : ''}
-                      ${index === stageConfigs.length - 1 ? 'rounded-r-lg' : ''}
-                      ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}
-                    `}
-                    onClick={() => !isUpdating && handleStageClick(index)}
-                  >
-                    <div className="flex items-center justify-center gap-1">
-                      <span className="whitespace-nowrap">{displayInfo.label}</span>
-                      {hasOptions && isCurrent && (
-                        <ChevronDown className={`w-3 h-3 transition-transform ${showStatusDropdown && isPending ? 'rotate-180' : ''}`} />
-                      )}
-                    </div>
-                  </div>
+        {stageConfigs.map((stageConfig, index) => {
+          const isCurrent = index === currentStageIndex;
+          const isPast = index < currentStageIndex;
+          const isPending = pendingStageIndex === index;
+          const hasOptions = stageConfig.options && stageConfig.options.length > 0;
+          const currentIsLost = isCurrent && isLostLike(contact.stageStatus);
 
-                  {/* Arrow */}
-                  {index < stageConfigs.length - 1 && isActive && (
-                    <div
-                      className={`
-                        absolute top-0 right-0 w-0 h-0
-                        border-t-[18px] border-b-[18px] border-l-[14px]
-                        border-t-transparent border-b-transparent
-                        ${displayInfo.arrowBorderColor}
-                        transform translate-x-full z-10
-                        transition-all duration-300
-                      `}
-                    />
-                  )}
-                </div>
+          return (
+            <div key={index} className="relative z-10 flex flex-col items-center flex-1 min-w-0 px-0.5">
+              <button
+                type="button"
+                disabled={isUpdating}
+                onClick={() => handleStageClick(index)}
+                title={stageConfig.label}
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all duration-300 border-[3px] bg-white flex-shrink-0
+                  ${currentIsLost ? "border-[#EF4444] ring-4 ring-red-50" :
+                    isCurrent ? "border-[#0085FF] ring-4 ring-blue-50" :
+                    isPast ? "border-[#0085FF] bg-[#0085FF]" :
+                    "border-gray-200 hover:border-gray-300"}
+                  ${isUpdating ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+              >
+                {isPast ? <Check className="w-3.5 h-3.5 text-white" /> :
+                  <div className={`w-2.5 h-2.5 rounded-full ${currentIsLost ? "bg-[#EF4444]" : isCurrent ? "bg-[#0085FF]" : "bg-gray-200"}`} />}
+              </button>
 
-                {/* Dropdown Options */}
-                {showStatusDropdown && isPending && stageConfig.options && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-30 overflow-hidden">
-                    {stageConfig.options.map((option, optIndex) => (
-                      <div
-                        key={option}
-                        className={`
-                          px-3 py-2 text-sm cursor-pointer transition-all
-                          ${contact.stageStatus === option ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}
-                          ${optIndex !== stageConfig.options.length - 1 ? 'border-b border-gray-100' : ''}
-                          ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}
-                          flex items-center gap-2
-                        `}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!isUpdating) {
-                            handleStageClick(index, option);
-                          }
-                        }}
-                      >
-                        <CheckCircle2 className="w-4 h-4 text-blue-600" />
-                        <span>{option}</span>
-                        {contact.stageStatus === option && (
-                          <div className="ml-auto">
-                            <CheckCircle2 className="w-4 h-4 text-blue-600" />
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+              <button
+                type="button"
+                disabled={isUpdating}
+                onClick={() => handleStageClick(index)}
+                className={`mt-2 flex items-center gap-0.5 text-[11px] font-semibold text-center leading-tight max-w-full transition-colors
+                  ${isCurrent ? (currentIsLost ? "text-[#EF4444]" : "text-[#0085FF]") : isPast ? "text-gray-700" : "text-gray-400"}
+                  ${isUpdating ? "cursor-not-allowed" : "cursor-pointer hover:text-[#0085FF]"}`}
+              >
+                <span className="truncate">{stageConfig.label}</span>
+                {hasOptions && isCurrent && (
+                  <ChevronDown className={`w-3 h-3 flex-shrink-0 transition-transform ${showStatusDropdown && isPending ? "rotate-180" : ""}`} />
                 )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+              </button>
 
-      {isUpdating && (
-        <div className="mt-4 flex items-center gap-2 text-gray-600">
-          <div className="w-3 h-3 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
-          <span className="text-xs">Updating...</span>
-        </div>
-      )}
+              {/* Dropdown Options */}
+              {showStatusDropdown && isPending && stageConfig.options && (
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 min-w-[160px] bg-white border border-gray-200 rounded-lg shadow-lg z-30 overflow-hidden">
+                  {stageConfig.options.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      disabled={isUpdating}
+                      onClick={(e) => { e.stopPropagation(); if (!isUpdating) handleStageClick(index, option); }}
+                      className={`w-full px-3 py-2 text-[13px] text-left flex items-center gap-2 transition-colors
+                        ${contact.stageStatus === option ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700 hover:bg-gray-50"}
+                        ${isUpdating ? "opacity-50 cursor-not-allowed" : ""}`}
+                    >
+                      <CheckCircle2 className={`w-4 h-4 flex-shrink-0 ${contact.stageStatus === option ? "text-blue-600" : "text-gray-300"}`} />
+                      <span className="truncate">{option}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
       <LifecycleStageModal
         isOpen={showLifecycleModal}
@@ -604,10 +578,10 @@ const BasicDetails = ({ contact, company, deals, contactFieldList = [], onContac
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
 
-      {/* --- PASTE THIS UI BLOCK STARTING HERE --- */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-4 rounded-lg border border-gray-200 relative z-50">
+      {/* Owner + audit strip (compact) */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white px-4 py-2.5 rounded-lg border border-gray-200 relative z-50">
 
         {/* LEFT SIDE: Owner Dropdown */}
         <div className="flex items-center gap-2 ">
@@ -710,96 +684,7 @@ const BasicDetails = ({ contact, company, deals, contactFieldList = [], onContac
       {/* Lifecycle Stages */}
       <LifecycleStages contact={contact} onContactUpdate={onContactUpdate} />
 
-      {/* Contact Information Grid */}
-      <div
-        className="flex flex-col items-start w-full"
-        style={{ padding: 16, gap: 16, backgroundColor: "#F8FAFC", borderRadius: 14 }}
-      >
-        <div className="flex flex-row items-start w-full" style={{ gap: 16 }}>
-          {/* Email */}
-          <div className="flex flex-col items-start flex-1" style={{ gap: 6, minWidth: 0 }}>
-            <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "120%", color: "#6B7280" }}>
-              Email
-            </span>
-            <span className="truncate w-full" style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 14, lineHeight: "120%", color: "#1F2937" }}>
-              {contact.email || "—"}
-            </span>
-          </div>
-
-          {/* Phone */}
-          <div className="flex flex-col items-start flex-1" style={{ gap: 6, minWidth: 0 }}>
-            <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "120%", color: "#6B7280" }}>
-              Phone
-            </span>
-            <span className="truncate w-full" style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 14, lineHeight: "120%", color: "#1F2937" }}>
-              {contact.phone || "—"}
-            </span>
-          </div>
-
-          {/* Company */}
-          <div className="flex flex-col items-start flex-1" style={{ gap: 6, minWidth: 0 }}>
-            <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "120%", color: "#6B7280" }}>
-              Company
-            </span>
-            <div className="flex items-center gap-1 w-full">
-              <span className="truncate" style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 14, lineHeight: "120%", color: "#1F2937" }}>
-                {company?.name || 'No company'}
-              </span>
-              {company && (
-                <Link
-                  to={`/companies/${company._id}`}
-                  className="text-gray-400 hover:text-gray-900 transition-colors flex-shrink-0"
-                >
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
-              )}
-            </div>
-          </div>
-
-          {/* Status */}
-          <div className="flex flex-col items-start flex-1" style={{ gap: 6, minWidth: 0 }}>
-            <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "120%", color: "#6B7280" }}>
-              Status
-            </span>
-            <span className="truncate w-full" style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 14, lineHeight: "120%", color: "#1F2937" }}>
-              {contact.stageStatus || "—"}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* --- CUSTOM FIELDS --- same quick-drawer pattern as the Deal overview
-          (deal/BasicDetails.jsx): a single entry point that opens
-          ContactFieldDrawer (wrapping the same ContactFieldSettings editor
-          Settings -> Contact Fields uses) instead of a large inline
-          value-display block, so managing fields here and in Settings is the
-          exact same UI, not two that can drift apart. */}
-      <div className="border-t border-gray-200 pt-4 mt-6">
-        {groupedFields.length === 0 ? (
-          <div className="flex items-center justify-end px-2 text-gray-400">
-            <button
-              type="button"
-              onClick={() => setShowFieldDrawer(true)}
-              className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:underline"
-            >
-              <Plus className="w-3 h-3" /> Add custom fields
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center justify-end gap-3 px-2">
-            <button
-              type="button"
-              onClick={() => setShowFieldDrawer(true)}
-              className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:underline"
-            >
-              <Plus className="w-3 h-3" /> Add Field
-            </button>
-            <button onClick={() => setShowEmptyFields(v => !v)} className="text-[10px] font-medium text-gray-400 hover:text-blue-600 flex items-center gap-1">
-              {showEmptyFields ? <><EyeOff className="w-3 h-3" /> Hide empty fields</> : <><EyeIcon className="w-3 h-3" /> Show all fields</>}
-            </button>
-          </div>
-        )}
-      </div>
+      {/* Removed Contact Information Grid and Custom Fields buttons as requested */}
 
       <ContactFieldDrawer
         isOpen={showFieldDrawer}
@@ -809,18 +694,38 @@ const BasicDetails = ({ contact, company, deals, contactFieldList = [], onContac
         }}
       />
 
-      {/* Deals Section */}
-      <div className="border-t border-gray-200 pt-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Target className="w-4 h-4 text-gray-600" />
-            <div>
-              <h3 className="text-lg font-bold text-gray-900">Associated Deals</h3>
-              <p className="text-sm text-gray-600">
-                {deals?.length || 0} deal{deals?.length !== 1 ? 's' : ''} in pipeline
-              </p>
-            </div>
-          </div>
+      {/* Company relationship (compact) */}
+      {company && (
+        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+          <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1.5">Company</p>
+          <Link
+            to={`/companies/${company._id}`}
+            className="group inline-flex items-center gap-2 min-w-0 max-w-full"
+          >
+            <span className="w-8 h-8 rounded-lg bg-blue-50 text-[#0085FF] flex items-center justify-center flex-shrink-0">
+              <Building2 className="w-4 h-4" />
+            </span>
+            <span className="text-sm font-semibold text-gray-900 group-hover:text-[#0085FF] truncate">
+              {company.name}
+            </span>
+            {(company.industry || company.email) && (
+              <span className="text-xs text-gray-400 truncate hidden sm:inline">
+                · {company.industry || company.email}
+              </span>
+            )}
+            <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-[#0085FF] flex-shrink-0" />
+          </Link>
+        </div>
+      )}
+
+      {/* Associated Deals */}
+      <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+        <div className="flex items-center gap-2 mb-3">
+          <Target className="w-4 h-4 text-gray-500" />
+          <h3 className="text-sm font-semibold text-gray-900">Associated Deals</h3>
+          <span className="text-xs text-gray-400">
+            {deals?.length || 0} in pipeline
+          </span>
         </div>
 
         <DealsTable
@@ -830,6 +735,49 @@ const BasicDetails = ({ contact, company, deals, contactFieldList = [], onContac
           onDealCreated={onDealCreated}
         />
       </div>
+
+      {/* Social / Online Presence — only populated values */}
+      {(() => {
+        const sm = contact.socialMedia || {};
+        const links = [
+          { key: "linkedin", label: "LinkedIn", value: sm.linkedin },
+          { key: "twitter", label: "Twitter / X", value: sm.twitter },
+          { key: "instagram", label: "Instagram", value: sm.instagram },
+          { key: "facebook", label: "Facebook", value: sm.facebook },
+          { key: "whatsapp", label: "WhatsApp", value: sm.whatsapp },
+        ].filter((l) => l.value && String(l.value).trim());
+
+        if (links.length === 0) return null;
+
+        const hrefFor = (key, value) => {
+          const v = String(value).trim();
+          if (key === "whatsapp") {
+            const digits = v.replace(/[^\d]/g, "");
+            return digits ? `https://wa.me/${digits}` : v;
+          }
+          return /^https?:\/\//i.test(v) ? v : `https://${v}`;
+        };
+
+        return (
+          <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-2">Social</p>
+            <div className="flex flex-wrap gap-2">
+              {links.map((l) => (
+                <a
+                  key={l.key}
+                  href={hrefFor(l.key, l.value)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 text-[13px] font-medium text-gray-700 hover:border-[#0085FF] hover:text-[#0085FF] transition-colors"
+                >
+                  {l.label}
+                  <ArrowRight className="w-3 h-3 -rotate-45" />
+                </a>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

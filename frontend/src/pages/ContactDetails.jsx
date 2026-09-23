@@ -278,7 +278,6 @@ const ContactDetailsPage = () => {
 
   const handleDealCreated = (newDeal) => {
     setDeals((prev) => [newDeal, ...prev]);
-    toast.success("Deal created successfully!");
     setShowDealForm(false);
   };
 
@@ -790,7 +789,6 @@ const ContactDetailsPage = () => {
             page's Overview strip. */}
         {showStats && activeTab === "Overview" && (
           <>
-            {!statsLoading && <ContactSummaryCard contact={contact} />}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
               {statsLoading
                 ? Array.from({ length: 6 }).map((_, i) => <StatTileSkeleton key={i} />)

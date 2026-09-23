@@ -18,7 +18,6 @@ const DealsTable = ({ deals = [], contact, company, onDealCreated }) => {
     setShowQuickDealForm(false);
     
     // Show success message (moved to parent, but can keep here too)
-    toast.success("Deal created!");
   };
 
   const handleCloseForm = () => {

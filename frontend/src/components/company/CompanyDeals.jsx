@@ -23,7 +23,6 @@ const CompanyDeals = ({ deals, companyId, setDeals }) => {
     try {
       const resDeals = await API.get("/deals");
       setDeals(resDeals.data.filter((d) => d.company?._id === companyId));
-      toast.success("Deal created successfully!");
     } catch (err) {
       toast.error("Failed to refresh deals list.");
     }
