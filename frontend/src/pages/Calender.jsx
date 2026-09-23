@@ -1181,10 +1181,10 @@ const AdminCalendar = () => {
                   medium: { bg: "#FFF6E5", color: "#B77B00", label: "Medium Priority" },
                   low: { bg: "#EAF7EE", color: "#2E9E4F", label: "Low Priority" },
                 };
-                const visibleMeetings = dayMeetings.slice(0, 2);
-                const overflowCount = dayMeetings.length - visibleMeetings.length;
-                const visibleTasks = dayTasks.slice(0, 2 - visibleMeetings.length);
-                const taskOverflowCount = dayTasks.length - visibleTasks.length;
+                const cellMeetings = dayMeetings.slice(0, 2);
+                const overflowCount = dayMeetings.length - cellMeetings.length;
+                const cellTasks = dayTasks.slice(0, 2 - cellMeetings.length);
+                const taskOverflowCount = dayTasks.length - cellTasks.length;
                 const isLastCol = i === 6;
                 const isLastRow = weekIdx === 5;
 
@@ -1254,7 +1254,7 @@ const AdminCalendar = () => {
 
                     {isOpenWeek && (
                     <div className="flex flex-col items-start w-full" style={{ gap: 4 }}>
-                      {visibleMeetings.map((m) => (
+                      {cellMeetings.map((m) => (
                         <div
                           key={m._id}
                           // Opens the meeting panel. stopPropagation because
@@ -1298,7 +1298,7 @@ const AdminCalendar = () => {
                           </span>
                         </div>
                       ))}
-                      {visibleTasks.map((t) => (
+                      {cellTasks.map((t) => (
                         <div
                           key={t._id}
                           onClick={(e) => {
