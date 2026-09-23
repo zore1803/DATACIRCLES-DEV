@@ -2846,6 +2846,21 @@ function Deals() {
                   loading={loading}
                   skeletonRows={dealsPerPage}
                   searchTerm={filters.searchTerm}
+                  isFiltered={
+                    !!filters.searchTerm ||
+                    filters.status !== "All" ||
+                    filters.company !== "All" ||
+                    filters.user !== "All" ||
+                    !!filters.minAmount ||
+                    !!filters.maxAmount ||
+                    !!filters.startDate ||
+                    !!filters.endDate
+                  }
+                  onCreateDeal={() => {
+                    setEditDeal(null);
+                    setInitialDealStatus("Open");
+                    setShowQuickAdd(true);
+                  }}
                   externalHiddenColumns={persistedHiddenColumnKeys}
                   externalColumnOrder={persistedColumnOrderKeys}
                 />

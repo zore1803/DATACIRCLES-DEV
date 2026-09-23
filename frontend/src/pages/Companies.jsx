@@ -2371,7 +2371,7 @@ function Companies() {
         document.body,
       )}
 
-      {!showLoadingSkeleton && !showHotlist && (
+      {!showLoadingSkeleton && !showHotlist && pagination.totalCount > 0 && (
         <div
           className={`fixed bottom-0 right-0 bg-white border-t border-[#E1E4EA] shadow-sm z-[9992] flex items-center ${isSearchOverlayOpen ? "pointer-events-none" : ""}`}
           style={{
