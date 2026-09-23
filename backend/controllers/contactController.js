@@ -7,12 +7,13 @@ const Meeting = require("../models/Meeting");
 const Task = require("../models/Task");
 const contactService = require("../services/contactService");
 const {
-  isValidStage,
-  isValidCombination,
-  stageForStatus,
-  defaultStatusForStage,
-  invalidCombinationMessage,
-} = require("../constants/contactLifecycle");
+  getStageMap,
+  isValidStageInMap,
+  isValidCombinationInMap,
+  stageForStatusInMap,
+  defaultStatusForStageInMap,
+  invalidCombinationMessageInMap,
+} = require("../services/contactLifecycleService");
 const { getOwnedCompanyIds } = require("../utils/ownedCompanies");
 
 // Mirrors companyController's isOwnedByUser, using the same `user`/`createdBy` fields the
@@ -505,20 +506,22 @@ const updateLifecycleStage = async (req, res) => {
 
     // Resolve whichever half the caller omitted, then validate the pair —
     // same rules as services/contactService.js's update path, both reading
-    // constants/contactLifecycle.js. A caller sending only a status (a Kanban
-    // drop, a status dropdown) gets its stage derived rather than silently
-    // leaving the two fields contradicting each other.
+    // the organization's ContactLifecycleSettings. A caller sending only a
+    // status (a Kanban drop, a status dropdown) gets its stage derived rather
+    // than silently leaving the two fields contradicting each other.
+    const stageMap = await getStageMap(req.user.organization);
+
     const nextStage =
-      lifecycleStage || (stageStatus ? stageForStatus(stageStatus) : contact.lifecycleStage);
+      lifecycleStage || (stageStatus ? stageForStatusInMap(stageMap, stageStatus) : contact.lifecycleStage);
     const nextStatus =
       stageStatus ||
-      (lifecycleStage ? defaultStatusForStage(lifecycleStage) : contact.stageStatus);
+      (lifecycleStage ? defaultStatusForStageInMap(stageMap, lifecycleStage) : contact.stageStatus);
 
-    if (!isValidStage(nextStage)) {
-      return res.status(400).json({ error: invalidCombinationMessage(nextStage, nextStatus) });
+    if (!isValidStageInMap(stageMap, nextStage)) {
+      return res.status(400).json({ error: invalidCombinationMessageInMap(stageMap, nextStage, nextStatus) });
     }
-    if (!isValidCombination(nextStage, nextStatus)) {
-      return res.status(400).json({ error: invalidCombinationMessage(nextStage, nextStatus) });
+    if (!isValidCombinationInMap(stageMap, nextStage, nextStatus)) {
+      return res.status(400).json({ error: invalidCombinationMessageInMap(stageMap, nextStage, nextStatus) });
     }
 
     const updateData = { lifecycleStage: nextStage, stageStatus: nextStatus };

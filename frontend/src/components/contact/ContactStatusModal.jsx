@@ -1,11 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import {
-    lifecycleStageOptions,
-    allLifecycleStages,
-    defaultStatusForStage,
-    getChipColor,
-} from "../../utils/contactConstants";
+import { getChipColor } from "../../utils/contactConstants";
+import useContactLifecycleStore from "../../store/useContactLifecycleStore";
 
 /*
  * The one place a contact's lifecycle is edited.
@@ -18,15 +14,22 @@ import {
  * status list is always scoped to the selected stage, and changing the stage
  * resets the status to that stage's default.
  *
- * Stages and statuses come from utils/contactConstants.js, which mirrors
- * backend/constants/contactLifecycle.js. This component defines none of its
- * own — that duplication is what previously let "Lost Lead" and "Won Lead"
- * reach the API and fail the enum.
+ * Stages and statuses come from useContactLifecycleStore, backed by the
+ * organization's ContactLifecycleSettings (Settings -> Contact Lifecycle) —
+ * the single source of truth. This component defines none of its own.
  */
 const ContactStatusModal = ({ contact, isOpen, onClose, onSave }) => {
     const [selectedStage, setSelectedStage] = useState("Lead");
     const [selectedStatus, setSelectedStatus] = useState("New");
     const [saving, setSaving] = useState(false);
+    const lifecycleStageOptions = useContactLifecycleStore((s) => s.lifecycleStageOptions);
+    const allLifecycleStages = useContactLifecycleStore((s) => s.allLifecycleStages);
+    const defaultStatusForStage = useContactLifecycleStore((s) => s.defaultStatusForStage);
+    const fetchStages = useContactLifecycleStore((s) => s.fetchStages);
+
+    useEffect(() => {
+        fetchStages();
+    }, [fetchStages]);
 
     // Re-seed from the contact each time the modal opens, so reopening after a
     // cancel doesn't show the abandoned selection.

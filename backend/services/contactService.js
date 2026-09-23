@@ -1,11 +1,12 @@
 const Contact = require("../models/Contact");
 const { processAdditionalFields } = require("./fieldCoercionService");
 const {
-  isValidCombination,
-  stageForStatus,
-  defaultStatusForStage,
-  invalidCombinationMessage,
-} = require("../constants/contactLifecycle");
+  getStageMap,
+  isValidCombinationInMap,
+  stageForStatusInMap,
+  defaultStatusForStageInMap,
+  invalidCombinationMessageInMap,
+} = require("./contactLifecycleService");
 
 function normalizeSocialMedia(socialMedia) {
   return {
@@ -82,20 +83,22 @@ async function createContact(
     contactData.socialMedia = normalizeSocialMedia(socialMediaInput);
   }
 
+  const stageMap = await getStageMap(organizationId);
+
   if (!contactData.lifecycleStage) {
     contactData.lifecycleStage = "Lead";
   }
 
   if (!contactData.stageStatus) {
-    contactData.stageStatus = defaultStatusForStage(contactData.lifecycleStage);
+    contactData.stageStatus = defaultStatusForStageInMap(stageMap, contactData.lifecycleStage);
   }
 
   // new Contact(...).save() below runs the model's pre-save pair check, so an
   // invalid combination is already rejected — this only makes the message the
   // caller sees identical to the one the update path produces.
-  if (!isValidCombination(contactData.lifecycleStage, contactData.stageStatus)) {
+  if (!isValidCombinationInMap(stageMap, contactData.lifecycleStage, contactData.stageStatus)) {
     throw new Error(
-      invalidCombinationMessage(contactData.lifecycleStage, contactData.stageStatus)
+      invalidCombinationMessageInMap(stageMap, contactData.lifecycleStage, contactData.stageStatus)
     );
   }
 
@@ -164,21 +167,23 @@ async function updateContact(
   // per-field enums would happily allow it, because each field is valid in
   // isolation. Whichever half the caller sends, the other is filled in or
   // checked here so the two can never disagree in the database.
-  if (updateData.lifecycleStage && !updateData.stageStatus) {
-    updateData.stageStatus = defaultStatusForStage(updateData.lifecycleStage);
-  } else if (updateData.stageStatus && !updateData.lifecycleStage) {
-    // Every status belongs to exactly one stage, so the stage is recoverable.
-    const derivedStage = stageForStatus(updateData.stageStatus);
-    if (!derivedStage) {
-      throw new Error(`Invalid stageStatus '${updateData.stageStatus}'`);
-    }
-    updateData.lifecycleStage = derivedStage;
-  }
-
   if (updateData.lifecycleStage || updateData.stageStatus) {
-    if (!isValidCombination(updateData.lifecycleStage, updateData.stageStatus)) {
+    const stageMap = await getStageMap(organizationId);
+
+    if (updateData.lifecycleStage && !updateData.stageStatus) {
+      updateData.stageStatus = defaultStatusForStageInMap(stageMap, updateData.lifecycleStage);
+    } else if (updateData.stageStatus && !updateData.lifecycleStage) {
+      // Every status belongs to exactly one stage, so the stage is recoverable.
+      const derivedStage = stageForStatusInMap(stageMap, updateData.stageStatus);
+      if (!derivedStage) {
+        throw new Error(`Invalid stageStatus '${updateData.stageStatus}'`);
+      }
+      updateData.lifecycleStage = derivedStage;
+    }
+
+    if (!isValidCombinationInMap(stageMap, updateData.lifecycleStage, updateData.stageStatus)) {
       throw new Error(
-        invalidCombinationMessage(updateData.lifecycleStage, updateData.stageStatus)
+        invalidCombinationMessageInMap(stageMap, updateData.lifecycleStage, updateData.stageStatus)
       );
     }
   }

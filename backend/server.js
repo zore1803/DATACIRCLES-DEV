@@ -195,6 +195,9 @@ app.use('/api/contact-folders', contactFolderRoutes);
 const contactFieldsRoutes = require('./routes/contactFields');
 app.use('/api/contact-fields', contactFieldsRoutes);
 
+const contactLifecycleSettingsRoutes = require('./routes/contactLifecycleSettings');
+app.use('/api/contact-lifecycle-settings', contactLifecycleSettingsRoutes);
+
 const companyFolderRoutes = require('./routes/companyFolderRoutes');
 app.use('/api/company-folders', companyFolderRoutes);
 

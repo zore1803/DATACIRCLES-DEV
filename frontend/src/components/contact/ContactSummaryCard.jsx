@@ -25,7 +25,11 @@ export default function ContactSummaryCard({ contact }) {
       collapsedFields={[
         { label: "Email", value: contact.email },
         { label: "Phone", value: contact.phone },
-        { label: "Company", value: contact.company?.name },
+        {
+          label: "Company",
+          value: contact.company?.name,
+          to: contact.company?._id ? `/companies/${contact.company._id}` : undefined,
+        },
         { label: "Owner", value: contact.user?.name },
         { label: "Client Since", value: formatDate(contact.createdAt) },
       ]}

@@ -22,17 +22,16 @@ import {
   FolderOpen,
   LayoutGrid,
   Info,
-  EyeOff
+  EyeOff,
+  Plus,
+  Settings as SettingsIcon
 } from "lucide-react";
 import AppToaster from "../AppToaster";
-import {
-  lifecycleStageOptions,
-  allLifecycleStages,
-  defaultStatusForStage,
-  getLifecycleStageForStatus,
-} from "../../utils/contactConstants";
+import useContactLifecycleStore from "../../store/useContactLifecycleStore";
 import EyeIcon from "../common/EyeIcon";
 import EditIcon from "../common/EditIcon";
+import ContactFieldDrawer from "./ContactFieldDrawer";
+import ContactLifecycleDrawer from "./ContactLifecycleDrawer";
 
 // Lifecycle Stage Modal Component  
 const LifecycleStageModal = ({ isOpen, onClose, contact, onUpdate }) => {
@@ -40,10 +39,19 @@ const LifecycleStageModal = ({ isOpen, onClose, contact, onUpdate }) => {
   const [selectedStatus, setSelectedStatus] = useState(contact.stageStatus || "New");
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // Stages and statuses come from utils/contactConstants.js — this component
-  // used to hold its own copy, which is how the lifecycle ended up defined in
-  // four places (backend, contactConstants, Contacts.jsx, here) with two of
-  // them disagreeing.
+  // Stages and statuses come from useContactLifecycleStore, which is backed
+  // by the organization's ContactLifecycleSettings (Settings -> Contact
+  // Lifecycle) — the single source of truth. This component used to hold its
+  // own hardcoded copy, which is how the lifecycle ended up defined
+  // separately in several places with some of them disagreeing.
+  const lifecycleStageOptions = useContactLifecycleStore((s) => s.lifecycleStageOptions);
+  const allLifecycleStages = useContactLifecycleStore((s) => s.allLifecycleStages);
+  const defaultStatusForStage = useContactLifecycleStore((s) => s.defaultStatusForStage);
+  const fetchStages = useContactLifecycleStore((s) => s.fetchStages);
+
+  useEffect(() => {
+    fetchStages();
+  }, [fetchStages]);
 
   const handleStageChange = (newStage) => {
     setSelectedStage(newStage);
@@ -160,81 +168,54 @@ const LifecycleStageModal = ({ isOpen, onClose, contact, onUpdate }) => {
   );
 };
 
-// Lifecycle Flow Component
+// Color cycled per configured stage, in place of the old hand-picked color per
+// hardcoded stage name — a stage added in Settings gets the next color in the
+// cycle instead of falling back to some default, and nothing here needs to
+// change when a stage is renamed or reordered.
+const STAGE_PALETTE = [
+  { bgColor: 'bg-blue-500', bgColorLight: 'bg-blue-50', textColor: 'text-white', textColorDark: 'text-blue-700', arrowBorderColor: 'border-l-blue-500' },
+  { bgColor: 'bg-indigo-500', bgColorLight: 'bg-indigo-50', textColor: 'text-white', textColorDark: 'text-indigo-700', arrowBorderColor: 'border-l-indigo-500' },
+  { bgColor: 'bg-purple-500', bgColorLight: 'bg-purple-50', textColor: 'text-white', textColorDark: 'text-purple-700', arrowBorderColor: 'border-l-purple-500' },
+  { bgColor: 'bg-amber-500', bgColorLight: 'bg-amber-50', textColor: 'text-white', textColorDark: 'text-amber-700', arrowBorderColor: 'border-l-amber-500' },
+  { bgColor: 'bg-green-500', bgColorLight: 'bg-green-50', textColor: 'text-white', textColorDark: 'text-green-700', arrowBorderColor: 'border-l-green-500' },
+  { bgColor: 'bg-teal-500', bgColorLight: 'bg-teal-50', textColor: 'text-white', textColorDark: 'text-teal-700', arrowBorderColor: 'border-l-teal-500' },
+];
+
+// Lifecycle Flow Component. Segments are ONE PER CONFIGURED STAGE (from
+// useContactLifecycleStore, backed by Settings -> Contact Lifecycle) rather
+// than a hardcoded 5-segment New/Contacted/Interested/Qualified/Won layout —
+// so adding, renaming or reordering a stage in Settings changes this bar
+// automatically instead of needing a matching code change here.
 const LifecycleStages = ({ contact, onContactUpdate }) => {
   const [showLifecycleModal, setShowLifecycleModal] = useState(false);
+  const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [pendingStageIndex, setPendingStageIndex] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  const stageConfigs = [
-    {
-      key: 'New',
-      label: 'New',
-      bgColor: 'bg-blue-500',
-      bgColorLight: 'bg-blue-50',
-      textColor: 'text-white',
-      textColorDark: 'text-blue-700',
-      arrowBorderColor: 'border-l-blue-500',
-      options: null,
-    },
-    {
-      key: 'Contacted',
-      label: 'Contacted',
-      bgColor: 'bg-indigo-500',
-      bgColorLight: 'bg-indigo-50',
-      textColor: 'text-white',
-      textColorDark: 'text-indigo-700',
-      arrowBorderColor: 'border-l-indigo-500',
-      options: null,
-    },
-    {
-      key: 'Interested',
-      label: 'Interested',
-      bgColor: 'bg-purple-500',
-      bgColorLight: 'bg-purple-50',
-      textColor: 'text-white',
-      textColorDark: 'text-purple-700',
-      arrowBorderColor: 'border-l-purple-500',
-      options: ['Interested', 'Unqualified'],
-    },
-    {
-      key: 'Qualified',
-      label: 'Qualified',
-      bgColor: 'bg-yellow-500',
-      bgColorLight: 'bg-yellow-50',
-      textColor: 'text-white',
-      textColorDark: 'text-yellow-700',
-      arrowBorderColor: 'border-l-yellow-500',
-      options: ['Qualified', 'Lost'],
-    },
-    {
-      key: 'Won',
-      label: 'Won/Churned',
-      bgColor: 'bg-green-500',
-      bgColorLight: 'bg-green-50',
-      textColor: 'text-white',
-      textColorDark: 'text-green-700',
-      arrowBorderColor: 'border-l-green-500',
-      options: ['Won', 'Churned'],
-    }
-  ];
+  const allLifecycleStages = useContactLifecycleStore((s) => s.allLifecycleStages);
+  const lifecycleStageOptions = useContactLifecycleStore((s) => s.lifecycleStageOptions);
+  const getLifecycleStageForStatus = useContactLifecycleStore((s) => s.getLifecycleStageForStatus);
+  const fetchStages = useContactLifecycleStore((s) => s.fetchStages);
 
-  const getCurrentStageIndex = () => {
-    const statusToIndex = {
-      'New': 0,
-      'Contacted': 1,
-      'Interested': 2,
-      'Unqualified': 2,
-      'Qualified': 3,
-      'Lost': 3,
-      'Won': 4,
-      'Churned': 4
+  useEffect(() => {
+    fetchStages();
+  }, [fetchStages]);
+
+  const stageConfigs = allLifecycleStages.map((stageName, i) => {
+    const statuses = lifecycleStageOptions[stageName] || [];
+    return {
+      key: stageName,
+      label: stageName,
+      ...STAGE_PALETTE[i % STAGE_PALETTE.length],
+      // Only offer a dropdown when the stage has more than one status to
+      // choose between — a single-status stage just applies directly on click.
+      options: statuses.length > 1 ? statuses : null,
+      soloStatus: statuses[0] || stageName,
     };
-    return statusToIndex[contact.stageStatus] || 0;
-  };
+  });
 
-  const currentStageIndex = getCurrentStageIndex();
+  const currentStageIndex = Math.max(0, allLifecycleStages.indexOf(contact.lifecycleStage));
 
   const handleStageClick = async (stageIndex, option = null) => {
     if (isUpdating) return;
@@ -250,15 +231,14 @@ const LifecycleStages = ({ contact, onContactUpdate }) => {
       return;
     }
 
-    const targetStatus = option || stageConfigs[stageIndex].key;
+    const targetStatus = option || stageConfigs[stageIndex].soloStatus;
 
     try {
       setIsUpdating(true);
 
-      // Was a hand-written status -> stage chain that silently fell back to
-      // the contact's CURRENT stage when a status didn't match any branch,
-      // which would send a contradicting pair. The shared helper resolves
-      // every status to its one stage.
+      // Resolves every status to its one configured stage, so a stage that's
+      // been renamed or a status moved between stages in Settings is always
+      // reflected correctly rather than trusting a stale local mapping.
       const lifecycleStage = getLifecycleStageForStatus(targetStatus);
 
       await API.put(`/contacts/${contact._id}/lifecycle-stage`, {
@@ -294,18 +274,8 @@ const LifecycleStages = ({ contact, onContactUpdate }) => {
     const stage = stageConfigs[stageIndex];
     const isCurrent = stageIndex === currentStageIndex;
 
-    if (stage.options && isCurrent) {
-      const currentStatus = contact.stageStatus;
-      if (stage.options.includes(currentStatus)) {
-        return {
-          ...stage,
-          label: currentStatus,
-          bgColor: ['Unqualified', 'Lost', 'Churned'].includes(currentStatus) ? 'bg-red-500' : stage.bgColor,
-          bgColorLight: ['Unqualified', 'Lost', 'Churned'].includes(currentStatus) ? 'bg-red-50' : stage.bgColorLight,
-          textColorDark: ['Unqualified', 'Lost', 'Churned'].includes(currentStatus) ? 'text-red-700' : stage.textColorDark,
-          arrowBorderColor: ['Unqualified', 'Lost', 'Churned'].includes(currentStatus) ? 'border-l-red-500' : stage.arrowBorderColor
-        };
-      }
+    if (isCurrent && contact.stageStatus) {
+      return { ...stage, label: contact.stageStatus };
     }
 
     return stage;
@@ -328,13 +298,23 @@ const LifecycleStages = ({ contact, onContactUpdate }) => {
           </button>
         </div>
 
-        <button
-          onClick={() => setShowLifecycleModal(true)}
-          className="flex items-center gap-2 px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
-        >
-          <EditIcon className="w-3 h-3" />
-          <span>Edit</span>
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setShowLifecycleModal(true)}
+            className="flex items-center gap-2 px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
+          >
+            <EditIcon className="w-3 h-3" />
+            <span>Edit</span>
+          </button>
+          <button
+            onClick={() => setShowSettingsDrawer(true)}
+            title="Edit lifecycle stages (Settings)"
+            className="flex items-center gap-2 px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
+          >
+            <SettingsIcon className="w-3.5 h-3.5" />
+            <span>Stages</span>
+          </button>
+        </div>
       </div>
 
       {/* Progress Flow */}
@@ -374,7 +354,7 @@ const LifecycleStages = ({ contact, onContactUpdate }) => {
                   {index < stageConfigs.length - 1 && isActive && (
                     <div
                       className={`
-                        absolute top-0 right-0 w-0 h-0 
+                        absolute top-0 right-0 w-0 h-0
                         border-t-[18px] border-b-[18px] border-l-[14px]
                         border-t-transparent border-b-transparent
                         ${displayInfo.arrowBorderColor}
@@ -388,41 +368,32 @@ const LifecycleStages = ({ contact, onContactUpdate }) => {
                 {/* Dropdown Options */}
                 {showStatusDropdown && isPending && stageConfig.options && (
                   <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-30 overflow-hidden">
-                    {stageConfig.options.map((option, optIndex) => {
-                      const isNegative = ['Unqualified', 'Lost', 'Churned'].includes(option);
-                      const isPositive = option === 'Won';
-
-                      return (
-                        <div
-                          key={option}
-                          className={`
-                            px-3 py-2 text-sm cursor-pointer transition-all
-                            ${contact.stageStatus === option ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}
-                            ${isNegative ? 'hover:bg-red-50' : ''}
-                            ${isPositive ? 'hover:bg-green-50' : ''}
-                            ${optIndex !== stageConfig.options.length - 1 ? 'border-b border-gray-100' : ''}
-                            ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}
-                            flex items-center gap-2
-                          `}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!isUpdating) {
-                              handleStageClick(index, option);
-                            }
-                          }}
-                        >
-                          {isNegative ? <XCircle className="w-4 h-4 text-red-600" /> :
-                            isPositive ? <Trophy className="w-4 h-4 text-green-600" /> :
-                              <CheckCircle2 className="w-4 h-4 text-blue-600" />}
-                          <span>{option}</span>
-                          {contact.stageStatus === option && (
-                            <div className="ml-auto">
-                              <CheckCircle2 className="w-4 h-4 text-blue-600" />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {stageConfig.options.map((option, optIndex) => (
+                      <div
+                        key={option}
+                        className={`
+                          px-3 py-2 text-sm cursor-pointer transition-all
+                          ${contact.stageStatus === option ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}
+                          ${optIndex !== stageConfig.options.length - 1 ? 'border-b border-gray-100' : ''}
+                          ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}
+                          flex items-center gap-2
+                        `}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!isUpdating) {
+                            handleStageClick(index, option);
+                          }
+                        }}
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                        <span>{option}</span>
+                        {contact.stageStatus === option && (
+                          <div className="ml-auto">
+                            <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -431,34 +402,23 @@ const LifecycleStages = ({ contact, onContactUpdate }) => {
         </div>
       </div>
 
-      {/* Current Status Display */}
-      <div className="mt-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-600">Current:</span>
-          <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${['Unqualified', 'Lost', 'Churned'].includes(contact.stageStatus) ? 'bg-red-100 text-red-700' :
-            contact.stageStatus === 'Won' ? 'bg-green-100 text-green-700' :
-              contact.stageStatus === 'Qualified' ? 'bg-yellow-100 text-yellow-700' :
-                contact.stageStatus === 'Interested' ? 'bg-purple-100 text-purple-700' :
-                  contact.stageStatus === 'Contacted' ? 'bg-indigo-100 text-indigo-700' :
-                    'bg-blue-100 text-blue-700'
-            }`}>
-            <span>{contact.stageStatus}</span>
-          </div>
+      {isUpdating && (
+        <div className="mt-4 flex items-center gap-2 text-gray-600">
+          <div className="w-3 h-3 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-xs">Updating...</span>
         </div>
-
-        {isUpdating && (
-          <div className="flex items-center gap-2 text-gray-600">
-            <div className="w-3 h-3 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
-            <span className="text-xs">Updating...</span>
-          </div>
-        )}
-      </div>
+      )}
 
       <LifecycleStageModal
         isOpen={showLifecycleModal}
         onClose={() => setShowLifecycleModal(false)}
         contact={contact}
         onUpdate={onContactUpdate}
+      />
+
+      <ContactLifecycleDrawer
+        isOpen={showSettingsDrawer}
+        onClose={() => setShowSettingsDrawer(false)}
       />
     </div>
   );
@@ -515,8 +475,9 @@ const AdditionalFieldsSection = ({ fields }) => {
   );
 };
 
-const BasicDetails = ({ contact, company, deals, contactFieldList = [], onContactUpdate, onDealCreated }) => {
+const BasicDetails = ({ contact, company, deals, contactFieldList = [], onContactUpdate, onDealCreated, onFieldsChanged }) => {
   const [showEmptyFields, setShowEmptyFields] = useState(false); // 👉 NEW Togle State
+  const [showFieldDrawer, setShowFieldDrawer] = useState(false);
 
   // --- PASTE THIS BLOCK STARTING HERE ---
   const [isOwnerDropdownOpen, setIsOwnerDropdownOpen] = useState(false);
@@ -626,45 +587,6 @@ const BasicDetails = ({ contact, company, deals, contactFieldList = [], onContac
       return mergedFields.filter((field) => !isEmpty(field.value));
     }
     return mergedFields;
-  };
-
-  const renderAdditionalFieldValue = (field) => {
-    if (isEmpty(field.value)) {
-      return <span className="text-gray-400 italic font-normal">Not available</span>;
-    }
-
-    switch (field.type) {
-      case "url":
-        const url = field.value.startsWith("http") ? field.value : `https://${field.value}`;
-        return (
-          <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline break-words font-medium">
-            {field.value}
-          </a>
-        );
-      case "date":
-        try {
-          return <span className="text-gray-900 font-medium">{new Date(field.value).toLocaleDateString()}</span>;
-        } catch {
-          return <span className="text-gray-900 font-medium break-words">{field.value}</span>;
-        }
-      case "multiselect":
-        if (Array.isArray(field.value)) {
-          return (
-            <div className="flex flex-wrap gap-1.5">
-              {field.value.map((item, idx) => (
-                <span key={idx} className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
-                  {item}
-                </span>
-              ))}
-            </div>
-          );
-        }
-        return <span className="text-gray-900 font-medium break-words">{field.value}</span>;
-      case "number":
-        return <span className="text-gray-900 font-medium">{Number(field.value).toLocaleString()}</span>;
-      default:
-        return <span className="text-gray-900 font-medium break-words">{field.value}</span>;
-    }
   };
 
   const visibleAdditionalFields = getVisibleAdditionalFields();
@@ -846,62 +768,46 @@ const BasicDetails = ({ contact, company, deals, contactFieldList = [], onContac
         </div>
       </div>
 
-      {/* --- PREMIUM CUSTOM FIELDS RENDERER --- */}
-      <div className="border-t border-gray-200 pt-6 mt-6">
-        <div className="flex justify-between items-center mb-5">
-          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <LayoutGrid className="w-5 h-5 text-blue-600" />
-            Additional Information
-          </h2>
-
-          <button
-            onClick={() => setShowEmptyFields(!showEmptyFields)}
-            className="flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-blue-600 px-3 py-1.5 border border-gray-200 rounded-md hover:bg-blue-50 hover:border-blue-200 transition-colors shadow-sm bg-white"
-          >
-            {showEmptyFields ? (
-              <><EyeOff className="w-3.5 h-3.5" /> Hide Empty Fields</>
-            ) : (
-              <><EyeIcon className="w-3.5 h-3.5" /> Show All Fields</>
-            )}
-          </button>
-        </div>
-
-        <div className="space-y-5">
-          {/* --- SECTIONS: DYNAMIC CUSTOM CATEGORIES --- */}
-          {groupedFields.map(([categoryName, categoryFields]) => (
-            <div key={categoryName} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="bg-gray-50/80 px-5 py-3 border-b border-gray-200 flex items-center gap-2">
-                <FolderOpen className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-sm font-bold text-gray-800 tracking-wide uppercase">{categoryName}</h3>
-              </div>
-              <div className="p-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
-                  {categoryFields.map((field, idx) => (
-                    <div key={`additional-${idx}`} className="flex flex-col sm:flex-row sm:items-start sm:gap-4 border-b border-gray-100 pb-3 last:border-0 last:pb-0">
-                      <span className="text-gray-500 font-medium w-40 flex-shrink-0 mb-1 sm:mb-0">
-                        {field.key}
-                        {field.required && <span className="text-red-500 ml-1" title="Required">*</span>}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        {renderAdditionalFieldValue(field)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {/* 👉 FIXED: Smarter Empty State Feedback */}
-          {groupedFields.length === 0 && (
-            <div className="text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-300 text-gray-400 text-sm italic mt-4">
-              {!showEmptyFields
-                ? 'No populated custom fields available. Click "Show All Fields" above.'
-                : 'No custom fields have been configured in Settings yet.'}
-            </div>
-          )}
-        </div>
+      {/* --- CUSTOM FIELDS --- same quick-drawer pattern as the Deal overview
+          (deal/BasicDetails.jsx): a single entry point that opens
+          ContactFieldDrawer (wrapping the same ContactFieldSettings editor
+          Settings -> Contact Fields uses) instead of a large inline
+          value-display block, so managing fields here and in Settings is the
+          exact same UI, not two that can drift apart. */}
+      <div className="border-t border-gray-200 pt-4 mt-6">
+        {groupedFields.length === 0 ? (
+          <div className="flex items-center justify-end px-2 text-gray-400">
+            <button
+              type="button"
+              onClick={() => setShowFieldDrawer(true)}
+              className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:underline"
+            >
+              <Plus className="w-3 h-3" /> Add custom fields
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-end gap-3 px-2">
+            <button
+              type="button"
+              onClick={() => setShowFieldDrawer(true)}
+              className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:underline"
+            >
+              <Plus className="w-3 h-3" /> Add Field
+            </button>
+            <button onClick={() => setShowEmptyFields(v => !v)} className="text-[10px] font-medium text-gray-400 hover:text-blue-600 flex items-center gap-1">
+              {showEmptyFields ? <><EyeOff className="w-3 h-3" /> Hide empty fields</> : <><EyeIcon className="w-3 h-3" /> Show all fields</>}
+            </button>
+          </div>
+        )}
       </div>
+
+      <ContactFieldDrawer
+        isOpen={showFieldDrawer}
+        onClose={() => {
+          setShowFieldDrawer(false);
+          onFieldsChanged?.();
+        }}
+      />
 
       {/* Deals Section */}
       <div className="border-t border-gray-200 pt-4">

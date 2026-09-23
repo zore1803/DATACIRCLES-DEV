@@ -60,17 +60,12 @@ import { getVideoTutorial } from "../utils/videoTutorials";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
 import ColumnSettingsPanel from "../components/ColumnSettingsPanel";
 import { useColumnSettings } from "../hooks/useColumnSettings";
-import {
-  lifecycleStageOptions,
-  allLifecycleStages,
-  allStageStatuses,
-  getLifecycleStageForStatus,
-  getBadgeColor,
-} from "../utils/contactConstants";
+import { getBadgeColor } from "../utils/contactConstants";
 import StatusDropdown from "../components/contact/StatusDropdown";
 import ContactStatusModal from "../components/contact/ContactStatusModal";
 import AdvancedFilterPanel from "../components/common/AdvancedFilterPanel";
 import useContactStore from "../store/useContactStore";
+import useContactLifecycleStore from "../store/useContactLifecycleStore";
 import AddToContactHotlistModal from "../components/contact/AddToContactHotlistModal";
 import ExportModal from "../components/common/ExportModal";
 import { NoteEditor } from "../components/contact/NoteSection";
@@ -168,6 +163,14 @@ const CONTACT_TABS = [
 
 function Contacts() {
   const isSearchOverlayOpen = useSearchOverlayOpen();
+  const lifecycleStageOptions = useContactLifecycleStore((s) => s.lifecycleStageOptions);
+  const allLifecycleStages = useContactLifecycleStore((s) => s.allLifecycleStages);
+  const allStageStatuses = useContactLifecycleStore((s) => s.allStageStatuses);
+  const getLifecycleStageForStatus = useContactLifecycleStore((s) => s.getLifecycleStageForStatus);
+  const fetchLifecycleStages = useContactLifecycleStore((s) => s.fetchStages);
+  useEffect(() => {
+    fetchLifecycleStages();
+  }, [fetchLifecycleStages]);
   const [contacts, setContacts] = useState([]);
   const [form, setForm] = useState({
     name: "",
@@ -2762,12 +2765,14 @@ function Contacts() {
           {/* Content Area */}
           {showKanban ? (
             <div className="flex gap-4 px-6 pt-6 pb-2 h-full">
-              {/* The board is the LEAD pipeline, so its columns are exactly the
-                  Lead stage's statuses — bound to the shared map rather than
-                  re-typed, so adding a Lead status can't leave a column out.
-                  Moving a card across all three lifecycle stages is done from
-                  the row menu's Change Status, not by drag. */}
-              {lifecycleStageOptions.Lead.map((col) => {
+              {/* The board is the first configured lifecycle stage's pipeline
+                  (originally "Lead"), so its columns are exactly that stage's
+                  statuses — bound to the shared, Settings-driven map rather
+                  than re-typed, so adding a status (or renaming the stage
+                  itself) in Settings can't leave a column out or break this.
+                  Moving a card across lifecycle stages is done from the row
+                  menu's Change Status, not by drag. */}
+              {(lifecycleStageOptions[allLifecycleStages[0]] || []).map((col) => {
                 const count = sortedContacts.filter(
                   (c) => (c.stageStatus || "New") === col
                 ).length;

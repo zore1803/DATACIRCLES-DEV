@@ -1,19 +1,19 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
-import DealFieldSettings from "../settings/DealFieldSettings";
+import ContactFieldSettings from "../settings/ContactFieldSettings";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 /*
- * Right-hand drawer wrapping the same DealFieldSettings editor Settings ->
- * Deal Fields uses — not a separate quick-add form, so whatever's added,
+ * Right-hand drawer wrapping the same ContactFieldSettings editor Settings ->
+ * Contact Fields uses — not a separate quick-add form, so whatever's added,
  * edited or reordered here is the exact same underlying data (same fetch,
  * same save calls), no duplicated logic to fall out of sync. Opened from the
- * Deal overview's "+ Add custom fields" link instead of navigating away to
- * Settings. Wide (like TemplateDrawer) since DealFieldSettings is a full
- * editor (categories, field types, drag reordering), not a short form.
+ * Contact overview's "+ Add custom fields" link instead of navigating away to
+ * Settings — the exact same pattern DealFieldDrawer.jsx uses for deals, kept
+ * consistent on purpose rather than inventing a second UI for the same idea.
  */
-const DealFieldDrawer = ({ isOpen, onClose }) => {
+const ContactFieldDrawer = ({ isOpen, onClose }) => {
   useBodyScrollLock(isOpen);
 
   if (!isOpen) return null;
@@ -23,14 +23,14 @@ const DealFieldDrawer = ({ isOpen, onClose }) => {
       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={onClose} />
       <aside
         role="dialog"
-        aria-label="Deal fields"
+        aria-label="Contact fields"
         className="fixed dc-panel-card w-[calc(100%-3rem)] lg:w-[70vw] bg-white shadow-2xl flex flex-col overflow-hidden animate-slideInRight"
       >
         <header className="flex-shrink-0 flex items-center justify-between gap-3 px-5 h-14 border-b border-[#E1E4EA]">
           <span
             style={{ fontFamily: "Inter", fontWeight: 600, fontSize: "14px", letterSpacing: "-0.04em", color: "#44444A" }}
           >
-            Deal Fields
+            Contact Fields
           </span>
           <button
             type="button"
@@ -43,7 +43,7 @@ const DealFieldDrawer = ({ isOpen, onClose }) => {
         </header>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
-          <DealFieldSettings />
+          <ContactFieldSettings />
         </div>
       </aside>
     </div>,
@@ -51,4 +51,4 @@ const DealFieldDrawer = ({ isOpen, onClose }) => {
   );
 };
 
-export default DealFieldDrawer;
+export default ContactFieldDrawer;

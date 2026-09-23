@@ -1,11 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { ChevronDown, Check } from "lucide-react";
-import {
-    lifecycleStageOptions,
-    allLifecycleStages,
-    getLifecycleStageForStatus,
-    getBadgeColor,
-} from "../../utils/contactConstants";
+import { getBadgeColor } from "../../utils/contactConstants";
+import useContactLifecycleStore from "../../store/useContactLifecycleStore";
 
 /*
  * Inline status picker on the contacts table.
@@ -22,11 +18,20 @@ import {
  *
  * Now the list is grouped by lifecycle stage, so what a status belongs to is
  * visible before you click it, and picking one sends BOTH lifecycleStage and
- * stageStatus, derived from the status itself. Statuses come from
- * utils/contactConstants.js — this component defines none.
+ * stageStatus, derived from the status itself. Stages/statuses come from
+ * useContactLifecycleStore (Settings -> Contact Lifecycle) — this component
+ * defines none of its own.
  */
 const StatusDropdown = ({ contact, onUpdate, isOpen, onToggle }) => {
     const dropdownRef = useRef(null);
+    const lifecycleStageOptions = useContactLifecycleStore((s) => s.lifecycleStageOptions);
+    const allLifecycleStages = useContactLifecycleStore((s) => s.allLifecycleStages);
+    const getLifecycleStageForStatus = useContactLifecycleStore((s) => s.getLifecycleStageForStatus);
+    const fetchStages = useContactLifecycleStore((s) => s.fetchStages);
+
+    useEffect(() => {
+        fetchStages();
+    }, [fetchStages]);
 
     useEffect(() => {
         const handleClickOutside = (event) => {

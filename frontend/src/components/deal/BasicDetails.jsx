@@ -11,7 +11,6 @@ import {
   Check,
   ChevronDown,
   LayoutGrid,
-  EyeOff,
   FolderOpen,
   Receipt,
   CheckSquare,
@@ -23,14 +22,13 @@ import {
   MessageSquare,
   FileText,
   PhoneCall,
-  Plus,
   Activity,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Settings as SettingsIcon
 } from "lucide-react";
 import AppToaster from "../AppToaster";
-import EyeIcon from "../common/EyeIcon";
-import DealFieldDrawer from "./DealFieldDrawer";
+import PipelineStageDrawer from "./PipelineStageDrawer";
 import {
   ResponsiveContainer,
   BarChart,
@@ -106,10 +104,10 @@ const DonutLabel = ({ cx, cy, value, total, label = "collected" }) => (
 
 // ─── main component ──────────────────────────────────────────────────────────
 
-const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged }) => {
+const BasicDetails = ({ deal, onDealUpdate }) => {
 
   // ── state ───────────────────────────────────────────────────────────────
-  const [showFieldDrawer, setShowFieldDrawer] = useState(false);
+  const [showStageDrawer, setShowStageDrawer] = useState(false);
   const [isOwnerDropdownOpen, setIsOwnerDropdownOpen] = useState(false);
   const [searchOwnerQuery,    setSearchOwnerQuery]    = useState("");
   const [availableUsers,      setAvailableUsers]      = useState([]);
@@ -123,8 +121,6 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
   const [tasks,    setTasks]    = useState([]);
   const [meetings, setMeetings] = useState([]);
   const [notes,    setNotes]    = useState([]);
-
-  const [showEmptyFields, setShowEmptyFields] = useState(false);
 
   // Pipeline stages as configured in Settings -> Pipeline (KanbanBoard.statuses),
   // the same list the Deals Kanban board renders as columns. Fetched here so the
@@ -148,8 +144,12 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
     API.get("/auth/all-user").then(r => setAvailableUsers(r.data.allUsers || [])).catch(() => {});
   }, [canEdit]);
 
-  useEffect(() => {
+  const refreshPipelineStatuses = () => {
     API.get("/kanban").then(r => setPipelineStatuses(r.data?.statuses || [])).catch(() => {});
+  };
+
+  useEffect(() => {
+    refreshPipelineStatuses();
   }, []);
 
   useEffect(() => {
@@ -191,27 +191,6 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
         ? err.response.data.message || "Subscription required."
         : err.response?.data?.error || "Failed to update owner.");
     }
-  };
-
-  // ── custom fields ────────────────────────────────────────────────────────
-  const isEmpty = v => v === null || v === undefined || v === "" || (typeof v === "string" && !v.trim()) || (Array.isArray(v) && !v.length);
-
-  const getMergedFields = () => {
-    if (!dealFieldList?.length) return (deal.additionalFields || []).map(f => ({ ...f, category: "Uncategorized" }));
-    const vm = new Map((deal.additionalFields || []).map(f => [f.key, f.value]));
-    return dealFieldList.map(tf => ({ key: tf.name, value: vm.has(tf.name) ? vm.get(tf.name) : null, type: tf.type, options: tf.options, required: tf.required, category: tf.category || "Uncategorized" }));
-  };
-
-  const renderFieldValue = (field) => {
-    if (isEmpty(field.value)) return <span className="text-gray-400 italic text-sm">—</span>;
-    const t = (field.type || "").toLowerCase();
-    if (t.includes("url")) { const url = field.value.startsWith("http") ? field.value : `https://${field.value}`; return <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-sm font-medium break-words">{field.value}</a>; }
-    if (t.includes("date")) { try { return <span className="text-sm font-medium text-gray-800">{new Date(field.value).toLocaleDateString()}</span>; } catch { return <span className="text-sm font-medium text-gray-800">{field.value}</span>; } }
-    if (t.includes("multi-select") || t.includes("checkbox") || t === "multiselect") {
-      if (Array.isArray(field.value)) return <div className="flex flex-wrap gap-1">{field.value.map((it, i) => <span key={i} className="px-2 py-0.5 rounded-md text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">{it}</span>)}</div>;
-    }
-    if (t.includes("number")) return <span className="text-sm font-medium text-gray-800">{Number(field.value).toLocaleString()}</span>;
-    return <span className="text-sm font-medium text-gray-800 break-words">{field.value}</span>;
   };
 
   // ── derived ──────────────────────────────────────────────────────────────
@@ -357,14 +336,6 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
   }, [activities]);
 
 
-  // Custom fields
-  const allMerged     = getMergedFields();
-  const visibleFields = showEmptyFields ? allMerged : allMerged.filter(f => !isEmpty(f.value));
-  const totalFC       = allMerged.length;
-  const groupedFields = Object.entries(
-    visibleFields.reduce((acc, f) => { const c = f.category || "Uncategorized"; if (!acc[c]) acc[c] = []; acc[c].push(f); return acc; }, {})
-  ).sort(([a], [b]) => a === "Uncategorized" ? 1 : b === "Uncategorized" ? -1 : a.localeCompare(b));
-
   // Same order Settings -> Pipeline and the Deals Kanban board use, so a stage
   // added there (e.g. "negotiation") shows up here without any further change.
   // "Lost" is a branch outcome rather than a forward step, so it's excluded from
@@ -396,43 +367,14 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
       <AppToaster />
 
 
-      <div className="relative z-10 -mt-2">
-        {groupedFields.length === 0 ? (
-          <div className="flex items-center justify-end px-2 text-gray-400">
-            {totalFC === 0 && (
-              <button
-                type="button"
-                onClick={() => setShowFieldDrawer(true)}
-                className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:underline"
-              >
-                <Plus className="w-3 h-3" /> Add custom fields
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center justify-end gap-3 px-2">
-            <button
-              type="button"
-              onClick={() => setShowFieldDrawer(true)}
-              className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:underline"
-            >
-              <Plus className="w-3 h-3" /> Add Field
-            </button>
-            <button onClick={() => setShowEmptyFields(v => !v)} className="text-[10px] font-medium text-gray-400 hover:text-blue-600 flex items-center gap-1">
-              {showEmptyFields ? <><EyeOff className="w-3 h-3" /> Hide empty fields</> : <><EyeIcon className="w-3 h-3" /> Show all fields</>}
-            </button>
-          </div>
-        )}
-      </div>
-
-      <DealFieldDrawer
-        isOpen={showFieldDrawer}
+      <PipelineStageDrawer
+        isOpen={showStageDrawer}
         onClose={() => {
-          setShowFieldDrawer(false);
-          // Same custom-field data Settings -> Deal Fields edits — refresh
-          // the parent's copy so anything added/changed/removed here shows
-          // up immediately instead of waiting for the next full page load.
-          onFieldsChanged?.();
+          setShowStageDrawer(false);
+          // Same statuses data Settings -> Pipeline edits — refresh so the
+          // Deal Journey bar reflects an added/renamed/reordered stage
+          // immediately instead of waiting for the next full page load.
+          refreshPipelineStatuses();
         }}
       />
 
@@ -446,12 +388,22 @@ const BasicDetails = ({ deal, dealFieldList = [], onDealUpdate, onFieldsChanged 
       <div className="bg-white px-5 py-4 rounded-xl border border-[#E7E4E3] shadow-sm relative z-10 text-left">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-sm font-semibold text-[#0E121B]">Deal Journey</h3>
-          {visualStages.includes(currentStatus) && (
-            <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap
-              ${currentStatus === "Lost" ? "bg-red-50 text-[#EF4444]" : "bg-blue-50 text-[#0085FF]"}`}>
-              Current: {currentStatus}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {visualStages.includes(currentStatus) && (
+              <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap
+                ${currentStatus === "Lost" ? "bg-red-50 text-[#EF4444]" : "bg-blue-50 text-[#0085FF]"}`}>
+                Current: {currentStatus}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowStageDrawer(true)}
+              title="Edit pipeline stages (Settings)"
+              className="flex items-center justify-center w-7 h-7 rounded-full text-gray-500 hover:text-[#0085FF] hover:bg-blue-50 transition-colors flex-shrink-0"
+            >
+              <SettingsIcon className="w-4 h-4" />
+            </button>
+          </div>
         </div>
         <div className="relative flex items-center justify-between px-1">
           <div className="absolute left-4 right-4 top-4 sm:top-[18px] h-[3px] bg-gray-100 -translate-y-1/2 z-0 rounded-full" />

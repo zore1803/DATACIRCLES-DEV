@@ -1,11 +1,10 @@
 // models/Contact.js
 const mongoose = require("mongoose");
 const {
-  LIFECYCLE_STAGES,
-  STAGE_STATUSES,
-  isValidCombination,
-  invalidCombinationMessage,
-} = require("../constants/contactLifecycle");
+  getStageMap,
+  isValidCombinationInMap,
+  invalidCombinationMessageInMap,
+} = require("../services/contactLifecycleService");
 
 const additionalFieldSchema = new mongoose.Schema({
   key: { type: String, required: true },
@@ -49,17 +48,17 @@ const contactSchema = new mongoose.Schema(
     company: { type: mongoose.Schema.Types.ObjectId, ref: "Company" },
 
     // Replace 'tag' with lifecycle stage system
-    // Enums come from constants/contactLifecycle.js — the one authoritative
-    // definition of the lifecycle. Never restate the lists here.
+    // No static `enum` here on purpose: the legal stage/status values are now
+    // per-organization (ContactLifecycleSettings), not a fixed list mongoose
+    // can check at schema-load time. The pre-save hook below validates the
+    // pair dynamically against that organization's configured stages instead.
     lifecycleStage: {
       type: String,
-      enum: LIFECYCLE_STAGES,
       default: "Lead",
       required: true,
     },
     stageStatus: {
       type: String,
-      enum: STAGE_STATUSES,
       required: true,
       default: "New",
     },
@@ -93,11 +92,18 @@ const contactSchema = new mongoose.Schema(
 // one for a Lead). Note this hook fires on .save() only, never on
 // findOneAndUpdate — the update path is guarded separately in
 // services/contactService.js, which is where the API's writes actually go.
-contactSchema.pre("save", function (next) {
-  if (!isValidCombination(this.lifecycleStage, this.stageStatus)) {
-    return next(new Error(invalidCombinationMessage(this.lifecycleStage, this.stageStatus)));
+contactSchema.pre("save", async function (next) {
+  try {
+    const stageMap = await getStageMap(this.organization);
+    if (!isValidCombinationInMap(stageMap, this.lifecycleStage, this.stageStatus)) {
+      return next(
+        new Error(invalidCombinationMessageInMap(stageMap, this.lifecycleStage, this.stageStatus))
+      );
+    }
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
 });
 
 module.exports = mongoose.model("Contact", contactSchema);

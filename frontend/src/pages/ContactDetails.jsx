@@ -189,6 +189,18 @@ const ContactDetailsPage = () => {
     }
   };
 
+  // Only the custom-field config, not the whole contact — cheap enough to
+  // refetch right after the field drawer closes (see BasicDetails'
+  // onFieldsChanged) instead of reloading everything fetchData() does.
+  const refreshContactFields = async () => {
+    try {
+      const res = await API.get("/contact-fields/latest");
+      setContactFieldList(res.data?.fields || []);
+    } catch (err) {
+      console.error("Failed to refresh contact fields:", err);
+    }
+  };
+
   useEffect(() => {
     // Reset so switching contacts (e.g. via the prev/next arrows) shows the
     // loading skeleton again instead of leaving the previous contact's data
@@ -218,7 +230,8 @@ const ContactDetailsPage = () => {
       } catch (err) {
         console.error("Failed to load contact profile:", err);
       }
-    };
+    };// onFieldsChanged) instead of reloading everything fetchData() does.
+
 
     // Tasks and meetings back the KPI row here. The Tasks/Meetings tabs fetch
     // their own copies for their tables, so a failure on either side only
@@ -796,6 +809,7 @@ const ContactDetailsPage = () => {
               contactFieldList={contactFieldList}
               onContactUpdate={handleContactUpdate}
               onDealCreated={handleDealCreated}
+              onFieldsChanged={refreshContactFields}
             />
           )}
           {activeTab === "Call Logs" && (

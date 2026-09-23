@@ -27,6 +27,7 @@ import {
   Gift,
   Wallet as WalletIcon,
   ListChecks,
+  GitBranch,
 } from "lucide-react";
 import SettingsIcon from "../components/common/SettingsIcon";
 
@@ -43,6 +44,7 @@ import AddUser from "../components/settings/AddUser";
 import KanbanSettings from "../components/settings/KanbanSettings";
 import CompanyFieldSettings from "../components/settings/CompanyFieldSettings";
 import ContactFieldSettings from "../components/settings/ContactFieldSettings";
+import ContactLifecycleSettings from "../components/settings/ContactLifecycleSettings";
 import DealFieldSettings from "../components/settings/DealFieldSettings";
 import HelpCenter from "../components/settings/HelpCenter";
 import VendorFieldSettings from "../components/settings/VendorFieldSettings";
@@ -328,6 +330,18 @@ const Settings = () => {
       borderColor: "border-indigo-200",
       hoverBg: "hover:bg-indigo-50",
       component: <ContactFieldSettings />,
+      category: "Customization",
+    },
+    {
+      id: "contact-lifecycle",
+      icon: <GitBranch className="w-5 h-5" />,
+      label: "Contact Lifecycle",
+      description: "Configure lifecycle stages and statuses",
+      color: "text-violet-600",
+      bgColor: "bg-violet-50",
+      borderColor: "border-violet-200",
+      hoverBg: "hover:bg-violet-50",
+      component: <ContactLifecycleSettings />,
       category: "Customization",
     },
     {

@@ -100,7 +100,6 @@ function DealDetail() {
   // create form there, the same as the Company page does.
   const [pendingCreate, setPendingCreate] = useState(null);
   const [invoicesLoading, setInvoicesLoading] = useState(true);
-  const [dealFieldList, setDealFieldList] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -198,31 +197,17 @@ function DealDetail() {
       setError(null);
       // Only the deal itself is fatal: a failure loading the side data
       // shouldn't replace the whole page with an error screen.
-      const [dealRes, fieldsRes, companiesRes, contactsRes] = await Promise.all([
+      const [dealRes, companiesRes, contactsRes] = await Promise.all([
         API.get(`/deals/${dealId}`),
-        API.get("/deal-fields/latest").catch(() => ({ data: { fields: [] } })),
         API.get("/companies").catch(() => ({ data: { companies: [] } })),
         API.get("/contacts").catch(() => ({ data: { contacts: [] } })),
       ]);
       setDeal(dealRes.data);
-      setDealFieldList(fieldsRes.data?.fields || []);
       setCompanies(companiesRes.data?.companies || companiesRes.data || []);
       setContacts(contactsRes.data?.contacts || contactsRes.data || []);
     } catch (err) {
       console.error("Failed to load deal details:", err);
       setError("Failed to load deal details. Please try again.");
-    }
-  };
-
-  // Only the custom-field config, not the whole deal — cheap enough to
-  // refetch right after the field drawer closes (see BasicDetails'
-  // onFieldsChanged) instead of reloading everything fetchData() does.
-  const refreshDealFields = async () => {
-    try {
-      const res = await API.get("/deal-fields/latest");
-      setDealFieldList(res.data?.fields || []);
-    } catch (err) {
-      console.error("Failed to refresh deal fields:", err);
     }
   };
 
@@ -634,9 +619,7 @@ function DealDetail() {
           {activeTab === "Overview" && (
             <BasicDetails
               deal={deal}
-              dealFieldList={dealFieldList}
               onDealUpdate={(updated) => (updated ? setDeal(updated) : fetchData())}
-              onFieldsChanged={refreshDealFields}
             />
           )}
           {activeTab === "Invoices" && (
