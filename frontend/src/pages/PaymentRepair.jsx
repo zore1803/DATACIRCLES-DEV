@@ -83,7 +83,9 @@ const PaymentRepair = () => {
       });
       setResult(res.data);
       if (apply) {
-        if (res.data.reconcileResult?.reconciled) {
+        // "reconciled" only means the payment was replayed — activation can
+        // still be blocked (e.g. mandate pending), so check the actual result.
+        if (res.data.subscription?.isPaymentConfirmed) {
           toast.success("Payment reconciled — subscription is now active.");
         } else {
           toast.error(res.data.message || "Could not reconcile this payment.");
@@ -391,7 +393,7 @@ const PaymentRepair = () => {
                       className="mt-4 inline-flex items-center justify-center gap-2 h-[42px] px-5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       {mandateApplying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
-                      {mandateApplying ? "Syncing…" : "Sync Mandate & Activate"}
+                      {mandateApplying ? "Syncing…" : "Sync Mandate from Razorpay"}
                     </button>
                   )}
                 </div>

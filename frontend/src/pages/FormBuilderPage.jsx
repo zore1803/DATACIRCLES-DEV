@@ -34,6 +34,7 @@ import API from "../services/api";
 import toast from "react-hot-toast";
 import {
   DndContext,
+  DragOverlay,
   closestCenter,
   PointerSensor,
   useSensor,
@@ -356,22 +357,48 @@ function ensureSubmitButton(elements) {
 
 // --- Palette (Fields panel) ---
 
+// Renders the same pill shape as PaletteItem, without the drag wiring — used both for the
+// dropped-in-place item and, via DragOverlay, for the floating copy that follows the cursor.
+function PaletteItemVisual({ children, dragging }) {
+  return (
+    <div
+      className={`flex items-center justify-between gap-2 px-3 py-2 border rounded-full text-sm select-none bg-white ${
+        dragging ? "border-[#0085FF] shadow-lg" : "border-[#E1E4EA] text-gray-700"
+      }`}
+    >
+      <span className="min-w-0 truncate">{children}</span>
+      <GripVertical className="w-3.5 h-3.5 flex-shrink-0 text-gray-300" />
+    </div>
+  );
+}
+
 function PaletteItem({ id, data, disabled, children }) {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id, data, disabled });
-  const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50 } : undefined;
+  // No local transform style: the item's own bounding box sits inside an overflow-y-auto panel,
+  // so following the pointer via CSS transform got clipped the moment the drag left that panel —
+  // it visually vanished until drop. A DragOverlay (rendered by DndContext, outside any clipped
+  // ancestor) now shows the floating copy instead; this source item just dims in place.
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, data, disabled });
   return (
     <div
       ref={setNodeRef}
-      style={style}
       {...(disabled ? {} : { ...listeners, ...attributes })}
-      className={`px-3 py-2 border rounded-lg text-sm select-none transition-colors ${
-        disabled
-          ? "bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed"
-          : "bg-white border-gray-200 text-gray-700 cursor-grab active:cursor-grabbing hover:border-blue-300 hover:bg-blue-50"
-      }`}
+      className={`group transition-opacity ${isDragging ? "opacity-30" : ""} ${disabled ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing"}`}
       title={disabled ? "Already on this form" : undefined}
     >
-      {children}
+      <div
+        className={`flex items-center justify-between gap-2 px-3 py-2 border rounded-full text-sm select-none transition-colors ${
+          disabled
+            ? "bg-gray-50 border-gray-100 text-gray-400"
+            : "bg-white border-[#E1E4EA] text-gray-700 group-hover:border-[#0085FF]/40 group-hover:bg-[#0085FF]/5"
+        }`}
+      >
+        <span className="min-w-0 truncate">{children}</span>
+        {disabled ? (
+          <span className="flex-shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Added</span>
+        ) : (
+          <GripVertical className="w-3.5 h-3.5 flex-shrink-0 text-gray-300 group-hover:text-[#0085FF]/60" />
+        )}
+      </div>
     </div>
   );
 }
@@ -468,7 +495,7 @@ function TokenSelect({ label, tokenKey, options, theme, resolved, onThemeChange 
       <select
         value={resolved[tokenKey] || ""}
         onChange={(e) => onThemeChange({ ...theme, [tokenKey]: e.target.value })}
-        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+        className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
       >
         {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
@@ -489,24 +516,38 @@ function FieldsPanel({ module, customFields, usedFieldIds, theme, onThemeChange 
   ];
 
   return (
-    <div className="w-64 shrink-0 bg-white border-r border-gray-200 flex flex-col">
-      <div className="flex border-b border-gray-100 shrink-0">
-        <button
-          onClick={() => setTab("fields")}
-          className={`flex-1 px-3 py-2.5 text-sm font-medium ${tab === "fields" ? "text-blue-600 border-b-2 border-blue-600 -mb-px" : "text-gray-500 hover:text-gray-800"}`}
-        >
-          Fields
-        </button>
-        <button
-          onClick={() => setTab("theme")}
-          className={`flex-1 px-3 py-2.5 text-sm font-medium ${tab === "theme" ? "text-blue-600 border-b-2 border-blue-600 -mb-px" : "text-gray-500 hover:text-gray-800"}`}
-        >
-          Design
-        </button>
+    <div className="w-64 shrink-0 bg-white border-r border-gray-200 flex flex-col min-h-0">
+      {/* pb intentionally 1 notch less than pt - the border-b below reads visually heavier than
+          plain padding, so a matching pb-4 left more apparent space below the switcher than
+          above it. */}
+      <div className="pt-4 px-3 pb-3 shrink-0 border-b border-gray-200">
+        {/* Same sliding pill switcher as the Field Settings pages (Custom Field / Custom
+            Section / Built-in), so this panel reads as part of the same design system. */}
+        <div className="relative inline-flex items-center bg-gray-100 rounded-full p-1 w-full">
+          <span
+            className="absolute top-1 bottom-1 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
+            style={{ left: tab === "fields" ? 4 : "50%", width: "calc(50% - 4px)" }}
+          />
+          {[
+            { id: "fields", label: "Fields" },
+            { id: "theme", label: "Design" },
+          ].map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`relative z-10 flex-1 py-1.5 text-sm font-semibold rounded-full transition-colors ${
+                tab === t.id ? "text-[#0085FF]" : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {tab === "theme" ? (
-        <div className="p-4 flex flex-col gap-4 overflow-y-auto">
+        <div className="p-4 pb-10 flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto">
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Theme</p>
             <div className="grid grid-cols-2 gap-2">
@@ -590,7 +631,7 @@ function FieldsPanel({ module, customFields, usedFieldIds, theme, onThemeChange 
                     <button
                       key={lbl}
                       onClick={() => onThemeChange({ ...theme, buttonRadius: val })}
-                      className={`flex-1 px-2 py-1 rounded border text-xs ${Number(resolved.buttonRadius) === val ? "bg-blue-50 border-blue-300 text-blue-600" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+                      className={`flex-1 px-2 py-1 rounded-full border text-xs ${Number(resolved.buttonRadius) === val ? "bg-blue-50 border-blue-300 text-blue-600" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
                     >
                       {lbl}
                     </button>
@@ -613,7 +654,7 @@ function FieldsPanel({ module, customFields, usedFieldIds, theme, onThemeChange 
                 <select
                   value={theme?.fontFamily || FONT_OPTIONS[0]}
                   onChange={(e) => onThemeChange({ ...theme, fontFamily: e.target.value })}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
                 >
                   {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
                 </select>
@@ -623,7 +664,7 @@ function FieldsPanel({ module, customFields, usedFieldIds, theme, onThemeChange 
                 <select
                   value={theme?.fontSize || "normal"}
                   onChange={(e) => onThemeChange({ ...theme, fontSize: e.target.value })}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
                 >
                   <option value="small">Small</option>
                   <option value="normal">Normal</option>
@@ -636,7 +677,7 @@ function FieldsPanel({ module, customFields, usedFieldIds, theme, onThemeChange 
                 <select
                   value={theme?.fontWeight || "normal"}
                   onChange={(e) => onThemeChange({ ...theme, fontWeight: e.target.value })}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
                 >
                   <option value="normal">Normal</option>
                   <option value="bold">Bold</option>
@@ -656,10 +697,13 @@ function FieldsPanel({ module, customFields, usedFieldIds, theme, onThemeChange 
           )}
         </div>
       ) : (
-        <div className="p-4 overflow-y-auto flex flex-col gap-5">
+        <div className="p-4 pb-10 flex-1 min-h-0 overflow-y-auto flex flex-col gap-4">
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{module} Fields</p>
-            <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-bold text-gray-900">{module} Fields</p>
+              <span className="text-xs text-gray-400">{systemFields.length}</span>
+            </div>
+            <div className="flex flex-col gap-1.5 p-2 rounded-xl border border-[#E1E4EA] bg-[#F5F7FA]/40">
               {systemFields.map((f) => (
                 <PaletteItem key={f.fieldId} id={`palette-${f.fieldId}`} data={{ type: "palette", source: "system", field: f }} disabled={usedFieldIds.has(f.fieldId)}>
                   {f.label}
@@ -670,8 +714,11 @@ function FieldsPanel({ module, customFields, usedFieldIds, theme, onThemeChange 
 
           {customFields.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Custom</p>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-bold text-gray-900">Custom</p>
+                <span className="text-xs text-gray-400">{customFields.length}</span>
+              </div>
+              <div className="flex flex-col gap-1.5 p-2 rounded-xl border border-[#E1E4EA] bg-[#F5F7FA]/40">
                 {customFields.map((f) => (
                   <PaletteItem
                     key={f._id}
@@ -688,10 +735,13 @@ function FieldsPanel({ module, customFields, usedFieldIds, theme, onThemeChange 
 
           {module === "Contact" && (
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Company Fields</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-bold text-gray-900">Company Fields</p>
+                <span className="text-xs text-gray-400">{SYSTEM_FIELDS.Company.length}</span>
+              </div>
               {/* Cross-module guard, built into the panel itself: ONLY system Company fields are
                   ever listed here — custom Company fields are never fetched or offered. */}
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5 p-2 rounded-xl border border-[#E1E4EA] bg-[#F5F7FA]/40">
                 {SYSTEM_FIELDS.Company.map((f) => (
                   <PaletteItem key={f.fieldId} id={`palette-${f.fieldId}`} data={{ type: "palette", source: "system", field: f }} disabled={usedFieldIds.has(f.fieldId)}>
                     {f.label}
@@ -702,24 +752,24 @@ function FieldsPanel({ module, customFields, usedFieldIds, theme, onThemeChange 
           )}
 
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Layout</p>
-            <div className="flex flex-col gap-1.5">
-              <PaletteItem id="palette-heading" data={{ type: "palette", source: "layout", field: { layoutType: "heading" } }}>
+            <p className="text-sm font-bold text-gray-900 mb-2">Layout</p>
+            <div className="flex flex-col gap-1.5 p-2 rounded-xl border border-[#E1E4EA] bg-[#F5F7FA]/40">
+              <PaletteItem id="palette-heading" data={{ type: "palette", source: "layout", field: { layoutType: "heading", label: "Heading" } }}>
                 <span className="flex items-center gap-2"><HeadingIcon className="w-3.5 h-3.5" /> Heading</span>
               </PaletteItem>
-              <PaletteItem id="palette-paragraph" data={{ type: "palette", source: "layout", field: { layoutType: "paragraph" } }}>
+              <PaletteItem id="palette-paragraph" data={{ type: "palette", source: "layout", field: { layoutType: "paragraph", label: "Paragraph" } }}>
                 <span className="flex items-center gap-2"><Type className="w-3.5 h-3.5" /> Paragraph</span>
               </PaletteItem>
-              <PaletteItem id="palette-divider" data={{ type: "palette", source: "layout", field: { layoutType: "divider" } }}>
+              <PaletteItem id="palette-divider" data={{ type: "palette", source: "layout", field: { layoutType: "divider", label: "Divider" } }}>
                 <span className="flex items-center gap-2"><Minus className="w-3.5 h-3.5" /> Divider</span>
               </PaletteItem>
-              <PaletteItem id="palette-image" data={{ type: "palette", source: "layout", field: { layoutType: "image" } }}>
+              <PaletteItem id="palette-image" data={{ type: "palette", source: "layout", field: { layoutType: "image", label: "Image" } }}>
                 <span className="flex items-center gap-2"><ImageIcon className="w-3.5 h-3.5" /> Image</span>
               </PaletteItem>
-              <PaletteItem id="palette-section" data={{ type: "palette", source: "layout", field: { layoutType: "section" } }}>
+              <PaletteItem id="palette-section" data={{ type: "palette", source: "layout", field: { layoutType: "section", label: "Section" } }}>
                 <span className="flex items-center gap-2"><Rows3 className="w-3.5 h-3.5" /> Section</span>
               </PaletteItem>
-              <PaletteItem id="palette-page" data={{ type: "palette", source: "layout", field: { layoutType: "page" } }}>
+              <PaletteItem id="palette-page" data={{ type: "palette", source: "layout", field: { layoutType: "page", label: "Page Break" } }}>
                 <span className="flex items-center gap-2"><FileStack className="w-3.5 h-3.5" /> Page Break</span>
               </PaletteItem>
             </div>
@@ -727,8 +777,8 @@ function FieldsPanel({ module, customFields, usedFieldIds, theme, onThemeChange 
 
           {addressBlocks.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Blocks</p>
-              <div className="flex flex-col gap-1.5">
+              <p className="text-sm font-bold text-gray-900 mb-2">Blocks</p>
+              <div className="flex flex-col gap-1.5 p-2 rounded-xl border border-[#E1E4EA] bg-[#F5F7FA]/40">
                 {addressBlocks.map((b) => {
                   // Disabled once every field it would add is already on the canvas — the same rule
                   // single fields use, since dropping it would then be a no-op.
@@ -737,7 +787,7 @@ function FieldsPanel({ module, customFields, usedFieldIds, theme, onThemeChange 
                     <PaletteItem
                       key={b.key}
                       id={`palette-block-${b.key}`}
-                      data={{ type: "palette", source: "block", field: { blockKey: b.key, module: b.module } }}
+                      data={{ type: "palette", source: "block", field: { blockKey: b.key, module: b.module, label: b.label } }}
                       disabled={allUsed}
                     >
                       <span className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5" /> {b.label}</span>
@@ -776,25 +826,33 @@ function CanvasItem({ element, fieldMetaById, isSelected, onSelect, onDelete, is
           : element.type === SECTION_BREAK ? "mt-5 pt-4 border-t border-gray-200 first:mt-0 first:pt-0 first:border-t-0" : ""
       } relative group border-2 rounded-lg px-3 py-3 cursor-pointer transition-all ${
         isSelected ? "border-blue-400 shadow-md" : "border-transparent hover:border-gray-200"
-      } ${isDragging ? "opacity-50" : ""}`}
+      } ${isDragging ? "!border-dashed !border-gray-300" : ""}`}
     >
       <div className="absolute -left-1 top-1/2 -translate-y-1/2 -translate-x-full opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 pr-1">
         <button {...attributes} {...listeners} className="text-gray-300 hover:text-gray-600 cursor-grab active:cursor-grabbing bg-white rounded border border-gray-100 p-1">
           <GripVertical className="w-3.5 h-3.5" />
         </button>
       </div>
+      {isDragging && (
+        // Covers the (now invisible) content below rather than replacing it, so the placeholder
+        // inherits this item's own natural height exactly instead of guessing at one — an earlier
+        // fixed-height stand-in stretched to fill the grid row's tallest sibling and shoved
+        // everything below it further down than the field actually needed.
+        <div className="absolute inset-0" />
+      )}
       <FormElementRenderer
         element={element}
         fieldMeta={element.fieldId ? fieldMetaById.get(element.fieldId) : undefined}
         interactive={false}
         theme={theme}
+        className={isDragging ? "invisible" : undefined}
       />
-      {deletable && (
+      {deletable && !isDragging && (
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(element.id); }}
           title={isLocked ? `${fieldMetaById.get(element.fieldId)?.label || "This field"} is required while ${moduleFromFieldId(element.fieldId)} fields exist on this form.` : undefined}
           className={`absolute top-1 right-1 p-1 opacity-0 group-hover:opacity-100 transition-opacity ${
-            isLocked ? "text-gray-300 cursor-not-allowed" : "text-gray-300 hover:text-red-500"
+            isLocked ? "text-gray-300 cursor-not-allowed" : "text-red-500 hover:text-red-600"
           }`}
         >
           <DeleteIcon className="w-4 h-4" />
@@ -891,7 +949,7 @@ function WidthControl({ element, onChange }) {
           <button
             key={v}
             onClick={() => onChange({ ...element, layoutWidth: v })}
-            className={`flex-1 px-2 py-1 rounded border text-xs ${current === v ? "bg-blue-50 border-blue-300 text-blue-600" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+            className={`flex-1 px-2 py-1 rounded-full border text-xs ${current === v ? "bg-blue-50 border-blue-300 text-blue-600" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
           >
             {lbl}
           </button>
@@ -961,7 +1019,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
     const lockedRequired = BASE_REQUIRED_FIELD_IDS.has(element.fieldId) || !!meta?.baseRequired;
 
     return (
-      <div className="w-72 shrink-0 bg-white border-l border-gray-200 p-4 overflow-y-auto flex flex-col gap-4">
+      <div className="w-72 shrink-0 min-h-0 bg-white border-l border-gray-200 p-4 pb-10 overflow-y-auto flex flex-col gap-4">
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="block text-xs font-medium text-gray-500">Label</label>
@@ -992,7 +1050,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
               type="text"
               value={element.placeholder || ""}
               onChange={(e) => onChange({ ...element, placeholder: e.target.value })}
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+              className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
             />
           </div>
         )}
@@ -1004,7 +1062,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
           <textarea
             value={element.helpText || ""}
             onChange={(e) => onChange({ ...element, helpText: e.target.value })}
-            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
             rows={2}
           />
         </div>
@@ -1036,7 +1094,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
               <select
                 value={element.defaultValue ?? ""}
                 onChange={(e) => onChange({ ...element, defaultValue: e.target.value })}
-                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
               >
                 <option value="">None</option>
                 {(meta?.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
@@ -1046,7 +1104,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
                 type={bounds?.input === "date" ? "date" : supports.min === "value" ? "number" : "text"}
                 value={element.defaultValue ?? ""}
                 onChange={(e) => onChange({ ...element, defaultValue: e.target.value })}
-                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
               />
             )}
           </div>
@@ -1065,7 +1123,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
                     type={bounds.input}
                     value={overrides.min ?? ""}
                     onChange={(e) => setOverride({ min: e.target.value })}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
                   />
                 </div>
                 <div>
@@ -1074,7 +1132,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
                     type={bounds.input}
                     value={overrides.max ?? ""}
                     onChange={(e) => setOverride({ max: e.target.value })}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
                   />
                 </div>
               </div>
@@ -1103,7 +1161,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
                     setOverride({ allowedDomains: e.target.value.split(",").map((d) => d.trim()).filter(Boolean) })
                   }
                   placeholder="acme.com, acme.co.in"
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
                 />
                 <p className="text-[11px] text-gray-400 mt-1">Leave blank to accept any domain.</p>
               </div>
@@ -1117,7 +1175,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
                   value={overrides.regex || ""}
                   onChange={(e) => setOverride({ regex: e.target.value })}
                   placeholder="Leave blank unless you need custom pattern matching"
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
                 />
                 <p className="text-xs text-gray-400 mt-1">Advanced — most forms don't need this.</p>
               </div>
@@ -1142,7 +1200,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
 
   if (isBreak(element)) {
     return (
-      <div className="w-72 shrink-0 bg-white border-l border-gray-200 p-4 flex flex-col gap-4">
+      <div className="w-72 shrink-0 min-h-0 bg-white border-l border-gray-200 p-4 pb-10 flex flex-col gap-4 overflow-y-auto">
         <div className="flex items-center gap-2">
           <span className={`text-xs font-semibold px-2 py-0.5 rounded ${element.type === PAGE_BREAK ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-600"}`}>
             {element.type === PAGE_BREAK ? "Page break" : "Section"}
@@ -1165,7 +1223,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
             value={element.title || ""}
             onChange={(e) => onChange({ ...element, title: e.target.value })}
             placeholder="e.g. Company Information"
-            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
           />
         </div>
         <div>
@@ -1174,7 +1232,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
             value={element.description || ""}
             onChange={(e) => onChange({ ...element, description: e.target.value })}
             placeholder="Optional — shown under the title"
-            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
             rows={2}
           />
         </div>
@@ -1189,13 +1247,13 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
 
   if (element.type === "heading" || element.type === "paragraph") {
     return (
-      <div className="w-72 shrink-0 bg-white border-l border-gray-200 p-4 flex flex-col gap-4">
+      <div className="w-72 shrink-0 min-h-0 bg-white border-l border-gray-200 p-4 pb-10 flex flex-col gap-4 overflow-y-auto">
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Text</label>
           <textarea
             value={element.text || ""}
             onChange={(e) => onChange({ ...element, text: e.target.value })}
-            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
             rows={element.type === "paragraph" ? 4 : 2}
           />
         </div>
@@ -1204,7 +1262,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
           <select
             value={element.fontSize || (element.type === "heading" ? "large" : "normal")}
             onChange={(e) => onChange({ ...element, fontSize: e.target.value })}
-            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
           >
             <option value="small">Small</option>
             <option value="normal">Normal</option>
@@ -1254,14 +1312,14 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
 
   if (element.type === "submitButton") {
     return (
-      <div className="w-72 shrink-0 bg-white border-l border-gray-200 p-4 flex flex-col gap-4">
+      <div className="w-72 shrink-0 min-h-0 bg-white border-l border-gray-200 p-4 pb-10 flex flex-col gap-4 overflow-y-auto">
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Button Label</label>
           <input
             type="text"
             value={element.label || ""}
             onChange={(e) => onChange({ ...element, label: e.target.value })}
-            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
           />
         </div>
         {/* A form has exactly ONE submit button, so its appearance belongs to the theme rather than
@@ -1294,7 +1352,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
 
   if (element.type === "image") {
     return (
-      <div className="w-72 shrink-0 bg-white border-l border-gray-200 p-4 flex flex-col gap-4 overflow-y-auto">
+      <div className="w-72 shrink-0 min-h-0 bg-white border-l border-gray-200 p-4 pb-10 flex flex-col gap-4 overflow-y-auto">
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Image</label>
           {element.url && (
@@ -1361,7 +1419,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
             value={element.alt || ""}
             onChange={(e) => onChange({ ...element, alt: e.target.value })}
             placeholder="Describes the image for screen readers"
-            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
           />
         </div>
       </div>
@@ -1370,7 +1428,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
 
   if (element.type === "divider") {
     return (
-      <div className="w-72 shrink-0 bg-white border-l border-gray-200 p-4 flex flex-col gap-4">
+      <div className="w-72 shrink-0 min-h-0 bg-white border-l border-gray-200 p-4 pb-10 flex flex-col gap-4 overflow-y-auto">
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Thickness (px)</label>
           <input
@@ -1379,7 +1437,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
             max={12}
             value={element.dividerThickness ?? 1}
             onChange={(e) => onChange({ ...element, dividerThickness: Number(e.target.value) })}
-            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
           />
         </div>
         <div>
@@ -1400,7 +1458,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
               max={64}
               value={element.dividerSpacingTop ?? 0}
               onChange={(e) => onChange({ ...element, dividerSpacingTop: Number(e.target.value) })}
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+              className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
             />
           </div>
           <div>
@@ -1411,7 +1469,7 @@ function PropertiesPanel({ element, fieldMetaById, onChange, onUploadImage }) {
               max={64}
               value={element.dividerSpacingBottom ?? 0}
               onChange={(e) => onChange({ ...element, dividerSpacingBottom: Number(e.target.value) })}
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+              className="w-full px-2 py-1.5 border border-gray-300 rounded-full text-sm"
             />
           </div>
         </div>
@@ -1599,6 +1657,9 @@ const FormBuilderPage = () => {
   const [dirty, setDirty] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const [saveError, setSaveError] = useState(null);
+  // The palette item currently being dragged, for the DragOverlay's floating copy — cleared on
+  // both a completed drop (handleDragEnd) and an aborted drag (Escape / dropped outside a target).
+  const [activeDrag, setActiveDrag] = useState(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -1733,6 +1794,7 @@ const FormBuilderPage = () => {
   };
 
   const handleDragEnd = (event) => {
+    setActiveDrag(null);
     const { active, over } = event;
     if (!over) return;
 
@@ -1961,15 +2023,43 @@ const FormBuilderPage = () => {
   const selectedElement = elements.find((e) => e.id === selectedId) || null;
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <div className="h-screen flex flex-col">
-        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4 shrink-0">
-          <Link to={`/forms/${id}`} className="flex items-center gap-1.5 text-gray-500 hover:text-gray-900 text-sm font-medium">
-            <ArrowLeft className="w-3.5 h-3.5" />
-            {form.title}
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={(event) => setActiveDrag(event.active.data.current || null)}
+      onDragCancel={() => setActiveDrag(null)}
+      onDragEnd={handleDragEnd}
+    >
+      {/* The shared app layout applies py-6 px-4 sm:px-6 lg:px-8 to every routed page; this page
+          opts back out the same way Companies/FormDetailPage do, with a true fixed strip anchored
+          to the sidebar edge (not just cancelled page padding) so it runs genuinely edge-to-edge,
+          flush against the sidebar and the viewport's right edge — matching Companies.jsx exactly. */}
+      {/* h-screen (100vh) measured from the viewport top, but this box actually starts below the
+          app's own fixed navbar — so a plain h-screen ran that navbar's height past the bottom of
+          the viewport, leaving a blank strip the page could scroll down into. Sized to the real
+          visible area instead.
+          -mb-6 alongside -mt-6: <main> applies its own py-6 on BOTH edges; -mt-6 only cancelled
+          the top one, leaving the bottom 24px unaccounted for.
+          The subtracted constant is NOT the navbar's own height (that's what the fixed header
+          strip below uses for ITS top offset, a separate concern) — it's this box's actual
+          rendered top position after <main>'s pt-[70px]/pt-20 minus our -mt-6, i.e. 70-24=46 /
+          80-24=56. Measured live via browser devtools; using the navbar height directly here
+          (54/64) left this box 8px short of the viewport on every screen size. */}
+      <div className="flex flex-col -mt-6 -mb-6 -mx-4 sm:-mx-6 lg:-mx-8 h-[calc(100vh-46px-var(--dc-offline-offset,0px))] lg:h-[calc(100vh-56px-var(--dc-offline-offset,0px))]">
+        <div
+          className="fixed right-0 h-16 px-4 sm:px-6 lg:px-8 border-b border-[#E1E4EA] bg-white flex items-center gap-4 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
+          style={{ left: "var(--sidebar-width, 0px)", zIndex: 40, minHeight: "64px", maxHeight: "64px", boxSizing: "border-box" }}
+        >
+          <Link to={`/forms/${id}`} className="flex items-center gap-1.5 text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium flex-shrink-0">
+            <ArrowLeft className="w-4 h-4" />
+            Back
           </Link>
-          <span className="text-gray-300">/</span>
-          <span className="text-sm font-semibold text-gray-900">Builder</span>
+          <div className="h-6 w-px bg-gray-200 flex-shrink-0" />
+          <div className="min-w-0 flex items-center gap-2">
+            <h1 className="m-0 leading-tight font-bold text-base sm:text-lg text-gray-900 truncate">
+              {form.title}
+            </h1>
+          </div>
           {/* One status, four states — the user should never have to wonder whether their work is
               safe. A failure is the only one that asks for action. */}
           {saveError ? (
@@ -1995,7 +2085,7 @@ const FormBuilderPage = () => {
           <div className="flex-1" />
           <button
             onClick={() => setShowPreview(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
+            className="flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-full hover:bg-gray-50 transition-colors"
           >
             <EyeIcon className="w-4 h-4" /> Preview
           </button>
@@ -2003,20 +2093,23 @@ const FormBuilderPage = () => {
             onClick={() => saveDraft()}
             disabled={saving || (!dirty && !saveError)}
             title={!dirty && !saveError ? "Everything is saved" : undefined}
-            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            className="px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-full hover:bg-gray-50 disabled:opacity-50 transition-colors"
           >
             {saving ? "Saving..." : "Save Draft"}
           </button>
           <button
             onClick={publish}
             disabled={publishing}
-            className="px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50"
+            className="px-4 py-2 bg-[#0085FF] text-white text-sm font-semibold rounded-full hover:bg-blue-600 disabled:opacity-50 transition-colors"
           >
             {publishing ? "Publishing..." : "Publish"}
           </button>
         </div>
 
-        <div className="flex-1 flex overflow-hidden">
+        {/* Spacer to offset the fixed header strip above, matching its own height exactly. */}
+        <div className="h-[72px] lg:h-16 shrink-0" />
+
+        <div className="flex-1 flex overflow-hidden min-h-0">
           <FieldsPanel
             module={form.module}
             customFields={customFields}
@@ -2038,6 +2131,21 @@ const FormBuilderPage = () => {
       </div>
 
       {showPreview && <PreviewModal elements={elements} fieldMetaById={fieldMetaById} theme={theme} onClose={() => setShowPreview(false)} />}
+
+      {/* Renders in a portal outside every clipped ancestor (the palette's own overflow-y-auto
+          included), so the dragged item stays visible the whole way to the canvas instead of
+          vanishing the moment it crosses the palette's edge.
+          Only for a PALETTE drag (dragging a new field in from the sidebar) — this DndContext
+          also covers canvas-internal reordering (CanvasItem's own useSortable), whose drag data
+          has no `field.label` at all, so this used to fall back to a floating "Field" pill
+          overlapping the row actually being reordered instead of showing nothing. */}
+      <DragOverlay dropAnimation={null}>
+        {activeDrag?.type === "palette" ? (
+          <div className="w-56">
+            <PaletteItemVisual dragging>{activeDrag.field?.label || "Field"}</PaletteItemVisual>
+          </div>
+        ) : null}
+      </DragOverlay>
     </DndContext>
   );
 };

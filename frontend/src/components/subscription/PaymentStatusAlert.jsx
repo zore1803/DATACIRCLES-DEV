@@ -12,12 +12,62 @@ import { hasValidPendingUpdate, deriveSubscriptionUIState, SUBSCRIPTION_UI_STATE
 // it never implies anything is "currently happening" the way the old
 // full-screen fallback incorrectly did.
 const RECENT_MANDATE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+// Mirrors GRACE_DAYS in backend utils/manualRenewal.js.
+const MANUAL_GRACE_DAYS = 7;
 
 const PaymentStatusAlert = ({ subscription, onRetryPayment, onResumePayment, onChangePlan, processing }) => {
   // Don't show if no subscription exists
   if (!subscription) return null;
 
+  // Manual billing (no autopay): an open renewal link means this period is
+  // due. Shown ahead of every other case — the subscription is still
+  // payment-confirmed from its last period, which would otherwise hide it.
+  const manualRenewal = subscription.billingMode === 'manual' ? subscription.manualRenewal : null;
+  if (manualRenewal?.shortUrl) {
+    const suspended = subscription.appStatus === 'suspended';
+    const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const graceEnds = new Date(new Date(manualRenewal.dueAt).getTime() + MANUAL_GRACE_DAYS * 24 * 60 * 60 * 1000);
+    const amount = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(manualRenewal.amount);
+    const tone = suspended ? 'bg-red-50 border-red-200 text-red-800' : 'bg-amber-50 border-amber-200 text-amber-800';
+    return (
+      <div className={`${tone} border rounded-lg p-4 mb-6`}>
+        <div className="flex">
+          <div className="flex-shrink-0">
+            {suspended ? <XCircle className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
+          </div>
+          <div className="ml-3 flex-1">
+            <h3 className="text-sm font-medium">
+              {suspended ? 'Workspace is read-only — renewal unpaid' : 'Renewal payment due'}
+            </h3>
+            <p className="mt-1 text-sm">
+              {suspended
+                ? `Your renewal of ${amount} due on ${fmt(manualRenewal.dueAt)} hasn't been paid. Pay now to restore full access immediately.`
+                : `Your renewal of ${amount} is due on ${fmt(manualRenewal.dueAt)}. Pay before ${fmt(graceEnds)} with UPI, card, net banking or wallet to keep full access.`}
+            </p>
+            <a
+              href={manualRenewal.shortUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex items-center bg-[#0085FF] text-white px-4 h-[38px] rounded-full text-sm font-medium hover:bg-blue-600 transition-colors"
+            >
+              <CreditCard className="w-4 h-4 mr-2" />
+              Pay {amount} now
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const uiState = deriveSubscriptionUIState(subscription);
+
+  // Checked before every early return below, because an honoured-but-unrenewable subscription trips
+  // all of them: it IS payment-confirmed, and it carries cancelAtPeriodEnd (that is how the paid
+  // term is made to lapse instead of renew). Falling through those guards would silence the one
+  // message this customer actually needs - that their auto-pay never got set up and the plan stops
+  // at period end.
+  const mandateUnusable =
+    subscription.mandateStatus === 'rejected' || subscription.mandateStatus === 'cancelled';
 
   // Hide during a genuine, not-yet-attempted trial. PENDING_MANDATE (a CAW
   // conversion attempt already in flight) is intentionally NOT trial here —
@@ -40,17 +90,57 @@ const PaymentStatusAlert = ({ subscription, onRetryPayment, onResumePayment, onC
   // deliberately NOT exempted here — those states are always reached from a
   // real paid subscription, where a genuine payment-status alert can be
   // legitimate.
-  if (uiState === SUBSCRIPTION_UI_STATES.TRIAL || uiState === SUBSCRIPTION_UI_STATES.EXPIRED) return null;
+  if (!mandateUnusable && (uiState === SUBSCRIPTION_UI_STATES.TRIAL || uiState === SUBSCRIPTION_UI_STATES.EXPIRED)) return null;
 
   // Hide if payment is already confirmed
-  if (subscription.isPaymentConfirmed) return null;
+  if (!mandateUnusable && subscription.isPaymentConfirmed) return null;
 
   // Hide if a downgrade or cancellation is scheduled — but only a REAL one;
   // a stale/partial pendingUpdate object must not suppress the payment alert
   // for what's actually just an incomplete new-subscription checkout.
-  if (hasValidPendingUpdate(subscription) || subscription.cancelAtPeriodEnd) return null;
+  if (!mandateUnusable && (hasValidPendingUpdate(subscription) || subscription.cancelAtPeriodEnd)) return null;
 
+  // Ordinary guards, skipped entirely for an unusable mandate (see above).
   const getAlertContent = () => {
+    // A mandate the bank actually refused is NOT the same as one the customer never finished, and
+    // it must not be described as "authorization wasn't completed" — nothing the customer does
+    // differently on the same card will fix it. Until now nothing in the UI read mandateStatus at
+    // all, so this case rendered as an ordinary "resume your payment" nudge: the customer had been
+    // charged, could not be activated, and was told to go finish something that had in fact failed.
+    if (mandateUnusable) {
+      // Two very different situations share mandateStatus 'rejected': the paid period is running
+      // (we honoured the purchase, auto-renew is simply off) or the payment was refunded and there
+      // is nothing active at all. Saying "could not be activated" in the first case would be a
+      // plain lie to a paying, active customer.
+      const wasRefunded = subscription.paymentStatus === 'payment_failed';
+      const reason = subscription.mandateFailureReason
+        || 'Your bank or card issuer rejected the recurring-payment mandate';
+
+      if (!wasRefunded) {
+        return {
+          icon: <AlertCircle className="w-5 h-5" />,
+          bgColor: 'bg-amber-50',
+          borderColor: 'border-amber-200',
+          textColor: 'text-amber-800',
+          title: 'Auto-renew is off — your plan is active',
+          message: `${reason}. Your subscription is active for the period you paid for, but it will not renew automatically and will end when that period does. Set up auto-pay with a different card, bank account or UPI to keep it running.`,
+          showResume: true,
+          showChangePlan: true,
+        };
+      }
+
+      return {
+        icon: <XCircle className="w-5 h-5" />,
+        bgColor: 'bg-red-50',
+        borderColor: 'border-red-200',
+        textColor: 'text-red-800',
+        title: 'Your bank declined the auto-pay setup',
+        message: `${reason}. A subscription needs that permission to renew, so it could not be activated, and the amount charged has been refunded — it can take 5–7 working days to appear. Try again with a different card, or use a bank account/UPI mandate instead.`,
+        showResume: true,
+        showChangePlan: true,
+      };
+    }
+
     if (uiState === SUBSCRIPTION_UI_STATES.PENDING_MANDATE) {
       // Never the legacy retryPayment endpoint here — that's Order/classic-
       // Subscriptions-only and not CAW-aware (confirmed by trace: it reads/

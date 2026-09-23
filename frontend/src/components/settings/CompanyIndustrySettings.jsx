@@ -23,14 +23,15 @@ const DEFAULT_INDUSTRIES = [
   "Nonprofit / Government / Public Sector",
 ];
 
-const CompanyIndustrySettings = () => {
+// activeTab ("custom" | "system") is now owned by CompanyFieldSettings, which merged this
+// component's own pill switcher into its single Custom Field / Custom Section / Built-in /
+// Custom Industry / Built-in Industry bar - this just renders whichever view is asked for.
+const CompanyIndustrySettings = ({ activeTab }) => {
   const [industries, setIndustries] = useState([]);
   const [newIndustryName, setNewIndustryName] = useState("");
   const [editIndex, setEditIndex] = useState(null);
   const [editValue, setEditValue] = useState("");
   const [loading, setLoading] = useState(true);
-  // Which list the new card shows - same pill switcher as SystemDefaultsSettings.
-  const [activeTab, setActiveTab] = useState("custom");
 
   useEffect(() => {
     fetchIndustries();
@@ -160,38 +161,10 @@ const CompanyIndustrySettings = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <>
       <AppToaster />
 
-      {/* ------------------------------------------------------------------ *
-       * NEW UI (System Defaults style). Built above the existing sections so
-       * they can be removed one at a time; shares the same state/handlers, so
-       * both write through the same code paths.
-       * ------------------------------------------------------------------ */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-        <div className="relative inline-flex items-center bg-gray-100 rounded-full p-1 mb-5">
-          <span
-            className="absolute top-1 bottom-1 w-24 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
-            style={{ left: 4 + (activeTab === "custom" ? 0 : 96) }}
-          />
-          {[
-            { id: "custom", label: "Custom" },
-            { id: "system", label: "System" },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`relative z-10 w-24 py-2 text-sm font-semibold rounded-full transition-colors ${
-                activeTab === tab.id ? "text-[#0085FF]" : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === "custom" && (
+      {activeTab === "custom" && (
           <>
             <form
               onSubmit={(e) => { e.preventDefault(); handleAdd(); }}
@@ -336,33 +309,35 @@ const CompanyIndustrySettings = () => {
             </div>
             <p className="text-xs text-gray-400 mt-3">
               These appear in every company form and cannot be edited or removed. Add your own
-              under the Custom tab.
+              under the Custom Industry tab.
             </p>
           </>
         )}
-      </div>
-
-      {/* Info Card */}
-      <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-5">
-        <div className="flex items-start gap-3">
-          <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <h3 className="font-semibold text-blue-900 mb-1">Industry Management Guide</h3>
-            <ul className="text-sm text-blue-700 space-y-1 leading-relaxed flex justify-between md:justify-start md:space-x-6 md:space-y-0">
-              <div>
-                <li>• Add custom industries for your organization's needs</li>
-                <li>• Default industries are available but not shown here</li>
-              </div>
-              <div>
-                <li>• Edit or delete custom industries as needed</li>
-                <li>• Changes apply to company profiles' industry dropdown</li>
-              </div>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
+    </>
   );
 };
+
+// Same bullets the old standalone card showed - CompanyFieldSettings renders this in place of
+// its Field Type Guide card while an industry tab is active.
+export const IndustryManagementGuide = () => (
+  <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-5">
+    <div className="flex items-start gap-3">
+      <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+      <div>
+        <h3 className="font-semibold text-blue-900 mb-1">Industry Management Guide</h3>
+        <ul className="text-sm text-blue-700 space-y-1 leading-relaxed flex justify-between md:justify-start md:space-x-6 md:space-y-0">
+          <div>
+            <li>• Add custom industries for your organization's needs</li>
+            <li>• Default industries are available but not shown here</li>
+          </div>
+          <div>
+            <li>• Edit or delete custom industries as needed</li>
+            <li>• Changes apply to company profiles' industry dropdown</li>
+          </div>
+        </ul>
+      </div>
+    </div>
+  </div>
+);
 
 export default CompanyIndustrySettings;

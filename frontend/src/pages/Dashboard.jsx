@@ -150,7 +150,7 @@ function Dashboard() {
   const setActiveDashboardTab = (tab) => {
     setSearchParams(tab === "Overview" ? {} : { tab });
   };
-  const DASHBOARD_TABS = ["Overview", "CRM", "Invoices"];
+  const DASHBOARD_TABS = ["Overview", "Invoices"];
   const DashboardTabSwitcher = () => (
     <div className="inline-flex items-center gap-1 h-10 p-1 bg-[#F1F1F5] rounded-full flex-shrink-0">
       {DASHBOARD_TABS.map((name) => {
@@ -1243,8 +1243,45 @@ function Dashboard() {
     }));
     const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
 
-    return { clearedPct, topClient, topClientPct, points, linePath, months: months.map((m) => m.month) };
+    return {
+      clearedPct,
+      topClient,
+      topClientPct,
+      points,
+      linePath,
+      months: months.map((m) => m.month),
+      chartData: months.map((m) => ({ month: m.month, amount: m.amount })),
+    };
   }, [invoices, deals, invoiceStats]);
+
+  // "Invoice Performance Analysis" chart — collection rate (paid ÷ issued, per
+  // month) over the last 8 months. Y-axis range is derived from the real data
+  // instead of a fixed 5-9% band, so it still reads correctly however low or
+  // high the actual rate is.
+  const invoicePerformanceData = useMemo(() => {
+    const months = Array.from({ length: 8 }, (_, i) => {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() - (7 - i));
+      return { key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleDateString("en-IN", { month: "short" }), issued: 0, paid: 0 };
+    });
+    const index = new Map(months.map((m, i) => [m.key, i]));
+    (invoices || []).forEach((inv) => {
+      const date = inv.date || inv.createdAt;
+      if (!date) return;
+      const d = new Date(date);
+      const idx = index.get(`${d.getFullYear()}-${d.getMonth()}`);
+      if (idx === undefined) return;
+      months[idx].issued += inv.amount || 0;
+      if ((inv.status || "").toLowerCase() === "accepted") months[idx].paid += inv.amount || 0;
+    });
+
+    return months.map((m) => ({
+      label: m.label,
+      collectionRate: m.issued > 0 ? Math.round((m.paid / m.issued) * 100) : 0,
+      overdueRate: m.issued > 0 ? Math.max(0, Math.round(100 - (m.paid / m.issued) * 100)) : 0,
+    }));
+  }, [invoices]);
 
   // Sales Revenue widget — 100 evenly-spaced points across the last 12 months,
   // built entirely from this org's own invoices (no fabricated baseline/noise —
@@ -1354,6 +1391,14 @@ function Dashboard() {
         //   API.get("/meetings/all-meetings"),
         // ]);
 
+        // allSettled, not all: these six endpoints are independently permission-gated per org
+        // (an org without the Invoices or Tasks module enabled 403s on just that one), so one
+        // rejecting used to fail the whole batch — every card on the page, including ones whose
+        // own data (companies/contacts) had already succeeded, fell back to 0 and the loading
+        // flag never cleared for that account since Promise.all short-circuits on the first
+        // rejection without ever reaching the setXxx calls below. Each request now succeeds or
+        // fails on its own; a failed one just keeps that section at its empty default instead
+        // of taking every other section down with it.
         const [
           companiesRes,
           contactsRes,
@@ -1361,14 +1406,16 @@ function Dashboard() {
           tasksRes,
           invoicesRes,
           meetingRes,
-        ] = await Promise.all([
+        ] = await Promise.allSettled([
           API.get("/companies"),
           API.get("/contacts"),
           API.get("/deals/dashboard-deals"),
           API.get("/tasks"), // ⬅️ staff can now access this
           API.get("/invoices"), // ⬅️ filtered automatically
           API.get("/meetings/dashboard"), // ⬅️ staff gets own meetings
-        ]);
+        ]).then((results) =>
+          results.map((r) => (r.status === "fulfilled" ? r.value : { data: [] }))
+        );
 
         const allInvoices = invoicesRes.data;
 
@@ -1433,263 +1480,6 @@ function Dashboard() {
     return <div></div>;
   }
 
-  // ------------------- CRM tab (empty for now) -------------------
-  if (activeDashboardTab === "CRM") {
-    const pendingTasksCount = allTasks.filter((t) => t.status === "Pending").length;
-    const meetingsTodayCount = allMeetings.filter((m) => {
-      if (!m.scheduledAt) return false;
-      const d = new Date(m.scheduledAt);
-      const now = new Date();
-      return (
-        d.getFullYear() === now.getFullYear() &&
-        d.getMonth() === now.getMonth() &&
-        d.getDate() === now.getDate()
-      );
-    }).length;
-
-    const pendingTasks = allTasks.filter((t) => t.status === "Pending");
-    const companiesTrend = getMonthOverMonthChange(companies, "createdAt", null);
-    const contactsTrend = getMonthOverMonthChange(contacts, "createdAt", null);
-    const meetingsTrend = getMonthOverMonthChange(allMeetings, "scheduledAt", null);
-    const pendingTasksTrend = getMonthOverMonthChange(pendingTasks, "createdAt", null);
-
-    const crmKpis = [
-      { icon: Building2, label: "Total Companies", value: totalClients, trend: `${companiesTrend.pct}% this month`, trendUp: companiesTrend.up },
-      { icon: Users, label: "Total Contacts", value: totalContacts, trend: `${contactsTrend.pct}% this month`, trendUp: contactsTrend.up },
-      { icon: VideoIcon, label: "Meetings Today", value: meetingsTodayCount, trend: `${meetingsTrend.pct}% this month`, trendUp: meetingsTrend.up },
-      { icon: ListChecks, label: "Pending Tasks", value: pendingTasksCount, trend: `${pendingTasksTrend.pct}% this month`, trendUp: pendingTasksTrend.up },
-    ];
-
-    return (
-      <div style={{ marginTop: -16 }}>
-        <div
-          className="box-border flex flex-row justify-between items-center h-[72px] min-h-[72px] max-h-[72px] px-4 sm:px-6 lg:px-8 py-3 top-[calc(54px+var(--dc-offline-offset,0px))] lg:h-16 lg:min-h-16 lg:max-h-16 lg:py-0 lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
-          style={{
-            position: "fixed",
-            left: "var(--sidebar-width, 0px)",
-            right: 0,
-            zIndex: 40,
-            gap: 16,
-            background: "#FFFFFF",
-            borderBottom: "1px solid #E1E4EA",
-            boxSizing: "border-box",
-          }}
-        >
-          <DashboardTabSwitcher />
-        </div>
-        {/* Spacer to offset the fixed header bar */}
-        <div className="h-[72px] lg:h-16" />
-
-        {/* KPI row: Companies / Contacts / Meetings Today / Pending Tasks —
-            same card shape (icon + label/value + bottom-right trend badge)
-            as the Overview tab's KPI row. */}
-        <div
-          className="grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:items-stretch lg:gap-4 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8"
-          style={{ marginTop: 24 }}
-        >
-          {crmKpis.map((kpi, i) => (
-            <StatTile
-              key={i}
-              tile={{
-                ...kpi,
-                subtitle: kpi.trend,
-                subtitleIcon: kpi.trendUp ? TrendingUp : TrendingDown,
-                subtitleColor: kpi.trendUp ? "#00C950" : "#E82222",
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Same full-bleed rule that closes the KPI row on the other tabs. */}
-        <div
-          className="-mx-4 sm:-mx-6 lg:-mx-8"
-          style={{ marginTop: 24, borderBottom: "1px solid #E1E4EA" }}
-        />
-
-        {/* Card row. Card One is the health gauge + engagement bars from the
-            design; Card Two is still a shell awaiting its content. */}
-        <div className="flex flex-col lg:flex-row" style={{ gap: 16, marginTop: 24 }}>
-          {/* Two cards on a 2:3 split - the second absorbed the width of the
-              old third card, with the first given a little back so it isn't
-              squeezed to a third of the row. */}
-          <div
-            className="box-border flex flex-col items-start min-w-0 w-full lg:basis-0"
-            style={{
-              padding: 18,
-              gap: 16,
-              height: 320,
-              flexGrow: 2,
-              background: "#FFFFFF",
-              border: "1px solid #E1E4EA",
-              borderRadius: 12,
-            }}
-          >
-            <span
-              className="self-stretch"
-              style={{ fontFamily: "'Inter Tight', Inter, sans-serif", fontWeight: 500, fontSize: 14, lineHeight: "120%", color: "#1F2937", opacity: 0.7 }}
-            >
-              CRM Health
-            </span>
-
-            {/* Chart Content: gauge on the left, metric bars on the right. */}
-            <div
-              className="flex flex-col sm:flex-row items-center self-stretch min-w-0"
-              style={{ gap: 24, flex: 1 }}
-            >
-              <div className="flex items-center justify-center min-w-0" style={{ flex: 1, alignSelf: "stretch" }}>
-                <CrmHealthGauge value={crmHealthScore} label={crmHealthLabel} />
-              </div>
-
-              {/* Shares the row with the gauge instead of being a fixed 181px
-                  block pinned to the card's edge: it grows with the card, but
-                  is capped so the bars don't stretch into a thin line on a
-                  wide screen. */}
-              <div
-                className="flex flex-col justify-center min-w-0"
-                style={{ gap: 16, flex: 1, maxWidth: 260 }}
-              >
-                {crmHealthMetrics.map((m) => (
-                  <div key={m.label} className="flex flex-col items-start self-stretch" style={{ gap: 9 }}>
-                    <span
-                      className="self-stretch truncate"
-                      style={{ fontFamily: "'Inter Tight', Inter, sans-serif", fontWeight: 500, fontSize: 12, lineHeight: "120%", color: "#525252" }}
-                    >
-                      {m.label}
-                    </span>
-                    <div className="flex flex-row items-center self-stretch" style={{ gap: 9 }}>
-                      <div
-                        className="relative flex-1 min-w-0"
-                        style={{ height: 4, background: "rgba(0, 133, 255, 0.1)", borderRadius: 999 }}
-                      >
-                        <div
-                          className="absolute left-0 top-0"
-                          style={{ width: `${Math.min(100, Math.max(0, m.value))}%`, height: 4, background: "#0085FF", borderRadius: 999 }}
-                        />
-                      </div>
-                      <span
-                        className="flex-shrink-0 text-right"
-                        style={{ width: 34, fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "120%", color: "#1F2937" }}
-                      >
-                        {m.value}%
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="box-border flex flex-col items-start min-w-0 w-full lg:basis-0"
-            style={{
-              padding: 18,
-              gap: 16,
-              height: 320,
-              flexGrow: 3,
-              background: "#FFFFFF",
-              border: "1px solid #E1E4EA",
-              borderRadius: 12,
-            }}
-          >
-            <span
-              className="self-stretch"
-              style={{ fontFamily: "'Inter Tight', Inter, sans-serif", fontWeight: 500, fontSize: 14, lineHeight: "120%", color: "#1F2937", opacity: 0.7 }}
-            >
-              Pipeline Snapshot
-            </span>
-
-            {/* Metric strip: four figures separated by vertical rules, each
-                with its own month-over-month delta. */}
-            <div className="flex flex-col self-stretch" style={{ gap: 12 }}>
-              <div className="self-stretch" style={{ height: 1, background: "#1F2937", opacity: 0.1 }} />
-
-              <div className="flex flex-row items-stretch self-stretch" style={{ gap: 8, height: 40 }}>
-                {pipelineSnapshot.map((m, i) => {
-                  // "Lost" going up is bad news, so its arrow and colour are
-                  // inverted rather than painting any rise green.
-                  const good = m.invert ? m.delta <= 0 : m.delta >= 0;
-                  const colour = good ? "#00C950" : "#F60000";
-                  return (
-                    <Fragment key={m.label}>
-                      {i > 0 && (
-                        <div style={{ width: 1, alignSelf: "stretch", background: "rgba(31, 41, 55, 0.3)" }} />
-                      )}
-                      <div className="flex flex-row justify-between items-end min-w-0" style={{ flex: 1, gap: 4 }}>
-                        <div className="flex flex-col items-start min-w-0" style={{ gap: 4 }}>
-                          <span
-                            className="truncate"
-                            style={{ fontFamily: "'Inter Tight', Inter, sans-serif", fontWeight: 400, fontSize: 12, lineHeight: "120%", color: "#525866" }}
-                          >
-                            {m.label}
-                          </span>
-                          <span
-                            className="whitespace-nowrap"
-                            style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 18, lineHeight: "120%", color: "#0E121B" }}
-                          >
-                            ₹{formatNumberToIndian(Math.round(m.value))}
-                          </span>
-                        </div>
-                        <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 4 }}>
-                          {m.delta >= 0 ? (
-                            <TrendingUp size={12} style={{ color: colour }} />
-                          ) : (
-                            <TrendingDown size={12} style={{ color: colour }} />
-                          )}
-                          <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: colour }}>
-                            {Math.abs(m.delta)}%
-                          </span>
-                        </div>
-                      </div>
-                    </Fragment>
-                  );
-                })}
-              </div>
-
-              <div className="self-stretch" style={{ height: 1, background: "#1F2937", opacity: 0.1 }} />
-            </div>
-
-            {/* Created vs won value, last 8 months. */}
-            <div className="self-stretch min-w-0" style={{ flex: 1 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={pipelineTrendData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(31, 41, 55, 0.1)" />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={{ stroke: "rgba(31, 41, 55, 0.3)" }}
-                    tick={{ fontSize: 10, fontFamily: "Inter", fill: "#1F2937" }}
-                  />
-                  <YAxis
-                    tickFormatter={formatCompactRupee}
-                    tickLine={false}
-                    axisLine={false}
-                    width={44}
-                    tick={{ fontSize: 10, fontFamily: "Inter", fill: "#1F2937" }}
-                  />
-                  <Tooltip
-                    formatter={(value, name) => [
-                      `₹${formatNumberToIndian(Math.round(value || 0))}`,
-                      name === "pipeline" ? "Created" : "Won",
-                    ]}
-                    contentStyle={{
-                      borderRadius: 8,
-                      border: "1px solid #E1E4EA",
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                      fontFamily: "Inter",
-                      fontSize: 12,
-                    }}
-                  />
-                  <Line type="monotone" dataKey="pipeline" stroke="#0085FF" strokeWidth={2} dot={false} isAnimationActive={false} />
-                  <Line type="monotone" dataKey="won" stroke="#0AA43E" strokeWidth={2} dot={false} isAnimationActive={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // ------------------- Invoices tab -------------------
   if (activeDashboardTab === "Invoices") {
     return (
@@ -1727,6 +1517,9 @@ function Dashboard() {
             { icon: TotalDealsClosedIcon, label: "Pending Invoices", value: `₹${Math.round(invoiceStats.sent).toLocaleString("en-IN")}`, trend: `${invoiceKpiTrends.pending.pct}% this month`, trendUp: invoiceKpiTrends.pending.up },
             { icon: DealValueOvertimeIcon, label: "Due Invoices", value: `₹${Math.round(invoiceStats.due).toLocaleString("en-IN")}`, trend: `${invoiceKpiTrends.due.pct}% this month`, trendUp: invoiceKpiTrends.due.up },
           ].map((kpi, i) => (
+            // fetchData's Promise.all is now allSettled (see the effect above), so `loading`
+            // clears promptly and reliably regardless of which individual endpoints 403 — safe
+            // to gate a real skeleton on it again here.
             loading ? (
               <StatTileSkeleton key={i} subtitle />
             ) : (
@@ -1830,10 +1623,18 @@ function Dashboard() {
             <div className="flex flex-col items-start self-stretch flex-shrink-0" style={{ gap: 24, width: "100%", height: 101 }}>
               <div className="flex flex-row items-start self-stretch flex-shrink-0" style={{ gap: 24, width: "100%", height: 51 }}>
                 {[
-                  { label: "Lorem Ipsum", value: "+2.1%", color: "#1F2937" },
-                  { label: "Lorem Ipsum", value: "95%", color: "#1F2937" },
-                  { label: "Lorem Ipsum", value: "3.3L INR", color: "#1F2937" },
-                  { label: "Lorem Ipsum", value: "12%", color: "#00C950" },
+                  {
+                    label: "Invoiced Growth",
+                    value: `${invoiceKpiTrends.total.up ? "+" : ""}${invoiceKpiTrends.total.pct}%`,
+                    color: invoiceKpiTrends.total.up ? "#00C950" : "#E82222",
+                  },
+                  { label: "Collection Rate", value: `${totalInvoicesCard.clearedPct}%`, color: "#1F2937" },
+                  { label: "Total Invoiced", value: formatCompactRupee(invoiceStats.total), color: "#1F2937" },
+                  {
+                    label: "Paid Growth",
+                    value: `${invoiceKpiTrends.paid.up ? "+" : ""}${invoiceKpiTrends.paid.pct}%`,
+                    color: invoiceKpiTrends.paid.up ? "#00C950" : "#E82222",
+                  },
                 ].map((item, idx) => (
                   <>
                     <div key={idx} className="flex flex-col items-start self-stretch flex-1" style={{ gap: 8, width: 184.25, height: 51 }}>
@@ -1856,62 +1657,51 @@ function Dashboard() {
               className="flex flex-col justify-center items-center self-stretch flex-shrink-0"
               style={{ padding: "14px 0px", gap: 10, width: "100%", height: 282, background: "#F8FAFC", borderRadius: 14 }}
             >
-              <div className="flex flex-col items-start self-stretch flex-shrink-0 relative" style={{ gap: 6, width: "100%", height: 230 }}>
-                <div className="flex flex-col justify-between items-center self-stretch flex-shrink-0" style={{ gap: 10, width: "100%", height: 210 }}>
-                  {[
-                    { pct: "9%", dashed: true },
-                    { pct: "8%", dashed: true },
-                    { pct: "7%", dashed: true },
-                    { pct: "6%", dashed: true },
-                    { pct: "5%", dashed: false },
-                  ].map((row) => (
-                    <div key={row.pct} className="mx-auto flex flex-row items-center self-stretch flex-shrink-0" style={{ gap: 6, width: "100%", height: 14 }}>
-                      <span style={{ width: 22, height: 14, fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "120%", textAlign: "right", color: "#1F2937" }}>
-                        {row.pct}
-                      </span>
-                      <div
-                        className="flex-1"
-                        style={{
-                          height: 0,
-                          borderTop: row.dashed ? "1px dashed rgba(31, 41, 55, 0.1)" : "1px solid rgba(31, 41, 55, 0.3)",
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mx-auto flex flex-row justify-between items-center self-stretch flex-shrink-0" style={{ padding: "0px 0px 0px 28px", gap: 10, width: "100%", height: 14 }}>
-                  {["Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8"].map((q) => (
-                    <span key={q} className="mx-auto" style={{ height: 14, fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "120%", textAlign: "right", color: "#1F2937" }}>
-                      {q}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="absolute flex flex-row justify-between items-center" style={{ gap: 22, width: "93.4%", height: 196, left: "3.4%", top: 7 }}>
-                  {Array.from({ length: 8 }).map((_, idx) => (
-                    <div
-                      key={idx}
-                      className="self-stretch flex-shrink-0"
-                      style={{ width: 0, borderLeft: idx === 0 ? "1px solid rgba(31, 41, 55, 0.3)" : "1px dashed rgba(31, 41, 55, 0.1)" }}
+              <div className="self-stretch flex-shrink-0" style={{ width: "100%", height: 230 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={invoicePerformanceData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(31, 41, 55, 0.1)" />
+                    <XAxis
+                      dataKey="label"
+                      tickLine={false}
+                      axisLine={{ stroke: "rgba(31, 41, 55, 0.3)" }}
+                      tick={{ fontSize: 12, fontFamily: "Inter", fill: "#1F2937" }}
                     />
-                  ))}
-                </div>
-
+                    <YAxis
+                      tickFormatter={(v) => `${v}%`}
+                      tickLine={false}
+                      axisLine={false}
+                      width={40}
+                      tick={{ fontSize: 12, fontFamily: "Inter", fill: "#1F2937" }}
+                    />
+                    <Tooltip
+                      formatter={(value, name) => [`${value}%`, name === "collectionRate" ? "Collection Rate" : "Overdue Rate"]}
+                      contentStyle={{
+                        borderRadius: 8,
+                        border: "1px solid #E1E4EA",
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                        fontFamily: "Inter",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Line type="monotone" dataKey="collectionRate" stroke="#0AA43E" strokeWidth={2} dot={false} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="overdueRate" stroke="#0085FF" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
               </div>
 
               <div className="flex flex-row justify-center items-center" style={{ gap: 16, width: "100%", height: 14 }}>
                 <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 4, width: 95, height: 14 }}>
                   <div className="flex-shrink-0" style={{ width: 16, height: 8, background: "#0AA43E", borderRadius: 4 }} />
                   <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "120%", color: "#1F2937" }}>
-                    Lorem Ipsum
+                    Collection Rate
                   </span>
                 </div>
 
                 <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 4, width: 95, height: 14 }}>
                   <div className="flex-shrink-0" style={{ width: 16, height: 8, background: "#0085FF", borderRadius: 4 }} />
                   <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "120%", color: "#1F2937" }}>
-                    Lorem Ipsum
+                    Overdue Rate
                   </span>
                 </div>
               </div>
@@ -2416,31 +2206,86 @@ function Dashboard() {
       {/* Spacer to offset the fixed header bar */}
       <div className="h-[72px] lg:h-16" />
 
-      {/* KPI Cards */}
-      <div
-        className="grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:items-stretch lg:gap-4 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8"
-        style={{ marginTop: 24 }}
-      >
-        {[
-          { icon: TotalIncomeIcon, label: "Total Income", value: `₹${Math.round(overviewKpis.totalIncome).toLocaleString("en-IN")}`, trend: `${overviewKpis.totalIncomeTrend.pct}% this month`, trendUp: overviewKpis.totalIncomeTrend.up },
-          { icon: RevenueGeneratedIcon, label: "Revenue Generated", value: `₹${Math.round(overviewKpis.revenueGenerated).toLocaleString("en-IN")}`, trend: `${overviewKpis.revenueGeneratedTrend.pct}% this month`, trendUp: overviewKpis.revenueGeneratedTrend.up },
-          { icon: TotalDealsClosedIcon, label: "Total Deals Closed", value: `${overviewKpis.dealsClosedCount}`, trend: `${overviewKpis.dealsClosedTrend.pct}% this month`, trendUp: overviewKpis.dealsClosedTrend.up },
-          { icon: DealValueOvertimeIcon, label: "Deal Value Overtime", value: `₹${Math.round(overviewKpis.dealValue).toLocaleString("en-IN")}`, trend: `${overviewKpis.dealValueTrend.pct}% this month`, trendUp: overviewKpis.dealValueTrend.up },
-        ].map((kpi, i) => (
-          loading ? (
-            <StatTileSkeleton key={i} subtitle />
-          ) : (
-            <StatTile
-              key={i}
-              tile={{
-                ...kpi,
-                subtitle: kpi.trend,
-                subtitleIcon: kpi.trendUp ? TrendingUp : TrendingDown,
-                subtitleColor: kpi.trendUp ? "#00C950" : "#E82222",
-              }}
-            />
-          )
-        ))}
+      {/* KPI Cards — Overview's own four, plus the Companies/Contacts/Meetings/Tasks row that
+          used to live on the CRM tab, as a second row in the same section (no divider between
+          them, unlike the rule that closes the whole KPI section below). */}
+      <div style={{ marginTop: 24 }}>
+        <div
+          className="grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:items-stretch lg:gap-4 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8"
+        >
+          {[
+            { icon: TotalIncomeIcon, label: "Total Income", value: `₹${Math.round(overviewKpis.totalIncome).toLocaleString("en-IN")}`, trend: `${overviewKpis.totalIncomeTrend.pct}% this month`, trendUp: overviewKpis.totalIncomeTrend.up },
+            { icon: RevenueGeneratedIcon, label: "Revenue Generated", value: `₹${Math.round(overviewKpis.revenueGenerated).toLocaleString("en-IN")}`, trend: `${overviewKpis.revenueGeneratedTrend.pct}% this month`, trendUp: overviewKpis.revenueGeneratedTrend.up },
+            { icon: TotalDealsClosedIcon, label: "Total Deals Closed", value: `${overviewKpis.dealsClosedCount}`, trend: `${overviewKpis.dealsClosedTrend.pct}% this month`, trendUp: overviewKpis.dealsClosedTrend.up },
+            { icon: DealValueOvertimeIcon, label: "Deal Value Overtime", value: `₹${Math.round(overviewKpis.dealValue).toLocaleString("en-IN")}`, trend: `${overviewKpis.dealValueTrend.pct}% this month`, trendUp: overviewKpis.dealValueTrend.up },
+          ].map((kpi, i) => (
+            // fetchData's Promise.all is now allSettled (see the effect above), so `loading`
+            // clears promptly and reliably regardless of which individual endpoints 403 — safe
+            // to gate a real skeleton on it again here.
+            loading ? (
+              <StatTileSkeleton key={i} subtitle />
+            ) : (
+              <StatTile
+                key={i}
+                tile={{
+                  ...kpi,
+                  subtitle: kpi.trend,
+                  subtitleIcon: kpi.trendUp ? TrendingUp : TrendingDown,
+                  subtitleColor: kpi.trendUp ? "#00C950" : "#E82222",
+                }}
+              />
+            )
+          ))}
+        </div>
+
+        {(() => {
+          const pendingTasksCount = allTasks.filter((t) => t.status === "Pending").length;
+          const meetingsTodayCount = allMeetings.filter((m) => {
+            if (!m.scheduledAt) return false;
+            const d = new Date(m.scheduledAt);
+            const now = new Date();
+            return (
+              d.getFullYear() === now.getFullYear() &&
+              d.getMonth() === now.getMonth() &&
+              d.getDate() === now.getDate()
+            );
+          }).length;
+          const pendingTasks = allTasks.filter((t) => t.status === "Pending");
+          const companiesTrend = getMonthOverMonthChange(companies, "createdAt", null);
+          const contactsTrend = getMonthOverMonthChange(contacts, "createdAt", null);
+          const meetingsTrend = getMonthOverMonthChange(allMeetings, "scheduledAt", null);
+          const pendingTasksTrend = getMonthOverMonthChange(pendingTasks, "createdAt", null);
+
+          const crmKpis = [
+            { icon: Building2, label: "Total Companies", value: totalClients, trend: `${companiesTrend.pct}% this month`, trendUp: companiesTrend.up },
+            { icon: Users, label: "Total Contacts", value: totalContacts, trend: `${contactsTrend.pct}% this month`, trendUp: contactsTrend.up },
+            { icon: VideoIcon, label: "Meetings Today", value: meetingsTodayCount, trend: `${meetingsTrend.pct}% this month`, trendUp: meetingsTrend.up },
+            { icon: ListChecks, label: "Pending Tasks", value: pendingTasksCount, trend: `${pendingTasksTrend.pct}% this month`, trendUp: pendingTasksTrend.up },
+          ];
+
+          return (
+            <div
+              className="grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:items-stretch lg:gap-4 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8"
+              style={{ marginTop: 12 }}
+            >
+              {crmKpis.map((kpi, i) => (
+                loading ? (
+                  <StatTileSkeleton key={i} subtitle />
+                ) : (
+                  <StatTile
+                    key={i}
+                    tile={{
+                      ...kpi,
+                      subtitle: kpi.trend,
+                      subtitleIcon: kpi.trendUp ? TrendingUp : TrendingDown,
+                      subtitleColor: kpi.trendUp ? "#00C950" : "#E82222",
+                    }}
+                  />
+                )
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* KPI section divider, 120px below the strip's divider (24 + 72 card height + 24) */}
@@ -2448,6 +2293,218 @@ function Dashboard() {
         className="-mx-4 sm:-mx-6 lg:-mx-8"
         style={{ marginTop: 24, borderBottom: "1px solid #E1E4EA" }}
       />
+
+      {/* Card row. Card One is the health gauge + engagement bars from the
+          design; Card Two is still a shell awaiting its content. Moved here from the
+          CRM tab so it only shows once, in Overview - above Sales Revenue. */}
+      <div className="flex flex-col lg:flex-row" style={{ gap: 16, marginTop: 24 }}>
+        {/* Two cards on a 2:3 split - the second absorbed the width of the
+            old third card, with the first given a little back so it isn't
+            squeezed to a third of the row. */}
+        <div
+          className="box-border flex flex-col items-start min-w-0 w-full lg:basis-0"
+          style={{
+            padding: 18,
+            gap: 16,
+            height: 320,
+            flexGrow: 2,
+            background: "#FFFFFF",
+            border: "1px solid #E1E4EA",
+            borderRadius: 12,
+          }}
+        >
+          <span
+            className="self-stretch"
+            style={{ fontFamily: "'Inter Tight', Inter, sans-serif", fontWeight: 500, fontSize: 14, lineHeight: "120%", color: "#1F2937", opacity: 0.7 }}
+          >
+            CRM Health
+          </span>
+
+          {loading ? (
+            <div className="flex flex-col sm:flex-row items-center self-stretch min-w-0" style={{ gap: 24, flex: 1 }}>
+              <Skeleton shape="circle" width={180} height={180} />
+              <div className="flex flex-col justify-center min-w-0" style={{ gap: 16, flex: 1, maxWidth: 260 }}>
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="flex flex-col items-start self-stretch" style={{ gap: 9 }}>
+                    <Skeleton width={100} height={12} />
+                    <Skeleton width="100%" height={4} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+          /* Chart Content: gauge on the left, metric bars on the right. */
+          <div
+            className="flex flex-col sm:flex-row items-center self-stretch min-w-0"
+            style={{ gap: 24, flex: 1 }}
+          >
+            <div className="flex items-center justify-center min-w-0" style={{ flex: 1, alignSelf: "stretch" }}>
+              <CrmHealthGauge value={crmHealthScore} label={crmHealthLabel} />
+            </div>
+
+            {/* Shares the row with the gauge instead of being a fixed 181px
+                block pinned to the card's edge: it grows with the card, but
+                is capped so the bars don't stretch into a thin line on a
+                wide screen. */}
+            <div
+              className="flex flex-col justify-center min-w-0"
+              style={{ gap: 16, flex: 1, maxWidth: 260 }}
+            >
+              {crmHealthMetrics.map((m) => (
+                <div key={m.label} className="flex flex-col items-start self-stretch" style={{ gap: 9 }}>
+                  <span
+                    className="self-stretch truncate"
+                    style={{ fontFamily: "'Inter Tight', Inter, sans-serif", fontWeight: 500, fontSize: 12, lineHeight: "120%", color: "#525252" }}
+                  >
+                    {m.label}
+                  </span>
+                  <div className="flex flex-row items-center self-stretch" style={{ gap: 9 }}>
+                    <div
+                      className="relative flex-1 min-w-0"
+                      style={{ height: 4, background: "rgba(0, 133, 255, 0.1)", borderRadius: 999 }}
+                    >
+                      <div
+                        className="absolute left-0 top-0"
+                        style={{ width: `${Math.min(100, Math.max(0, m.value))}%`, height: 4, background: "#0085FF", borderRadius: 999 }}
+                      />
+                    </div>
+                    <span
+                      className="flex-shrink-0 text-right"
+                      style={{ width: 34, fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "120%", color: "#1F2937" }}
+                    >
+                      {m.value}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          )}
+        </div>
+
+        <div
+          className="box-border flex flex-col items-start min-w-0 w-full lg:basis-0"
+          style={{
+            padding: 18,
+            gap: 16,
+            height: 320,
+            flexGrow: 3,
+            background: "#FFFFFF",
+            border: "1px solid #E1E4EA",
+            borderRadius: 12,
+          }}
+        >
+          <span
+            className="self-stretch"
+            style={{ fontFamily: "'Inter Tight', Inter, sans-serif", fontWeight: 500, fontSize: 14, lineHeight: "120%", color: "#1F2937", opacity: 0.7 }}
+          >
+            Pipeline Snapshot
+          </span>
+
+          {loading ? (
+            <div className="flex flex-col self-stretch" style={{ gap: 16, flex: 1 }}>
+              <div className="flex flex-row items-stretch self-stretch" style={{ gap: 8, height: 40 }}>
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="flex flex-col items-start min-w-0" style={{ flex: 1, gap: 4 }}>
+                    <Skeleton width={60} height={10} />
+                    <Skeleton width={70} height={16} />
+                  </div>
+                ))}
+              </div>
+              <Skeleton width="100%" height="100%" className="flex-1" />
+            </div>
+          ) : (
+          <>
+          {/* Metric strip: four figures separated by vertical rules, each
+              with its own month-over-month delta. */}
+          <div className="flex flex-col self-stretch" style={{ gap: 12 }}>
+            <div className="self-stretch" style={{ height: 1, background: "#1F2937", opacity: 0.1 }} />
+
+            <div className="flex flex-row items-stretch self-stretch" style={{ gap: 8, height: 40 }}>
+              {pipelineSnapshot.map((m, i) => {
+                // "Lost" going up is bad news, so its arrow and colour are
+                // inverted rather than painting any rise green.
+                const good = m.invert ? m.delta <= 0 : m.delta >= 0;
+                const colour = good ? "#00C950" : "#F60000";
+                return (
+                  <Fragment key={m.label}>
+                    {i > 0 && (
+                      <div style={{ width: 1, alignSelf: "stretch", background: "rgba(31, 41, 55, 0.3)" }} />
+                    )}
+                    <div className="flex flex-row justify-between items-end min-w-0" style={{ flex: 1, gap: 4 }}>
+                      <div className="flex flex-col items-start min-w-0" style={{ gap: 4 }}>
+                        <span
+                          className="truncate"
+                          style={{ fontFamily: "'Inter Tight', Inter, sans-serif", fontWeight: 400, fontSize: 12, lineHeight: "120%", color: "#525866" }}
+                        >
+                          {m.label}
+                        </span>
+                        <span
+                          className="whitespace-nowrap"
+                          style={{ fontFamily: "Inter", fontWeight: 600, fontSize: 18, lineHeight: "120%", color: "#0E121B" }}
+                        >
+                          ₹{formatNumberToIndian(Math.round(m.value))}
+                        </span>
+                      </div>
+                      <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 4 }}>
+                        {m.delta >= 0 ? (
+                          <TrendingUp size={12} style={{ color: colour }} />
+                        ) : (
+                          <TrendingDown size={12} style={{ color: colour }} />
+                        )}
+                        <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: colour }}>
+                          {Math.abs(m.delta)}%
+                        </span>
+                      </div>
+                    </div>
+                  </Fragment>
+                );
+              })}
+            </div>
+
+            <div className="self-stretch" style={{ height: 1, background: "#1F2937", opacity: 0.1 }} />
+          </div>
+
+          {/* Created vs won value, last 8 months. */}
+          <div className="self-stretch min-w-0" style={{ flex: 1 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={pipelineTrendData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(31, 41, 55, 0.1)" />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={{ stroke: "rgba(31, 41, 55, 0.3)" }}
+                  tick={{ fontSize: 10, fontFamily: "Inter", fill: "#1F2937" }}
+                />
+                <YAxis
+                  tickFormatter={formatCompactRupee}
+                  tickLine={false}
+                  axisLine={false}
+                  width={56}
+                  tick={{ fontSize: 10, fontFamily: "Inter", fill: "#1F2937" }}
+                />
+                <Tooltip
+                  formatter={(value, name) => [
+                    `₹${formatNumberToIndian(Math.round(value || 0))}`,
+                    name === "pipeline" ? "Created" : "Won",
+                  ]}
+                  contentStyle={{
+                    borderRadius: 8,
+                    border: "1px solid #E1E4EA",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                    fontFamily: "Inter",
+                    fontSize: 12,
+                  }}
+                />
+                <Line type="monotone" dataKey="pipeline" stroke="#0085FF" strokeWidth={2} dot={false} isAnimationActive={false} />
+                <Line type="monotone" dataKey="won" stroke="#0AA43E" strokeWidth={2} dot={false} isAnimationActive={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+          </>
+          )}
+        </div>
+      </div>
 
       <div className="flex flex-col items-start" style={{ gap: 6, width: 186, height: 19, marginTop: 24 }}>
         <span
@@ -2726,28 +2783,37 @@ function Dashboard() {
             {loading ? (
               <Skeleton width="100%" height={197} shape="rect" className="rounded-md" />
             ) : (
-              <div className="relative flex flex-row items-center self-stretch flex-shrink-0" style={{ height: 197 }}>
-                {totalInvoicesCard.points.map((p, idx) => (
-                  <div
-                    key={idx}
-                    className="flex flex-col justify-center items-center self-stretch flex-1"
-                    style={{ gap: 6 }}
-                  >
-                    <div className="flex-1" style={{ width: 1, background: "rgba(31, 41, 55, 0.1)" }} />
-                    <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 12, lineHeight: "120%", color: "#6B7280" }}>
-                      {totalInvoicesCard.months[idx]}
-                    </span>
-                  </div>
-                ))}
-
-                <div className="absolute" style={{ left: 0, right: 0, height: 124, top: 29 }}>
-                  <svg width="100%" height="124" viewBox="0 0 374 124" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d={totalInvoicesCard.linePath} stroke="#0085FF" strokeWidth="2" fill="none" vectorEffect="non-scaling-stroke" />
-                    {totalInvoicesCard.points.map((p, idx) => (
-                      <circle key={idx} cx={p.x} cy={p.y} r={2.5} fill="#FFFFFF" stroke="#0085FF" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-                    ))}
-                  </svg>
-                </div>
+              <div className="self-stretch flex-shrink-0" style={{ height: 197 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={totalInvoicesCard.chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <XAxis
+                      dataKey="month"
+                      tickLine={false}
+                      axisLine={{ stroke: "rgba(31, 41, 55, 0.1)" }}
+                      tick={{ fontSize: 12, fontFamily: "Inter", fill: "#6B7280" }}
+                    />
+                    <YAxis hide domain={[0, "dataMax"]} />
+                    <Tooltip
+                      formatter={(value) => [`₹${formatNumberToIndian(Math.round(value || 0))}`, "Paid"]}
+                      contentStyle={{
+                        borderRadius: 8,
+                        border: "1px solid #E1E4EA",
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                        fontFamily: "Inter",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="amount"
+                      stroke="#0085FF"
+                      strokeWidth={2}
+                      dot={{ r: 2.5, fill: "#FFFFFF", stroke: "#0085FF", strokeWidth: 1 }}
+                      activeDot={{ r: 4 }}
+                      isAnimationActive={false}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
               </div>
             )}
           </div>

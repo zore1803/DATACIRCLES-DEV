@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import ForgotPassword from "./pages/ForgotPassword";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import OfflineBanner from "./components/common/OfflineBanner";
@@ -74,6 +73,9 @@ import Journals from "./pages/Journals";
 import Expenses from "./pages/Expenses";
 import IndirectIncome from "./pages/IndirectIncome";
 import TeamIcon from "./components/common/TeamIcon";
+import ForgotPass from "./components/login/ForgotPass";
+import Verification from "./components/login/Verification";
+import PhoneLogin from "./components/login/PhoneLogin";
 
 function ChecklistModal({ showChecklist, setShowChecklist }) {
   const location = useLocation();
@@ -219,8 +221,27 @@ function ChecklistModal({ showChecklist, setShowChecklist }) {
   );
 }
 
-function App() {
+// Renders inside <Router> (see App() below) specifically so useLocation() below actually
+// works — this used to be the top-level default-exported component, with <Router> as the
+// outermost element of its own return, which meant every location-dependent computation ran
+// *before* React had entered any Router context at all. useLocation() would throw there, so
+// this had silently been reading `location.pathname` off the browser global `window.location`
+// instead (no local `location` was ever declared) — it happened to hold a plausible value
+// most of the time, but wasn't a real React dependency, so nothing forced a re-render when the
+// route actually changed. Splitting the Router out into its own thin wrapper fixes that at
+// the source instead of trying to patch the read site.
+function AppInner() {
   const { isAuthenticated, isLoading, getAccessTokenSilently } = useAuth0();
+  // shouldHideNavigation below reads location.pathname but this component never called
+  // useLocation() — that name was silently resolving to the browser global `window.location`
+  // instead. It happened to hold roughly the right value most of the time (pushState updates
+  // it synchronously too), but reading it that way isn't a React dependency: nothing marks
+  // App() for re-render when the route changes, only when it re-renders for some unrelated
+  // reason (a state update elsewhere in this component). Landing on "/" right after login is
+  // exactly the gap — App() could keep rendering with the just-logged-out-of-login-page's
+  // classes/background (Nav/Header hidden, gray auth-page fill) until something else happened
+  // to force a re-render, instead of updating the moment the URL actually changed.
+  const location = useLocation();
   const [showChecklist, setShowChecklist] = useState(false);
   const [isSetupComplete, setIsSetupComplete] = useState(false);
   // Completing setup (joining with a company code) doesn't change any auth
@@ -247,6 +268,8 @@ function App() {
   // Define routes where navbar and header should be hidden
   const authRoutes = [
     "/login",
+    "/register",
+    "/phone-login",
     "/super-admin/login",
     "/forgot-password",
     "/reset-password",
@@ -373,7 +396,6 @@ function App() {
   }, [userIsAuthenticated, location.pathname]);
 
   return (
-    <Router>
       <TopLoadingBarProvider>
       <div className="min-h-screen bg-white relative">
         {/* Single global toaster. Many page/tab components also mount their
@@ -409,28 +431,40 @@ function App() {
           (isSetupComplete || isSuperAdminAuthenticated) &&
           !shouldHideNavigation && <Navbar />}
         <main
+          // marginLeft used to be a one-time `window.innerWidth >= 1024` JS check baked into
+          // inline style — React only re-runs that on a re-render, not on an actual window
+          // resize, so a window that started narrow and was later widened/maximized permanently
+          // lost its sidebar-reserving margin for the rest of the session: the icon rail then
+          // rendered on top of page content on every route, not just here. A real CSS media
+          // query (the lg: breakpoint) reflows on every resize automatically, same as any other
+          // responsive class already on this element.
           className={`transition-all duration-300 ease-in-out py-6 px-4 sm:px-6 lg:px-8 ${
             userIsAuthenticated && !shouldHideNavigation
-              ? "pt-[70px] lg:pt-20"
+              ? "pt-[70px] lg:pt-20 lg:ml-[var(--sidebar-width,64px)]"
               : ""
           }`}
           style={
             userIsAuthenticated && !shouldHideNavigation
-              ? {
-                  marginLeft:
-                    window.innerWidth >= 1024
-                      ? "var(--sidebar-width, 64px)"
-                      : undefined,
-                  marginTop: "var(--dc-offline-offset, 0px)",
-                  transition: "margin-left 300ms ease-in-out",
-                }
-              : undefined
+              ? { marginTop: "var(--dc-offline-offset, 0px)", transition: "margin-left 300ms ease-in-out" }
+              // Full-bleed auth pages (login/register/forgot-password/verification) fill their own
+              // h-screen container with #EAEAEA, but main's own py-6/px-* padding still carves a
+              // gap around it — coloring that gap to match instead of removing the padding, so the
+              // gutter reads as part of the page's gray background rather than as <body>'s white.
+              : shouldHideNavigation
+                ? { backgroundColor: "#EAEAEA" }
+                : undefined
           }
         >
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
+            {/* Login/Register/ForgotPass all navigate() to these plain paths, so this — not a
+                "/userlogin"-prefixed duplicate — is what the signup/reset flow actually depends
+                on; "/verification" previously had no route at all here, 404ing after every
+                registration and every unverified login attempt. */}
+            <Route path="/verification" element={<Verification />} />
+            <Route path="/phone-login" element={<PhoneLogin />} />
+            <Route path="/forgot-password" element={<ForgotPass />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/super-admin/login" element={<SuperAdminLogin />} />
             <Route
@@ -818,6 +852,15 @@ function App() {
         />
       </div>
       </TopLoadingBarProvider>
+  );
+}
+
+// Thin shell so AppInner (which needs useLocation()) renders as a Router descendant
+// instead of Router being constructed as the outermost element of AppInner's own return.
+function App() {
+  return (
+    <Router>
+      <AppInner />
     </Router>
   );
 }

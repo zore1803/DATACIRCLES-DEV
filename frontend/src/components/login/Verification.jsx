@@ -1,6 +1,6 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import API from "../../services/api";
 
 export default function Verification() {
   const location = useLocation();
@@ -10,6 +10,8 @@ export default function Verification() {
 
   const [code, setCode] = useState(["", "", "", "", "", ""]);
   const [timeLeft, setTimeLeft] = useState(39);
+  const [verificationError, setVerificationError] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const inputRefs = useRef([]);
 
@@ -85,34 +87,49 @@ export default function Verification() {
   // RESEND CODE
   // ==================================================
 
-  const handleResend = () => {
+  const handleResend = async () => {
     if (timeLeft > 0) return;
 
-    setCode(["", "", "", "", "", ""]);
-    setTimeLeft(39);
+    try {
+      await API.post("/auth/resend-otp", { email });
 
-    inputRefs.current[0]?.focus();
-
-    // Backend resend functionality will be connected later.
+      setCode(["", "", "", "", "", ""]);
+      setTimeLeft(39);
+      inputRefs.current[0]?.focus();
+    } catch (error) {
+      console.error("Resend OTP request failed:", error);
+    }
   };
 
   // ==================================================
   // VERIFY CODE
   // ==================================================
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     const enteredCode = code.join("");
 
-    if (enteredCode.length !== 6) {
+    if (enteredCode.length !== 6 || isVerifying) {
       return;
     }
 
-    // Frontend only for now.
-    // Backend OTP verification will be connected later.
+    try {
+      setIsVerifying(true);
+      setVerificationError("");
+      await API.post("/auth/verify-email", {
+        email,
+        code: enteredCode,
+      });
 
-    console.log("Verification code:", enteredCode);
-
-    navigate("/dashboard");
+      navigate("/register", {
+        replace: true,
+        state: { accountCreated: true },
+      });
+    } catch (error) {
+      console.error("Verification request failed:", error);
+      setVerificationError(error.response?.data?.message || "Invalid verification code.");
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   const isCodeComplete = code.every((digit) => digit !== "");
@@ -120,143 +137,123 @@ export default function Verification() {
   const formattedTime = `00:${String(timeLeft).padStart(2, "0")}`;
 
   return (
-    <div className="min-h-screen w-full bg-[#EAEAEA] p-2 font-inter">
-      <div className="flex w-full items-start gap-4">
+   <div className="h-screen w-full bg-[#EAEAEA] p-0 font-inter overflow-hidden flex items-center justify-center">
+      <div className="flex w-full h-full items-stretch gap-4 flex-col lg:flex-row">
+         {/* ==================================================
+    LEFT SECTION
+    ================================================== */}
+
+<div className="relative h-full w-full lg:w-[clamp(360px,33vw,540px)] shrink-0 overflow-hidden rounded-[18px] bg-white hidden lg:block">
+
+  {/* TOP TRANSPARENT IMAGE */}
+  <img
+    src="/Ellipse 2.png"
+    alt=""
+    className="absolute left-0 -top-40 z-10 h-auto w-full object-contain"
+  />
+
+  {/* BOTTOM TRANSPARENT IMAGE */}
+  <img
+    src="/Ellipse 1.png"
+    alt=""
+    className="absolute left-0 z-10 h-[120%] w-full object-contain"
+  />
+
+  {/* BOTTOM CONTENT */}
+  <div className="absolute bottom-[32px] mb-20 left-1/2 z-20 h-[286px] w-[448px] -translate-x-1/2">
+
+    {/* ICON */}
+    <div className="absolute left-[178px] top-0 flex h-[92px] w-[92px] items-center justify-center rounded-[16px] bg-[#0085FF]">
+
+      <svg
+        width="40"
+        height="40"
+        viewBox="0 0 40 40"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M20 10C15.0294 10 11 14.0294 11 19V31.0498C11 31.5743 10.5743 32 10.0498 32C9.798 31.9999 9.557 31.8997 9.3789 31.7217L0 22.3428V26.585L7.2578 33.8428C7.9984 34.5834 9.002 34.9999 10.0498 35C12.2312 35 14 33.2312 14 31.0498V19C14 15.6863 16.6863 13 20 13C23.3137 13 26 15.6863 26 19V31.0498C26 33.2312 27.7688 35 29.9502 35C30.998 34.9999 32.0016 34.5834 32.7422 33.8428L34.707 31.8785L37.707 28.8785L40 26.585V22.3428L37.8789 24.4639L35.585 26.7574L32.585 29.7574L30.6211 31.7217C30.443 31.8997 30.202 31.9999 29.9502 32C29.4257 32 29 31.5743 29 31.0498V19C29 14.0294 24.9706 10 20 10ZM20 15C17.7909 15 16 16.7909 16 19V31.0498C16 34.3358 13.3358 37 10.0498 37C8.472 36.9999 6.958 36.3735 5.8428 35.2578L0 29.4141V33.6562L3.722 37.3789C5.400 39.0572 7.676 39.9999 10.0498 40C14.9926 40 19 35.9926 19 31.0498V19C19 18.4477 19.4477 18 20 18C20.5523 18 21 18.4477 21 19V31.0498C21 35.9926 25.0074 40 29.9502 40C32.324 39.9999 34.6 39.0572 36.278 37.3789L40 33.6562V29.4141L34.1572 35.2578C33.042 36.3734 31.528 36.9999 29.9502 37C26.6642 37 24 34.3358 24 31.0498V19C24 16.7909 22.2091 15 20 15Z"
+          fill="#F8FAFC"
+        />
+
+        <path
+          d="M20 5C12.268 5 6 11.268 6 19V25.1719L9 28.1719V19C9 12.9249 13.9249 8 20 8C26.0751 8 31 12.9249 31 19V28.1719L34 25.1719V19C34 11.268 27.732 5 20 5Z"
+          fill="#F8FAFC"
+        />
+
+        <path
+          d="M20 0C9.5066 0 1 8.5066 1 19V20.1719L4 23.1719V19C4 10.1634 11.1634 3 20 3C28.8366 3 36 10.1634 36 19V23.1719L39 20.1719V19C39 8.5066 30.4934 0 20 0Z"
+          fill="#F8FAFC"
+        />
+      </svg>
+
+    </div>
+
+    {/* DATACIRCLES TEXT */}
+    <div className="absolute left-0 top-[122px] w-full text-center">
+      <span className="font-inter text-[29px] font-bold leading-none tracking-[-1.5px] text-black">
+        One Platform for Every Business and Revenue Decision
+      </span>
+    </div>
+
+  </div>
+</div>
 
         {/* ==================================================
-            LEFT SECTION — SAME AS REGISTER
-            HIDDEN ON MOBILE
+            RIGHT SECTION
+            No fixed height: it grows with its content so the
+            OTP inputs, resend timer, etc. never get clipped or
+            force an unwanted scrollbar inside the panel.
             ================================================== */}
 
-        <div className="relative hidden h-[905px] w-[599px] shrink-0 overflow-hidden rounded-[18px] bg-white lg:block">
-
-          {/* TOP TRANSPARENT IMAGE */}
-          <img
-            src="/src/assets/Ellipse 2.png"
-            alt=""
-            className="absolute left-0 -top-40 z-10 h-auto w-full object-contain"
-          />
-
-          {/* BOTTOM TRANSPARENT IMAGE */}
-          <img
-            src="/src/assets/Ellipse 1.png"
-            alt=""
-            className="absolute left-0 z-10 h-[120%] w-full object-contain"
-          />
-
-          {/* BOTTOM CONTENT */}
-          <div className="absolute bottom-[32px] mb-20 left-1/2 z-20 h-[286px] w-[448px] -translate-x-1/2">
-
-            {/* ICON */}
-            <div className="absolute left-[178px] top-0 flex h-[92px] w-[92px] items-center justify-center rounded-[16px] bg-[#0085FF]">
-
-              <svg
-                width="40"
-                height="40"
-                viewBox="0 0 40 40"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  fillRule="evenodd"
-                  clipRule="evenodd"
-                  d="M20 10C15.0294 10 11 14.0294 11 19V31.0498C11 31.5743 10.5743 32 10.0498 32C9.798 31.9999 9.557 31.8997 9.3789 31.7217L0 22.3428V26.585L7.2578 33.8428C7.9984 34.5834 9.002 34.9999 10.0498 35C12.2312 35 14 33.2312 14 31.0498V19C14 15.6863 16.6863 13 20 13C23.3137 13 26 15.6863 26 19V31.0498C26 33.2312 27.7688 35 29.9502 35C30.998 34.9999 32.0016 34.5834 32.7422 33.8428L34.707 31.8785L37.707 28.8785L40 26.585V22.3428L37.8789 24.4639L35.585 26.7574L32.585 29.7574L30.6211 31.7217C30.443 31.8997 30.202 31.9999 29.9502 32C29.4257 32 29 31.5743 29 31.0498V19C29 14.0294 24.9706 10 20 10ZM20 15C17.7909 15 16 16.7909 16 19V31.0498C16 34.3358 13.3358 37 10.0498 37C8.472 36.9999 6.958 36.3735 5.8428 35.2578L0 29.4141V33.6562L3.722 37.3789C5.4004 39.0572 7.676 39.9999 10.0498 40C14.9926 40 19 35.9926 19 31.0498V19C19 18.4477 19.4477 18 20 18C20.5523 18 21 18.4477 21 19V31.0498C21 35.9926 25.0074 40 29.9502 40C32.324 39.9999 34.6 39.0572 36.278 37.3789L40 33.6562V29.4141L34.1572 35.2578C33.042 36.3734 31.528 36.9999 29.9502 37C26.6642 37 24 34.3358 24 31.0498V19C24 16.7909 22.2091 15 20 15Z"
-                  fill="#F8FAFC"
-                />
-
-                <path
-                  d="M20 5C12.268 5 6 11.268 6 19V25.1719L9 28.1719V19C9 12.9249 13.9249 8 20 8C26.0751 8 31 12.9249 31 19V28.1719L34 25.1719V19C34 11.268 27.732 5 20 5Z"
-                  fill="#F8FAFC"
-                />
-
-                <path
-                  d="M20 0C9.5066 0 1 8.5066 1 19V20.1719L4 23.1719V19C4 10.1634 11.1634 3 20 3C28.8366 3 36 10.1634 36 19V23.1719L39 20.1719V19C39 8.5066 30.4934 0 20 0Z"
-                  fill="#F8FAFC"
-                />
-              </svg>
-
-            </div>
-
-            {/* DATACIRCLES TEXT */}
-            <div className="absolute left-0 top-[122px] w-full text-center">
-              <span className="font-inter text-[29px] font-bold leading-none tracking-[-1.5px] text-black">
-                One Platform for Every Business and Revenue Decision
-              </span>
-            </div>
-
-          </div>
-        </div>
-
-        {/* ==================================================
-            RIGHT SECTION — SAME AS REGISTER
-            ================================================== */}
-
-        <div className="h-[899px] min-w-0 flex-1 overflow-hidden rounded-[18px] bg-white">
+        <div className="min-h-0 w-full min-w-0 flex-1 overflow-hidden rounded-[18px] bg-white lg:h-full lg:min-h-0">
 
           {/* CENTERED CONTENT */}
-          <div className="flex h-full w-full items-center justify-center px-4 sm:px-0">
+          <div className="flex min-h-0 w-full items-center justify-center overflow-visible px-[clamp(12px,4vw,40px)] py-[clamp(16px,3vh,32px)] lg:h-full lg:overflow-y-auto lg:overscroll-contain">
 
-            {/* ==================================================
-                ONLY THIS CENTER CONTENT IS REPLACED
-                449 × 692
-                ================================================== */}
+            <div className="w-full max-w-[449px] py-[clamp(4px,1vh,12px)]">
 
-            <div className="h-[692px] w-full max-w-[449px] shrink-0">
+              {/* ==================================================
+                  TOP SECTION
+                  ================================================== */}
 
-              <div className="relative h-full w-full">
+              <div className="w-full">
 
-                {/* ==================================================
-                    VERIFICATION ICON IMAGE
-                    ================================================== */}
+                {/* ICON */}
+<img
+  src="https://ik.imagekit.io/qiap0iq38/DATACIRCLES_PROJECT/signup/Frame%2026.png"
+  alt="Email verification"
+  className="h-[clamp(48px,6.5vh,64px)] w-[clamp(48px,6.5vh,64px)] object-contain"
+/>
 
-                <img
-                  src="https://ik.imagekit.io/qiap0iq38/DATACIRCLES_PROJECT/signup/Frame%2026.png"
-                  alt="Email verification"
-                  className="
-                    absolute
-                    left-0
-                    top-0
-                    h-[56px]
-                    w-[56px]
-                    object-contain
-                  "
-                />
-
-                {/* ==================================================
-                    HEADING
-                    ================================================== */}
-
+                {/* HEADING */}
                 <h1
                   className="
-                    absolute
-                    left-0
-                    top-[82px]
-                    m-0
+                    mt-[clamp(12px,2vh,20px)]
                     font-['Inter']
-                    text-[28px]
+                    text-[clamp(20px,2.2vw,28px)]
                     font-semibold
-                    leading-[36px]
+                    leading-[clamp(26px,3vh,36px)]
                     tracking-[-0.14px]
                     text-[#0F172A]
+                    sm:text-[28px]
+                    sm:leading-[36px]
                   "
                 >
                   Check your Email
                 </h1>
 
-                {/* ==================================================
-                    DESCRIPTION
-                    ================================================== */}
-
+                {/* DESCRIPTION */}
                 <p
                   className="
-                    absolute
-                    left-0
-                    top-[132px]
-                    m-0
+                    mt-[clamp(6px,1vh,8px)]
                     font-['Inter']
-                    text-[18px]
+                    text-[clamp(14px,1.4vw,18px)]
                     font-medium
-                    leading-[28px]
+                    leading-[clamp(20px,2.5vh,28px)]
                     text-[#475569]
                   "
                 >
@@ -265,41 +262,29 @@ export default function Verification() {
 
                 <p
                   className="
-                    absolute
-                    left-0
-                    top-[160px]
-                    m-0
                     max-w-full
+                    break-words
                     font-['Inter']
-                    text-[18px]
+                    text-[clamp(14px,1.4vw,18px)]
                     font-medium
-                    leading-[28px]
+                    leading-[clamp(20px,2.5vh,28px)]
                   "
                 >
-                  <span className="text-[#0085FF]">
-                    {email}
-                  </span>
-
-                  <span className="text-[#475569]">
-                    {" "}below
-                  </span>
+                  <span className="text-[#0085FF]">{email}</span>
+                  <span className="text-[#475569]"> below</span>
                 </p>
 
-                {/* ==================================================
-                    OTP INPUTS
-                    ================================================== */}
+              </div>
 
+              {/* ==================================================
+                  OTP + ACTIONS
+                  ================================================== */}
+
+              <div className="mt-[clamp(16px,2.5vh,24px)] w-full">
+
+                {/* OTP INPUTS */}
                 <div
-                  className="
-                    absolute
-                    left-0
-                    top-[214px]
-                    flex
-                    w-full
-                    justify-between
-                    gap-2
-                    sm:gap-0
-                  "
+                  className="flex w-full justify-between gap-[clamp(6px,1.2vw,10px)]"
                   onPaste={handlePaste}
                 >
                   {code.map((digit, index) => (
@@ -313,17 +298,15 @@ export default function Verification() {
                       maxLength={1}
                       value={digit}
                       onChange={(event) =>
-                        handleCodeChange(
-                          event.target.value,
-                          index
-                        )
+                        handleCodeChange(event.target.value, index)
                       }
-                      onKeyDown={(event) =>
-                        handleKeyDown(event, index)
-                      }
+                      onKeyDown={(event) => handleKeyDown(event, index)}
                       className="
-                        h-[48px]
-                        w-[calc((100%-40px)/6)]
+                        h-[clamp(40px,5.5vh,48px)]
+                        w-full
+                        max-w-[69px]
+                        min-w-0
+                        flex-1
                         rounded-full
                         border
                         border-[#E2E8F0]
@@ -337,28 +320,14 @@ export default function Verification() {
                         outline-none
                         transition
                         focus:border-[#0085FF]
-                        sm:h-[48px]
-                        sm:w-[69px]
                       "
                     />
                   ))}
                 </div>
 
-                {/* ==================================================
-                    DIDN'T RECEIVE
-                    ================================================== */}
+                {/* DIDN'T RECEIVE */}
+                <div className="mt-[clamp(16px,2.8vh,25px)] flex w-full flex-wrap items-center justify-center gap-[clamp(6px,0.7vw,8px)] text-center">
 
-                <div
-                  className="
-                    absolute
-                    left-0
-                    top-[290px]
-                    flex
-                    w-full
-                    items-center
-                    justify-center
-                  "
-                >
                   <span
                     className="
                       font-['Inter']
@@ -376,7 +345,6 @@ export default function Verification() {
                     onClick={handleResend}
                     disabled={timeLeft > 0}
                     className={`
-                      ml-[8px]
                       font-['Inter']
                       text-[14px]
                       font-semibold
@@ -388,64 +356,25 @@ export default function Verification() {
                       }
                     `}
                   >
-                    Send Again
+                    {timeLeft > 0 ? formattedTime : "Resend"}
                   </button>
+
                 </div>
 
-                {/* ==================================================
-                    RESEND TIMER
-                    ================================================== */}
+                {verificationError && (
+                  <p className="mt-3 text-center font-['Inter'] text-[13px] font-medium text-red-500">
+                    {verificationError}
+                  </p>
+                )}
 
-                <div
-                  className="
-                    absolute
-                    left-0
-                    top-[341px]
-                    flex
-                    w-full
-                    items-center
-                    justify-center
-                  "
-                >
-                  <span
-                    className="
-                      font-['Inter']
-                      text-[14px]
-                      font-semibold
-                      leading-[20px]
-                      text-[#0F172A]
-                    "
-                  >
-                    Resend
-                  </span>
-
-                  <span
-                    className="
-                      ml-[8px]
-                      font-['Inter']
-                      text-[14px]
-                      font-semibold
-                      leading-[20px]
-                      text-[#0085FF]
-                    "
-                  >
-                    {formattedTime}
-                  </span>
-                </div>
-
-                {/* ==================================================
-                    VERIFY BUTTON
-                    ================================================== */}
-
+                {/* VERIFY BUTTON */}
                 <button
                   type="button"
                   onClick={handleVerify}
-                  disabled={!isCodeComplete}
+                  disabled={!isCodeComplete || isVerifying}
                   className="
-                    absolute
-                    left-0
-                    top-[390px]
-                    h-[48px]
+                    mt-[clamp(16px,2.5vh,24px)]
+                    h-[clamp(42px,5.5vh,48px)]
                     w-full
                     rounded-full
                     bg-[#0085FF]
@@ -463,33 +392,79 @@ export default function Verification() {
                   Verify Code
                 </button>
 
+                {/* BACK */}
+                <div className="mt-[clamp(12px,2vh,18px)] flex w-full items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => navigate(-1)}
+                    className="
+                      cursor-pointer
+                      font-['Inter']
+                      text-[14px]
+                      font-semibold
+                      leading-[20px]
+                      text-[#64748B]
+                      hover:underline
+                    "
+                  >
+                    ← Go Back
+                  </button>
+                </div>
+
               </div>
 
-              {/* FOOTER */}
-              <div className="mt-35 w-full justify-center">
+              {/* ==================================================
+                  FOOTER
+                  ================================================== */}
+
+              <div className="mt-[clamp(24px,5vh,96px)] whitespace-nowrap w-full justify-center">
 
                 {/* DIVIDER */}
-                <div className="h-px w-[120%] -translate-x-10 bg-[#E2E8F0]" />
+                <div className="h-px w-full bg-[#E2E8F0]" />
 
-                {/* Footer Content */}
-                <div className="mt-[20px] flex w-full items-center justify-center gap-8 whitespace-nowrap">
+                {/* FOOTER CONTENT */}
+                <div className="mt-[clamp(12px,2vh,20px)] flex w-full flex-wrap items-center justify-center gap-[clamp(10px,1.5vw,32px)] pb-4 lg:flex-nowrap">
 
-                  <span className="font-['Inter'] text-[14px] font-normal leading-[20px] text-[#475569]">
+                  <span
+                    className="
+                      text-center
+                      font-['Inter']
+                      text-[13px]
+                      font-normal
+                      leading-[20px]
+                      text-[#475569]
+                      sm:text-[14px]
+                    "
+                  >
                     2026 Datacircles. All Rights Reserved.
                   </span>
 
-                  <div className="flex items-center gap-[32px]">
+                  <div className="flex flex-wrap items-center justify-center gap-[clamp(10px,1.5vw,32px)] lg:flex-nowrap">
 
                     <button
                       type="button"
-                      className="font-['Inter'] text-[14px] font-normal leading-[20px] text-[#475569]"
+                      className="
+                        font-['Inter']
+                        text-[13px]
+                        font-normal
+                        leading-[20px]
+                        text-[#475569]
+                        sm:text-[14px]
+                      "
                     >
                       Privacy Policy
                     </button>
 
                     <button
                       type="button"
-                      className="font-['Inter'] text-[14px] font-normal leading-[20px] text-[#475569]"
+                      className="
+                        font-['Inter']
+                        text-[13px]
+                        font-normal
+                        leading-[20px]
+                        text-[#475569]
+                        sm:text-[14px]
+                      "
                     >
                       Terms of Service
                     </button>
@@ -510,6 +485,3 @@ export default function Verification() {
     </div>
   );
 }
-
-
-

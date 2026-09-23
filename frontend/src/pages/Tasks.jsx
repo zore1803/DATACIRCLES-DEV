@@ -3393,7 +3393,7 @@ function Tasks() {
           bar reports the fetch instead. */}
       {/* No border-t: the toolbar strip right above already has its own
           border-b, so a top border here would double up against it. */}
-      <div className="relative bg-white border-x border-b border-[#E1E4EA]" style={{ paddingLeft: "var(--content-inset, 16px)" }}>
+      <div className={`relative bg-white border-x border-[#E1E4EA] ${showTaskLoadingSkeleton || tasks.length > 0 ? "border-b" : ""}`} style={{ paddingLeft: "var(--content-inset, 16px)" }}>
           <table
             className="w-full border-separate border-spacing-0 text-left"
             style={{ minWidth: `${taskTable.getTotalSize()}px`, tableLayout: "fixed" }}
@@ -3562,7 +3562,7 @@ function Tasks() {
           bar reports the fetch instead. */}
       {/* No border-t: the toolbar strip right above already has its own
           border-b, so a top border here would double up against it. */}
-      <div className="relative bg-white border-x border-b border-[#E1E4EA]" style={{ paddingLeft: "var(--content-inset, 16px)" }}>
+      <div className={`relative bg-white border-x border-[#E1E4EA] ${showMeetingLoadingSkeleton || meetings.length > 0 ? "border-b" : ""}`} style={{ paddingLeft: "var(--content-inset, 16px)" }}>
           <table
             className="w-full border-separate border-spacing-0 text-left"
             style={{ minWidth: `${meetingTable.getTotalSize()}px`, tableLayout: "fixed" }}

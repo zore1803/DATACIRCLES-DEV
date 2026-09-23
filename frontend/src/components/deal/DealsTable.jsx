@@ -1,4 +1,5 @@
 import CalendarIcon from "../common/CalendarIcon";
+import EmptyState from "../common/EmptyState";
 import DeleteIcon from "../common/DeleteIcon";
 import PdfIcon from "../common/PdfIcon";
 import Checkbox from "../common/Checkbox";
@@ -18,7 +19,8 @@ import {
   Pin,
   PinOff,
   EyeOff,
-  ArrowUp, ArrowDown } from "lucide-react";
+  ArrowUp, ArrowDown,
+  Handshake } from "lucide-react";
 import CustomDropdown from "../common/CustomDropdown";
 import TableSkeletonRows from "../common/TableSkeletonRows";
 
@@ -102,6 +104,10 @@ export default function DealsTable({
   setQuickViewDealId,
   toggleStar,
   searchTerm = "",
+  // Shared empty state (same as Contacts/Companies): needs to know whether
+  // the table is empty because of a filter, and how to start a new deal.
+  isFiltered = false,
+  onCreateDeal,
   scrollContainerRef,
   // Persisted column choices from the page's "Columns" panel
   // (useColumnSettings("deals", ...) in Deals.jsx). Unioned with this
@@ -1011,11 +1017,13 @@ export default function DealsTable({
               <TableSkeletonRows numRows={skeletonRows} columns={table.getVisibleLeafColumns().filter((c) => c.id !== "selection")} hasCheckbox />
             ) : sortedTableDeals.length === 0 ? (
               <tr>
-                <td
-                  colSpan={table.getAllColumns().length}
-                  className="px-6 py-12 text-center text-gray-500 font-medium"
-                >
-                  No deals found.
+                <td colSpan={table.getAllColumns().length}>
+                  <EmptyState
+                    icon={Handshake}
+                    noun="Deal"
+                    isFiltered={isFiltered}
+                    onCreate={onCreateDeal}
+                  />
                 </td>
               </tr>
             ) : (

@@ -24,6 +24,7 @@ const {
   cancelSubscription,
   reconcileSubscriptionPayment,
   reconcileMandate,
+  handleUnusableMandate,
 } = require('./subscriptionController');
 const razorpay = require('../config/razorpay');
 const {
@@ -1572,6 +1573,51 @@ const checkMandate = async (req, res) => {
       storedMandateStatus: subscription.mandateStatus,
       isPaymentConfirmed: subscription.isPaymentConfirmed,
     };
+
+    // Rejected/cancelled at Razorpay but still 'pending' here: the token
+    // webhook was missed. Syncing it runs exactly what that webhook would —
+    // reconcileMandate (a paid first invoice activates for the paid period,
+    // auto-renew off) then handleUnusableMandate (refunds instead, only when
+    // RAZORPAY_AUTO_REFUND_REJECTED_MANDATE is on).
+    const unusable = razorpayMandateStatus === 'rejected' || razorpayMandateStatus === 'cancelled';
+    if (unusable && subscription.mandateStatus !== razorpayMandateStatus) {
+      const willRefund = process.env.RAZORPAY_AUTO_REFUND_REJECTED_MANDATE === 'true';
+      const outcome = willRefund
+        ? 'the captured first payment will be REFUNDED automatically (RAZORPAY_AUTO_REFUND_REJECTED_MANDATE is on) and the subscription will not activate'
+        : 'the paid period will be activated with auto-renew OFF (the customer keeps what they paid for; they can set up auto-pay again later)';
+      if (!apply) {
+        return res.json({
+          ...base,
+          canFix: true,
+          message: `Razorpay reports this mandate as "${razorpayMandateStatus}"${tokenSummary.failureReason ? ` (${tokenSummary.failureReason})` : ''}, but this system still has it as "${subscription.mandateStatus}" — the token webhook was missed. Syncing it: ${outcome}.`,
+        });
+      }
+      if (!subscription.mandateTokenId) subscription.mandateTokenId = tokenId;
+      subscription.mandateStatus = razorpayMandateStatus;
+      await reconcileMandate(subscription);
+      await handleUnusableMandate(subscription, {
+        tokenEntity: { error_description: tokenSummary.failureReason },
+        mandateStatus: razorpayMandateStatus,
+      });
+      const refreshed = await Subscription.findById(subscription._id).populate('organization', 'name email');
+      return res.json({
+        ...base,
+        canFix: true,
+        applied: true,
+        subscription: {
+          _id: refreshed._id,
+          organization: refreshed.organization,
+          planName: refreshed.planName,
+          paymentStatus: refreshed.paymentStatus,
+          mandateStatus: refreshed.mandateStatus,
+          appStatus: refreshed.appStatus,
+          isPaymentConfirmed: refreshed.isPaymentConfirmed,
+        },
+        message: refreshed.isPaymentConfirmed
+          ? `Mandate synced as "${razorpayMandateStatus}" — subscription is active for the paid period with auto-renew off.`
+          : `Mandate synced as "${razorpayMandateStatus}" — subscription not activated (paymentStatus "${refreshed.paymentStatus}"${willRefund ? '; first payment refunded' : ''}).`,
+      });
+    }
 
     if (razorpayMandateStatus !== 'confirmed') {
       return res.json({

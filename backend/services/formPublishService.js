@@ -5,6 +5,7 @@
 const crypto = require("crypto");
 const FormDefinition = require("../models/FormDefinition");
 const FormVersion = require("../models/FormVersion");
+const FormSubmission = require("../models/FormSubmission");
 const {
   computeSchemaHash,
   resolveFields,
@@ -21,17 +22,34 @@ function mintPublicSlug() {
 /**
  * Purpose: Save the builder's in-progress layout/theme edits onto FormDefinition — the "working
  * copy" write path (FORMS_DOMAIN_MODEL.md: "FormDefinition IS the working copy").
- * Inputs: formDefinitionId, organizationId, { layout?, theme?, title? }
+ * Inputs: formDefinitionId, organizationId, { layout?, theme?, title?, module? }
  * Outputs: Promise<FormDefinitionDocument>
  * Side effects: one FormDefinition write. Sets hasUnpublishedChanges = true whenever `layout`
  *   changes and status is already "published" or "paused" — never touches `status` itself
  *   (FORMS_SCHEMA.md §1/§2: ordinary draft saves must never affect reachability).
- * Errors thrown: throws if formDefinitionId doesn't resolve within organizationId
+ * Errors thrown: throws if formDefinitionId doesn't resolve within organizationId; throws if
+ *   `module` is given for a form that already has canvas fields or submissions — module drives
+ *   which fields/system schema the whole form is built against, so changing it under existing
+ *   work would silently orphan fields and submissions tied to the old module.
  * Known callers: builder save endpoint (future controller)
  */
-async function saveDraft(formDefinitionId, organizationId, { layout, theme, title } = {}) {
+async function saveDraft(formDefinitionId, organizationId, { layout, theme, title, module } = {}) {
   const form = await FormDefinition.findOne({ _id: formDefinitionId, organization: organizationId });
   if (!form) throw new Error("FormDefinition not found");
+
+  if (module !== undefined && module !== form.module) {
+    if (!["Contact", "Company", "Vendor"].includes(module)) {
+      throw new Error('module must be one of "Contact", "Company", "Vendor"');
+    }
+    if ((form.layout || []).length > 0) {
+      throw new Error("Cannot change module: this form already has fields on its canvas");
+    }
+    const submissionCount = await FormSubmission.countDocuments({ formDefinition: form._id });
+    if (submissionCount > 0) {
+      throw new Error("Cannot change module: this form already has submissions");
+    }
+    form.module = module;
+  }
 
   if (layout !== undefined) {
     form.layout = layout;

@@ -128,7 +128,10 @@ const { setAppStatus } = require('../controllers/subscriptionController');
  *   'SUBSCRIPTION_ADVANCED'. No effect on any real code path when omitted.
  */
 async function renewSubscription(subscription, { chargeMandateFn, _injectFailureAfter } = {}) {
-  if (!subscription.mandateTokenId) {
+  // A 'manual' subscription has no mandate: its chargeMandateFn (see
+  // manualRenewal.js) sends a payment link instead, and a later call with the
+  // captured payment commits the renewal through the same steps below.
+  if (!subscription.mandateTokenId && subscription.billingMode !== 'manual') {
     // R1/R2 gating — SKIPPED. Structured return, not a throw (Phase 4B Slice
     // 3): this is an expected business outcome (this subscription was never
     // renewal-eligible in the first place), not an error condition.
@@ -345,6 +348,7 @@ async function renewSubscription(subscription, { chargeMandateFn, _injectFailure
     // clean-failure shape (PAST_DUE, non-terminal transaction) as a charge
     // Razorpay itself declines, just detected one step earlier.
     if (
+      subscription.billingMode !== 'manual' &&
       typeof subscription.mandateMaxAmount === 'number' &&
       billingInvoice.total > subscription.mandateMaxAmount
     ) {
@@ -383,6 +387,19 @@ async function renewSubscription(subscription, { chargeMandateFn, _injectFailure
       // attempt must find and reuse it, not lose it to an unrelated
       // concurrent reservation.
       return { outcome: 'RECONCILIATION_NEEDED', reason: 'AMBIGUOUS_CHARGE_RESULT', error: chargeErr?.message };
+    }
+
+    if (chargeResult?.pending) {
+      // Manual billing: a payment link went out instead of a charge. Nothing
+      // is paid yet, so the invoice/transaction stay PENDING_PAYMENT/PRICED
+      // and appStatus is untouched — the grace job (manualRenewal.js) owns
+      // what happens if it stays unpaid. Paying it re-enters this function,
+      // which resumes this same transaction instead of repricing.
+      return {
+        outcome: 'AWAITING_PAYMENT',
+        invoice: billingInvoice._id,
+        transaction: commercialTransaction._id,
+      };
     }
 
     if (!chargeResult?.success) {

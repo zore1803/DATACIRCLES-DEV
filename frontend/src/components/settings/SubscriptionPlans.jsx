@@ -22,6 +22,7 @@ import { formatPrice } from "../../utils/pricingSnapshot";
 import { waitForSettlement } from "../../utils/waitForSettlement";
 import { Tag, CheckCircle2 } from "lucide-react";
 import CheckoutJourneyScreen from "../subscription/CheckoutJourneyScreen";
+import PaymentMethodModal from "../subscription/PaymentMethodModal";
 import { isCouponStillRecurring } from "../../utils/couponHelpers";
 
 // Icon map — keyed by planId
@@ -92,6 +93,13 @@ const SubscriptionPlans = () => {
   // converted. Reset each time the transition confirmation is (re)opened.
   const [transitionAddonChoices, setTransitionAddonChoices] = useState({});
   const [checkoutData, setCheckoutData] = useState(null); // modal data, null = closed
+  // A Registration Link shows only ONE autopay method on Razorpay's page
+  // (omitting it showed Cards only), so the customer picks it in
+  // PaymentMethodModal first. Holds which action resumes after the pick:
+  // { kind: 'checkout' | 'resume' }, null = closed. The last pick is reused
+  // when checkout re-runs after the billing-profile modal.
+  const [methodPrompt, setMethodPrompt] = useState(null);
+  const lastMandateMethodRef = useRef(null);
 
   // Coupon applied on this page (before checkout). Holds { code, name, rules }.
   // Discounts ripple onto every plan/add-on card via the coupon's per-product
@@ -1350,9 +1358,14 @@ const SubscriptionPlans = () => {
   // the user had just completed it. Passing the fresh user explicitly here
   // sidesteps the closure entirely rather than depending on React's next
   // render to have happened first.
-  const handleConfirmCheckout = async (userOverride) => {
+  const handleConfirmCheckout = async (userOverride, mandateMethod = lastMandateMethodRef.current) => {
     if (!checkoutData) return;
     const effectiveUser = userOverride || currentUser;
+
+    if (!checkoutData.type && !mandateMethod) {
+      setMethodPrompt({ kind: "checkout" });
+      return;
+    }
 
     // Popup-blocker fix (see openRegistrationLinkJourney's own comment):
     // every checkoutData.type branch below either returns early via
@@ -1661,6 +1674,7 @@ const SubscriptionPlans = () => {
         billingCycle: checkoutData.billingCycle,
         addons: addonsPayload,
         ...(checkoutData.appliedCoupon ? { couponCode: checkoutData.appliedCoupon.code } : {}),
+        mandateMethod,
         // Referral code is NOT sent here — it's applied immediately via its
         // own Apply button (handleApplyReferral), not folded into checkout
         // submission. See the state declaration above for why.
@@ -1687,6 +1701,7 @@ const SubscriptionPlans = () => {
       // card's in-progress configuration is stale regardless.
       setSelectedAddons({});
       setCheckoutData(null);
+      lastMandateMethodRef.current = null;
 
       if (response.paymentDetails && razorpayLoaded) {
         if (preopenedPopup && !preopenedPopup.closed) preopenedPopup.close();
@@ -1731,9 +1746,14 @@ const SubscriptionPlans = () => {
   // not CAW-aware at all. Must explicitly pass the CURRENT plan/billingCycle/
   // add-ons/coupon so nothing is silently dropped — omitting couponCode here
   // would overwrite subscription.appliedCoupon to null on the backend.
-  const handleResumePayment = async () => {
+  const handleResumePayment = async (mandateMethod) => {
     const sub = subscription?.subscription;
     if (!sub) return;
+
+    if (!mandateMethod) {
+      setMethodPrompt({ kind: "resume" });
+      return;
+    }
 
     // Same popup-blocker fix as handleConfirmCheckout — open the tab
     // synchronously here, before the first await, not inside
@@ -1766,6 +1786,7 @@ const SubscriptionPlans = () => {
         billingCycle: sub.billingCycle,
         addons: (sub.activeAddons || []).map((a) => ({ addonKey: a.addonKey, quantity: a.quantity })),
         ...(sub.appliedCoupon?.code ? { couponCode: sub.appliedCoupon.code } : {}),
+        mandateMethod,
       };
       const response = await updateSubscription(planData);
       if (response.registrationLink?.shortUrl) {
@@ -2049,6 +2070,20 @@ const SubscriptionPlans = () => {
         />
       )}
 
+      <PaymentMethodModal
+        isOpen={!!methodPrompt}
+        onClose={() => setMethodPrompt(null)}
+        // Runs inside this click, so the registration tab pre-open in both
+        // handlers still counts as a user gesture (popup-blocker fix).
+        onSelect={(method) => {
+          const prompt = methodPrompt;
+          setMethodPrompt(null);
+          lastMandateMethodRef.current = method;
+          if (prompt?.kind === "resume") handleResumePayment(method);
+          else handleConfirmCheckout(undefined, method);
+        }}
+      />
+
       <CheckoutSummaryModal
         checkoutData={checkoutData}
         // Explicit no-arg call — handleConfirmCheckout now takes an optional
@@ -2056,7 +2091,8 @@ const SubscriptionPlans = () => {
         // function reference here would let the button's click event leak
         // through as that argument instead.
         onConfirm={() => handleConfirmCheckout()}
-        onCancel={() => setCheckoutData(null)}
+        onCancel={() => { lastMandateMethodRef.current = null; setCheckoutData(null); }}
+        // Only a first payment creates a mandate; paying orgs already have one.
         onCarryForwardChange={checkoutData?.type === "plan_downgrade" ? handleDowngradeCarryForwardChange : handleCarryForwardChange}
         onDowngradeResolutionChange={handleDowngradeResolutionChange}
         transitionAddonChoices={transitionAddonChoices}
@@ -2123,7 +2159,7 @@ const SubscriptionPlans = () => {
         <PaymentStatusAlert
           subscription={subscription?.subscription}
           onRetryPayment={handleRetryPayment}
-          onResumePayment={handleResumePayment}
+          onResumePayment={() => handleResumePayment()}
           onChangePlan={() => document.getElementById('plan-cards-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
           processing={processing || paymentInProgress}
         />

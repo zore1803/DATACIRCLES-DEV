@@ -224,7 +224,7 @@ async function getForm(req, res) {
 
 /**
  * PATCH /api/forms/:id
- * Body: { layout?, theme?, title? } — direct pass-through to formPublishService.saveDraft.
+ * Body: { layout?, theme?, title?, module? } — direct pass-through to formPublishService.saveDraft.
  */
 async function updateForm(req, res) {
   try {
@@ -236,8 +236,8 @@ async function updateForm(req, res) {
       }
     }
 
-    const { layout, theme, title } = req.body || {};
-    const form = await formPublishService.saveDraft(req.params.id, req.user.organization, { layout, theme, title });
+    const { layout, theme, title, module } = req.body || {};
+    const form = await formPublishService.saveDraft(req.params.id, req.user.organization, { layout, theme, title, module });
     res.json({ form });
   } catch (err) {
     handleServiceError(res, err, "Failed to update form");

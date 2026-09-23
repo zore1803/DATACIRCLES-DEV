@@ -37,6 +37,10 @@ const subscriptionSchema = new mongoose.Schema({
   // ============================================================
   razorpayCustomerId: { type: String }, // cust_… (the mandate's customer)
   mandateTokenId: { type: String }, // token_… the reusable authorization CAW charges against
+  // Why the mandate is unusable, in the bank's own words (Razorpay's error_description, e.g.
+  // "Failed to tokenise the card"). Surfaced to the customer so a rejected auto-pay setup
+  // explains itself instead of leaving them on a silent trial after being charged.
+  mandateFailureReason: { type: String },
   // Added in Phase 2 (onboarding) — needed to correlate the incoming
   // token.confirmed/payment.captured webhooks back to the subscription that
   // requested them, since the Registration Link's invoice/order ids aren't
@@ -54,6 +58,20 @@ const subscriptionSchema = new mongoose.Schema({
   },
   mandateMaxAmount: { type: Number }, // cap in the same unit as totalAmount; charges above it hard-fail
   mandateExpiresAt: { type: Date },
+  // 'autopay' — a Charge-at-Will mandate is charged each renewal (above).
+  // 'manual'  — no mandate: each period's invoice is sent as a plain Razorpay
+  // payment link (every method: UPI, cards, netbanking, wallets…) that the
+  // customer pays themselves. See utils/manualRenewal.js.
+  billingMode: { type: String, enum: ['autopay', 'manual'], default: 'autopay' },
+  // The open renewal link for a 'manual' subscription, cleared once paid.
+  // dueAt is the period boundary it bills for; grace/reminders count from it.
+  manualRenewal: {
+    invoiceId: { type: String }, // inv_… — matches payment.invoice_id on payment.captured
+    shortUrl: { type: String },
+    amount: { type: Number },
+    dueAt: { type: Date },
+    remindersSent: [{ type: Number }], // grace days already reminded on (e.g. 3, 6)
+  },
   // Phase 1 of annual-billing groundwork (docs/audit/ANNUAL_BILLING_SCOPE.md).
   // Set exactly once, at first successful payment (runFirstPaymentSettlement),
   // and never again. Plain `immutable: true` was tried first and rejected by

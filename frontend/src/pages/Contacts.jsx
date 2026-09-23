@@ -2896,7 +2896,7 @@ function Contacts() {
             // loads; the top progress bar reports the fetch instead.
             // No border-t: the toolbar strip right above already has its own
             // border-b, so a top border here would double up against it.
-            <div className="relative bg-white border-r border-b border-[#E1E4EA]" style={{ paddingLeft: "var(--content-inset, 16px)" }}>
+            <div className={`relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || sortedContacts.length > 0 ? "border-b" : ""}`} style={{ paddingLeft: "var(--content-inset, 16px)" }}>
               <table
                 className="w-full border-separate border-spacing-0 text-left"
                 style={{
@@ -3113,7 +3113,7 @@ function Contacts() {
           document.body,
         )}
 
-        {!showKanban && activeTab !== "Hotlist" && !showLoadingSkeleton && (
+        {!showKanban && activeTab !== "Hotlist" && !showLoadingSkeleton && pagination.totalCount > 0 && (
           <div
             className={`fixed bottom-0 right-0 bg-white border-t border-[#E1E4EA] shadow-sm z-[9992] flex items-center ${isSearchOverlayOpen ? "pointer-events-none" : ""}`}
             style={{
