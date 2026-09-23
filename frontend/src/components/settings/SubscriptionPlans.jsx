@@ -1911,6 +1911,23 @@ const SubscriptionPlans = () => {
   // JS modal. Never trusts local state, only the freshly-fetched value each
   // time (same discipline as startPolling/waitForSettlement.js).
   const startMandatePolling = async (popupWindow) => {
+    // Ask Razorpay directly on each tick, then read our own state — the same
+    // reconcile-then-fetch the PENDING_MANDATE auto-detect effect uses. The
+    // hosted Registration Link has no synchronous verify callback, so polling
+    // fetchSubscription alone only ever re-reads what the webhook wrote; if the
+    // webhook never arrives (e.g. it can't reach the backend in test/local), a
+    // mandate that WAS approved on Razorpay's page stays "pending" here and the
+    // "Confirming your mandate..." overlay spins the full timeout. Reconciling
+    // pulls the real status from Razorpay instead of waiting on a webhook.
+    const reconcileThenFetch = async () => {
+      try {
+        await subscriptionAPI.reconcilePayment();
+      } catch {
+        // Best-effort — fall through to the plain read.
+      }
+      return fetchSubscription();
+    };
+
     // Race the real settlement poll against the customer closing the
     // Razorpay tab — found via live QA: closing that tab used to leave the
     // full-screen "Confirming your mandate..." overlay up for the entire
@@ -1918,7 +1935,7 @@ const SubscriptionPlans = () => {
     // itself has no way to know the tab is gone until it finally times out.
     const outcome = await Promise.race([
       waitForSettlement({
-        fetchLatest: fetchSubscription,
+        fetchLatest: reconcileThenFetch,
         isSettled: (data) => !!data?.subscription?.isPaymentConfirmed,
         intervalMs: 5000,
         timeoutMs: 5 * 60 * 1000,
@@ -1929,9 +1946,10 @@ const SubscriptionPlans = () => {
 
     if (outcome.kind === "closed") {
       // The tab closing doesn't itself prove the mandate wasn't approved —
-      // check once more immediately in case the webhook already landed
-      // (e.g. approved on Razorpay's page a moment before the tab closed).
-      const latest = await fetchSubscription();
+      // check once more immediately in case it was approved a moment before the
+      // tab closed. Reconcile against Razorpay rather than reading local state,
+      // since the confirming webhook may never have reached the backend.
+      const latest = await reconcileThenFetch();
       if (pollCancelledRef.current) return;
       if (latest?.subscription?.isPaymentConfirmed) {
         setCheckoutJourneyState('success');

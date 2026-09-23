@@ -51,7 +51,11 @@ const SortableRow = ({ id, children }) => {
   );
 };
 
-export default function KanbanSettings() {
+// `embedded` = rendered inside a drawer (PipelineStageDrawer) rather than on
+// the Settings page. The drawer already supplies the surrounding card, padding
+// and a footer hint, so embedded mode drops this component's own outer card,
+// the page-header offset, and the trailing hint to avoid double-nesting.
+export default function KanbanSettings({ embedded = false }) {
   const [statuses, setStatuses] = useState([]);
   const [newStatus, setNewStatus] = useState("");
   const [editIndex, setEditIndex] = useState(null);
@@ -214,10 +218,10 @@ export default function KanbanSettings() {
   }
 
   return (
-    <div className="space-y-6 -mt-8">
+    <div className={embedded ? "space-y-4" : "space-y-6 -mt-8"}>
       <AppToaster />
 
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+      <div className={embedded ? "" : "bg-white rounded-2xl border border-gray-200 shadow-sm p-6"}>
         {/* Add form + table, same shapes as SystemDefaultsSettings.jsx: one pill input paired with
             a pill Add button, then the #F5F7FA-headed table below it. */}
         <form
@@ -349,10 +353,12 @@ export default function KanbanSettings() {
           </DndContext>
         )}
 
-        <p className="text-xs text-gray-400 mt-3">
-          Drag a row to reorder the pipeline. Changes save automatically and apply to all deals.
-          Won and Lost cannot be renamed or removed.
-        </p>
+        {!embedded && (
+          <p className="text-xs text-gray-400 mt-3">
+            Drag a row to reorder the pipeline. Changes save automatically and apply to all deals.
+            Won and Lost cannot be renamed or removed.
+          </p>
+        )}
       </div>
     </div>
   );

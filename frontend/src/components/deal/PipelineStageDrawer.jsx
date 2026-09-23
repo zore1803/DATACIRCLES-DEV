@@ -25,9 +25,9 @@ const PipelineStageDrawer = ({ isOpen, onClose }) => {
       <aside
         role="dialog"
         aria-label="Pipeline stages"
-        className="fixed dc-panel-card w-[calc(100%-3rem)] lg:w-[70vw] bg-white shadow-2xl flex flex-col overflow-hidden animate-slideInRight"
+        className="fixed dc-panel-card dc-panel-w bg-white shadow-2xl flex flex-col overflow-hidden animate-slideInRight"
       >
-        <header className="flex-shrink-0 flex items-center justify-between gap-3 px-6 py-4 border-b border-[#D9D9D9] bg-white">
+        <header className="flex-shrink-0 flex items-center justify-between gap-3 px-5 py-3.5 border-b border-[#E1E4EA] bg-white">
           <div>
             <h2 className="text-[15px] font-semibold leading-6 text-[#1C1B1F]">
               Pipeline Stages
@@ -38,21 +38,29 @@ const PipelineStageDrawer = ({ isOpen, onClose }) => {
             type="button"
             onClick={onClose}
             title="Close"
-            className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity flex-shrink-0"
+            className="self-start p-2 -mr-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
             aria-label="Close"
           >
-            <X className="w-[18px] h-[18px]" strokeWidth={2} />
+            <X className="w-5 h-5" />
           </button>
         </header>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
-          {/* KanbanSettings carries a `-mt-8` sized for Settings -> Pipeline's
-              own page header above it; this offsets that so it doesn't clip
-              under the drawer header instead. */}
-          <div className="mt-8">
-            <KanbanSettings />
-          </div>
+          <KanbanSettings embedded />
         </div>
+
+        <footer className="flex-shrink-0 px-5 py-3 border-t border-[#E1E4EA] bg-[#FAFBFC] flex items-center justify-between gap-3">
+          <p className="text-[11px] text-[#99A0AE] min-w-0 truncate">
+            Changes save automatically and apply to all deals.
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-9 px-5 rounded-full border border-[#E1E4EA] text-[13px] font-medium text-[#1F2937] hover:bg-gray-50 transition-colors flex-shrink-0"
+          >
+            Close
+          </button>
+        </footer>
       </aside>
     </div>,
     document.body

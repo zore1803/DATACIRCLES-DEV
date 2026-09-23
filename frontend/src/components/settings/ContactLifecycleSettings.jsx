@@ -13,9 +13,12 @@ import EditIcon from "../common/EditIcon";
 import DeleteIcon from "../common/DeleteIcon";
 import useContactLifecycleStore from "../../store/useContactLifecycleStore";
 
-export default function ContactLifecycleSettings() {
+// `embedded` = rendered inside the ContactLifecycleDrawer rather than on the
+// Settings page. The drawer supplies its own card, padding and footer hint, so
+// embedded mode drops this component's outer card and trailing hint to avoid
+// double-nesting.
+export default function ContactLifecycleSettings({ embedded = false }) {
   const [stages, setStages] = useState([]);
-  const [settingsId, setSettingsId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newStageName, setNewStageName] = useState("");
@@ -34,7 +37,6 @@ export default function ContactLifecycleSettings() {
       setLoading(true);
       const res = await API.get("/contact-lifecycle-settings");
       setStages(res.data?.stages || []);
-      setSettingsId(res.data?._id || null);
     } catch (err) {
       console.error("Failed to load contact lifecycle settings", err);
       toast.error("Failed to load contact lifecycle settings");
@@ -48,7 +50,6 @@ export default function ContactLifecycleSettings() {
       setSaving(true);
       const res = await API.put("/contact-lifecycle-settings", { stages: updatedStages });
       setStages(res.data.stages);
-      setSettingsId(res.data._id);
       // Every open drawer/dropdown/Kanban picks this up immediately instead
       // of waiting for its own next fetch.
       setStoreStages(res.data.stages, res.data._id);
@@ -154,10 +155,10 @@ export default function ContactLifecycleSettings() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={embedded ? "space-y-4" : "space-y-6"}>
       <AppToaster />
 
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+      <div className={embedded ? "" : "bg-white rounded-2xl border border-gray-200 shadow-sm p-6"}>
         <form
           onSubmit={(e) => { e.preventDefault(); handleAddStage(); }}
           className="flex gap-2 mb-5"
@@ -305,10 +306,12 @@ export default function ContactLifecycleSettings() {
           </div>
         )}
 
-        <p className="text-xs text-gray-400 mt-3">
-          A stage or status still assigned to a contact can't be removed — reassign those contacts first.
-          Changes save automatically and apply to every contact page, dropdown and the Kanban board.
-        </p>
+        {!embedded && (
+          <p className="text-xs text-gray-400 mt-3">
+            A stage or status still assigned to a contact can't be removed — reassign those contacts first.
+            Changes save automatically and apply to every contact page, dropdown and the Kanban board.
+          </p>
+        )}
       </div>
     </div>
   );
