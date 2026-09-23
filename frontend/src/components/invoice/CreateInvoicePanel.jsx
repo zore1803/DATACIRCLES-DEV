@@ -1641,10 +1641,8 @@ const CreateInvoicePanel = ({
           {/* Sections 01-04 (Details/Address/GST/Items) swap to the
               full-width table layout when the preview is hidden — same form
               state and handlers either way, just a different arrangement.
-              Notes onward always renders from this file, unchanged.
-              Quotations always use the inline form (never FullWidthDocumentPanel)
-              so their Swipe-style layout renders in both modes. */}
-          {hidePreview && type !== "quotation" ? (
+              Notes onward always renders from this file, unchanged. */}
+          {hidePreview ? (
             <FullWidthDocumentPanel
               type={type}
               docName={docName}
@@ -1660,9 +1658,11 @@ const CreateInvoicePanel = ({
               onAddDeal={onAddDeal}
               catalogue={catalogue}
               addItem={addItem}
-              removeItem={removeItem}
               updateItem={updateItem}
               stripHtml={stripHtml}
+              fieldErrors={fieldErrors}
+              setFieldErrors={setFieldErrors}
+              setShowQuickItemDrawer={setShowQuickItemDrawer}
             />
           ) : (
           <>

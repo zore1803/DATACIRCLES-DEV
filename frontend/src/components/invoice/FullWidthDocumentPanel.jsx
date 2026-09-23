@@ -55,6 +55,9 @@ const FullWidthDocumentPanel = ({
   removeItem,
   updateItem,
   stripHtml,
+  fieldErrors = {},
+  setFieldErrors = () => {},
+  setShowQuickItemDrawer = () => {},
 }) => {
   // "billing" | "shipping" | null — which field group opened the saved
   // address book (AddressBookDrawer).
@@ -298,20 +301,29 @@ const FullWidthDocumentPanel = ({
         }}
       />
 
-      {/* 03 — GST & Tax Details */}
+      {/* 03 — Billing & Tax Information */}
       {supportsGSTIN && (
         <>
-          <SectionHeader number={sectionNo.billing} title="GST & Tax Details" />
+          <SectionHeader number={sectionNo.billing} title="Billing & Tax Information" />
           <div className="grid grid-cols-1 @2xl:grid-cols-2 gap-x-6 gap-y-2 w-full">
             <div className="flex flex-col gap-1">
               <FieldLabel>Receiver GSTIN</FieldLabel>
-              <input
-                type="text"
-                value={form.receiverGSTIN}
-                onChange={(e) => setField("receiverGSTIN", e.target.value)}
-                placeholder="Enter Receiver GSTIN (e.g., 22AAAAA0000A1Z5)"
-                className={inputClass}
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={form.receiverGSTIN || ""}
+                  onChange={(e) => {
+                    setFieldErrors((prev) => ({ ...prev, receiverGSTIN: false }));
+                    setField("receiverGSTIN", e.target.value);
+                  }}
+                  placeholder="Enter Receiver GSTIN (e.g., 22AAAAA0000A1Z5)"
+                  className={`${fieldErrors.receiverGSTIN ? "border-red-400" : "border-[#E1E4EA]"} w-full h-[38px] px-3.5 bg-white border rounded-full text-[13px] text-[#1F2937] placeholder:text-[#99A0AE] focus:outline-none focus:border-[#0085FF] focus:ring-2 focus:ring-[#0085FF]/10 transition-all flex-1 min-w-0`}
+                />
+                <div className="w-10 flex-shrink-0" aria-hidden="true" />
+              </div>
+              {fieldErrors.receiverGSTIN && (
+                <p className="text-xs text-red-600 mt-1">Invalid GSTIN format (e.g., 22AAAAA0000A1Z5)</p>
+              )}
             </div>
             {/* No document-level GST Rate control here: GST is strictly
                 item/variant-level. computeDocument() reads each line's own
@@ -371,7 +383,16 @@ const FullWidthDocumentPanel = ({
       )}
 
       {/* 04 — Items, as a real table */}
-      <SectionHeader number={sectionNo.items} title={`${docName} Items`} />
+      <div className="flex items-center justify-between w-full mt-2">
+        <SectionHeader number={sectionNo.items} title="Products & Services" />
+        <button
+          type="button"
+          onClick={() => setShowQuickItemDrawer(true)}
+          className="text-[12px] font-semibold text-[#0085FF] hover:underline flex-shrink-0"
+        >
+          + Add new Product?
+        </button>
+      </div>
       <div className="w-full overflow-x-auto rounded-lg border border-[#E1E4EA]">
         <table className="w-full text-[13px] border-collapse">
           <thead>
@@ -545,7 +566,21 @@ const FullWidthDocumentPanel = ({
                     <td className="px-2 py-2 text-right font-medium text-[#1F2937]">
                       {money(row?.taxable ?? 0)}
                     </td>
-                    {taxOn && <td className="px-2 py-2 text-right text-[#525866]">{row?.gstRate ?? 0}%</td>}
+                    {taxOn && (
+                      <td className="px-2 py-2">
+                        <select
+                          value={item.gstRate ?? 0}
+                          onChange={(e) => updateItem(index, { gstRate: parseFloat(e.target.value) })}
+                          className="w-full h-9 px-1 rounded-md border border-[#E1E4EA] text-[13px] bg-white focus:outline-none focus:border-[#0085FF]"
+                        >
+                          <option value={0}>0%</option>
+                          <option value={5}>5%</option>
+                          <option value={12}>12%</option>
+                          <option value={18}>18%</option>
+                          <option value={28}>28%</option>
+                        </select>
+                      </td>
+                    )}
                     {taxOn && (
                       <td className="px-2 py-2 text-right text-[#525866]">
                         {money((row?.cgst ?? 0) + (row?.sgst ?? 0) + (row?.igst ?? 0))}
@@ -589,9 +624,27 @@ const FullWidthDocumentPanel = ({
             <span>Sub Total</span>
             <span>{money(t.grossTaxable - t.documentDiscount)}</span>
           </div>
-          {taxOn && (
+          {taxOn && form.transactionType === "intra" && t.totalCGST > 0 && (
+            <>
+              <div className="flex justify-between text-[13px] text-[#525866]">
+                <span>CGST</span>
+                <span>{money(t.totalCGST)}</span>
+              </div>
+              <div className="flex justify-between text-[13px] text-[#525866]">
+                <span>SGST</span>
+                <span>{money(t.totalSGST)}</span>
+              </div>
+            </>
+          )}
+          {taxOn && form.transactionType === "inter" && t.totalIGST > 0 && (
             <div className="flex justify-between text-[13px] text-[#525866]">
-              <span>Total GST</span>
+              <span>IGST</span>
+              <span>{money(t.totalIGST)}</span>
+            </div>
+          )}
+          {taxOn && totalTax > 0 && (
+            <div className="flex justify-between text-[13px] text-[#525866] font-medium border-t border-[#E1E4EA] pt-1">
+              <span>Total Tax</span>
               <span>{money(totalTax)}</span>
             </div>
           )}

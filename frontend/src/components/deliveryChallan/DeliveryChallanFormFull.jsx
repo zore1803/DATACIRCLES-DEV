@@ -1930,11 +1930,32 @@ const DeliveryChallanFormFull = ({
               }}
             />
 
-            {/* ── Section 3: Products & Services ── */}
+            {/* ── Section 3: Billing & Tax Information ── */}
+            <div className="bg-white px-8 py-7 border-b border-[#E9E9EC]">
+              <SectionHeader number="03" title="Billing & Tax Information" />
+              <div className="mt-4 max-w-lg">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[12px] font-medium text-[#525866]">Receiver GSTIN</label>
+                  <input
+                    id="receiverGSTIN"
+                    type="text"
+                    value={form.receiverGSTIN || ""}
+                    onChange={(e) => {
+                      setForm((prev) => ({ ...prev, receiverGSTIN: e.target.value }));
+                      setHasUnsavedChanges(true);
+                    }}
+                    placeholder="Enter Receiver GSTIN (e.g., 22AAAAA0000A1Z5)"
+                    className="w-full h-[38px] px-3.5 bg-white border border-[#E1E4EA] rounded-full text-[13px] text-[#1F2937] placeholder:text-[#99A0AE] focus:outline-none focus:border-[#0085FF] focus:ring-2 focus:ring-[#0085FF]/10 transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* ── Section 4: Products & Services ── */}
             <div className="bg-white px-8 py-7 border-b border-[#E9E9EC]">
               <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-2">
-                  <SectionHeader number="03" title="Products & Services" />
+                  <SectionHeader number="04" title="Products & Services" />
                   <div className="group relative">
                     <div className="w-4 h-4 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-[10px] cursor-help">?</div>
                   </div>
@@ -2200,7 +2221,7 @@ const DeliveryChallanFormFull = ({
               <div className="lg:col-span-7 space-y-5">
                 <div>
                   <div className="flex items-center justify-between gap-2">
-                    <SectionHeader number="04" title="Notes" />
+                    <SectionHeader number="05" title="Notes" />
                     <button
                       type="button"
                       onClick={() => setNotesDrawer("notes")}
@@ -2224,7 +2245,7 @@ const DeliveryChallanFormFull = ({
 
                 <div>
                   <div className="flex items-center justify-between gap-2">
-                    <SectionHeader number="05" title="Terms & Conditions" />
+                    <SectionHeader number="06" title="Terms & Conditions" />
                     <button
                       type="button"
                       onClick={() => setNotesDrawer("terms")}
@@ -2414,7 +2435,7 @@ const DeliveryChallanFormFull = ({
                   replacing the old decorative button that didn't actually
                   do anything. */}
               <div>
-                <SectionHeader number="06" title="Signature" />
+                <SectionHeader number="07" title="Signature" />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
