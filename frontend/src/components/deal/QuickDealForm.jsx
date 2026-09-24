@@ -17,8 +17,10 @@ const QuickDealForm = ({
   onDealUpdated,
   onRequestClose,
   initialCompanyId = "",
+  initialContactId = "",
   initialStatus = "Open",
   editDeal = null,
+  isContactLocked = false,
 }) => {
   const isEditing = !!editDeal;
   const [form, setForm] = useState({
@@ -26,7 +28,7 @@ const QuickDealForm = ({
     amount: "",
     status: initialStatus,
     company: initialCompanyId,
-    contact: "",
+    contact: initialContactId,
   });
   const [additionalFieldValues, setAdditionalFieldValues] = useState({});
   const [fieldDefinitions, setFieldDefinitions] = useState([]);
@@ -677,16 +679,19 @@ const QuickDealForm = ({
                   valueKey="_id"
                   className="flex-1"
                   error={validationErrors.contact}
+                  disabled={isContactLocked}
                   compact
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowQuickContactForm(true)}
-                  className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] border border-[#1F2937]/10 flex items-center justify-center hover:opacity-90 transition-opacity cursor-pointer"
-                  title="Add New Contact"
-                >
-                  <PlusIcon className="w-4 h-4 text-white" />
-                </button>
+                {!isContactLocked && (
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickContactForm(true)}
+                    className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] border border-[#1F2937]/10 flex items-center justify-center hover:opacity-90 transition-opacity cursor-pointer"
+                    title="Add New Contact"
+                  >
+                    <PlusIcon className="w-4 h-4 text-white" />
+                  </button>
+                )}
               </div>
               {validationErrors.contact && (
                 <p className="text-red-500 text-xs mt-1 font-inter">{validationErrors.contact}</p>

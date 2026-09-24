@@ -25,6 +25,7 @@ export default function ContactLifecycleSettings({ embedded = false }) {
   const [editingStageIndex, setEditingStageIndex] = useState(null);
   const [editingStageName, setEditingStageName] = useState("");
   const [newStatusInputs, setNewStatusInputs] = useState({}); // { [stageIndex]: text }
+  const [expandedStageIndex, setExpandedStageIndex] = useState(null);
 
   const setStoreStages = useContactLifecycleStore((s) => s.setStages);
 
@@ -189,30 +190,39 @@ export default function ContactLifecycleSettings({ embedded = false }) {
           <div className="space-y-4">
             {stages.map((stage, stageIndex) => (
               <div key={stage.name} className="rounded-xl border border-[#E1E4EA] overflow-hidden">
-                <div className="flex items-center gap-2 bg-[#F5F7FA] px-4 py-3 border-b border-[#E1E4EA]">
-                  <div className="flex flex-col -my-1">
-                    <button
-                      type="button"
-                      disabled={saving || stageIndex === 0}
-                      onClick={() => moveStage(stageIndex, -1)}
-                      className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
-                      title="Move up"
-                    >
-                      <ChevronUp className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={saving || stageIndex === stages.length - 1}
-                      onClick={() => moveStage(stageIndex, 1)}
-                      className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
-                      title="Move down"
-                    >
-                      <ChevronDownIcon className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                <div 
+                  className={`flex items-center gap-2 px-4 py-3 ${embedded ? 'bg-white cursor-pointer hover:bg-gray-50' : 'bg-[#F5F7FA] border-b border-[#E1E4EA]'}`}
+                  onClick={() => {
+                    if (embedded) {
+                      setExpandedStageIndex(prev => prev === stageIndex ? null : stageIndex);
+                    }
+                  }}
+                >
+                  {!embedded && (
+                    <div className="flex flex-col -my-1" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        disabled={saving || stageIndex === 0}
+                        onClick={() => moveStage(stageIndex, -1)}
+                        className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                        title="Move up"
+                      >
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={saving || stageIndex === stages.length - 1}
+                        onClick={() => moveStage(stageIndex, 1)}
+                        className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                        title="Move down"
+                      >
+                        <ChevronDownIcon className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
 
                   {editingStageIndex === stageIndex ? (
-                    <>
+                    <div className="flex-1 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="text"
                         value={editingStageName}
@@ -235,33 +245,46 @@ export default function ContactLifecycleSettings({ embedded = false }) {
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
-                    </>
+                    </div>
                   ) : (
                     <>
-                      <span className="flex-1 text-sm font-semibold text-gray-900">{stage.name}</span>
-                      <span className="text-xs text-gray-400">Stage {stageIndex + 1}</span>
-                      <button
-                        type="button"
-                        onClick={() => { setEditingStageIndex(stageIndex); setEditingStageName(stage.name); }}
-                        className="flex items-center justify-center w-7 h-7 rounded-full text-blue-600 hover:bg-blue-50 transition-colors"
-                        title="Rename stage"
-                      >
-                        <EditIcon className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteStage(stageIndex)}
-                        className="flex items-center justify-center w-7 h-7 rounded-full text-red-600 hover:bg-red-50 transition-colors"
-                        title="Delete stage"
-                      >
-                        <DeleteIcon className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex-1 flex items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-900">{stage.name}</span>
+                        <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">Stage {stageIndex + 1}</span>
+                      </div>
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        {!embedded ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => { setEditingStageIndex(stageIndex); setEditingStageName(stage.name); }}
+                              className="flex items-center justify-center w-7 h-7 rounded-full text-blue-600 hover:bg-blue-50 transition-colors"
+                              title="Rename stage"
+                            >
+                              <EditIcon className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteStage(stageIndex)}
+                              className="flex items-center justify-center w-7 h-7 rounded-full text-red-600 hover:bg-red-50 transition-colors"
+                              title="Delete stage"
+                            >
+                              <DeleteIcon className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        ) : (
+                          <ChevronDownIcon 
+                            className={`w-4 h-4 text-gray-400 transition-transform ${expandedStageIndex === stageIndex ? 'rotate-180' : ''}`} 
+                          />
+                        )}
+                      </div>
                     </>
                   )}
                 </div>
 
-                <div className="p-4">
-                  <div className="flex flex-wrap gap-2 mb-3">
+                {(!embedded || expandedStageIndex === stageIndex) && (
+                  <div className="p-4">
+                    <div className="flex flex-wrap gap-2 mb-3">
                     {stage.statuses.map((status, statusIndex) => (
                       <span
                         key={status}
@@ -301,6 +324,7 @@ export default function ContactLifecycleSettings({ embedded = false }) {
                     </button>
                   </form>
                 </div>
+                )}
               </div>
             ))}
           </div>

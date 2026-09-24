@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import QuickDealForm from "../deal/QuickDealForm";
 import toast from "react-hot-toast";
 
-const DealsTable = ({ deals = [], contact, company, onDealCreated }) => {
+const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCreated }) => {
   const [showQuickDealForm, setShowQuickDealForm] = useState(false);
 
   // Handle deal creation
@@ -38,32 +38,34 @@ const DealsTable = ({ deals = [], contact, company, onDealCreated }) => {
           </button>
         </div>
 
-        <div className="overflow-auto rounded-lg border border-gray-200">
-          <table className="min-w-full text-sm text-gray-700">
-            <thead className="bg-gray-50 text-left">
+        {/* Full-bleed table — breaks out of the card's px-4 so the header band
+            and row dividers run edge to edge, like the main Deals list. */}
+        <div className="-mx-4 border-t border-gray-200 overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-4 py-3 font-medium text-gray-900">Deal Name</th>
-                <th className="px-4 py-3 font-medium text-gray-900">Stage</th>
-                <th className="px-4 py-3 font-medium text-gray-900">Amount</th>
-                <th className="px-4 py-3 font-medium text-gray-900">Last Updated</th>
-                <th className="px-4 py-3 font-medium text-gray-900">Company</th>
+                <th className="pl-4 pr-4 py-3 text-left font-medium text-gray-700">Deal Name</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700">Stage</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700">Amount</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700">Last Updated</th>
+                <th className="pl-4 pr-4 py-3 text-left font-medium text-gray-700">Company</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 bg-white">
-              {deals?.length > 0 ? (
-                deals.map((deal) => (
+            {deals?.length > 0 ? (
+              <tbody className="divide-y divide-gray-100">
+                {deals.map((deal) => (
                   <tr key={deal._id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3">
                       <Link
                         to={`/deals/${deal._id}`}
-                        className="text-gray-900 hover:text-gray-700 hover:underline font-medium"
+                        className="text-gray-900 hover:underline font-medium"
                       >
                         {deal.title}
                       </Link>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                        deal.status === 'Won' 
+                        deal.status === 'Won'
                           ? 'bg-blue-900 text-white'
                           : deal.status === 'Lost'
                           ? 'bg-blue-300 text-gray-700'
@@ -72,8 +74,8 @@ const DealsTable = ({ deals = [], contact, company, onDealCreated }) => {
                         {deal.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-medium text-gray-900">
-                      <h6>₹{deal.amount?.toLocaleString() || 0}</h6>
+                    <td className="px-4 py-3 text-gray-900">
+                      <h6>₹{deal.amount?.toLocaleString("en-IN") || 0}</h6>
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {new Date(deal.updatedAt).toLocaleDateString('en-IN', {
@@ -86,8 +88,10 @@ const DealsTable = ({ deals = [], contact, company, onDealCreated }) => {
                       {deal.company?.name || company?.name || "-"}
                     </td>
                   </tr>
-                ))
-              ) : (
+                ))}
+              </tbody>
+            ) : (
+              <tbody>
                 <tr>
                   <td colSpan="5" className="px-4 py-12 text-center text-gray-500">
                     <div className="flex flex-col items-center gap-3">
@@ -107,8 +111,8 @@ const DealsTable = ({ deals = [], contact, company, onDealCreated }) => {
                     </div>
                   </td>
                 </tr>
-              )}
-            </tbody>
+              </tbody>
+            )}
           </table>
         </div>
       </div>
@@ -116,10 +120,11 @@ const DealsTable = ({ deals = [], contact, company, onDealCreated }) => {
       {/* Quick Deal Form with Pre-filled Company and Contact */}
       {showQuickDealForm && (
         <QuickDealForm
-          companies={company ? [company] : []} // Pass single company
-          contacts={contact ? [contact] : []} // Pass single contact
-          preSelectedCompany={company?._id} // Pre-select the company
-          preSelectedContact={contact?._id} // Pre-select the contact
+          companies={company ? [company] : (allCompanies.length > 0 ? allCompanies : [])}
+          contacts={contact ? [contact] : []}
+          initialCompanyId={company?._id}
+          initialContactId={contact?._id}
+          isContactLocked={!!contact}
           onDealCreated={handleDealCreated}
           onRequestClose={handleCloseForm}
         />

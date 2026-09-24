@@ -804,6 +804,7 @@ const ContactDetailsPage = () => {
             <BasicDetails
               contact={contact}
               company={company}
+              allCompanies={allCompanies}
               deals={deals}
               contactFieldList={contactFieldList}
               onContactUpdate={handleContactUpdate}
