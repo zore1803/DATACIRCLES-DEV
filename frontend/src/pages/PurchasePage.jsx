@@ -291,6 +291,24 @@ const PurchasePage = () => {
 
   const statusOptions = ["Draft", "Pending", "Confirmed", "Partial", "Paid", "Cancelled"];
 
+  // Statuses a user may set by hand. "Partial" and "Paid" are deliberately
+  // absent: both are payment-derived, set by the server from how much of
+  // grandTotal has actually been recorded (see statusForPaidAmount in
+  // purchaseController) whenever a payment is saved — Partial above zero, Paid
+  // once the balance clears. Offering them in the menu let someone mark a
+  // purchase Paid with nothing recorded against it, so the badge and the
+  // payment ledger could disagree. Reaching them is now Record Payment's job
+  // alone. "Confirmed" stays manual, because that is the physical-receipt event
+  // that triggers stock-in and is also the gate the server requires before it
+  // will promote a purchase on payment at all.
+  //
+  // They remain in `statusOptions` above, which drives filtering and the field
+  // config, so partially-paid and paid purchases are still filterable.
+  const PAYMENT_DERIVED_STATUSES = ["Partial", "Paid"];
+  const manualStatusOptions = statusOptions.filter(
+    (s) => !PAYMENT_DERIVED_STATUSES.includes(s),
+  );
+
   // Columns available in the rule-builder filter panel (mirrors Companies.jsx pattern).
   const purchaseFilterColumns = [
     { key: "purchaseNumber", label: "Purchase Number" },
@@ -971,9 +989,9 @@ const PurchasePage = () => {
                   {p.status !== "Cancelled" && p.status !== "Paid" && (
                     <button
                       onClick={() => { closeRowMenu(); handleRecordPayment(p); }}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-blue-600 hover:bg-blue-50 whitespace-nowrap"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                     >
-                      <IndianRupee className="w-3.5 h-3.5" />
+                      <IndianRupee className="w-3.5 h-3.5 text-emerald-600" />
                       Record Payment
                     </button>
                   )}
@@ -2198,7 +2216,7 @@ const PurchasePage = () => {
             className="fixed z-[100061] w-[160px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5"
             style={{ top: statusMenu.y, left: statusMenu.x }}
           >
-            {statusOptions.map((st) => (
+            {manualStatusOptions.map((st) => (
               <button
                 key={st}
                 onClick={(e) => {

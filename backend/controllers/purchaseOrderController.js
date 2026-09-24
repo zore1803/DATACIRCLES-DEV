@@ -82,53 +82,18 @@ async function attachConvertedPurchaseInfo(purchaseOrders, organizationId) {
   return purchaseOrders;
 }
 
-// Applies/reverses the inventory movement for a PurchaseOrder transitioning
-// into or out of "Delivered" — the single inventory-triggering event for the
-// PO -> Purchase workflow. Converting to a Purchase, and that Purchase later
-// being marked Paid, must never touch stock — it was already moved here.
+// A Purchase Order NEVER moves stock — not even on "Delivered". A PO is only
+// the intent to buy; "Delivered" just means the order is ready to be converted
+// into a Purchase. The actual goods-received stock-in is owned entirely by the
+// Purchase's own "Confirmed" event (see purchaseController.syncPurchaseStock),
+// and the reversal by that Purchase being Cancelled after Confirmed.
 //
-// Guarded by stockMovementStatus so re-saving, re-delivering, converting to a
-// Purchase, or marking that Purchase Paid can never double the stock
-// increase — Delivered can only ever apply its movement once until reversed.
-async function syncPurchaseOrderDeliveryStock(purchaseOrder, oldStatus, oldStockMovementStatus, userId) {
-  const newStatus = purchaseOrder.status;
-  const isNowDelivered = newStatus === "Delivered";
-  const wasDelivered = oldStatus === "Delivered";
-
-  if (isNowDelivered && !wasDelivered && oldStockMovementStatus !== "applied") {
-    // -> Delivered: goods have physically arrived, increase stock exactly once.
-    await syncDocumentStock({
-      organization: purchaseOrder.organization,
-      documentId: purchaseOrder._id,
-      documentModel: "PurchaseOrder",
-      documentNumber: purchaseOrder.poNumber,
-      items: purchaseOrder.items,
-      previousItems: [],
-      baseDirection: "in",
-      userId,
-      reason: "purchase_received",
-      isReversal: false,
-    });
-    purchaseOrder.stockMovementStatus = "applied";
-    await purchaseOrder.save({ validateModifiedOnly: true });
-  } else if (!isNowDelivered && wasDelivered && oldStockMovementStatus === "applied") {
-    // Delivered -> anything else (Pending/Approved/Rejected): reverse the
-    // earlier increase so the ledger stays accurate.
-    await syncDocumentStock({
-      organization: purchaseOrder.organization,
-      documentId: purchaseOrder._id,
-      documentModel: "PurchaseOrder",
-      documentNumber: purchaseOrder.poNumber,
-      items: purchaseOrder.items,
-      previousItems: [],
-      baseDirection: "in",
-      userId,
-      reason: "adjustment",
-      isReversal: true,
-    });
-    purchaseOrder.stockMovementStatus = "reversed";
-    await purchaseOrder.save({ validateModifiedOnly: true });
-  }
+// Kept as a no-op (rather than removing the call sites) so the PO status flow
+// stays exactly as before and the module keeps one clear place documenting why
+// no stock moves here. `stockMovementStatus` on the PO is left untouched.
+async function syncPurchaseOrderDeliveryStock(/* purchaseOrder, oldStatus, oldStockMovementStatus, userId */) {
+  // Intentionally does nothing — the PO is stock-free by design.
+  return;
 }
 
 // Create Purchase Order
@@ -452,8 +417,10 @@ exports.deletePurchaseOrder = async (req, res) => {
       return res.status(404).json({ message: "Purchase Order not found" });
     }
 
-    // Deleting a Delivered PO must reverse its stock increase — otherwise the
-    // stock stays inflated with no surviving document to explain why.
+    // New POs are stock-free, so this never fires for them. It stays only to
+    // clean up LEGACY POs that applied a stock increase under the old
+    // "Delivered moves stock" behavior — deleting such a PO must reverse that
+    // increase so stock isn't left inflated with no surviving document.
     if (purchaseOrder.stockMovementStatus === "applied") {
       await syncDocumentStock({
         organization: req.user.organization,

@@ -53,6 +53,7 @@ const RecordPurchasePaymentModal = ({ isOpen, onClose, purchase, onSuccess }) =>
     notes: "",
     internalNotes: "",
   });
+  const [wasCapped, setWasCapped] = useState(false);
 
   useEffect(() => {
     if (isOpen && localPurchase) {
@@ -85,8 +86,30 @@ const RecordPurchasePaymentModal = ({ isOpen, onClose, purchase, onSuccess }) =>
 
   if (!shouldRender || !localPurchase) return null;
 
+  // The amount field is capped at the purchase's live balance. `max` on a
+  // number input only blocks the spinners — it does nothing about typing — so
+  // anything over the balance is snapped down to it as it is entered, instead
+  // of being accepted and then rejected on submit. `amountDue` already nets off
+  // every recorded payment, so the cap shrinks as the bill gets paid down.
+  const clampAmount = (raw) => {
+    if (raw === "") return "";
+    const n = parseFloat(raw);
+    if (Number.isNaN(n)) return "";
+    if (n < 0) return "0";
+    if (n > amountDue) return amountDue > 0 ? String(Number(amountDue.toFixed(2))) : "";
+    // Return the raw text, not the parsed number, so part-typed values like
+    // "100." or a trailing "0" survive instead of being rewritten mid-keystroke.
+    return raw;
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
+    if (name === "amount") {
+      const capped = clampAmount(value);
+      setWasCapped(capped !== value);
+      setForm((p) => ({ ...p, amount: capped }));
+      return;
+    }
     setForm((p) => ({ ...p, [name]: value }));
   };
 
@@ -126,6 +149,7 @@ const RecordPurchasePaymentModal = ({ isOpen, onClose, purchase, onSuccess }) =>
         handleClose();
       } else {
         toast.success(`${fmt(paymentAmount)} recorded — ${fmt(remaining)} still due`);
+        setWasCapped(false);
         setForm((p) => ({ ...p, amount: remaining.toFixed(2), reference: "", notes: "", internalNotes: "" }));
         setActiveTab("history");
         onSuccess?.(updated);
@@ -168,7 +192,7 @@ const RecordPurchasePaymentModal = ({ isOpen, onClose, purchase, onSuccess }) =>
 
       {/* Right drawer */}
       <div
-        className={`fixed dc-panel-card dc-panel-w z-[100020] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
+        className={`fixed dc-panel-card dc-panel-w z-[100020] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out font-inter ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -260,6 +284,11 @@ const RecordPurchasePaymentModal = ({ isOpen, onClose, purchase, onSuccess }) =>
                       className={`${fieldClass} pl-8`}
                     />
                   </div>
+                  {wasCapped && amountDue > 0 && (
+                    <p className="mt-1.5 text-[11px] text-amber-600">
+                      Capped at the remaining balance of {fmt(amountDue)}.
+                    </p>
+                  )}
                   <div className="flex gap-4 mt-2 text-[11px] text-gray-500">
                     <span>
                       Total Amount{" "}
@@ -302,7 +331,7 @@ const RecordPurchasePaymentModal = ({ isOpen, onClose, purchase, onSuccess }) =>
                         onClick={() => setForm((p) => ({ ...p, paymentMethod: type }))}
                         className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                           form.paymentMethod === type
-                            ? "bg-green-500 border-green-500 text-white"
+                            ? "bg-blue-600 border-blue-600 text-white"
                             : "bg-white border-gray-300 text-gray-600 hover:border-gray-400"
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                       >

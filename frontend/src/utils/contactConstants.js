@@ -69,6 +69,9 @@ export const isValidCombination = (stage, status) =>
 // churned grey.
 const STATUS_TONE = {
     New: "slate",
+    // Deal pipeline stages share this map so a status renders identically
+    // whether it sits on a contact row or a deal row.
+    Open: "blue",
     Contacted: "amber",
     Interested: "blue",
     Unqualified: "red",

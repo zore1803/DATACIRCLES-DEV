@@ -96,30 +96,27 @@ function isValidPurchaseStatusTransition(oldStatus, newStatus) {
   return true;
 }
 
-// Applies/reverses the stock-in for a Purchase transitioning into or out of
-// "Confirmed" (or a status implying it was already reached, e.g. Partial/Paid
-// via statusForPaidAmount jumping straight there) — the single inventory-
-// triggering event for a Purchase, mirroring purchaseOrderController's
-// syncPurchaseOrderDeliveryStock (Delivered) and purchaseReturnController's
-// syncPurchaseReturnStock (Confirmed) exactly.
+// Applies/reverses the stock-in for a Purchase. "Confirmed" is the SINGLE
+// inventory-triggering event for the whole PO -> Purchase workflow: the
+// Purchase Order itself is stock-free (see purchaseOrderController), so a
+// Purchase's own Confirmed always owns the stock-in — whether it was created
+// standalone or converted from a Delivered PO. There is no "skipped" path any
+// more; every Confirmed applies exactly once, guarded by stockMovementStatus.
 //
-// Two goods sources must never double-count the same stock: a Purchase
-// linked to a Purchase Order whose own Delivered transition already applied
-// it. In that case this Purchase's own Confirmed transition is a no-op for
-// stock — recorded as stockMovementStatus 'skipped' rather than 'applied',
-// so cancelling this Purchase later correctly does NOT reverse anything (the
-// PO's movement is a separate event this record never owned).
+// Rules enforced here:
+//   Draft/Pending  -> nothing (no stock has moved yet)
+//   -> Confirmed    -> STOCK IN (+), mark 'applied'  [once]
+//   Confirmed edit  -> apply only the item delta
+//   -> Cancelled    -> reverse the STOCK IN (-), mark 'reversed'  [once, idempotent]
+//   -> Paid/Partial -> payment-only, NEVER touches stock
 async function syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, userId, previousItems = null) {
   const newStatus = purchase.status;
   const reachedStockPhase = ["Confirmed", "Partial", "Paid"].includes(newStatus);
   const wasInStockPhase = ["Confirmed", "Partial", "Paid"].includes(oldStatus);
 
-  // Already Confirmed (stock previously applied by this Purchase, not
-  // skipped in favor of its PO) and its items just changed: apply only the
-  // delta between what was previously on the document and what's on it now
-  // — same technique purchaseReturnController's syncPurchaseReturnStock
-  // uses, so editing a received quantity from 4 -> 6 only moves 2 more
-  // units, never re-applies all 6.
+  // Already applied and the items just changed: move only the delta between
+  // what was previously on the document and what's on it now — so editing a
+  // received quantity from 4 -> 6 only moves 2 more units, never re-applies 6.
   if (oldStockMovementStatus === "applied" && previousItems) {
     await syncDocumentStock({
       organization: purchase.organization,
@@ -136,38 +133,31 @@ async function syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, us
     return;
   }
 
+  // First time reaching Confirmed (or straight to Partial/Paid): apply the
+  // full stock-in exactly once. The Purchase always owns this now — the PO
+  // never applied anything to defer to.
   if (reachedStockPhase && !wasInStockPhase && oldStockMovementStatus === "pending") {
-    let sourcePoApplied = false;
-    if (purchase.purchaseOrder) {
-      const sourcePo = await PurchaseOrder.findById(purchase.purchaseOrder).select("stockMovementStatus");
-      sourcePoApplied = sourcePo?.stockMovementStatus === "applied";
-    }
-
-    if (sourcePoApplied) {
-      purchase.stockMovementStatus = "skipped";
-    } else {
-      await syncDocumentStock({
-        organization: purchase.organization,
-        documentId: purchase._id,
-        documentModel: "Purchase",
-        documentNumber: purchase.purchaseNumber,
-        items: purchase.items,
-        previousItems: [],
-        baseDirection: "in",
-        userId,
-        reason: "purchase_received",
-        isReversal: false,
-      });
-      purchase.stockMovementStatus = "applied";
-    }
+    await syncDocumentStock({
+      organization: purchase.organization,
+      documentId: purchase._id,
+      documentModel: "Purchase",
+      documentNumber: purchase.purchaseNumber,
+      items: purchase.items,
+      previousItems: [],
+      baseDirection: "in",
+      userId,
+      reason: "purchase_received",
+      isReversal: false,
+    });
+    purchase.stockMovementStatus = "applied";
     await purchase.save({ validateModifiedOnly: true });
     return;
   }
 
+  // Cancelled AFTER an applied Confirmed: reverse exactly what was added, once.
+  // The 'applied' -> 'reversed' guard makes a second cancellation a no-op, so
+  // the net stock effect of this Purchase is 0 and can never be reversed twice.
   if (newStatus === "Cancelled" && oldStockMovementStatus === "applied") {
-    // Only a Purchase that itself applied the movement reverses it — a
-    // 'skipped' one (stock came from the linked PO) has nothing of its own
-    // to undo.
     await syncDocumentStock({
       organization: purchase.organization,
       documentId: purchase._id,
@@ -206,13 +196,10 @@ exports.createPurchase = async (req, res) => {
       if (!poExists) return res.status(404).json({ message: "Purchase Order not found" });
 
       // An Approved or Delivered PO can become a Purchase — Pending/Rejected
-      // can't, since neither represents a confirmed order yet. If the PO was
-      // already Delivered (stock already applied there), this Purchase's own
-      // later Confirmed transition is a no-op for stock (see syncPurchaseStock's
-      // 'skipped' path) — converting from Approved (before delivery) is
-      // equally safe, since then this Purchase's own Confirmed is what
-      // actually applies it. Enforced here (not just hidden in the UI) since
-      // this endpoint can be hit directly.
+      // can't, since neither represents a confirmed order yet. The PO is
+      // stock-free either way, so this Purchase's own Confirmed transition is
+      // what applies the stock-in (see syncPurchaseStock). Enforced here (not
+      // just hidden in the UI) since this endpoint can be hit directly.
       if (poExists.status !== "Approved" && poExists.status !== "Delivered") {
         return res.status(400).json({
           message: `Only an Approved or Delivered Purchase Order can be converted to a Purchase (this one is "${poExists.status}").`,
@@ -558,10 +545,8 @@ exports.updatePurchase = async (req, res) => {
     // applied and items were part of this update — moves just the delta
     // between the old and new quantities. Covers both the edit form (which
     // sends items+status together) and bulk status updates from the list
-    // page, which PUT here rather than the /status endpoint below.
-    // syncPurchaseStock itself skips the movement (stockMovementStatus:
-    // 'skipped') when this Purchase's linked PO already applied it on
-    // Delivered, so the same goods are never counted twice.
+    // page, which PUT here rather than the /status endpoint below. The linked
+    // PO is stock-free, so this Purchase's Confirmed always owns the movement.
     await syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, req.user.id, items ? previousItemsSnapshot : null);
 
     // Populate references

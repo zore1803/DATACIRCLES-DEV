@@ -36,6 +36,7 @@ import {
   ListOrdered,
   List as ListIcon,
   Link as LinkIcon,
+  Repeat,
   ArrowUp, ArrowDown } from "lucide-react";
 import TableSkeletonRows from "../components/common/TableSkeletonRows";
 import { useTopLoadingSignal } from "../components/common/TopLoadingBar";
@@ -141,6 +142,9 @@ const SalesReturn = () => {
   // consistent across modules.
   const [shareMenu, setShareMenu] = useState(null);
   const [shareMenuChannel, setShareMenuChannel] = useState(null);
+  // Change-status flyout (submenu opened from the row's "Change Status" action),
+  // mirroring PurchasePage / other modules.
+  const [statusMenu, setStatusMenu] = useState(null);
   // Share is click-to-open/pinned (its button toggles shareMenu directly)
   // — this is just the unconditional close used by closeRowMenu and the
   // scroll handler.
@@ -658,6 +662,7 @@ const SalesReturn = () => {
       setOpenRowActionsId(null);
       setRowActionsPos(null);
       forceCloseShareFlyout();
+      setStatusMenu(null);
     };
     return (
       <div
@@ -757,20 +762,34 @@ const SalesReturn = () => {
                   Mark Refunded
                 </button>
               )}
-              {row.status !== "Confirmed" && row.status !== "Refunded" && (
-                <>
-                  <div className="w-full border-t border-[#F1F1F5] my-0.5" />
-                  <div className="px-2 py-1 text-[10px] uppercase text-gray-400">Change status</div>
-                  {STATUS_OPTIONS.filter((s) => s !== row.status).map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => { close(); handleStatusChange(row, s); }}
-                      className="w-full flex items-center px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
-                    >
-                      → {s}
-                    </button>
-                  ))}
-                </>
+              {row.status !== "Refunded" && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Toggle the status submenu, positioned to the left of the row
+                    // menu (same pattern as Share). The row menu stays open.
+                    if (statusMenu?.doc?._id === row._id) {
+                      setStatusMenu(null);
+                      return;
+                    }
+                    forceCloseShareFlyout();
+                    const zMenu = getAncestorZoom(document.body);
+                    const DROPDOWN_W = 160;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setStatusMenu({
+                      doc: row,
+                      x: Math.max(4, rect.left / zMenu - DROPDOWN_W),
+                      y: rect.top / zMenu,
+                    });
+                  }}
+                  className="w-full flex items-center justify-between px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                >
+                  <span className="flex items-center gap-2">
+                    <Repeat className="w-3.5 h-3.5 text-orange-600" />
+                    Change Status
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                </button>
               )}
               <div className="w-full border-t border-[#F1F1F5] my-0.5" />
               <button
@@ -1054,6 +1073,39 @@ const SalesReturn = () => {
         subtitle="Narrow down by number, status, amount or reason"
         emptyStateText="Add a rule to filter the list."
       />
+
+      {statusMenu && createPortal(
+        <>
+          <div className="fixed inset-0 z-[100011]" onClick={() => setStatusMenu(null)} />
+          <div
+            className="fixed z-[100012] w-[160px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5"
+            style={{ top: statusMenu.y, left: statusMenu.x }}
+          >
+            {STATUS_OPTIONS.map((st) => (
+              <button
+                key={st}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (st !== statusMenu.doc.status) {
+                    handleStatusChange(statusMenu.doc, st);
+                  }
+                  setStatusMenu(null);
+                  setOpenRowActionsId(null);
+                  setRowActionsPos(null);
+                }}
+                className={`w-full text-left px-2 py-1.5 rounded-md text-xs whitespace-nowrap ${
+                  statusMenu.doc.status === st
+                    ? "bg-blue-50 text-blue-600 font-medium"
+                    : "text-[#161618] hover:bg-gray-50"
+                }`}
+              >
+                {st}
+              </button>
+            ))}
+          </div>
+        </>,
+        document.body
+      )}
 
       {shareMenu && createPortal(
         <>

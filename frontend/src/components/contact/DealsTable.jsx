@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import QuickDealForm from "../deal/QuickDealForm";
 import toast from "react-hot-toast";
+import { getBadgeColor } from "../../utils/contactConstants";
 
 const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCreated }) => {
   const [showQuickDealForm, setShowQuickDealForm] = useState(false);
@@ -64,13 +65,11 @@ const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCre
                       </Link>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                        deal.status === 'Won'
-                          ? 'bg-blue-900 text-white'
-                          : deal.status === 'Lost'
-                          ? 'bg-blue-300 text-gray-700'
-                          : 'bg-blue-100 text-gray-800'
-                      }`}>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getBadgeColor(
+                          deal.status,
+                        )}`}
+                      >
                         {deal.status}
                       </span>
                     </td>
