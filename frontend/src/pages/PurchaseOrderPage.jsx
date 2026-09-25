@@ -45,7 +45,7 @@ import {
   Strikethrough as StrikethroughIcon,
   ListOrdered,
   List as ListIcon,
-  Link as LinkIcon, ArrowUp, ArrowDown, RefreshCw, Repeat } from "lucide-react";
+  Link as LinkIcon, ArrowUp, ArrowDown, Repeat } from "lucide-react";
 import toast from "react-hot-toast";
 import VideoTutorialModal from "../components/VideoTutorialModal";
 import { getVideoTutorial } from "../utils/videoTutorials";
@@ -1058,7 +1058,7 @@ const PurchaseOrderPage = () => {
                       !po.convertedPurchase && (po.status === "Approved" || po.status === "Delivered") ? "text-blue-600 hover:bg-blue-50" : "text-gray-400 cursor-not-allowed"
                     } disabled:opacity-50`}
                   >
-                    <RefreshCw className="w-3.5 h-3.5" />
+                    <Repeat className="w-3.5 h-3.5" />
                     {convertingPOId === po._id ? "Converting…" : "Convert to Purchase"}
                   </button>
                   <div className="w-full border-t border-[#F1F1F5] my-0.5" />

@@ -102,87 +102,96 @@ const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCre
           </button>
         </div>
 
-        <div className="border border-gray-200 rounded-lg overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Deal Name</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Stage</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Amount</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Last Updated</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Company</th>
-                <th className="px-2 py-3 w-10" />
-              </tr>
-            </thead>
-            {deals?.length > 0 ? (
-              <tbody className="divide-y divide-gray-100">
-                {deals.map((deal) => (
-                  <tr key={deal._id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3">
-                      <Link
-                        to={`/deals/${deal._id}`}
-                        className="text-gray-900 hover:underline font-medium"
-                      >
-                        {deal.title}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                        style={stagePillStyle(deal.status)}
-                      >
-                        {deal.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-900">
-                      <h6>₹{deal.amount?.toLocaleString("en-IN") || 0}</h6>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {new Date(deal.updatedAt).toLocaleDateString("en-IN", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </td>
-                    <td className="px-4 py-3 text-gray-700">
-                      {deal.company?.name || company?.name || "-"}
-                    </td>
-                    <td className="px-2 py-3 text-right">
-                      <button
-                        onClick={(e) => openMenu(e, deal._id)}
-                        className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
-                        title="More actions"
-                      >
-                        <MoreIcon className="w-4 h-4" />
-                      </button>
+        {/* Matches the main Deals table's visual language: #F5F7FA bold headers
+            with a caret, and #E1E4EA vertical + horizontal gridlines on every
+            cell (border-separate so the sticky header keeps its borders). Once
+            there are ~4+ deals the body scrolls vertically while the header
+            stays pinned, so the section never grows unbounded. */}
+        <div className="border border-[#E1E4EA] rounded-lg overflow-hidden">
+          <div className="overflow-x-auto overflow-y-auto max-h-[248px]">
+            <table className="w-full min-w-full text-sm text-left border-separate border-spacing-0">
+              <thead className="sticky top-0 z-20">
+                <tr>
+                  {["Deal Name", "Stage", "Amount", "Last Updated", "Company"].map((label, i, arr) => (
+                    <th
+                      key={label}
+                      className={`px-4 py-3 text-sm font-bold text-[#525866] bg-[#F5F7FA] border-b border-[#E1E4EA] ${i < arr.length - 1 ? "border-r" : ""}`}
+                    >
+                      <span className="truncate">{label}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              {deals?.length > 0 ? (
+                <tbody>
+                  {deals.map((deal) => (
+                    <tr key={deal._id} className="bg-white hover:bg-blue-50 transition-colors">
+                      <td className="px-4 py-3 border-b border-r border-[#E1E4EA]">
+                        <Link
+                          to={`/deals/${deal._id}`}
+                          className="text-blue-600 hover:underline font-medium"
+                        >
+                          {deal.title}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 border-b border-r border-[#E1E4EA]">
+                        <span
+                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                          style={stagePillStyle(deal.status)}
+                        >
+                          {deal.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-900 border-b border-r border-[#E1E4EA]">
+                        <h6 className="font-semibold">₹{deal.amount?.toLocaleString("en-IN") || 0}</h6>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 border-b border-r border-[#E1E4EA]">
+                        {new Date(deal.updatedAt).toLocaleDateString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 border-b border-[#E1E4EA]">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate">{deal.company?.name || company?.name || "-"}</span>
+                          <button
+                            onClick={(e) => openMenu(e, deal._id)}
+                            className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                            title="More actions"
+                          >
+                            <MoreIcon className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              ) : (
+                <tbody>
+                  <tr>
+                    <td colSpan="5" className="px-4 py-12 text-center text-gray-500">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
+                          <PlusIcon className="w-4 h-4 text-gray-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900 mb-1">No deals yet</p>
+                          <p className="text-xs text-gray-600">Create your first deal to get started</p>
+                        </div>
+                        <button
+                          onClick={() => setShowQuickDealForm(true)}
+                          className="px-4 py-2 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
+                        >
+                          Create Deal
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            ) : (
-              <tbody>
-                <tr>
-                  <td colSpan="6" className="px-4 py-12 text-center text-gray-500">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
-                        <PlusIcon className="w-4 h-4 text-gray-400" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 mb-1">No deals yet</p>
-                        <p className="text-xs text-gray-600">Create your first deal to get started</p>
-                      </div>
-                      <button
-                        onClick={() => setShowQuickDealForm(true)}
-                        className="px-4 py-2 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
-                      >
-                        Create Deal
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            )}
-          </table>
+                </tbody>
+              )}
+            </table>
+          </div>
         </div>
       </div>
 
