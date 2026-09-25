@@ -727,6 +727,17 @@ exports.addPurchasePayment = async (req, res) => {
     });
     if (!purchase) return res.status(404).json({ error: "Purchase not found" });
 
+    // A payment can only be recorded once the purchase is Confirmed (goods
+    // received). Recording against Draft/Pending would store the payment but
+    // leave the status stuck — statusForPaidAmount only promotes to
+    // Partial/Paid from Confirmed onward — so reject it outright here. This is
+    // the server-side counterpart of the UI guard in PurchasePage.
+    if (!["Confirmed", "Partial", "Paid"].includes(purchase.status)) {
+      return res.status(400).json({
+        error: "This purchase isn't confirmed yet — confirm it before recording a payment.",
+      });
+    }
+
     const alreadyPaid = (purchase.payments || []).reduce((sum, p) => sum + p.amount, 0);
     const amountDue = purchase.grandTotal - alreadyPaid;
     if (parsedAmount > amountDue + 0.01) {

@@ -1054,12 +1054,15 @@ const PurchaseOrderPage = () => {
                     onClick={() => { closeRowMenu(); handleConvertToPurchase(po); }}
                     disabled={convertingPOId === po._id || !!po.convertedPurchase}
                     title={po.convertedPurchase ? `Already converted to ${po.convertedPurchase.purchaseNumber}` : undefined}
-                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap ${
-                      !po.convertedPurchase && (po.status === "Approved" || po.status === "Delivered") ? "text-blue-600 hover:bg-blue-50" : "text-gray-400 cursor-not-allowed"
+                    className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap ${
+                      !po.convertedPurchase && (po.status === "Approved" || po.status === "Delivered") ? "text-[#161618] hover:bg-gray-50" : "text-gray-400 cursor-not-allowed"
                     } disabled:opacity-50`}
                   >
-                    <Repeat className="w-3.5 h-3.5" />
-                    {convertingPOId === po._id ? "Converting…" : "Convert to Purchase"}
+                    <span className="flex items-center gap-2">
+                      <Repeat className="w-3.5 h-3.5 text-orange-600" />
+                      {convertingPOId === po._id ? "Converting…" : "Convert to Purchase"}
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
                   </button>
                   <div className="w-full border-t border-[#F1F1F5] my-0.5" />
                   <button

@@ -1598,14 +1598,15 @@ const BasicDetails = ({ contact, company, allCompanies = [], deals, onContactUpd
       {/* 2. Associated Deals (moved up — its own header + table). */}
       <DealsTable deals={deals || []} contact={contact} company={company} allCompanies={allCompanies} onDealCreated={onDealCreated} />
 
-      {/* 3. Calendar on the left, Activity Timeline on the right. */}
+      {/* 3. Relationship Pulse on the left (tall chart); the right column stacks
+             the Activity Timeline and Calendar to fill the space beside it. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        <ContactCalendar activity={activity} loading={activityLoading} onNavigateTab={onNavigateTab} />
-        <RecentActivity activity={activity} loading={activityLoading} />
+        <RelationshipPulse activity={activity} loading={activityLoading} />
+        <div className="space-y-4">
+          <RecentActivity activity={activity} loading={activityLoading} />
+          <ContactCalendar activity={activity} loading={activityLoading} onNavigateTab={onNavigateTab} />
+        </div>
       </div>
-
-      {/* 4. Relationship Pulse (full width). */}
-      <RelationshipPulse activity={activity} loading={activityLoading} />
 
       {/* 5. Call effectiveness + follow-up load + engagement balance */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

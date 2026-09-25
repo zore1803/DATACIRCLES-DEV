@@ -498,6 +498,13 @@ const PurchasePage = () => {
   };
 
   const handleRecordPayment = (purchase) => {
+    // A payment can only be recorded once the purchase is Confirmed (goods
+    // received). Draft/Pending purchases aren't a payable bill yet.
+    const s = purchase.status;
+    if (s !== "Confirmed" && s !== "Partial" && s !== "Paid") {
+      toast.error("This purchase isn't confirmed yet — confirm it before recording a payment.");
+      return;
+    }
     setPurchaseToPay(purchase);
     setShowPaymentModal(true);
   };
@@ -645,6 +652,10 @@ const PurchasePage = () => {
     switch (status?.toLowerCase()) {
       case "paid":
         return "bg-green-100 text-green-800 border-transparent";
+      case "partial":
+        return "bg-orange-100 text-orange-800 border-transparent";
+      case "confirmed":
+        return "bg-indigo-100 text-indigo-800 border-transparent";
       case "pending":
         return "bg-yellow-100 text-yellow-800 border-transparent";
       case "cancelled":
@@ -654,6 +665,15 @@ const PurchasePage = () => {
       default:
         return "bg-gray-100 text-gray-800 border-transparent";
     }
+  };
+
+  // "Partial" is stored compactly but reads clearer as "Partially Paid" in the UI.
+  const getStatusLabel = (status) => (status === "Partial" ? "Partially Paid" : status);
+
+  // Amount still owed on a purchase (grandTotal minus everything recorded).
+  const amountDueOf = (p) => {
+    const paid = (p.payments || []).reduce((s, pay) => s + (Number(pay.amount) || 0), 0);
+    return (p.grandTotal ?? 0) - paid;
   };
 
   const handlePageChange = (page) => {
@@ -1215,12 +1235,25 @@ const PurchasePage = () => {
                 </div>
               );
             } else if (vc.key === "grandTotal") {
+              const due = amountDueOf(p);
+              const showDue = p.status === "Partial" && due > 0.01;
               baseContent = (
-                <div className="truncate text-sm font-medium text-gray-700">
-                  ₹{(p.grandTotal ?? 0).toLocaleString("en-IN", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                <div className="truncate">
+                  <div className="text-sm font-medium text-gray-700">
+                    ₹{(p.grandTotal ?? 0).toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </div>
+                  {showDue && (
+                    <div className="text-xs font-medium text-[#E5484D]">
+                      ₹{due.toLocaleString("en-IN", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      due
+                    </div>
+                  )}
                 </div>
               );
             } else if (vc.key === "status") {
@@ -1229,7 +1262,7 @@ const PurchasePage = () => {
                   <span
                     className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusBadgeColor(p.status)}`}
                   >
-                    {p.status}
+                    {getStatusLabel(p.status)}
                   </span>
                 </div>
               );
