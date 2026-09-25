@@ -1,35 +1,98 @@
 import PlusIcon from "../common/PlusIcon";
+import MoreIcon from "../common/MoreIcon";
+import EyeIcon from "../common/EyeIcon";
+import EditIcon from "../common/EditIcon";
+import DeleteIcon from "../common/DeleteIcon";
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
 import QuickDealForm from "../deal/QuickDealForm";
+import ConfirmDialog from "../common/ConfirmDialog";
+import API from "../../services/api";
 import toast from "react-hot-toast";
-import { getBadgeColor } from "../../utils/contactConstants";
 
-const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCreated }) => {
+// The app scales its desktop layout with a CSS `zoom` on <html>; portal menus
+// paint in that zoomed space, so rect-derived positions are divided by the
+// accumulated ancestor zoom to line up on screen (same approach as the main
+// Deals table).
+const getAncestorZoom = (el) => {
+  let z = 1;
+  let node = el;
+  while (node && node.nodeType === 1) {
+    const cz = parseFloat(getComputedStyle(node).zoom);
+    if (cz && !Number.isNaN(cz)) z *= cz;
+    node = node.parentElement;
+  }
+  return z || 1;
+};
+
+// Stage pill colors, matched to the main Deals table: Won green, Lost red,
+// everything else (Open) blue.
+const stagePillStyle = (status) =>
+  status === "Won"
+    ? { backgroundColor: "rgba(0, 201, 80, 0.1)", color: "#00A63E" }
+    : status === "Lost"
+      ? { backgroundColor: "rgba(232, 34, 34, 0.1)", color: "#E82222" }
+      : { backgroundColor: "rgba(0, 133, 255, 0.1)", color: "#0085FF" };
+
+const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCreated, title = "Associated Deals" }) => {
+  const navigate = useNavigate();
   const [showQuickDealForm, setShowQuickDealForm] = useState(false);
+  const [editDeal, setEditDeal] = useState(null);
+  const [deleteId, setDeleteId] = useState(null);
+  const [menuId, setMenuId] = useState(null);
+  const [menuPos, setMenuPos] = useState(null);
 
-  // Handle deal creation
-  const handleDealCreated = (newDeal) => {
-    // Call parent callback to update parent state
-    if (onDealCreated) {
-      onDealCreated(newDeal);
-    }
-    
-    // Close the form
-    setShowQuickDealForm(false);
-    
-    // Show success message (moved to parent, but can keep here too)
+  const closeMenu = () => {
+    setMenuId(null);
+    setMenuPos(null);
   };
 
-  const handleCloseForm = () => {
+  const handleDealCreated = (newDeal) => {
+    onDealCreated?.(newDeal);
     setShowQuickDealForm(false);
+  };
+
+  const openMenu = (e, id) => {
+    e.stopPropagation();
+    if (menuId === id) return closeMenu();
+    const z = getAncestorZoom(document.body);
+    const MENU_W = 150;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const top = rect.bottom / z + 4;
+    let left = rect.right / z - MENU_W;
+    left = Math.max(8, left);
+    setMenuPos({ top, left });
+    setMenuId(id);
+  };
+
+  const confirmDelete = async () => {
+    const id = deleteId;
+    setDeleteId(null);
+    try {
+      await API.delete(`/deals/${id}`);
+      toast.success("Deal deleted.");
+      window.location.reload();
+    } catch (err) {
+      if (err.response?.status === 402) {
+        toast.error(err.response?.data?.message || "An active subscription is required to make changes.");
+      } else {
+        toast.error(err.response?.data?.error || "Failed to delete deal.");
+      }
+    }
   };
 
   return (
     <>
       <div>
-        {/* Add Deal Button - Top Right */}
-        <div className="flex justify-end mb-4">
+        {/* Header — title + count on the left, Add Deal on the right, one line. */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+            <span className="text-xs text-gray-400">
+              {deals?.length || 0} deal{deals?.length !== 1 ? "s" : ""}
+            </span>
+          </div>
           <button
             onClick={() => setShowQuickDealForm(true)}
             className="inline-flex items-center gap-2 px-3 py-2 bg-[#0085FF] text-white text-sm font-medium rounded-full hover:bg-blue-600 transition-colors"
@@ -39,17 +102,16 @@ const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCre
           </button>
         </div>
 
-        {/* Full-bleed table — breaks out of the card's px-4 so the header band
-            and row dividers run edge to edge, like the main Deals list. */}
-        <div className="-mx-4 border-t border-gray-200 overflow-x-auto">
+        <div className="border border-gray-200 rounded-lg overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="pl-4 pr-4 py-3 text-left font-medium text-gray-700">Deal Name</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700">Deal Name</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Stage</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Amount</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Last Updated</th>
-                <th className="pl-4 pr-4 py-3 text-left font-medium text-gray-700">Company</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700">Company</th>
+                <th className="px-2 py-3 w-10" />
               </tr>
             </thead>
             {deals?.length > 0 ? (
@@ -66,9 +128,8 @@ const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCre
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getBadgeColor(
-                          deal.status,
-                        )}`}
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                        style={stagePillStyle(deal.status)}
                       >
                         {deal.status}
                       </span>
@@ -77,14 +138,23 @@ const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCre
                       <h6>₹{deal.amount?.toLocaleString("en-IN") || 0}</h6>
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {new Date(deal.updatedAt).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric'
+                      {new Date(deal.updatedAt).toLocaleDateString("en-IN", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
                       })}
                     </td>
                     <td className="px-4 py-3 text-gray-700">
                       {deal.company?.name || company?.name || "-"}
+                    </td>
+                    <td className="px-2 py-3 text-right">
+                      <button
+                        onClick={(e) => openMenu(e, deal._id)}
+                        className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                        title="More actions"
+                      >
+                        <MoreIcon className="w-4 h-4" />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -92,7 +162,7 @@ const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCre
             ) : (
               <tbody>
                 <tr>
-                  <td colSpan="5" className="px-4 py-12 text-center text-gray-500">
+                  <td colSpan="6" className="px-4 py-12 text-center text-gray-500">
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
                         <PlusIcon className="w-4 h-4 text-gray-400" />
@@ -116,7 +186,46 @@ const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCre
         </div>
       </div>
 
-      {/* Quick Deal Form with Pre-filled Company and Contact */}
+      {/* Row actions menu (portal so it never clips inside the table's overflow) */}
+      {menuId && menuPos && createPortal(
+        <>
+          <div className="fixed inset-0 z-[9998]" onClick={closeMenu} />
+          <div
+            style={{ position: "fixed", top: menuPos.top, left: menuPos.left }}
+            className="w-[150px] z-[9999] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5"
+          >
+            <button
+              onClick={() => { closeMenu(); navigate(`/deals/${menuId}`); }}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+            >
+              <EyeIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
+              View Deal
+            </button>
+            <button
+              onClick={() => {
+                const d = deals.find((x) => x._id === menuId);
+                closeMenu();
+                if (d) setEditDeal(d);
+              }}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+            >
+              <EditIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
+              Edit Deal
+            </button>
+            <div className="w-full border-t border-[#F1F1F5] my-0.5" />
+            <button
+              onClick={() => { const id = menuId; closeMenu(); setDeleteId(id); }}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-red-600 hover:bg-red-50 whitespace-nowrap"
+            >
+              <DeleteIcon className="w-3.5 h-3.5" />
+              Delete Deal
+            </button>
+          </div>
+        </>,
+        document.body,
+      )}
+
+      {/* Create Deal */}
       {showQuickDealForm && (
         <QuickDealForm
           companies={company ? [company] : (allCompanies.length > 0 ? allCompanies : [])}
@@ -125,9 +234,30 @@ const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCre
           initialContactId={contact?._id}
           isContactLocked={!!contact}
           onDealCreated={handleDealCreated}
-          onRequestClose={handleCloseForm}
+          onRequestClose={() => setShowQuickDealForm(false)}
         />
       )}
+
+      {/* Edit Deal */}
+      {editDeal && (
+        <QuickDealForm
+          companies={company ? [company] : (allCompanies.length > 0 ? allCompanies : [])}
+          contacts={contact ? [contact] : []}
+          editDeal={editDeal}
+          isContactLocked={!!contact}
+          onDealUpdated={() => { setEditDeal(null); window.location.reload(); }}
+          onRequestClose={() => setEditDeal(null)}
+        />
+      )}
+
+      <ConfirmDialog
+        isOpen={!!deleteId}
+        title="Delete deal"
+        message="Are you sure you want to delete this deal? This action cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteId(null)}
+      />
     </>
   );
 };

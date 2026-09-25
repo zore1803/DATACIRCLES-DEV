@@ -810,6 +810,7 @@ const ContactDetailsPage = () => {
               onContactUpdate={handleContactUpdate}
               onDealCreated={handleDealCreated}
               onFieldsChanged={refreshContactFields}
+              onNavigateTab={setActiveTab}
             />
           )}
           {activeTab === "Call Logs" && (

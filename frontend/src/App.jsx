@@ -72,7 +72,6 @@ import PaymentsTimeline from "./pages/PaymentsTimeline";
 import Journals from "./pages/Journals";
 import Expenses from "./pages/Expenses";
 import IndirectIncome from "./pages/IndirectIncome";
-import TeamIcon from "./components/common/TeamIcon";
 import ForgotPass from "./components/login/ForgotPass";
 import Verification from "./components/login/Verification";
 import PhoneLogin from "./components/login/PhoneLogin";
@@ -768,7 +767,7 @@ function AppInner() {
               path="/super-admin/users"
               element={
                 <SuperAdminPrivateRoute>
-                  <TeamIcon />
+                  <Users />
                 </SuperAdminPrivateRoute>
               }
             />

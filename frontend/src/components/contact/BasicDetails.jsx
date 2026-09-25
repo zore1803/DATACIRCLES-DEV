@@ -6,9 +6,6 @@ import toast from "react-hot-toast";
 import {
   X,
   Check,
-  Target,
-  Plus,
-  EyeOff,
   PhoneCall,
   CalendarDays,
   CheckSquare,
@@ -68,18 +65,6 @@ const formatActivityTime = (value) => {
   if (d.toDateString() === yesterday.toDateString()) return `Yesterday · ${time}`;
   return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} · ${time}`;
 };
-
-// A small uppercase section heading, so every block below the KPI row shares
-// the same typographic rhythm.
-const SectionTitle = ({ icon: Icon, title, right }) => (
-  <div className="flex items-center justify-between mb-3">
-    <div className="flex items-center gap-2">
-      {Icon && <Icon className="w-4 h-4 text-gray-400" />}
-      <h3 className="text-[11px] font-semibold tracking-wide text-gray-500 uppercase">{title}</h3>
-    </div>
-    {right}
-  </div>
-);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lifecycle Stage edit modal — the EXISTING contact lifecycle edit path, kept
@@ -839,7 +824,7 @@ const RecentActivity = ({ activity, loading }) => {
   }, [items, filter]);
 
   return (
-    <div className="h-[267px] flex flex-col bg-white border border-gray-200 rounded-lg p-5">
+    <div className="h-[320px] flex flex-col bg-white border border-gray-200 rounded-lg p-5">
       <h3 className="text-sm font-semibold text-gray-900 mb-5 flex-shrink-0">Activity Timeline</h3>
       <div className="flex items-center gap-1 mb-4 flex-wrap flex-shrink-0">
         {ACTIVITY_TABS.map((tab) => (
@@ -1424,7 +1409,150 @@ const FollowUpLoad = ({ activity, loading }) => {
 };
 
 
-const BasicDetails = ({ contact, company, allCompanies = [], deals, contactFieldList = [], onContactUpdate, onDealCreated, onFieldsChanged }) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// Contact Calendar — the current month with today highlighted and a dot on any
+// day that carries a real meeting (scheduledAt) or task due date (dueDate). The
+// Upcoming list underneath is the next few dated commitments, soonest first.
+// "View Calendar" / "Show All" jump to the contact's Calendar tab. Nothing is
+// fabricated — a month with no records simply shows no dots.
+// ─────────────────────────────────────────────────────────────────────────────
+const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+
+const ContactCalendar = ({ activity, loading, onNavigateTab }) => {
+  const { meetings, tasks } = activity;
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const todayDate = now.getDate();
+
+  const { cells, eventDays, upcoming } = useMemo(() => {
+    const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7; // Mon = 0
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const grid = [];
+    for (let i = 0; i < firstWeekday; i += 1) grid.push(null);
+    for (let d = 1; d <= daysInMonth; d += 1) grid.push(d);
+
+    const days = new Set();
+    const markDay = (dateVal) => {
+      if (!dateVal) return;
+      const dt = new Date(dateVal);
+      if (Number.isNaN(dt.getTime())) return;
+      if (dt.getFullYear() === year && dt.getMonth() === month) days.add(dt.getDate());
+    };
+    meetings.forEach((m) => markDay(m.scheduledAt || m.createdAt));
+    tasks.forEach((t) => markDay(t.dueDate));
+
+    const startOfToday = new Date(year, month, todayDate).getTime();
+    const up = [
+      ...meetings
+        .filter((m) => m.scheduledAt && new Date(m.scheduledAt).getTime() >= startOfToday)
+        .map((m) => ({ date: m.scheduledAt, title: m.title || m.subject || "Meeting", kind: "Meeting", color: TYPE_META.meeting.color })),
+      ...tasks
+        .filter((t) => t.status !== "Completed" && t.dueDate && new Date(t.dueDate).getTime() >= startOfToday)
+        .map((t) => ({ date: t.dueDate, title: t.title || "Task", kind: "Task", color: TYPE_META.task.color })),
+    ]
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .slice(0, 4);
+
+    return { cells: grid, eventDays: days, upcoming: up };
+  }, [meetings, tasks, year, month, todayDate]);
+
+  const goCalendar = () => onNavigateTab?.("Calendar");
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-gray-900">Calendar</h3>
+        <button
+          type="button"
+          onClick={goCalendar}
+          className="text-xs font-medium text-[#0085FF] hover:underline"
+        >
+          View Calendar
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="h-[220px] flex items-center justify-center">
+          <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-7 gap-y-1 text-center">
+            {WEEKDAYS.map((w) => (
+              <span key={w} className="text-[11px] font-medium text-gray-400 pb-1">
+                {w}
+              </span>
+            ))}
+            {cells.map((d, i) => {
+              if (d === null) return <span key={`b-${i}`} />;
+              const isToday = d === todayDate;
+              const hasEvent = eventDays.has(d);
+              return (
+                <div key={d} className="flex flex-col items-center justify-start h-8">
+                  <span
+                    className={`w-7 h-7 flex items-center justify-center rounded-full text-xs ${
+                      isToday
+                        ? "bg-[#0085FF] text-white font-semibold"
+                        : "text-gray-700"
+                    }`}
+                  >
+                    {d}
+                  </span>
+                  {hasEvent && !isToday && (
+                    <span className="w-1 h-1 rounded-full bg-[#0085FF] -mt-0.5" />
+                  )}
+                  {hasEvent && isToday && (
+                    <span className="w-1 h-1 rounded-full bg-transparent -mt-0.5" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-semibold text-gray-900">Upcoming</h4>
+              {upcoming.length > 0 && (
+                <button
+                  type="button"
+                  onClick={goCalendar}
+                  className="text-xs font-medium text-[#0085FF] hover:underline"
+                >
+                  Show All
+                </button>
+              )}
+            </div>
+            {upcoming.length === 0 ? (
+              <p className="text-xs text-gray-400 py-1">No upcoming meetings or tasks.</p>
+            ) : (
+              <div className="space-y-2.5">
+                {upcoming.map((item, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span
+                      className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0"
+                      style={{ background: item.color }}
+                    />
+                    <div className="min-w-0">
+                      <p className="text-xs text-gray-900 truncate">
+                        {item.title} <span className="text-gray-400">· {item.kind}</span>
+                      </p>
+                      <p className="text-[11px] text-gray-400">
+                        {new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+const BasicDetails = ({ contact, company, allCompanies = [], deals, onContactUpdate, onDealCreated, onNavigateTab }) => {
   // Real contact activity, fetched here (the same per-type endpoints the
   // Call Logs / Notes / Tasks / Meetings tabs use) to back the Engagement
   // Overview and Recent Activity sections. Failures degrade to empty lists so
@@ -1467,33 +1595,23 @@ const BasicDetails = ({ contact, company, allCompanies = [], deals, contactField
       {/* 1. Lifecycle Journey */}
       <LifecycleJourney contact={contact} onContactUpdate={onContactUpdate} />
 
-      {/* 2. Activity Timeline */}
-      <RecentActivity activity={activity} loading={activityLoading} />
+      {/* 2. Associated Deals (moved up — its own header + table). */}
+      <DealsTable deals={deals || []} contact={contact} company={company} allCompanies={allCompanies} onDealCreated={onDealCreated} />
 
-      {/* 3. Engagement charts — hero pulse + balance radar */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <RelationshipPulse activity={activity} loading={activityLoading} />
-        <EngagementBalance activity={activity} loading={activityLoading} />
+      {/* 3. Calendar on the left, Activity Timeline on the right. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <ContactCalendar activity={activity} loading={activityLoading} onNavigateTab={onNavigateTab} />
+        <RecentActivity activity={activity} loading={activityLoading} />
       </div>
 
-      {/* 4. Call effectiveness + follow-up load */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* 4. Relationship Pulse (full width). */}
+      <RelationshipPulse activity={activity} loading={activityLoading} />
+
+      {/* 5. Call effectiveness + follow-up load + engagement balance */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <CallEffectiveness activity={activity} loading={activityLoading} />
         <FollowUpLoad activity={activity} loading={activityLoading} />
-      </div>
-
-      {/* 5. Associated Deals */}
-      <div className="bg-white border border-gray-200 rounded-xl px-4 py-4">
-        <SectionTitle
-          icon={Target}
-          title="Associated Deals"
-          right={
-            <span className="text-[11px] text-gray-400">
-              {deals?.length || 0} deal{deals?.length !== 1 ? "s" : ""}
-            </span>
-          }
-        />
-        <DealsTable deals={deals || []} contact={contact} company={company} allCompanies={allCompanies} onDealCreated={onDealCreated} />
+        <EngagementBalance activity={activity} loading={activityLoading} />
       </div>
     </div>
   );
