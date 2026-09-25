@@ -4,6 +4,7 @@ import Checkbox from "../common/Checkbox";
 import CellphoneIcon from "../common/CellphoneIcon";
 import PlusIcon from "../common/PlusIcon";
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import ReactQuill from "react-quill-new";
 import "react-quill/dist/quill.snow.css";
 import API from "../../services/api";
@@ -11,6 +12,10 @@ import CustomFieldsSection, { getMissingRequiredFields } from "../common/CustomF
 import toast from "react-hot-toast";
 import SearchIcon from "../common/SearchIcon";
 import { useSystemSettings } from "../../hooks/useSystemSettings";
+import QuickDealForm from "../deal/QuickDealForm";
+import QuickContactForm from "../contact/QuickContactForm";
+import { CreateInvoicePanel } from "../invoice/CreateInvoicePanel";
+import useDocumentDefaults from "../../hooks/useDocumentDefaults";
 import {
   X,
   Clock,
@@ -252,9 +257,21 @@ const PriorityChip = ({ priority }) => {
 // option lists render stacked on top of each other.
 const SingleSelectDropdown = ({ options, value, onChange, disabled, isOpen, onOpenChange }) => {
   const selectedOption = options.find(opt => opt.value === value) || options[0];
+  const wrapperRef = useRef(null);
+
+  // Close on outside click via a listener (not a fixed backdrop, which would
+  // block scrolling the form while the dropdown is open).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onDown = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) onOpenChange(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [isOpen, onOpenChange]);
 
   return (
-    <div className="relative">
+    <div className="relative" ref={wrapperRef}>
       <button
         type="button"
         disabled={disabled}
@@ -268,7 +285,6 @@ const SingleSelectDropdown = ({ options, value, onChange, disabled, isOpen, onOp
 
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-[10040]" onClick={() => onOpenChange(false)} />
           <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-xl z-[10050] py-1 animate-in fade-in zoom-in duration-200">
             {options.map((option) => (
               <button
@@ -311,26 +327,36 @@ const EntityPickerDropdown = ({ entities, value, onChange, entityType, disabled,
       return;
     }
     onOpenChange(true);
-    // Only scroll by however much the open panel actually overflows the
-    // scrollable form, instead of yanking the trigger to the very top.
+    // Always open DOWNWARD. Scroll the form by however much the panel overflows
+    // the scrollable body so the whole list shows below the field (never
+    // yanking the trigger to the top, and never flipping the panel upward).
     requestAnimationFrame(() => {
       const el = wrapperRef.current;
       if (!el) return;
+      const PANEL_HEIGHT = 220; // search box + max-h-40 list
       let scroller = el.parentElement;
       while (scroller && scroller.scrollHeight <= scroller.clientHeight) {
         scroller = scroller.parentElement;
       }
       if (!scroller) return;
-      const PANEL_HEIGHT = 220; // search box + max-h-40 list
       const overflow =
-        el.getBoundingClientRect().bottom +
-        PANEL_HEIGHT -
-        scroller.getBoundingClientRect().bottom;
+        el.getBoundingClientRect().bottom + PANEL_HEIGHT - scroller.getBoundingClientRect().bottom;
       if (overflow > 0) {
-        scroller.scrollBy({ top: overflow + 8, behavior: "smooth" });
+        scroller.scrollBy({ top: overflow + 12, behavior: "smooth" });
       }
     });
   };
+
+  // Close on outside click via a listener (not a fixed backdrop, which would
+  // block scrolling the form while the dropdown is open).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onDown = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) onOpenChange(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [isOpen, onOpenChange]);
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -350,8 +376,7 @@ const EntityPickerDropdown = ({ entities, value, onChange, entityType, disabled,
 
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-[10040]" onClick={() => onOpenChange(false)} />
-          <div className="absolute left-0 right-0 mt-2 w-full bg-white border border-gray-100 rounded-xl shadow-xl z-[10050] animate-in fade-in zoom-in duration-200">
+          <div className="absolute left-0 right-0 w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-xl z-[10050] animate-in fade-in duration-150">
             <div className="p-2 border-b border-gray-100">
               <div className="relative">
                 <SearchIcon className="absolute left-3 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
@@ -398,25 +423,39 @@ const EntityPickerDropdown = ({ entities, value, onChange, entityType, disabled,
 const MultiSelectDropdown = ({ users, selectedUsers, onSelectionChange, placeholder = "Select participants", isOpen, onOpenChange }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const wrapperRef = useRef(null);
+  const listRef = useRef(null);
 
-  const openDropdown = () => {
-    onOpenChange(true);
-    // The list opens BELOW the button, so scroll only by however much it
-    // overflows the bottom of the scrollable panel — pulling the trigger all
-    // the way to the top moves the form far more than needed.
+  const openDropdown = () => onOpenChange(true);
+
+  // Opens downward. On open — and after each select/deselect, since a new chip
+  // grows the row above and pushes the list down — scroll the form body just
+  // enough that the WHOLE panel sits above the sticky footer. Only scrolls when
+  // part of it is hidden, so there's no jump when already visible.
+  useEffect(() => {
+    if (!isOpen) return;
     requestAnimationFrame(() => {
-      const el = wrapperRef.current;
+      const el = listRef.current;
       if (!el) return;
       let scroller = el.parentElement;
       while (scroller && scroller.scrollHeight <= scroller.clientHeight) {
         scroller = scroller.parentElement;
       }
       if (!scroller) return;
-      const overflow =
-        el.getBoundingClientRect().bottom + 220 - scroller.getBoundingClientRect().bottom;
-      if (overflow > 0) scroller.scrollBy({ top: overflow + 8, behavior: "smooth" });
+      const overflow = el.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom;
+      if (overflow > 0) scroller.scrollBy({ top: overflow + 12, behavior: "smooth" });
     });
-  };
+  }, [isOpen, selectedUsers]);
+
+  // Close on outside click via a listener (not a fixed backdrop, which would
+  // block scrolling the form while the dropdown is open).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onDown = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) onOpenChange(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [isOpen, onOpenChange]);
 
   const filteredUsers = users.filter(user =>
     (user.name || "").toLowerCase().includes(searchTerm.toLowerCase())
@@ -427,7 +466,8 @@ const MultiSelectDropdown = ({ users, selectedUsers, onSelectionChange, placehol
       ? selectedUsers.filter(id => id !== userId)
       : [...selectedUsers, userId];
     onSelectionChange(updatedSelection);
-    onOpenChange(false);
+    // Stay open so several participants can be toggled in one go — the backdrop
+    // closes it on an outside click.
   };
 
   const selectedUsersList = users.filter(user => selectedUsers.includes(user._id));
@@ -459,8 +499,7 @@ const MultiSelectDropdown = ({ users, selectedUsers, onSelectionChange, placehol
         </button>
         {isOpen && (
           <>
-          <div className="fixed inset-0 z-[10040]" onClick={() => onOpenChange(false)} />
-          <div className="absolute z-[10050] w-full mt-2 bg-white border border-gray-300 rounded-xl shadow-xl">
+          <div ref={listRef} className="absolute z-[10050] w-full mt-2 bg-white border border-gray-300 rounded-xl shadow-xl">
             <div className="p-3 border-b border-gray-200">
               <div className="relative">
                 <SearchIcon className="absolute left-3 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
@@ -592,12 +631,19 @@ const AdminMeetingForm = ({
   // dropdowns is open, if any — shared so opening one closes the others
   // instead of them stacking on top of each other.
   const [openDropdown, setOpenDropdown] = useState(null);
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [generatingLink, setGeneratingLink] = useState(false);
   const [googleStatus, setGoogleStatus] = useState(null); // { configured, connected, connectedEmail }
   const [connectingGoogle, setConnectingGoogle] = useState(false);
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
+  // Quick-create shortcuts behind the "+" buttons on Link Deal / Link Invoice.
+  const [quickDealOpen, setQuickDealOpen] = useState(false);
+  const [quickContactOpen, setQuickContactOpen] = useState(false);
+  const [quickInvoiceOpen, setQuickInvoiceOpen] = useState(false);
+  const [dealFormCompanies, setDealFormCompanies] = useState([]);
+  const documentDefaults = useDocumentDefaults();
   const [existingMeetings, setExistingMeetings] = useState([]);
   const [companyContacts, setCompanyContacts] = useState([]);
   const [linkableDeals, setLinkableDeals] = useState([]);
@@ -723,14 +769,15 @@ const AdminMeetingForm = ({
           const dealsList = res.data || [];
           setLinkableDeals(dealsList);
           
-          // Auto-set the companyId if a meeting is opened from a Deal
-          // but missing the explicit initialCompanyId prop.
+          // Opened from a Deal without an explicit company: adopt the deal's
+          // company and its single contact (the pickers below scope to it).
           if (initialDealId && !initialCompanyId) {
             const linkedDeal = dealsList.find(d => d._id === initialDealId);
-            if (linkedDeal && linkedDeal.company) {
-              const cid = linkedDeal.company._id || linkedDeal.company;
-              setForm(f => ({ ...f, companyId: cid }));
-              fetchCompanyContacts(cid);
+            if (linkedDeal) {
+              const cid = linkedDeal.company?._id || linkedDeal.company || null;
+              const dcid = linkedDeal.contact?._id || linkedDeal.contact || null;
+              setForm(f => ({ ...f, ...(cid ? { companyId: cid } : {}), linkedContactId: dcid }));
+              if (cid) fetchCompanyContacts(cid);
             }
           }
         })
@@ -774,6 +821,9 @@ const AdminMeetingForm = ({
           linkedTo: initialContactId ? "contact" : "company",
           companyId: initialCompanyId || null,
           contactId: initialContactId || null,
+          // On a contact's page the meeting always belongs to that contact, so
+          // the Link Contact field is pre-filled and shown read-only below.
+          linkedContactId: initialContactId || null,
           linkedDealId: initialDealId || null,
         };
         setForm(initialFormData);
@@ -815,6 +865,13 @@ const AdminMeetingForm = ({
         newForm.participants = [];
       }
 
+      // Changing the linked contact re-scopes the Deal (and therefore Invoice)
+      // list, so drop any deal/invoice that no longer belongs to the new contact.
+      if (key === "linkedContactId") {
+        newForm.linkedDealId = null;
+        newForm.linkedInvoiceId = null;
+      }
+
       if (key === "linkedDealId" && val) {
         const deal = linkableDeals.find(d => d._id === val);
         if (deal && deal.company) {
@@ -824,6 +881,10 @@ const AdminMeetingForm = ({
           if (newForm.linkedTo !== "company") {
             newForm.linkedTo = "company";
           }
+        }
+        // A deal has one contact, so selecting a deal fixes the linked contact.
+        if (deal) {
+          newForm.linkedContactId = deal.contact?._id || deal.contact || null;
         }
       }
 
@@ -1008,11 +1069,137 @@ const AdminMeetingForm = ({
     }
   };
 
+  // Link Invoice follows Link Deal: changing the deal drops an invoice that
+  // doesn't belong to it, so the meeting can't keep a stale link.
+  useEffect(() => {
+    if (!form.linkedDealId || !form.linkedInvoiceId) return;
+    const stillValid = linkableInvoices.some(
+      (inv) =>
+        String(inv._id) === String(form.linkedInvoiceId) &&
+        String(inv.deal?._id || inv.deal || "") === String(form.linkedDealId),
+    );
+    if (!stillValid) setForm((f) => ({ ...f, linkedInvoiceId: null }));
+  }, [form.linkedDealId, form.linkedInvoiceId, linkableInvoices]);
+
   if (!shouldRender) return null;
 
   const entityList =
     form.linkedTo === "contact" ? allContacts : form.linkedTo === "vendor" ? vendors : companies;
   const readOnly = !isEditMode && mode === "view";
+
+  // Link Deal is scoped to the record whose page we're on — a contact's own
+  // deals (there are usually several), otherwise the company's.
+  // The contact this meeting is scoped to: the locked one when opened from a
+  // contact page, otherwise whatever the user picked in Link Contact. Deals are
+  // then limited to that contact's deals, falling back to the company's deals
+  // when no contact is chosen.
+  const activeContactId = initialContactId || form.linkedContactId;
+  const scopedDeals = activeContactId
+    ? linkableDeals.filter((d) => String(d.contact?._id || d.contact || "") === String(activeContactId))
+    : form.companyId
+      ? linkableDeals.filter((d) => String(d.company?._id || d.company || "") === String(form.companyId))
+      : linkableDeals;
+
+  // A linked deal has one contact, so the contact pickers scope to it — empty
+  // when the deal has no contact, never the whole company list.
+  const linkedDealContactId = (() => {
+    const d = linkableDeals.find((x) => String(x._id) === String(form.linkedDealId));
+    return d ? String(d.contact?._id || d.contact || "") : "";
+  })();
+  const hasLinkedDealSelected = !!form.linkedDealId;
+  // Keep already-selected participants visible even when scoped.
+  const scopedCompanyContacts = hasLinkedDealSelected
+    ? companyContacts.filter(
+        (c) =>
+          String(c._id) === linkedDealContactId ||
+          (form.participants || []).includes(c._id),
+      )
+    : companyContacts;
+  const contactPickList = companyContacts.length > 0 ? companyContacts : allContacts;
+  const scopedContactPickList = hasLinkedDealSelected
+    ? contactPickList.filter((c) => String(c._id) === linkedDealContactId)
+    : contactPickList;
+
+  // An invoice always belongs to a deal, so Link Invoice is gated entirely on
+  // the chosen deal: no deal -> nothing to pick; a deal with no invoices ->
+  // "No invoice found"; a deal with invoices -> only that deal's invoices.
+  const invoiceDealId = (inv) => String(inv.deal?._id || inv.deal || "");
+  const hasLinkedDeal = !!form.linkedDealId;
+  const scopedInvoices = hasLinkedDeal
+    ? linkableInvoices.filter((inv) => invoiceDealId(inv) === String(form.linkedDealId))
+    : [];
+  const noInvoicesForDeal = hasLinkedDeal && scopedInvoices.length === 0;
+  // Prefer the meeting's own linked contact (an older meeting may point
+  // elsewhere), falling back to the contact whose page we're on.
+  // Same lazy load the Invoices tab does before opening QuickDealForm.
+  const openQuickDeal = async () => {
+    if (dealFormCompanies.length === 0) {
+      try {
+        const res = await API.get("/companies");
+        setDealFormCompanies(res.data?.companies || res.data || []);
+      } catch {
+        toast.error("Failed to load companies");
+      }
+    }
+    setQuickDealOpen(true);
+  };
+
+  const openQuickContact = async () => {
+    if (dealFormCompanies.length === 0) {
+      try {
+        const res = await API.get("/companies");
+        setDealFormCompanies(res.data?.companies || res.data || []);
+      } catch {
+        toast.error("Failed to load companies");
+      }
+    }
+    setQuickContactOpen(true);
+  };
+
+  // QuickContactForm's callback carries no payload, so refetch and link
+  // whichever contact is newest.
+  const handleQuickContactCreated = async () => {
+    setQuickContactOpen(false);
+    try {
+      const res = await API.get("/contacts");
+      const list = res.data || [];
+      setCompanyContacts(list.filter((c) => !form.companyId || c.company?._id === form.companyId));
+      const newest = [...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+      if (newest) setForm((f) => ({ ...f, linkedContactId: newest._id }));
+    } catch {
+      toast.error("Failed to refresh contacts");
+    }
+  };
+
+  const handleQuickDealCreated = (deal) => {
+    setQuickDealOpen(false);
+    setLinkableDeals((prev) => (prev.some((d) => d._id === deal._id) ? prev : [...prev, deal]));
+    setForm((f) => ({ ...f, linkedDealId: deal._id, linkedInvoiceId: null }));
+  };
+
+  // CreateInvoicePanel's onCreated carries no payload, so refetch and link
+  // whichever invoice on this deal is newest.
+  const handleQuickInvoiceCreated = async () => {
+    try {
+      const res = await API.get("/invoices");
+      const list = res.data || [];
+      setLinkableInvoices(list);
+      const mine = list
+        .filter((inv) => String(inv.deal?._id || inv.deal || "") === String(form.linkedDealId))
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      if (mine[0]) setForm((f) => ({ ...f, linkedInvoiceId: mine[0]._id }));
+    } catch {
+      toast.error("Failed to refresh invoices");
+    }
+  };
+
+  const lockedContactId = form.linkedContactId || initialContactId;
+  const lockedContactName =
+    (companyContacts.length > 0 ? companyContacts : allContacts).find(
+      (c) => String(c._id) === String(lockedContactId),
+    )?.name ||
+    (String(lockedContactId) === String(initialContactId) ? contactName : "") ||
+    "—";
 
   return (
     <>
@@ -1045,8 +1232,11 @@ const AdminMeetingForm = ({
           {/* Form Body */}
           <div className="flex-1 overflow-y-auto">
             <form onSubmit={handleSubmit} noValidate className="flex flex-col h-full">
-              {/* Content */}
-              <div className="px-8 py-6 space-y-6">
+              {/* Extra bottom padding while a dropdown is open so the last
+                  fields' panels can scroll clear of the sticky footer. Applied
+                  instantly (no transition) so the dropdown's auto-scroll has the
+                  room immediately, otherwise the panel stays clipped. */}
+              <div className={`px-8 pt-6 space-y-6 ${openDropdown ? "pb-72" : "pb-6"}`}>
                 <div ref={titleInputRef}>
                   <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                     Meeting Title <span className="text-[#FF4935]">*</span>
@@ -1362,7 +1552,7 @@ const AdminMeetingForm = ({
                   <div ref={participantsRef}>
                     <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Client Contacts</label>
                     <MultiSelectDropdown
-                      users={companyContacts}
+                      users={scopedCompanyContacts}
                       selectedUsers={form.participants}
                       onSelectionChange={(participants) => handleChange("participants", participants)}
                       placeholder={form.companyId ? "Add client contacts" : "Select a company first"}
@@ -1408,8 +1598,17 @@ const AdminMeetingForm = ({
 
                 <div>
                   <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Link Contact</label>
+                  {/* Read-only on a contact page and on a deal page — there it's
+                      fixed to the deal's contact (or "—" when the deal has none). */}
+                  {initialContactId || initialDealId ? (
+                    <div className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] flex items-center bg-[#F5F7FA] text-[#1F2937] cursor-not-allowed">
+                      <span className="truncate">{lockedContactName}</span>
+                    </div>
+                  ) : (
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
                   <EntityPickerDropdown
-                    entities={companyContacts.length > 0 ? companyContacts : allContacts}
+                    entities={scopedContactPickList}
                     value={form.linkedContactId}
                     onChange={(val) => handleChange("linkedContactId", val)}
                     entityType="contact"
@@ -1418,34 +1617,108 @@ const AdminMeetingForm = ({
                     isOpen={openDropdown === "linkedContact"}
                     onOpenChange={(open) => setOpenDropdown(open ? "linkedContact" : null)}
                   />
+                    </div>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={openQuickContact}
+                        className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] flex items-center justify-center hover:opacity-90 transition-opacity"
+                        title="Create a new contact"
+                      >
+                        <PlusIcon className="w-4 h-4 text-white" />
+                      </button>
+                    )}
+                  </div>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Link Deal</label>
-                  <EntityPickerDropdown
-                    entities={linkableDeals}
-                    value={form.linkedDealId}
-                    onChange={(val) => handleChange("linkedDealId", val)}
-                    entityType="deal"
-                    displayKey="title"
-                    disabled={readOnly}
-                    isOpen={openDropdown === "linkedDeal"}
-                    onOpenChange={(open) => setOpenDropdown(open ? "linkedDeal" : null)}
-                  />
+                  {initialDealId ? (
+                    // On a deal's own page the meeting always belongs to that deal.
+                    <div className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] flex items-center bg-[#F5F7FA] text-[#1F2937] cursor-not-allowed">
+                      <span className="truncate">
+                        {linkableDeals.find((d) => String(d._id) === String(form.linkedDealId))?.title ||
+                          dealName ||
+                          "—"}
+                      </span>
+                    </div>
+                  ) : (
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <EntityPickerDropdown
+                        entities={scopedDeals}
+                        value={form.linkedDealId}
+                        onChange={(val) => handleChange("linkedDealId", val)}
+                        entityType="deal"
+                        displayKey="title"
+                        disabled={readOnly}
+                        isOpen={openDropdown === "linkedDeal"}
+                        onOpenChange={(open) => setOpenDropdown(open ? "linkedDeal" : null)}
+                      />
+                    </div>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={openQuickDeal}
+                        className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] flex items-center justify-center hover:opacity-90 transition-opacity"
+                        title="Create a new deal"
+                      >
+                        <PlusIcon className="w-4 h-4 text-white" />
+                      </button>
+                    )}
+                  </div>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Link Invoice</label>
-                  <EntityPickerDropdown
-                    entities={linkableInvoices}
-                    value={form.linkedInvoiceId}
-                    onChange={(val) => handleChange("linkedInvoiceId", val)}
-                    entityType="invoice"
-                    displayKey="invoiceNumber"
-                    disabled={readOnly}
-                    isOpen={openDropdown === "linkedInvoice"}
-                    onOpenChange={(open) => setOpenDropdown(open ? "linkedInvoice" : null)}
-                  />
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      {!hasLinkedDeal ? (
+                        // No deal chosen yet — an invoice can't exist without a
+                        // deal, so show an uneditable hint instead of a picker.
+                        <div className="w-full border border-dashed border-[#1F2937]/15 rounded-full px-3 h-[38px] text-[13px] flex items-center bg-[#F5F7FA] text-[#525866]">
+                          <span className="truncate">Select a deal first</span>
+                        </div>
+                      ) : noInvoicesForDeal ? (
+                        // Deal chosen but it has no invoices — uneditable message;
+                        // the "+" creates one on the full invoice page.
+                        <div className="w-full border border-dashed border-[#1F2937]/15 rounded-full px-3 h-[38px] text-[13px] flex items-center bg-[#F5F7FA] text-[#525866]">
+                          <span className="truncate">No invoice found</span>
+                        </div>
+                      ) : (
+                        <EntityPickerDropdown
+                          entities={scopedInvoices}
+                          value={form.linkedInvoiceId}
+                          onChange={(val) => handleChange("linkedInvoiceId", val)}
+                          entityType="invoice"
+                          displayKey="invoiceNumber"
+                          disabled={readOnly}
+                          isOpen={openDropdown === "linkedInvoice"}
+                          onOpenChange={(open) => setOpenDropdown(open ? "linkedInvoice" : null)}
+                        />
+                      )}
+                    </div>
+                    {/* An invoice always belongs to a deal, so this is only
+                        usable once one is linked. */}
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Open the full Invoice creation page with the linked
+                          // deal preselected, instead of a floating panel.
+                          if (!form.linkedDealId) return;
+                          navigate(`/accounting?tab=tax&newInvoice=1&dealId=${form.linkedDealId}`);
+                        }}
+                        disabled={!form.linkedDealId}
+                        className={`flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] flex items-center justify-center transition-opacity ${form.linkedDealId ? "hover:opacity-90" : "opacity-40 cursor-not-allowed"}`}
+                        title={form.linkedDealId ? "Create a new invoice" : "Select or create a deal first"}
+                      >
+                        <PlusIcon className="w-4 h-4 text-white" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {meetingFieldDefs.length > 0 && (
@@ -1543,6 +1816,48 @@ const AdminMeetingForm = ({
           </div>
         </div>
       </div>
+
+      {/* The quick-create drawers are `fixed` but sit below this form's own
+          z-index, so they're wrapped in a stacking context above it. */}
+      {(quickDealOpen || quickContactOpen || (quickInvoiceOpen && documentDefaults.settled)) && (
+        <div className="relative z-[10060]">
+          {quickContactOpen && (
+            <QuickContactForm
+              companies={dealFormCompanies}
+              initialCompanyId={form.companyId || initialCompanyId || ""}
+              onContactCreated={handleQuickContactCreated}
+              onRequestClose={() => setQuickContactOpen(false)}
+            />
+          )}
+          {quickDealOpen && (
+            <QuickDealForm
+              companies={dealFormCompanies}
+              contacts={companyContacts.length > 0 ? companyContacts : allContacts}
+              initialCompanyId={form.companyId || initialCompanyId || ""}
+              initialContactId={lockedContactId || ""}
+              isContactLocked={!!initialContactId}
+              onDealCreated={handleQuickDealCreated}
+              onRequestClose={() => setQuickDealOpen(false)}
+            />
+          )}
+          {quickInvoiceOpen && documentDefaults.settled && (
+            <CreateInvoicePanel
+              type="tax"
+              deals={linkableDeals.filter((d) => String(d._id) === String(form.linkedDealId))}
+              preselectDealId={form.linkedDealId}
+              documentTypeSettings={documentDefaults.documentTypeSettings}
+              defaultDueDateDays={documentDefaults.defaultDueDateDays}
+              defaultNotesByType={documentDefaults.defaultNotesByType}
+              defaultTermsByType={documentDefaults.defaultTermsByType}
+              defaultNotesFlat={documentDefaults.defaultNotesFlat}
+              defaultTermsFlat={documentDefaults.defaultTermsFlat}
+              onAddDeal={openQuickDeal}
+              onCreated={handleQuickInvoiceCreated}
+              onClose={() => setQuickInvoiceOpen(false)}
+            />
+          )}
+        </div>
+      )}
     </>
   );
 };

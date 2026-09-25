@@ -360,17 +360,17 @@ const QuickDealForm = ({
 
     // Validate required fields
     if (!form.title || !form.title.trim()) {
-      errors.title = "Title is required";
+      errors.title = "Please enter a deal title.";
       hasErrors = true;
     }
 
     if (!form.amount || form.amount === "" || parseFloat(form.amount) <= 0) {
-      errors.amount = "Amount is required and must be greater than 0";
+      errors.amount = "Please enter an amount greater than 0.";
       hasErrors = true;
     }
 
     if (!form.status || !form.status.trim()) {
-      errors.status = "Status is required";
+      errors.status = "Please select a status.";
       hasErrors = true;
     }
 
@@ -391,7 +391,7 @@ const QuickDealForm = ({
       if (fieldDef.required) {
         const value = additionalFieldValues[fieldDef.name];
         if (!value || value.toString().trim() === "") {
-          errors[fieldDef.name] = `${fieldDef.name} is required`;
+          errors[fieldDef.name] = `Please fill in ${fieldDef.name}.`;
           hasErrors = true;
         }
       }
@@ -399,6 +399,9 @@ const QuickDealForm = ({
 
     if (hasErrors) {
       setValidationErrors(errors);
+      // Surface the first specific problem as a friendly toast (in addition to
+      // the inline field errors), instead of a generic "fix the errors" message.
+      toast.error(Object.values(errors)[0]);
 
       // Scroll to whichever invalid field appears first on the page (not
       // necessarily the one checked first above), so the user always lands

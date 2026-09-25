@@ -1,6 +1,5 @@
 import DeleteIcon from "../common/DeleteIcon";
 import EmptyState from "../common/EmptyState";
-import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import MoreIcon from "../common/MoreIcon";
 import React, { useState, useEffect, useCallback } from "react";
@@ -150,13 +149,6 @@ const CreatedDateIcon = ({ size = 16, ...props }) => (
 );
 
 
-const DeleteWarningIcon = ({ size = 48, ...props }) => (
-  <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
-    <rect width="48" height="48" rx="10" fill="#FFEBEC" />
-    <path d="M29 18H34V20H32V33C32 33.5523 31.5523 34 31 34H17C16.4477 34 16 33.5523 16 33V20H14V18H19V15C19 14.4477 19.4477 14 20 14H28C28.5523 14 29 14.4477 29 15V18ZM30 20H18V32H30V20ZM21 23H23V29H21V23ZM25 23H27V29H25V23ZM21 16V18H27V16H21Z" fill="#CD3636" />
-  </svg>
-);
-
 const MiniFileIcon = ({ size = 32, ...props }) => (
   <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
     <path
@@ -166,19 +158,6 @@ const MiniFileIcon = ({ size = 32, ...props }) => (
   </svg>
 );
 
-const CheckboxIcon = ({ size = 16, checked = false, ...props }) => (
-  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
-    <path
-      d="M4 0.75H12C13.7949 0.75 15.25 2.20507 15.25 4V12C15.25 13.7949 13.7949 15.25 12 15.25H4C2.20507 15.25 0.75 13.7949 0.75 12V4C0.75 2.20507 2.20507 0.75 4 0.75Z"
-      fill={checked ? "#0085FF" : "white"}
-      stroke={checked ? "#0085FF" : "#EBEBEB"}
-      strokeWidth="1.5"
-    />
-    {checked && (
-      <path d="M4.5 8.2L6.9 10.6L11.5 5.5" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-    )}
-  </svg>
-);
 
 const MiniOpenFolderIcon = ({ size = 40, ...props }) => (
   <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
@@ -186,134 +165,50 @@ const MiniOpenFolderIcon = ({ size = 40, ...props }) => (
   </svg>
 );
 
+// Matches the shared BulkDeleteModal styling for a consistent delete dialog.
 const ConfirmModal = ({ title, description, confirmLabel, extra, requireCheck, onCancel, onConfirm }) => {
   const [checked, setChecked] = useState(false);
   const disabled = requireCheck && !checked;
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
       onClick={onCancel}
     >
       <div
-        className="flex flex-col items-start bg-white"
-        style={{
-          boxSizing: "border-box",
-          width: 400,
-          height: 366,
-          border: "1px solid #EBEBEB",
-          borderRadius: 8,
-        }}
+        className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-sm sm:max-w-lg mx-4 animate-in fade-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
-        <div
-          className="flex flex-col items-center self-stretch"
-          style={{ boxSizing: "border-box", width: 400, height: 294, padding: 20, gap: 16 }}
-        >
-          <DeleteWarningIcon size={48} />
-          <div
-            className="flex flex-col items-center self-stretch"
-            style={{ boxSizing: "border-box", width: 360, gap: 8 }}
-          >
-            <p
-              style={{
-                fontFamily: "Inter Tight",
-                fontWeight: 500,
-                fontSize: 18,
-                lineHeight: "120%",
-                color: "#171717",
-              }}
-            >
-              {title}
-            </p>
-            <p
-              className="text-center self-stretch"
-              style={{
-                fontFamily: "Inter Tight",
-                fontWeight: 400,
-                fontSize: 14,
-                lineHeight: "140%",
-                color: "#5C5C5C",
-              }}
-            >
-              {description}
-            </p>
-          </div>
-          {extra && <div style={{ width: 360 }}>{extra}</div>}
-          {requireCheck && (
-            <label
-              className="flex items-center self-stretch cursor-pointer"
-              style={{ width: 360, height: 20, gap: 8 }}
-            >
-              <Checkbox checked={checked} onChange={(e) => setChecked(e.target.checked)} />
-              <CheckboxIcon size={16} checked={checked} style={{ flexShrink: 0 }} />
-              <span
-                style={{
-                  fontFamily: "Inter Tight",
-                  fontWeight: 400,
-                  fontSize: 14,
-                  lineHeight: "140%",
-                  color: "#5C5C5C",
-                }}
-              >
-                I understand this action cannot be undone
-              </span>
-            </label>
-          )}
-        </div>
+        <h3 className="text-lg font-semibold font-sf text-gray-900 mb-4">{title}</h3>
+        <p className="text-sm text-gray-600 mb-6 font-inter">{description}</p>
 
-        {/* Modal Footer */}
-        <div
-          className="flex items-center justify-end flex-shrink-0"
-          style={{
-            boxSizing: "border-box",
-            width: 400,
-            height: 72,
-            padding: "16px 20px",
-            gap: 12,
-            borderTop: "1px solid #EBEBEB",
-          }}
-        >
+        {extra && <div className="mb-6">{extra}</div>}
+
+        {requireCheck && (
+          <label className="flex items-center gap-2 text-sm text-gray-600 mb-6 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={(e) => setChecked(e.target.checked)}
+              className="accent-red-600"
+            />
+            I understand this action cannot be undone
+          </label>
+        )}
+
+        <div className="flex justify-between gap-3">
           <button
+            type="button"
             onClick={onCancel}
-            className="flex items-center justify-center hover:bg-gray-50 transition-colors whitespace-nowrap"
-            style={{
-              boxSizing: "border-box",
-              padding: "10px 12px",
-              gap: 6,
-              minWidth: 67,
-              height: 40,
-              background: "#FFFFFF",
-              border: "1px solid #EBEBEB",
-              boxShadow: "0px 1px 2px rgba(10, 13, 20, 0.03)",
-              borderRadius: 367,
-              fontFamily: "Inter Tight",
-              fontWeight: 500,
-              fontSize: 14,
-              lineHeight: "120%",
-              color: "#171717",
-            }}
+            className="bg-gray-200 font-sf text-gray-800 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors cursor-pointer"
           >
             Cancel
           </button>
           <button
+            type="button"
             onClick={onConfirm}
             disabled={disabled}
-            className="flex items-center justify-center hover:opacity-90 transition-opacity whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              boxSizing: "border-box",
-              padding: "10px 12px",
-              gap: 6,
-              minWidth: 106,
-              height: 40,
-              background: "#CD3636",
-              borderRadius: 367,
-              fontFamily: "Inter Tight",
-              fontWeight: 500,
-              fontSize: 14,
-              lineHeight: "120%",
-              color: "#FFFFFF",
-            }}
+            className="bg-red-600 font-sf text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed min-w-[92px]"
           >
             {confirmLabel}
           </button>
@@ -1410,7 +1305,7 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
           className="flex items-center"
           style={{
             boxSizing: "border-box",
-            width: 360,
+            width: "100%",
             gap: 12,
             padding: 14,
             background: "#FFFFFF",
@@ -1463,7 +1358,7 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
           className="flex items-center"
           style={{
             boxSizing: "border-box",
-            width: 360,
+            width: "100%",
             gap: 12,
             padding: 14,
             background: "#FFFFFF",

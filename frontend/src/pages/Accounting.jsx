@@ -384,6 +384,15 @@ const Accounting = () => {
     if (status) {
       setFilterStatuses((prev) => ({ ...prev, [key]: status }));
     }
+    // Deep link to open the create panel with a deal preselected — used by the
+    // "+" on a Note/Meeting form's Link Invoice, which now navigates here
+    // instead of opening a floating panel.
+    if (params.get("newInvoice") === "1") {
+      setActiveTab(key);
+      setEditPanelDoc(null);
+      setPreselectInvoiceDealId(params.get("dealId") || null);
+      setShowCreatePanel(true);
+    }
     if (search) {
       setSearchTerms((prev) => ({ ...prev, [key]: search }));
       // The search box is collapsed to an icon by default — open it, or the
@@ -797,6 +806,9 @@ const Accounting = () => {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [editPanelDoc, setEditPanelDoc] = useState(null);
+  // Deal to preselect when the create panel is opened from a deep link
+  // (e.g. the "+" on a Note/Meeting form's Link Invoice → /accounting?newInvoice=1&dealId=…).
+  const [preselectInvoiceDealId, setPreselectInvoiceDealId] = useState(null);
   const [conversionData, setConversionData] = useState(null);
   const [showQuickDealForm, setShowQuickDealForm] = useState(false);
   const [companies, setCompanies] = useState([]);
@@ -2961,6 +2973,7 @@ const Accounting = () => {
           const panelProps = {
             deals,
             initialDoc: editPanelDoc,
+            preselectDealId: preselectInvoiceDealId,
             conversionData,
             defaultDueDateDays,
             documentTypeSettings,
@@ -2972,6 +2985,7 @@ const Accounting = () => {
             onClose: () => {
               setShowCreatePanel(false);
               setEditPanelDoc(null);
+              setPreselectInvoiceDealId(null);
               setConversionData(null);
               setFormHandoff(null);
               // Deliberately NOT resetting invoiceFullWidth/quotationFullWidth/

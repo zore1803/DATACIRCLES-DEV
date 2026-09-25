@@ -311,12 +311,18 @@ export default function KanbanSettings({ embedded = false }) {
             value={newStatus}
             onChange={(e) => setNewStatus(e.target.value)}
             placeholder="Add pipeline stage (e.g. Qualified, Proposal Sent)"
-            className="flex-1 min-w-0 px-4 py-2 text-sm rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            className="flex-1 min-w-0 px-4 h-10 text-[13px] rounded-full border border-[#E1E4EA] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
           />
           <button
             type="submit"
             disabled={!newStatus.trim()}
-            className="flex-shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-full disabled:opacity-50 transition-colors flex items-center gap-1.5"
+            // Same primary treatment as the header's Upgrade Plan pill.
+            className="flex-shrink-0 px-5 h-10 border border-[#0C4FCD] text-white text-[13px] font-semibold rounded-full disabled:opacity-50 transition-opacity hover:opacity-90 flex items-center gap-1.5"
+            style={{
+              background:
+                "linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 100%), var(--btn-primary)",
+              boxShadow: "inset 0px 0px 0px 1.8px rgba(255, 255, 255, 0.25)",
+            }}
           >
             <PlusIcon className="w-4 h-4" /> Add
           </button>

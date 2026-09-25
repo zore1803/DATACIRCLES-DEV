@@ -31,7 +31,6 @@ const ContactLifecycleDrawer = ({ isOpen, onClose }) => {
             <h2 className="text-[15px] font-semibold leading-6 text-[#1C1B1F]">
               Contact Lifecycle
             </h2>
-            <p className="text-[12px] text-[#78788D] mt-0.5">Configure lifecycle stages and statuses</p>
           </div>
           <button
             type="button"
@@ -48,10 +47,7 @@ const ContactLifecycleDrawer = ({ isOpen, onClose }) => {
           <ContactLifecycleSettings embedded />
         </div>
 
-        <footer className="flex-shrink-0 px-5 py-3 border-t border-[#E1E4EA] bg-[#FAFBFC] flex items-center justify-between gap-3">
-          <p className="text-[11px] text-[#99A0AE] min-w-0 truncate">
-            Changes save automatically and apply everywhere.
-          </p>
+        <footer className="flex-shrink-0 px-5 py-3 border-t border-[#E1E4EA] bg-[#FAFBFC] flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={onClose}

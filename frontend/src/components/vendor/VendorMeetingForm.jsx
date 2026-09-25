@@ -262,11 +262,11 @@ const VendorMeetingForm = ({
 
   const validateForm = () => {
     const newErrors = {};
-    if (!form.title?.trim()) newErrors.title = "Meeting title is required";
-    if (!form.date && !calendarDate) newErrors.date = "Date is required";
-    
+    if (!form.title?.trim()) newErrors.title = "Please enter a meeting title.";
+    if (!form.date && !calendarDate) newErrors.date = "Please choose a date for the meeting.";
+
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return newErrors;
   };
 
   const getScheduledAt = () => {
@@ -279,8 +279,9 @@ const VendorMeetingForm = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!validateForm()) {
-      toast.error("Please fix the errors before submitting");
+    const validationErrors = validateForm();
+    if (Object.keys(validationErrors).length > 0) {
+      toast.error(Object.values(validationErrors)[0]);
       return;
     }
 

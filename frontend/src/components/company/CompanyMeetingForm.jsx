@@ -75,9 +75,21 @@ const PriorityChip = ({ priority }) => {
 // option lists render stacked on top of each other.
 const SingleSelectDropdown = ({ options, value, onChange, disabled, isOpen, onOpenChange }) => {
   const selectedOption = options.find(opt => opt.value === value) || options[0];
+  const wrapperRef = useRef(null);
+
+  // Close on outside click via a listener, not a fixed backdrop (which would
+  // block scrolling the form while the dropdown is open).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onDown = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) onOpenChange(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [isOpen, onOpenChange]);
 
   return (
-    <div className="relative">
+    <div className="relative" ref={wrapperRef}>
       <button
         type="button"
         disabled={disabled}
@@ -94,7 +106,6 @@ const SingleSelectDropdown = ({ options, value, onChange, disabled, isOpen, onOp
 
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => onOpenChange(false)} />
           <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-xl z-50 py-1 overflow-hidden animate-in fade-in zoom-in duration-200">
             {options.map((option) => (
               <button
@@ -125,18 +136,39 @@ const MultiSelectDropdown = ({ users, selectedUsers, onSelectionChange, placehol
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const wrapperRef = useRef(null);
+  const listRef = useRef(null);
 
-  const openDropdown = () => {
-    setIsOpen(true);
-    // The list opens BELOW the button, so when the button itself is near
-    // the bottom of the scrollable panel, the list renders mostly/fully
-    // off-screen and needs a manual scroll to see any options. Scroll the
-    // trigger toward the top of the panel instead, right as the list
-    // opens, so the options are visible immediately.
+  const openDropdown = () => setIsOpen(true);
+
+  // Opens downward. On open — and after each select/deselect, since picking a
+  // participant grows the chip row and pushes the list down — scroll the form
+  // body just enough that the WHOLE panel sits above the sticky footer. Only
+  // scrolls when part of it is hidden, so there's no jump when already visible.
+  useEffect(() => {
+    if (!isOpen) return;
     requestAnimationFrame(() => {
-      wrapperRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const el = listRef.current;
+      if (!el) return;
+      let scroller = el.parentElement;
+      while (scroller && scroller.scrollHeight <= scroller.clientHeight) {
+        scroller = scroller.parentElement;
+      }
+      if (!scroller) return;
+      const overflow = el.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom;
+      if (overflow > 0) scroller.scrollBy({ top: overflow + 12, behavior: "smooth" });
     });
-  };
+  }, [isOpen, selectedUsers]);
+
+  // Close on outside click via a listener, not a fixed backdrop (which would
+  // block scrolling the form while the dropdown is open).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onDown = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [isOpen]);
 
   const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -147,7 +179,8 @@ const MultiSelectDropdown = ({ users, selectedUsers, onSelectionChange, placehol
       ? selectedUsers.filter(id => id !== userId)
       : [...selectedUsers, userId];
     onSelectionChange(updatedSelection);
-    setIsOpen(false);
+    // Stay open so several participants can be toggled in one go — the backdrop
+    // below closes it on an outside click.
   };
 
   const selectedUsersList = users.filter(user => selectedUsers.includes(user._id));
@@ -181,7 +214,8 @@ const MultiSelectDropdown = ({ users, selectedUsers, onSelectionChange, placehol
           <TeamIcon className="w-4 h-4 text-gray-400" />
         </button>
         {isOpen && (
-          <div className="absolute z-[10050] w-full mt-2 bg-white border border-gray-300 rounded-xl shadow-xl">
+          <>
+          <div ref={listRef} className="absolute z-[10050] w-full mt-2 bg-white border border-gray-300 rounded-xl shadow-xl">
             <div className="p-3 border-b border-gray-200">
               <div className="relative">
                 <SearchIcon className="absolute left-3 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
@@ -220,6 +254,7 @@ const MultiSelectDropdown = ({ users, selectedUsers, onSelectionChange, placehol
               )}
             </div>
           </div>
+          </>
         )}
       </div>
     </div>
@@ -325,6 +360,8 @@ const CompanyMeetingForm = ({
   const [timeConflict, setTimeConflict] = useState(null);
   const [errors, setErrors] = useState({});
   const [isEditMode, setIsEditMode] = useState(mode === "create" || !!startInEditMode);
+  // On a deal page, scope Client Contacts to the deal's single contact.
+  const [dealContactId, setDealContactId] = useState("");
 
   const meetingTypeOptions = [
     { value: 'in-person', label: 'In-person', icon: Building, className: 'bg-orange-50 text-orange-600' },
@@ -424,6 +461,14 @@ const CompanyMeetingForm = ({
       API.get("/auth/google/status")
         .then((res) => setGoogleStatus(res.data))
         .catch(() => setGoogleStatus(null));
+      // Resolve the deal's contact to scope Client Contacts.
+      if (dealId) {
+        API.get(`/deals/${dealId}`)
+          .then((res) => setDealContactId(String(res.data?.contact?._id || res.data?.contact || "")))
+          .catch(() => setDealContactId(""));
+      } else {
+        setDealContactId("");
+      }
 
       if (meetingData && mode === "view") {
         const initialFormData = {
@@ -459,7 +504,7 @@ const CompanyMeetingForm = ({
       setTimeout(() => setShouldRender(false), 300);
       setTimeConflict(null);
     }
-  }, [open, meetingData, mode, calendarDate, fetchMeetingsForDate, startInEditMode]);
+  }, [open, meetingData, mode, calendarDate, fetchMeetingsForDate, startInEditMode, dealId]);
 
   const handleChange = (key, val) => {
     setForm(f => ({ ...f, [key]: val }));
@@ -510,12 +555,12 @@ const CompanyMeetingForm = ({
   const validateForm = () => {
     const newErrors = {};
 
-    if (!form.title?.trim()) newErrors.title = "Meeting title is required";
-    if (!form.date && !calendarDate) newErrors.date = "Date is required";
-    if (form.participants.length === 0) newErrors.participants = "At least one participant is required";
+    if (!form.title?.trim()) newErrors.title = "Please enter a meeting title.";
+    if (!form.date && !calendarDate) newErrors.date = "Please choose a date for the meeting.";
+    if (form.participants.length === 0) newErrors.participants = "Please add at least one participant.";
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return newErrors;
   };
 
   const getScheduledAt = () => {
@@ -528,8 +573,9 @@ const CompanyMeetingForm = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!validateForm()) {
-      toast.error("Please fix the errors before submitting");
+    const validationErrors = validateForm();
+    if (Object.keys(validationErrors).length > 0) {
+      toast.error(Object.values(validationErrors)[0]);
       return;
     }
 
@@ -881,7 +927,7 @@ const CompanyMeetingForm = ({
                       <span>Client Contacts</span>
                     </div>
                     <MultiSelectDropdown
-                      users={users}
+                      users={dealId ? (users || []).filter((u) => String(u._id) === dealContactId || (form.participants || []).includes(u._id)) : users}
                       selectedUsers={form.participants}
                       onSelectionChange={(participants) => handleChange("participants", participants)}
                       placeholder="Add client contacts"

@@ -254,11 +254,11 @@ const ContactMeetingForm = ({ open, mode, meetingData, calendarDate, contactId, 
 
   const validateForm = () => {
     const newErrors = {};
-    if (!form.title?.trim()) newErrors.title = "Meeting title is required";
-    if (!form.date && !calendarDate) newErrors.date = "Date is required";
-    
+    if (!form.title?.trim()) newErrors.title = "Please enter a meeting title.";
+    if (!form.date && !calendarDate) newErrors.date = "Please choose a date for the meeting.";
+
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return newErrors;
   };
 
   const getScheduledAt = () => {
@@ -302,9 +302,11 @@ const ContactMeetingForm = ({ open, mode, meetingData, calendarDate, contactId, 
   const handleSubmit = async (e) => {
   e.preventDefault();
 
-  if (!validateForm()) {
-    // Scroll to whichever invalid field sits highest on screen, rather than
-    // just reporting via toast that something is wrong.
+  const validationErrors = validateForm();
+  if (Object.keys(validationErrors).length > 0) {
+    // Friendly toast for the first problem, plus scroll to whichever invalid
+    // field sits highest on screen.
+    toast.error(Object.values(validationErrors)[0]);
     const latestErrors = {};
     if (!form.title?.trim()) latestErrors.title = true;
     if (!form.date && !calendarDate) latestErrors.date = true;

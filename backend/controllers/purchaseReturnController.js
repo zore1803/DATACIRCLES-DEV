@@ -69,13 +69,12 @@ const POPULATE = [
 ];
 
 // Applies the inventory stock-out for a PurchaseReturn transitioning into
-// "Confirmed" — the single inventory-triggering event for this module,
-// mirroring purchaseOrderController.js's syncPurchaseOrderDeliveryStock
-// (Delivered) exactly. "Confirmed" is terminal for STATUS (enforced by the
-// callers below via isBlockedStatusChange, which still allows moving onward
-// to "Paid"), so there's no "moving out of Confirmed" branch to reverse —
-// the only way to fully undo the stock-out is deleting the return, which
-// deletePurchaseReturn reverses via isReversal: true.
+// "Confirmed" — the single inventory-triggering event for this module.
+// "Confirmed" is the physical "goods left toward the vendor" event and can
+// only move onward to "Paid" (no stock effect) or "Cancelled" (which reverses
+// the stock-out, below), never back to Draft/Pending (enforced by the callers
+// via isBlockedStatusChange). Deleting a Confirmed return also reverses it
+// (deletePurchaseReturn, via isReversal: true).
 //
 // Items themselves stay editable after Confirmed though (e.g. correcting the
 // return qty on an already-confirmed return) — see the `previousItems`
@@ -114,6 +113,31 @@ async function syncPurchaseReturnStock(purchaseReturn, oldStatus, oldStockMoveme
     return;
   }
 
+  // Cancelled AFTER an applied Confirmed: reverse exactly the stock-out that
+  // was applied, once. Goods that were sent back to the vendor are treated as
+  // never having left, so the stock comes back IN. Mirrors Purchase's
+  // Confirmed -> Cancelled reversal. The 'applied' -> 'reversed' guard makes a
+  // second cancellation a no-op, so the net stock effect is 0 and can never be
+  // reversed twice (and a later delete won't double-reverse either, since it
+  // only fires on 'applied').
+  if (purchaseReturn.status === "Cancelled" && oldStockMovementStatus === "applied") {
+    await syncDocumentStock({
+      organization: purchaseReturn.organization,
+      documentId: purchaseReturn._id,
+      documentModel: "PurchaseReturn",
+      documentNumber: purchaseReturn.returnNumber,
+      items: purchaseReturn.items,
+      previousItems: [],
+      baseDirection: "out",
+      userId,
+      reason: "adjustment",
+      isReversal: true,
+    });
+    purchaseReturn.stockMovementStatus = "reversed";
+    await purchaseReturn.save({ validateModifiedOnly: true });
+    return;
+  }
+
   if (oldStockMovementStatus === "applied" && previousItems) {
     // Already Confirmed/Paid and its items just changed: apply only the
     // delta between what was previously on the document and what's on it
@@ -133,16 +157,16 @@ async function syncPurchaseReturnStock(purchaseReturn, oldStatus, oldStockMoveme
   }
 }
 
-// Once a return is Confirmed, goods have physically left — the status can
-// only move onward to "Paid" (payment/refund settling, no stock effect) or
-// stay Confirmed, never back to Draft/Pending/Cancelled. The only way to
-// undo a Confirmed return's stock effect is deleting it (see
-// deletePurchaseReturn). Mirrors PurchaseOrder's "Delivered can't be changed
-// to another status" rule.
+// Once a return is Confirmed, goods have physically left — the status can only
+// move onward to "Paid" (payment/refund settling, no stock effect), stay
+// Confirmed, or be "Cancelled" (which reverses the stock-out — see
+// syncPurchaseReturnStock). It can never walk back to Draft/Pending, since
+// those imply the goods never left. Mirrors Purchase's Confirmed -> Cancelled
+// reversal path.
 function isBlockedStatusChange(oldStatus, newStatus) {
   if (oldStatus !== "Confirmed") return false;
   if (newStatus === undefined) return false;
-  return newStatus !== "Confirmed" && newStatus !== "Paid";
+  return newStatus !== "Confirmed" && newStatus !== "Paid" && newStatus !== "Cancelled";
 }
 
 // How much of each line item on a Purchase has already been returned, across

@@ -316,12 +316,12 @@ const NoteSection = ({ contactId: propContactId, isQuickView }) => {
 
   const handleAddOrUpdateNote = async () => {
     if (!noteContent.trim() || noteContent === "<p><br></p>") {
-      toast.error("Note content required");
+      toast.error("Please add some note content before saving.");
       return;
     }
 
     if (!contact?.company?._id) {
-      toast.error("Contact company missing");
+      toast.error("This contact isn't linked to a company yet — add one first.");
       return;
     }
 

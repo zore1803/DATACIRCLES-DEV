@@ -638,6 +638,7 @@ function DealDetail() {
           {activeTab === "Notes" && (
             <CompanyNotesTab
               dealId={dealId}
+              dealName={deal.title}
               companyId={companyId}
               showStats={showStats}
             />

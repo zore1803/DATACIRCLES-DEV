@@ -2,7 +2,7 @@ import DeleteIcon from "../common/DeleteIcon";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import SearchIcon from "../common/SearchIcon";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import {
@@ -40,6 +40,7 @@ const SearchableEntityDropdown = ({ options, value, onChange, displayKey, placeh
   );
 
   const popupRef = useRef(null);
+  const wrapperRef = useRef(null);
 
   // While open, tell the form to add temporary bottom padding — otherwise a
   // dropdown on the last field has nowhere to scroll to and stays clipped.
@@ -57,13 +58,27 @@ const SearchableEntityDropdown = ({ options, value, onChange, displayKey, placeh
     };
   }, [isOpen, onOpenChange]);
 
+  // Close on outside click via a listener, not a fixed backdrop (a backdrop
+  // would block scrolling the form while the dropdown is open).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onDown = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setIsOpen(false);
+        setSearch("");
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [isOpen]);
+
   const toggle = () => {
     setIsOpen((v) => !v);
     if (isOpen) setSearch("");
   };
 
   return (
-    <div className="relative">
+    <div className="relative" ref={wrapperRef}>
       <button
         type="button"
         disabled={disabled}
@@ -76,13 +91,6 @@ const SearchableEntityDropdown = ({ options, value, onChange, displayKey, placeh
 
       {isOpen && (
         <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => {
-              setIsOpen(false);
-              setSearch("");
-            }}
-          />
           <div
             ref={popupRef}
             className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-gray-100 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in duration-200"
@@ -147,6 +155,7 @@ const SearchableEntityDropdown = ({ options, value, onChange, displayKey, placeh
 const SingleSelectDropdown = ({ options, value, onChange, disabled, onOpenChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const popupRef = useRef(null);
+  const wrapperRef = useRef(null);
   const selectedOption = options.find(opt => opt.value === value) || options[0];
 
   // See SearchableEntityDropdown above — opens scroll room, then scrolls
@@ -163,8 +172,19 @@ const SingleSelectDropdown = ({ options, value, onChange, disabled, onOpenChange
     };
   }, [isOpen, onOpenChange]);
 
+  // Close on outside click via a listener, not a fixed backdrop (which would
+  // block scrolling the form while the dropdown is open).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onDown = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [isOpen]);
+
   return (
-    <div className="relative">
+    <div className="relative" ref={wrapperRef}>
       <button
         type="button"
         disabled={disabled}
@@ -180,10 +200,6 @@ const SingleSelectDropdown = ({ options, value, onChange, disabled, onOpenChange
 
       {isOpen && (
         <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setIsOpen(false)}
-          />
           <div
             ref={popupRef}
             className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-gray-100 rounded-xl shadow-xl z-50 py-1 max-h-[180px] overflow-y-auto animate-in fade-in zoom-in duration-200"
@@ -307,6 +323,7 @@ const CompanyTaskForm = ({
   const [showUserSelector, setShowUserSelector] = useState(false);
   const [userSelectorSearch, setUserSelectorSearch] = useState("");
   const assigneesFieldRef = useRef(null);
+  const userSelectorPopupRef = useRef(null);
   // Extra scroll room is only added while a dropdown is actually open, so the
   // form doesn't sit with a big empty gap under its last field the rest of
   // the time. Counted rather than a boolean so overlapping open/close
@@ -387,8 +404,10 @@ const CompanyTaskForm = ({
           ...initialState,
           selectedDate: calendarDate,
         });
-        setRelatedContactId("");
-        setRelatedDealId("");
+        // Preselect the contact/deal this task is being created for, when the
+        // caller opened the form from a specific contact/deal context.
+        setRelatedContactId(contactId || "");
+        setRelatedDealId(dealId || "");
       }
       setErrors({});
       setIsEditMode(mode === "create" || !!startInEditMode);
@@ -410,16 +429,57 @@ const CompanyTaskForm = ({
     };
   }, [open]);
 
-  // Scroll the Assignees field into view when its list opens — it sits at
-  // the bottom of the scrollable body, right against the sticky footer, so
-  // the dropdown would otherwise render partly hidden below the fold.
+  // The Assignees list opens DOWNWARD. When it opens — and after each
+  // select/deselect, since picking a user grows the avatar row and pushes the
+  // list down — scroll the form body just enough that the WHOLE panel (all the
+  // available users) sits above the sticky footer. Only scrolls when part of it
+  // is actually hidden, so there's no jump when it's already visible.
   useEffect(() => {
-    if (showUserSelector) {
-      assigneesFieldRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    } else {
+    if (!showUserSelector) {
       setUserSelectorSearch("");
+      return;
     }
+    requestAnimationFrame(() => {
+      const el = userSelectorPopupRef.current;
+      if (!el) return;
+      let scroller = el.parentElement;
+      while (scroller && scroller.scrollHeight <= scroller.clientHeight) {
+        scroller = scroller.parentElement;
+      }
+      if (!scroller) return;
+      const overflow = el.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom;
+      if (overflow > 0) scroller.scrollBy({ top: overflow + 12, behavior: "smooth" });
+    });
+  }, [showUserSelector, form.users]);
+
+  // Close the Assignees list on outside click via a listener, not a fixed
+  // backdrop (which would block scrolling the form while it's open).
+  useEffect(() => {
+    if (!showUserSelector) return;
+    const onDown = (e) => {
+      if (assigneesFieldRef.current && !assigneesFieldRef.current.contains(e.target)) {
+        setShowUserSelector(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
   }, [showUserSelector]);
+
+  // A selected deal has one contact, so the Contact field is fixed to it.
+  const selectedDealContactId = useMemo(() => {
+    const d = deals.find((x) => String(x._id) === String(relatedDealId));
+    return d ? String(d.contact?._id || d.contact || "") : "";
+  }, [deals, relatedDealId]);
+
+  useEffect(() => {
+    if (
+      relatedDealId &&
+      selectedDealContactId &&
+      relatedContactId !== selectedDealContactId
+    ) {
+      setRelatedContactId(selectedDealContactId);
+    }
+  }, [relatedDealId, selectedDealContactId, relatedContactId]);
 
   const handleChange = (key, val) => {
     setForm((f) => ({ ...f, [key]: val }));
@@ -431,13 +491,13 @@ const CompanyTaskForm = ({
   const validateForm = () => {
     const newErrors = {};
 
-    if (!form.title?.trim()) newErrors.title = "Task title is required";
-    if (!form.dueDate) newErrors.dueDate = "Due date is required";
+    if (!form.title?.trim()) newErrors.title = "Please enter a task title.";
+    if (!form.dueDate) newErrors.dueDate = "Please choose a due date.";
     if (!calendarDate && !form.selectedDate)
-      newErrors.selectedDate = "Selected date is required";
+      newErrors.selectedDate = "Please pick a date for the task.";
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return newErrors;
   };
 
   const handleUserSelection = (userId) => {
@@ -465,8 +525,9 @@ const CompanyTaskForm = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!validateForm()) {
-      toast.error("Please fix the errors before submitting");
+    const validationErrors = validateForm();
+    if (Object.keys(validationErrors).length > 0) {
+      toast.error(Object.values(validationErrors)[0]);
       return;
     }
 
@@ -515,8 +576,9 @@ const CompanyTaskForm = ({
         onUpdate();
         toast.success("Task updated successfully");
       } else {
+        // Create toast is shown by the parent's onSave handler — don't
+        // duplicate it here.
         await onSave(payload);
-        toast.success("Task saved successfully");
       }
       onClose();
     } catch (err) {
@@ -590,8 +652,8 @@ const CompanyTaskForm = ({
               giving it somewhere to scroll to; otherwise the form would sit
               with a large empty gap under its last field. */}
           <div
-            className={`flex-1 min-h-0 overflow-y-auto px-8 pt-6 space-y-6 transition-[padding] duration-200 ${
-              openDropdowns > 0 ? "pb-52" : "pb-6"
+            className={`flex-1 min-h-0 overflow-y-auto px-8 pt-6 space-y-6 ${
+              openDropdowns > 0 || showUserSelector ? "pb-52" : "pb-6"
             }`}
           >
             <div>
@@ -638,30 +700,67 @@ const CompanyTaskForm = ({
                 <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                   Contact
                 </label>
-                <SearchableEntityDropdown
-                  options={contacts}
-                  value={relatedContactId}
-                  onChange={setRelatedContactId}
-                  displayKey="name"
-                  placeholder="None"
-                  disabled={!isEditMode && mode === "view"}
-                  onOpenChange={handleDropdownOpenChange}
-                />
+                {dealId ? (
+                  // Deal page: contact is fixed to the deal's contact (or none).
+                  <div className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] flex items-center bg-gray-50 text-[13px] text-[#1F2937]">
+                    <span className="truncate">
+                      {(selectedDealContactId &&
+                        contacts.find((c) => String(c._id) === selectedDealContactId)?.name) ||
+                        "No contact"}
+                    </span>
+                  </div>
+                ) : (
+                  <SearchableEntityDropdown
+                    // With a deal selected, only that deal's contact is offered
+                    // (empty if the deal has none) — never the whole company list.
+                    options={
+                      relatedDealId
+                        ? contacts.filter((c) => String(c._id) === selectedDealContactId)
+                        : contacts
+                    }
+                    value={relatedContactId}
+                    onChange={(val) => {
+                      // Changing the contact re-scopes the Deal list.
+                      setRelatedContactId(val);
+                      setRelatedDealId("");
+                    }}
+                    displayKey="name"
+                    placeholder="None"
+                    disabled={!isEditMode && mode === "view"}
+                    onOpenChange={handleDropdownOpenChange}
+                  />
+                )}
               </div>
 
               <div>
                 <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                   Deal
                 </label>
-                <SearchableEntityDropdown
-                  options={deals.map((d) => ({ ...d, _displayTitle: d.title || d.name }))}
-                  value={relatedDealId}
-                  onChange={setRelatedDealId}
-                  displayKey="_displayTitle"
-                  placeholder="None"
-                  disabled={!isEditMode && mode === "view"}
-                  onOpenChange={handleDropdownOpenChange}
-                />
+                {dealId ? (
+                  // Deal page: the deal is fixed to this page's deal.
+                  <div className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] flex items-center bg-gray-50 text-[13px] text-[#1F2937]">
+                    <span className="truncate">
+                      {deals.find((d) => String(d._id) === String(dealId))?.title ||
+                        deals.find((d) => String(d._id) === String(dealId))?.name ||
+                        "Deal"}
+                    </span>
+                  </div>
+                ) : (
+                  <SearchableEntityDropdown
+                    // Only the selected contact's deals are offered; with no
+                    // contact chosen, all of the company's deals are available.
+                    options={(relatedContactId
+                      ? deals.filter((d) => String(d.contact?._id || d.contact || "") === String(relatedContactId))
+                      : deals
+                    ).map((d) => ({ ...d, _displayTitle: d.title || d.name }))}
+                    value={relatedDealId}
+                    onChange={setRelatedDealId}
+                    displayKey="_displayTitle"
+                    placeholder="None"
+                    disabled={!isEditMode && mode === "view"}
+                    onOpenChange={handleDropdownOpenChange}
+                  />
+                )}
               </div>
             </div>
 
@@ -755,11 +854,7 @@ const CompanyTaskForm = ({
 
                 {showUserSelector && (
                   <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setShowUserSelector(false)}
-                    />
-                    <div className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                    <div ref={userSelectorPopupRef} className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden animate-in fade-in duration-150">
                       <div className="p-2 border-b border-gray-100">
                         <div className="relative">
                           <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />

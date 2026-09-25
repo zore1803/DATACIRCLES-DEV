@@ -91,7 +91,7 @@ const LastUpdatedIcon = ({ size = 20, ...props }) => (
 // contact's `companyId`, since a Note always belongs to a company in the data
 // model) and it scopes itself to notes tagged with that contact. Same table,
 // editor, filters and bulk strip either way.
-export default function CompanyNotesTab({ showStats = true, autoOpenCreate = false, onAutoOpenCreateConsumed, contactId, dealId, companyId: scopedCompanyId }) {
+export default function CompanyNotesTab({ showStats = true, autoOpenCreate = false, onAutoOpenCreateConsumed, contactId, dealId, dealName, companyId: scopedCompanyId }) {
   const { id: routeId } = useParams();
   // The company a new note is filed under: the scoped record's company on the
   // contact/deal pages, otherwise the company whose page we're on.
@@ -135,6 +135,10 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
   const [noteTitle, setNoteTitle] = useState("");
   const [noteContent, setNoteContent] = useState("");
   const [taggedContacts, setTaggedContacts] = useState([]);
+  const [taggedDeals, setTaggedDeals] = useState([]);
+  const [taggedInvoices, setTaggedInvoices] = useState([]);
+  const [deals, setDeals] = useState([]);
+  const [invoices, setInvoices] = useState([]);
   const [noteType, setNoteType] = useState("General Note");
   const [visibility, setVisibility] = useState("Team");
   const [editingNoteId, setEditingNoteId] = useState(null);
@@ -472,16 +476,69 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
   const fetchContacts = useCallback(async () => {
     try {
       const res = await API.get("/contacts");
-      setContacts(res.data.filter((c) => c.company?._id === id));
+      // The page's own contact must be in the list even when it has no company
+      // (or a different one), otherwise its locked chip can't be resolved.
+      const scoped = res.data.filter(
+        (c) => c.company?._id === id || (contactId && String(c._id) === String(contactId)),
+      );
+      setContacts(scoped);
+      // Returned too, so the editor can link a contact it just created.
+      return scoped;
     } catch (err) {
       toast.error("Failed to load contacts");
+      return [];
     }
-  }, [id]);
+  }, [id, contactId]);
+
+  // Link Deal / Link Invoice are scoped to the record whose page we're on: on a
+  // contact profile that means only that contact's deals (a contact commonly
+  // has several) and only the invoices raised against those deals, rather than
+  // everything belonging to the parent company.
+  const fetchDeals = useCallback(async () => {
+    if (!id && !contactId && !dealId) return;
+    try {
+      const res = await API.get("/deals");
+      setDeals(
+        res.data.filter((d) =>
+          dealId
+            ? String(d._id) === String(dealId)
+            : contactId
+              ? String(d.contact?._id || d.contact) === String(contactId)
+              : String(d.company?._id || d.company) === String(id),
+        ),
+      );
+    } catch (err) {
+      toast.error("Failed to load deals");
+    }
+  }, [id, contactId, dealId]);
+
+  const fetchInvoices = useCallback(async () => {
+    if (!id && !contactId && !dealId) return [];
+    try {
+      const res = await API.get("/invoices");
+      const scoped = res.data.filter((inv) =>
+        dealId
+          ? String(inv.deal?._id || inv.deal) === String(dealId)
+          : contactId
+            ? String(inv.deal?.contact?._id || inv.deal?.contact) === String(contactId)
+            : String(inv.deal?.company?._id || inv.deal?.company) === String(id),
+      );
+      setInvoices(scoped);
+      // Returned as well as stored: the editor links whichever invoice its
+      // quick-create shortcut just produced, without waiting for a re-render.
+      return scoped;
+    } catch (err) {
+      toast.error("Failed to load invoices");
+      return [];
+    }
+  }, [id, contactId, dealId]);
 
   useEffect(() => {
     fetchNotes();
     fetchContacts();
-  }, [fetchNotes, fetchContacts]);
+    fetchDeals();
+    fetchInvoices();
+  }, [fetchNotes, fetchContacts, fetchDeals, fetchInvoices]);
 
   const withContactTagged = (ids) =>
     contactId && !ids.includes(contactId) ? [...ids, contactId] : ids;
@@ -491,6 +548,8 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
     setNoteTitle("");
     setNoteContent("");
     setTaggedContacts([]);
+    setTaggedDeals([]);
+    setTaggedInvoices([]);
     setNoteType(noteTypes[0] || "General Note");
     setVisibility("Team");
     setManualEditorOpen(false);
@@ -517,6 +576,8 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
           title: noteTitle,
           note: noteContent,
           taggedContacts: withContactTagged(taggedContacts.map((c) => c.value)),
+          taggedDeals: taggedDeals.map((d) => d.value),
+          taggedInvoices: taggedInvoices.map((i) => i.value),
           noteType,
           visibility,
         });
@@ -533,6 +594,8 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
           // contact-scoped fetch matches on taggedContacts, so an untagged
           // note would vanish the moment it was saved.
           taggedContacts: withContactTagged(taggedContacts.map((c) => c.value)),
+          taggedDeals: taggedDeals.map((d) => d.value),
+          taggedInvoices: taggedInvoices.map((i) => i.value),
           noteType,
           visibility,
         });
@@ -557,6 +620,12 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
     setNoteContent(note.note);
     setTaggedContacts(
       note.taggedContacts.map((c) => ({ label: c.name, value: c._id })),
+    );
+    setTaggedDeals(
+      (note.taggedDeals || []).map((d) => ({ label: d.title || "Deal", value: d._id || d })),
+    );
+    setTaggedInvoices(
+      (note.taggedInvoices || []).map((i) => ({ label: i.invoiceNumber || "Invoice", value: i._id || i })),
     );
     setNoteType(note.noteType || noteTypes[0] || "General Note");
     setVisibility(note.visibility || "Team");
@@ -593,6 +662,8 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
         taggedContacts: withContactTagged(
           (note.taggedContacts || []).map((c) => c._id || c),
         ),
+        taggedDeals: (note.taggedDeals || []).map((d) => d._id || d),
+        taggedInvoices: (note.taggedInvoices || []).map((i) => i._id || i),
         noteType: note.noteType || noteTypes[0] || "General Note",
         visibility: note.visibility || "Team",
       });
@@ -846,6 +917,20 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
       subtitleClass: "text-gray-400",
     },
   ];
+
+  // On a deal page, scope (and pin) the editor's Contact picker to the deal's
+  // single contact. `deals` is already fetched scoped to this deal.
+  const dealContactId = useMemo(() => {
+    if (!dealId) return "";
+    const theDeal = deals.find((d) => String(d._id) === String(dealId));
+    return theDeal ? String(theDeal.contact?._id || theDeal.contact || "") : "";
+  }, [dealId, deals]);
+  // On a deal page, only the deal's contact is offered (empty if it has none) —
+  // never the whole company list.
+  const editorContacts = useMemo(
+    () => (dealId ? contacts.filter((c) => String(c._id) === dealContactId) : contacts),
+    [contacts, dealId, dealContactId],
+  );
 
   return (
     <div>
@@ -1593,7 +1678,20 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
         setNoteContent={setNoteContent}
         taggedContacts={taggedContacts}
         setTaggedContacts={setTaggedContacts}
-        contacts={contacts}
+        contacts={editorContacts}
+        deals={deals}
+        invoices={invoices}
+        taggedDeals={taggedDeals}
+        setTaggedDeals={setTaggedDeals}
+        taggedInvoices={taggedInvoices}
+        setTaggedInvoices={setTaggedInvoices}
+        lockedContactId={contactId || dealContactId || null}
+        lockedDealId={dealId || null}
+        lockedDealName={dealName || ""}
+        onContactCreated={fetchContacts}
+        companyId={id}
+        onDealCreated={(deal) => setDeals((prev) => (prev.some((d) => d._id === deal._id) ? prev : [...prev, deal]))}
+        onInvoicesChanged={fetchInvoices}
         noteType={noteType}
         setNoteType={setNoteType}
         visibility={visibility}

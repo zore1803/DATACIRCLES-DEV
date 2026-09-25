@@ -7,7 +7,11 @@ import { createPortal } from "react-dom";
 import ReactQuill from "react-quill-new";
 import "react-quill/dist/quill.snow.css";
 import API from "../../services/api";
-import { useParams } from "react-router-dom";
+import QuickDealForm from "../deal/QuickDealForm";
+import QuickContactForm from "../contact/QuickContactForm";
+import { CreateInvoicePanel } from "../invoice/CreateInvoicePanel";
+import useDocumentDefaults from "../../hooks/useDocumentDefaults";
+import { useParams, useNavigate } from "react-router-dom";
 import toast from 'react-hot-toast';
 import { getAncestorZoom } from "../../utils/domUtils";
 import {
@@ -59,6 +63,7 @@ import EditIcon from "../common/EditIcon";
 const NoteTypeDropdown = ({ options, value, onChange, onOpenChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const popupRef = useRef(null);
+  const wrapperRef = useRef(null);
 
   // See EntityPickerDropdown below — tells the form to open up scroll room,
   // then scrolls the opened card fully into view.
@@ -74,8 +79,19 @@ const NoteTypeDropdown = ({ options, value, onChange, onOpenChange }) => {
     };
   }, [isOpen, onOpenChange]);
 
+  // Close on outside click via a listener, not a fixed backdrop (which would
+  // block scrolling the form while the dropdown is open).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onDown = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [isOpen]);
+
   return (
-    <div className="relative">
+    <div className="relative" ref={wrapperRef}>
       <button
         type="button"
         onClick={() => setIsOpen((v) => !v)}
@@ -87,7 +103,6 @@ const NoteTypeDropdown = ({ options, value, onChange, onOpenChange }) => {
 
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
           <div
             ref={popupRef}
             className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-gray-100 rounded-xl shadow-xl z-50 py-1 max-h-[180px] overflow-y-auto animate-in fade-in zoom-in duration-200"
@@ -113,16 +128,18 @@ const NoteTypeDropdown = ({ options, value, onChange, onOpenChange }) => {
   );
 };
 
-// Searchable single-pick dropdown for the "Link Contact"/"Link Deal"/"Link
+// Searchable multi-pick dropdown for the "Link Contact"/"Link Deal"/"Link
 // Invoice" fields — matches the Task form's SearchableEntityDropdown (pill
 // trigger, search box, capped list), anchored the same in-flow way as above.
-const EntityPickerDropdown = ({ options, value, onChange, displayKey, placeholder, onOpenChange }) => {
+// What's linked is shown as chips inside the trigger itself, the way every
+// other picker in the app reads, rather than in a separate row underneath.
+const EntityPickerDropdown = ({ options, selected = [], onSelect, onRemove, displayKey, placeholder, onOpenChange, singleSelect = false }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const selected = options.find((o) => o._id === value);
   const filtered = options.filter((o) => (o[displayKey] || "").toLowerCase().includes(search.toLowerCase()));
 
   const popupRef = useRef(null);
+  const wrapperRef = useRef(null);
 
   // While open, tell the form to add temporary bottom padding — otherwise a
   // dropdown on the last field has nowhere to scroll to and stays clipped.
@@ -140,31 +157,76 @@ const EntityPickerDropdown = ({ options, value, onChange, displayKey, placeholde
     };
   }, [isOpen, onOpenChange]);
 
+  // Close on outside click via a listener, not a fixed backdrop (which would
+  // block scrolling the form while the dropdown is open).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onDown = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setIsOpen(false);
+        setSearch("");
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [isOpen]);
+
   const toggle = () => {
     setIsOpen((v) => !v);
     if (isOpen) setSearch("");
   };
 
   return (
-    <div className="relative flex-1 min-w-0">
-      <button
-        type="button"
+    <div className="relative flex-1 min-w-0" ref={wrapperRef}>
+      {/* A div, not a button: the chips carry their own remove buttons and
+          nesting a button inside a button is invalid. */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={toggle}
-        className={`w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-left flex items-center justify-between gap-2 transition-all bg-white font-inter ${selected ? "text-[#1F2937]" : "text-[#1F2937] opacity-50"}`}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggle();
+          }
+        }}
+        className="w-full border border-[#1F2937]/10 rounded-[19px] px-2 py-1 min-h-[38px] text-[13px] text-left flex items-center justify-between gap-2 transition-all bg-white font-inter cursor-pointer"
       >
-        <span className="truncate">{selected ? selected[displayKey] : placeholder}</span>
+        {selected.length === 0 ? (
+          <span className="truncate px-1 text-[#1F2937] opacity-50">{placeholder}</span>
+        ) : singleSelect ? (
+          // One value at a time, shown as plain text (no removable chip).
+          <span className="truncate px-1 text-[#1F2937]">{selected[0].label}</span>
+        ) : (
+          <span className="flex flex-wrap items-center gap-1.5 min-w-0">
+            {selected.map((sel) => (
+              <span
+                key={sel.value}
+                className="inline-flex items-center gap-1 max-w-full px-1 text-[13px] text-[#1F2937]"
+              >
+                <span className="truncate">{sel.label}</span>
+                {onRemove && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemove(sel.value);
+                    }}
+                    className="hover:bg-gray-100 rounded-full p-0.5 flex-shrink-0 text-gray-400 hover:text-gray-600"
+                    title="Remove"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </span>
+            ))}
+          </span>
+        )}
         <ChevronDown className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-      </button>
+      </div>
 
       {isOpen && (
         <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => {
-              setIsOpen(false);
-              setSearch("");
-            }}
-          />
           <div
             ref={popupRef}
             className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-gray-100 rounded-xl shadow-xl z-[10050] animate-in fade-in zoom-in duration-200"
@@ -188,20 +250,27 @@ const EntityPickerDropdown = ({ options, value, onChange, displayKey, placeholde
               {filtered.length === 0 ? (
                 <p className="px-3 py-2 text-[12px] text-center text-gray-400">No results</p>
               ) : (
-                filtered.map((o) => (
-                  <button
-                    key={o._id}
-                    type="button"
-                    onClick={() => {
-                      onChange(o._id);
-                      setIsOpen(false);
-                      setSearch("");
-                    }}
-                    className={`w-full text-left px-3 py-1.5 text-[12px] truncate transition-colors hover:bg-gray-50 ${value === o._id ? "bg-blue-50/50 text-blue-600" : "text-gray-700"}`}
-                  >
-                    {o[displayKey]}
-                  </button>
-                ))
+                filtered.map((o) => {
+                  const isSelected = selected.some((sel) => String(sel.value) === String(o._id));
+                  return (
+                    <button
+                      key={o._id}
+                      type="button"
+                      onClick={() => {
+                        // Single-select always replaces; multi toggles.
+                        if (singleSelect) onSelect(o);
+                        else if (isSelected) onRemove?.(o._id);
+                        else onSelect(o);
+                        setIsOpen(false);
+                        setSearch("");
+                      }}
+                      className={`w-full text-left px-3 py-1.5 text-[12px] truncate transition-colors hover:bg-gray-50 flex items-center gap-2 ${isSelected ? "bg-blue-50/50 text-blue-600" : "text-gray-700"}`}
+                    >
+                      <span className="truncate flex-1">{o[displayKey]}</span>
+                      {isSelected && <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+                    </button>
+                  );
+                })
               )}
             </div>
           </div>
@@ -1180,17 +1249,53 @@ export const NoteEditor = ({
   onDelete,
   loading,
   isEditing,
+  // On an entity page (e.g. a contact's Notes tab) the note always belongs to
+  // that record, so its chip is pre-filled and can't be removed.
+  lockedContactId = null,
+  // Same idea on a deal's own page: the note belongs to that deal, so Link
+  // Deal is fixed and only the contact/invoice are free to choose.
+  lockedDealId = null,
+  lockedDealName = "",
+  // Lets the parent refresh its contact list after the quick-create shortcut.
+  onContactCreated,
+  // Quick-create shortcuts: the company the note belongs to, the list
+  // QuickDealForm needs, and callbacks that let the parent refresh its own
+  // deal/invoice lists after something is created here.
+  companyId = null,
+  companies = [],
+  onDealCreated,
+  onInvoicesChanged,
+  // Optional controlled state: callers that persist the links pass these in,
+  // otherwise the editor keeps them locally as before.
+  taggedDeals: taggedDealsProp,
+  setTaggedDeals: setTaggedDealsProp,
+  taggedInvoices: taggedInvoicesProp,
+  setTaggedInvoices: setTaggedInvoicesProp,
   noteTypes = ["General Note", "Meeting Note", "Call Note", "Follow-up Note"]
 }) => {
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkModalUrl, setLinkModalUrl] = useState("");
-  const [contactToAdd, setContactToAdd] = useState("");
-  const [taggedDeals, setTaggedDeals] = useState([]);
-  const [dealToAdd, setDealToAdd] = useState("");
-  const [taggedInvoices, setTaggedInvoices] = useState([]);
-  const [invoiceToAdd, setInvoiceToAdd] = useState("");
+  const [quickDealOpen, setQuickDealOpen] = useState(false);
+  const [quickContactOpen, setQuickContactOpen] = useState(false);
+  const [companyOptions, setCompanyOptions] = useState(companies);
+  const [quickInvoiceOpen, setQuickInvoiceOpen] = useState(false);
+  const navigate = useNavigate();
+  const documentDefaults = useDocumentDefaults();
+
+  // Opening the full Invoice creation page (Accounting) with the linked deal
+  // preselected, instead of the floating in-form panel. Requires a linked deal.
+  const goToCreateInvoice = () => {
+    if (!newInvoiceDealId) return;
+    navigate(`/accounting?tab=tax&newInvoice=1&dealId=${newInvoiceDealId}`);
+  };
+  const [localTaggedDeals, setLocalTaggedDeals] = useState([]);
+  const [localTaggedInvoices, setLocalTaggedInvoices] = useState([]);
+  const taggedDeals = taggedDealsProp ?? localTaggedDeals;
+  const setTaggedDeals = setTaggedDealsProp ?? setLocalTaggedDeals;
+  const taggedInvoices = taggedInvoicesProp ?? localTaggedInvoices;
+  const setTaggedInvoices = setTaggedInvoicesProp ?? setLocalTaggedInvoices;
   const pendingLinkRef = useRef({ quill: null, range: null });
 
   // Extra scroll room is only added while a dropdown is actually open, so the
@@ -1202,7 +1307,122 @@ export const NoteEditor = ({
     setOpenDropdowns((n) => Math.max(0, n + (open ? 1 : -1)));
   }, []);
 
+  // Link Invoice follows Link Deal: once deals are linked, only those deals'
+  // invoices can be picked. With no deal linked the field keeps the page's own
+  // scope (the contact's or company's invoices).
+  const invoiceOf = (inv) => String(inv.deal?._id || inv.deal || "");
+  const scopedInvoices = useMemo(() => {
+    if (!taggedDeals.length) return invoices;
+    const dealIds = taggedDeals.map((td) => String(td.value));
+    return invoices.filter((inv) => dealIds.includes(invoiceOf(inv)));
+  }, [invoices, taggedDeals]);
+  const noInvoicesForDeal = taggedDeals.length > 0 && scopedInvoices.length === 0;
+
+  // On a deal/contact's own page, Link Deal and Link Invoice are single-select.
+  const singleLink = !!(lockedContactId || lockedDealId);
+
+  const linkDeal = (deal) => {
+    if (!deal) return;
+    if (taggedDeals.some((td) => td.value === deal._id)) return;
+    setTaggedDeals([...taggedDeals, { label: deal.title || deal.name || "Deal", value: deal._id }]);
+  };
+  const linkInvoice = (invoice) => {
+    if (!invoice) return;
+    if (taggedInvoices.some((ti) => ti.value === invoice._id)) return;
+    setTaggedInvoices([...taggedInvoices, { label: invoice.invoiceNumber || "Invoice", value: invoice._id }]);
+  };
+
+  // An invoice always belongs to a deal, so the quick-create shortcut only
+  // makes sense once one is linked — it bills against the most recent pick.
+  const newInvoiceDealId = taggedDeals.length ? taggedDeals[taggedDeals.length - 1].value : null;
+  const newInvoiceDeals = deals.filter((d) => String(d._id) === String(newInvoiceDealId));
+
+  // Same lazy load CompanyInvoicesTab does before opening QuickDealForm — the
+  // list isn't needed until the shortcut is actually used.
+  const openQuickDeal = async () => {
+    if (companyOptions.length === 0) {
+      try {
+        const res = await API.get("/companies");
+        setCompanyOptions(res.data?.companies || res.data || []);
+      } catch {
+        toast.error("Failed to load companies");
+      }
+    }
+    setQuickDealOpen(true);
+  };
+
+  const openQuickContact = async () => {
+    if (companyOptions.length === 0) {
+      try {
+        const res = await API.get("/companies");
+        setCompanyOptions(res.data?.companies || res.data || []);
+      } catch {
+        toast.error("Failed to load companies");
+      }
+    }
+    setQuickContactOpen(true);
+  };
+
+  // QuickContactForm's callback carries no payload, so ask the parent to
+  // refetch and link whichever contact is newest.
+  const handleQuickContactCreated = async () => {
+    setQuickContactOpen(false);
+    const fresh = await onContactCreated?.();
+    if (!Array.isArray(fresh) || !fresh.length) return;
+    const newest = [...fresh].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+    if (newest && !taggedContacts.some((tc) => tc.value === newest._id)) {
+      setTaggedContacts([...taggedContacts, { label: newest.name, value: newest._id }]);
+    }
+  };
+
+  const handleQuickDealCreated = (deal) => {
+    setQuickDealOpen(false);
+    onDealCreated?.(deal);
+    linkDeal(deal);
+  };
+
+  // CreateInvoicePanel's onCreated carries no payload, so ask the parent to
+  // refetch and link whichever invoice on this deal is newest.
+  const handleQuickInvoiceCreated = async () => {
+    const fresh = await onInvoicesChanged?.();
+    if (!Array.isArray(fresh)) return;
+    const mine = fresh
+      .filter((inv) => String(inv.deal?._id || inv.deal || "") === String(newInvoiceDealId))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (mine[0]) linkInvoice(mine[0]);
+  };
+
+  // Dropping a deal drops any invoice that came with it, so the note can't keep
+  // a link that no longer belongs to it.
+  useEffect(() => {
+    if (!taggedDeals.length || !taggedInvoices.length) return;
+    const allowed = scopedInvoices.map((inv) => String(inv._id));
+    const kept = taggedInvoices.filter((ti) => allowed.includes(String(ti.value)));
+    if (kept.length !== taggedInvoices.length) setTaggedInvoices(kept);
+  }, [scopedInvoices, taggedDeals, taggedInvoices, setTaggedInvoices]);
+
   useBodyScrollLock(isOpen);
+
+  // Same for the deal on a deal page: it's what the note belongs to.
+  useEffect(() => {
+    if (!isOpen || !lockedDealId) return;
+    if (taggedDeals.some((td) => String(td.value) === String(lockedDealId))) return;
+    const deal = deals.find((d) => String(d._id) === String(lockedDealId));
+    setTaggedDeals([
+      { label: deal?.title || deal?.name || lockedDealName || "Deal", value: lockedDealId },
+      ...taggedDeals,
+    ]);
+  }, [isOpen, lockedDealId, lockedDealName, deals, taggedDeals, setTaggedDeals]);
+
+  // Keep the page's own contact pinned in the list while the editor is open —
+  // it's what scopes the note to this record, so it can't be dropped.
+  useEffect(() => {
+    if (!isOpen || !lockedContactId) return;
+    if (taggedContacts.some((tc) => tc.value === lockedContactId)) return;
+    const contact = contacts.find((c) => c._id === lockedContactId);
+    if (!contact) return;
+    setTaggedContacts([{ label: contact.name, value: contact._id }, ...taggedContacts]);
+  }, [isOpen, lockedContactId, contacts, taggedContacts, setTaggedContacts]);
 
   useEffect(() => {
     if (isOpen) {
@@ -1293,7 +1513,7 @@ export const NoteEditor = ({
               giving it somewhere to scroll to; otherwise the form would sit
               with a large empty gap under its last field. */}
           <div
-            className={`px-8 pt-6 space-y-6 overflow-y-auto min-h-0 flex-1 transition-[padding] duration-200 ${
+            className={`px-8 pt-6 space-y-6 overflow-y-auto min-h-0 flex-1 ${
               openDropdowns > 0 ? "pb-52" : "pb-6"
             }`}
           >
@@ -1359,50 +1579,42 @@ export const NoteEditor = ({
               <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                 Link Contact
               </label>
+              {lockedContactId ? (
+                // On a contact's own page the note always belongs to that
+                // contact, so this is a fixed, read-only field rather than a
+                // picker.
+                <div className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] flex items-center bg-[#F5F7FA] text-[#1F2937] font-inter cursor-not-allowed">
+                  <span className="truncate">
+                    {taggedContacts.find((tc) => tc.value === lockedContactId)?.label ||
+                      contacts.find((c) => c._id === lockedContactId)?.name ||
+                      "—"}
+                  </span>
+                </div>
+              ) : (
               <div className="flex items-center gap-3">
+                {/* Picking from the list links it straight away, and what's
+                    linked shows inside the field — the "+" buttons below are
+                    quick-create shortcuts, not "add". */}
                 <EntityPickerDropdown
                   options={contacts}
-                  value={contactToAdd}
-                  onChange={setContactToAdd}
+                  selected={taggedContacts}
+                  onSelect={(contact) =>
+                    setTaggedContacts([...taggedContacts, { label: contact.name, value: contact._id }])
+                  }
+                  onRemove={(val) => setTaggedContacts(taggedContacts.filter((c) => c.value !== val))}
                   displayKey="name"
                   placeholder="Choose Contact"
                   onOpenChange={handleDropdownOpenChange}
                 />
                 <button
                   type="button"
-                  onClick={() => {
-                    if (!contactToAdd) return;
-                    const contact = contacts.find((c) => c._id === contactToAdd);
-                    if (!contact) return;
-                    if (!taggedContacts.some((tc) => tc.value === contact._id)) {
-                      setTaggedContacts([...taggedContacts, { label: contact.name, value: contact._id }]);
-                    }
-                    setContactToAdd("");
-                  }}
+                  onClick={openQuickContact}
                   className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] flex items-center justify-center hover:opacity-90 transition-opacity"
-                  title="Add contact"
+                  title="Create a new contact"
                 >
                   <PlusIcon className="w-4 h-4 text-white" />
                 </button>
               </div>
-              {taggedContacts.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {taggedContacts.map((tc) => (
-                    <span
-                      key={tc.value}
-                      className="inline-flex items-center gap-1 pl-2.5 pr-1.5 h-6 rounded-full bg-blue-50 text-blue-700 text-[11px] font-medium"
-                    >
-                      {tc.label}
-                      <button
-                        type="button"
-                        onClick={() => setTaggedContacts(taggedContacts.filter((c) => c.value !== tc.value))}
-                        className="hover:bg-blue-100 rounded-full p-0.5"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
               )}
             </div>
 
@@ -1410,50 +1622,40 @@ export const NoteEditor = ({
               <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                 Link Deal
               </label>
+              {lockedDealId ? (
+                // On a deal's own page the note always belongs to that deal.
+                <div className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] flex items-center bg-[#F5F7FA] text-[#1F2937] font-inter cursor-not-allowed">
+                  <span className="truncate">
+                    {taggedDeals.find((td) => String(td.value) === String(lockedDealId))?.label ||
+                      lockedDealName ||
+                      "—"}
+                  </span>
+                </div>
+              ) : (
               <div className="flex items-center gap-3">
                 <EntityPickerDropdown
                   options={deals}
-                  value={dealToAdd}
-                  onChange={setDealToAdd}
+                  selected={taggedDeals}
+                  onSelect={
+                    singleLink
+                      ? (deal) => setTaggedDeals([{ label: deal.title || deal.name || "Deal", value: deal._id }])
+                      : linkDeal
+                  }
+                  onRemove={(val) => setTaggedDeals(taggedDeals.filter((d) => d.value !== val))}
                   displayKey="title"
                   placeholder="Choose Deal"
+                  singleSelect={singleLink}
                   onOpenChange={handleDropdownOpenChange}
                 />
                 <button
                   type="button"
-                  onClick={() => {
-                    if (!dealToAdd) return;
-                    const deal = deals.find((d) => d._id === dealToAdd);
-                    if (!deal) return;
-                    if (!taggedDeals.some((td) => td.value === deal._id)) {
-                      setTaggedDeals([...taggedDeals, { label: deal.title || deal.name, value: deal._id }]);
-                    }
-                    setDealToAdd("");
-                  }}
+                  onClick={openQuickDeal}
                   className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] flex items-center justify-center hover:opacity-90 transition-opacity"
-                  title="Add deal"
+                  title="Create a new deal"
                 >
                   <PlusIcon className="w-4 h-4 text-white" />
                 </button>
               </div>
-              {taggedDeals.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {taggedDeals.map((td) => (
-                    <span
-                      key={td.value}
-                      className="inline-flex items-center gap-1 pl-2.5 pr-1.5 h-6 rounded-full bg-blue-50 text-blue-700 text-[11px] font-medium"
-                    >
-                      {td.label}
-                      <button
-                        type="button"
-                        onClick={() => setTaggedDeals(taggedDeals.filter((d) => d.value !== td.value))}
-                        className="hover:bg-blue-100 rounded-full p-0.5"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
               )}
             </div>
 
@@ -1461,50 +1663,49 @@ export const NoteEditor = ({
               <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                 Link Invoice
               </label>
+              {noInvoicesForDeal ? (
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0 border border-dashed border-[#1F2937]/15 rounded-full px-3 h-[38px] text-[13px] flex items-center bg-[#F5F7FA] text-[#525866] font-inter">
+                    <span className="truncate">
+                      No invoice for {taggedDeals.length > 1 ? "these deals" : "this deal"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={goToCreateInvoice}
+                    disabled={!newInvoiceDealId}
+                    className={`flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] flex items-center justify-center transition-opacity ${newInvoiceDealId ? "hover:opacity-90" : "opacity-40 cursor-not-allowed"}`}
+                    title={newInvoiceDealId ? "Create a new invoice" : "Select or create a deal first"}
+                  >
+                    <PlusIcon className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              ) : (
               <div className="flex items-center gap-3">
                 <EntityPickerDropdown
-                  options={invoices}
-                  value={invoiceToAdd}
-                  onChange={setInvoiceToAdd}
+                  options={scopedInvoices}
+                  selected={taggedInvoices}
+                  onSelect={
+                    singleLink
+                      ? (invoice) => setTaggedInvoices([{ label: invoice.invoiceNumber || "Invoice", value: invoice._id }])
+                      : linkInvoice
+                  }
+                  onRemove={(val) => setTaggedInvoices(taggedInvoices.filter((i) => i.value !== val))}
                   displayKey="invoiceNumber"
                   placeholder="Choose Invoice"
+                  singleSelect={singleLink}
                   onOpenChange={handleDropdownOpenChange}
                 />
                 <button
                   type="button"
-                  onClick={() => {
-                    if (!invoiceToAdd) return;
-                    const invoice = invoices.find((i) => i._id === invoiceToAdd);
-                    if (!invoice) return;
-                    if (!taggedInvoices.some((ti) => ti.value === invoice._id)) {
-                      setTaggedInvoices([...taggedInvoices, { label: invoice.invoiceNumber, value: invoice._id }]);
-                    }
-                    setInvoiceToAdd("");
-                  }}
-                  className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] flex items-center justify-center hover:opacity-90 transition-opacity"
-                  title="Add invoice"
+                  onClick={goToCreateInvoice}
+                  disabled={!newInvoiceDealId}
+                  className={`flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] flex items-center justify-center transition-opacity ${newInvoiceDealId ? "hover:opacity-90" : "opacity-40 cursor-not-allowed"}`}
+                  title={newInvoiceDealId ? "Create a new invoice" : "Select or create a deal first"}
                 >
                   <PlusIcon className="w-4 h-4 text-white" />
                 </button>
               </div>
-              {taggedInvoices.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {taggedInvoices.map((ti) => (
-                    <span
-                      key={ti.value}
-                      className="inline-flex items-center gap-1 pl-2.5 pr-1.5 h-6 rounded-full bg-blue-50 text-blue-700 text-[11px] font-medium"
-                    >
-                      {ti.label}
-                      <button
-                        type="button"
-                        onClick={() => setTaggedInvoices(taggedInvoices.filter((i) => i.value !== ti.value))}
-                        className="hover:bg-blue-100 rounded-full p-0.5"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
               )}
             </div>
           </div>
@@ -1585,6 +1786,48 @@ export const NoteEditor = ({
         </div>
       )}
 
+      {/* The quick-create drawers are `fixed` but live below this editor's own
+          z-index, so they're wrapped in a stacking context that sits above it. */}
+      {(quickDealOpen || quickContactOpen || (quickInvoiceOpen && documentDefaults.settled)) && (
+        <div className="relative z-[10060]">
+          {quickContactOpen && (
+            <QuickContactForm
+              companies={companyOptions}
+              initialCompanyId={companyId || ""}
+              onContactCreated={handleQuickContactCreated}
+              onRequestClose={() => setQuickContactOpen(false)}
+            />
+          )}
+          {quickDealOpen && (
+            <QuickDealForm
+              companies={companyOptions}
+              contacts={contacts}
+              initialCompanyId={companyId || ""}
+              initialContactId={lockedContactId || ""}
+              isContactLocked={!!lockedContactId}
+              onDealCreated={handleQuickDealCreated}
+              onRequestClose={() => setQuickDealOpen(false)}
+            />
+          )}
+          {quickInvoiceOpen && documentDefaults.settled && (
+            <CreateInvoicePanel
+              type="tax"
+              deals={newInvoiceDeals}
+              preselectDealId={newInvoiceDealId}
+              documentTypeSettings={documentDefaults.documentTypeSettings}
+              defaultDueDateDays={documentDefaults.defaultDueDateDays}
+              defaultNotesByType={documentDefaults.defaultNotesByType}
+              defaultTermsByType={documentDefaults.defaultTermsByType}
+              defaultNotesFlat={documentDefaults.defaultNotesFlat}
+              defaultTermsFlat={documentDefaults.defaultTermsFlat}
+              onAddDeal={openQuickDeal}
+              onCreated={handleQuickInvoiceCreated}
+              onClose={() => setQuickInvoiceOpen(false)}
+            />
+          )}
+        </div>
+      )}
+
       <NoteStyles />
     </>
   );
@@ -1657,12 +1900,16 @@ const NoteSection = ({ companyId: propCompanyId, dealId, isQuickView }) => {
   }, [companyId]);
 
   const fetchInvoices = useCallback(async () => {
-    if (!companyId) return;
+    if (!companyId) return [];
     try {
       const res = await API.get("/invoices");
-      setInvoices(res.data.filter((inv) => inv.deal?.company === companyId || inv.deal?.company?._id === companyId));
+      const scoped = res.data.filter((inv) => inv.deal?.company === companyId || inv.deal?.company?._id === companyId);
+      setInvoices(scoped);
+      // Returned too, so the editor can link an invoice it just created.
+      return scoped;
     } catch (err) {
       toast.error("Failed to load invoices");
+      return [];
     }
   }, [companyId]);
 
@@ -1675,7 +1922,7 @@ const NoteSection = ({ companyId: propCompanyId, dealId, isQuickView }) => {
 
   const handleAddOrUpdateNote = async () => {
     if (!noteContent.trim() || noteContent === "<p><br></p>") {
-      toast.error("Note content is required");
+      toast.error("Please add some note content before saving.");
       return;
     }
 
@@ -1872,6 +2119,9 @@ const NoteSection = ({ companyId: propCompanyId, dealId, isQuickView }) => {
         contacts={contacts}
         deals={deals}
         invoices={invoices}
+        companyId={companyId}
+        onDealCreated={(deal) => setDeals((prev) => (prev.some((d) => d._id === deal._id) ? prev : [...prev, deal]))}
+        onInvoicesChanged={fetchInvoices}
         noteType={noteType}
         setNoteType={setNoteType}
         visibility={visibility}

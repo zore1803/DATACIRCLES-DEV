@@ -148,11 +148,12 @@ const CompanyTasksTable = ({ companyId, setTasks }) => {
 
   const handleTaskUpdate = async () => {
     try {
-      // Refetch tasks after update
+      // Refetch tasks after update. The success toast is shown by
+      // CompanyTaskForm (single source of truth for the update toast) — don't
+      // duplicate it here.
       const response = await API.get(`/tasks/company/${companyId}`);
       setLocalTasks(response.data || []);
       setTasks(response.data || []);
-      toast.success("Task updated successfully!");
     } catch (err) {
       console.error("Error updating task:", err);
       toast.error("Failed to update task.");

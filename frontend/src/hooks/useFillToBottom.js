@@ -1,45 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-// Minimum height the container will ever be given, so a mis-measurement (or a
-// very short window) can never collapse the table to nothing.
+// Floor so a mis-measurement or very short window can't collapse the box.
 const MIN_HEIGHT = 180;
 
-/**
- * Sizes a container to fill exactly the remaining viewport space, with an
- * optional element (e.g. a pagination bar) reserved below it — matching how
- * Companies.jsx/Deals.jsx/Tasks.jsx behave via their own position:fixed +
- * top/bottom anchoring: the box is always the same height regardless of how
- * many rows it holds, and a short list leaves empty space inside the box
- * rather than shrinking it.
- *
- * This is an EXACT height, not a cap — deliberately, to match those pages.
- * (An earlier version of this hook used max-height instead, so a short list
- * would shrink the box and let the pagination bar sit right under the last
- * row. That was a real, intentional design — it was reverted specifically so
- * these tabs read as consistent with the rest of the app, not because it was
- * wrong on its own terms.)
- *
- * Why this measures instead of using a `calc(100vh - <constant>)`:
- * the height of everything above the container is not knowable as a constant
- * here. It changes with the KPI row toggle, with a wrapped company address,
- * with the admin-notice banner, and — because the KPI grid reflows from 6
- * columns to 3 below 1024px — with the viewport width itself. A constant would
- * need a different value per breakpoint per state, and would still be wrong
- * whenever the banner appears.
- *
- * Zoom handling: this app stacks two CSS `zoom` layers (#root at 0.75 and the
- * dynamic <html> zoom from App.jsx), both only active >=1024px. `zoom` is read
- * directly off the elements rather than inferred, so no breakpoint logic is
- * needed here — below 1024px both read 1 and the math collapses to the plain
- * case.
- *
- * Usage:
- *   const { containerRef, footerRef, style } = useFillToBottom();
- *   <div ref={containerRef} style={style} className="overflow-y-auto">…</div>
- *   <div ref={footerRef}>…pagination…</div>
- *
- * `footerRef` is optional — omit it if nothing needs to stay visible below.
- */
+// Caps a container at the remaining viewport space (minus an optional footer,
+// e.g. a pagination bar, reserved below it) so a long list scrolls internally
+// while a short list shrinks to its rows instead of leaving a gap below.
+// Measured rather than a calc() constant because the height above the container
+// varies with the KPI toggle, banners and the responsive KPI grid. Zoom is read
+// off the elements (this app stacks #root 0.75 + a dynamic <html> zoom >=1024px).
+// Usage: const { containerRef, footerRef, style } = useFillToBottom();
 export default function useFillToBottom() {
   const containerRef = useRef(null);
   const footerRef = useRef(null);
@@ -119,6 +89,8 @@ export default function useFillToBottom() {
   return {
     containerRef,
     footerRef,
-    style: height == null ? undefined : { height: `${height}px` },
+    // max-height, not height: a short list shrinks to fit (no trailing gap),
+    // a long one caps here and scrolls internally.
+    style: height == null ? undefined : { maxHeight: `${height}px` },
   };
 }

@@ -144,12 +144,12 @@ const ContactTaskForm = ({
   const validateForm = () => {
     const newErrors = {};
     
-    if (!form.title?.trim()) newErrors.title = "Task title is required";
-    if (!form.dueDate) newErrors.dueDate = "Due date is required";
-    if (!calendarDate && !form.selectedDate) newErrors.selectedDate = "Selected date is required";
-    
+    if (!form.title?.trim()) newErrors.title = "Please enter a task title.";
+    if (!form.dueDate) newErrors.dueDate = "Please choose a due date.";
+    if (!calendarDate && !form.selectedDate) newErrors.selectedDate = "Please pick a date for the task.";
+
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return newErrors;
   };
 
   const handleUserSelection = (userId) => {
@@ -177,8 +177,9 @@ const ContactTaskForm = ({
 const handleSubmit = async (e) => {
   e.preventDefault();
   
-  if (!validateForm()) {
-    toast.error("Please fix the errors before submitting");
+  const validationErrors = validateForm();
+  if (Object.keys(validationErrors).length > 0) {
+    toast.error(Object.values(validationErrors)[0]);
     return;
   }
 
@@ -210,8 +211,8 @@ const handleSubmit = async (e) => {
       onUpdate();
       toast.success("Task updated successfully");
     } else {
+      // Create toast is shown by the parent's onSave handler — don't duplicate.
       await onSave(payload);
-      toast.success("Task saved successfully");
     }
     onClose();
   } catch (err) {
