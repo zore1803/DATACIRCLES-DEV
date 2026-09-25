@@ -7,6 +7,7 @@ const resolveBankDetails = require("../utils/resolveBankDetails");
 const Branding = require("../models/Branding");
 const mongoose = require("mongoose");
 const Deal = require("../models/Deal");
+const DeliveryChallan = require("../models/deliveryChallan");
 const DocumentSettings = require("../models/DocumentSettings");
 const { getDocumentSettingsForOrganization, resolveDocumentNumber, invoiceSeries, raiseInvoiceSeriesTo } = require("../utils/documentNumbering");
 const resolveDocumentNumberSeriesRaise = raiseInvoiceSeriesTo;
@@ -245,6 +246,43 @@ const createInvoice = async (req, res) => {
     
     invoice.stockMovementStatus = 'applied';
     await invoice.save({ session, validateModifiedOnly: true });
+
+    // Auto-create a matching Delivery Challan for every invoice. It mirrors the
+    // invoice's line items and parties (same mapping as the manual
+    // invoice -> delivery challan conversion in converterController), but the
+    // invoice itself is kept — this is an additional linked document, not a
+    // conversion. Stock is NOT deducted again: the DeliveryChallan model has no
+    // stockMovementStatus field, so inventorySync never runs for it, and the
+    // invoice above already applied the stock movement for these items.
+    const deliveryChallanNumber = await resolveDocumentNumber({
+      Model: DeliveryChallan,
+      numberField: "deliveryChallanNumber",
+      organization: req.user.organization,
+      documentTypeKey: "deliveryChallan",
+      prefix: (documentSettings.documentTypeSettings?.deliveryChallan?.prefix || "DC-").toString(),
+      suffix: (documentSettings.documentTypeSettings?.deliveryChallan?.suffix || "").toString(),
+      providedNumber: null,
+      session,
+      date,
+    });
+
+    const invoiceObj = invoice.toObject();
+    const deliveryChallanData = {
+      ...invoiceObj,
+      _id: new mongoose.Types.ObjectId(),
+      deliveryChallanNumber,
+      status: "Draft",
+      items: invoiceObj.items.map((item) => ({ ...item, hsn: undefined })),
+      createdAt: undefined,
+      updatedAt: undefined,
+    };
+    delete deliveryChallanData.invoiceNumber;
+    delete deliveryChallanData.receiverGSTIN;
+    delete deliveryChallanData.stockMovementStatus;
+    delete deliveryChallanData.duplicatedFrom;
+
+    const deliveryChallan = new DeliveryChallan(deliveryChallanData);
+    await deliveryChallan.save({ session });
 
     await session.commitTransaction();
     session.endSession();

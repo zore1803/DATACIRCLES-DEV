@@ -1,11 +1,12 @@
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import DealsTable from "./DealsTable";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import {
   X,
   Check,
+  ChevronDown,
   PhoneCall,
   CalendarDays,
   CheckSquare,
@@ -243,33 +244,69 @@ const LifecycleJourney = ({ contact, onContactUpdate }) => {
   const [showEdit, setShowEdit] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [hovered, setHovered] = useState(null);
+  const [openDropdown, setOpenDropdown] = useState(null);
+  const [savingStatus, setSavingStatus] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 50);
+    return () => clearTimeout(t);
+  }, []);
+
   const allLifecycleStages = useContactLifecycleStore((s) => s.allLifecycleStages);
+  const lifecycleStageOptions = useContactLifecycleStore((s) => s.lifecycleStageOptions);
   const fetchStages = useContactLifecycleStore((s) => s.fetchStages);
 
   useEffect(() => {
     fetchStages();
   }, [fetchStages]);
 
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
   const total = allLifecycleStages.length;
   const currentIndex = Math.max(0, allLifecycleStages.indexOf(contact.lifecycleStage));
-  const currentStageName = allLifecycleStages[currentIndex] || "";
   const rawStatus = (contact.stageStatus || "").trim();
-  const showStatus =
-    rawStatus.length > 0 && rawStatus.toLowerCase() !== currentStageName.toLowerCase();
 
-  // Progress across the configured journey. The current stage counts as
-  // reached, so a contact sitting on the final stage reads 100%.
   const progressPct = total > 0 ? Math.round(((currentIndex + 1) / total) * 100) : 0;
-
   const ageDays = daysBetween(contact.createdAt);
-  // `updatedAt` is the closest real signal available — the schema keeps no
-  // per-stage history, so this is labelled as last movement on the record
-  // rather than claimed as time-in-stage.
   const sinceMoveDays = daysBetween(contact.updatedAt);
+
+  const selectStatus = async (stageName, status) => {
+    setOpenDropdown(null);
+    if (!status || savingStatus) return;
+    const previous = { lifecycleStage: contact.lifecycleStage, stageStatus: contact.stageStatus };
+    try {
+      setSavingStatus(true);
+      onContactUpdate?.({ ...contact, lifecycleStage: stageName, stageStatus: status });
+      await API.put(`/contacts/${contact._id}/lifecycle-stage`, {
+        lifecycleStage: stageName,
+        stageStatus: status,
+      });
+      toast.success("Status updated!");
+    } catch (error) {
+      onContactUpdate?.({ ...contact, ...previous });
+      if (error.response?.status === 402) {
+        toast.error(error.response?.data?.message || "An active subscription is required to make changes.");
+      } else {
+        toast.error(error.response?.data?.error || "Failed to update status");
+      }
+    } finally {
+      setSavingStatus(false);
+    }
+  };
 
   return (
     <div className="bg-white border border-[#E1E4EA] rounded-xl px-5 py-4">
-      <div className="flex items-start justify-between gap-4 mb-4">
+      <div className="flex items-start justify-between gap-4 mb-8">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Route className="w-4 h-4 text-gray-400" />
@@ -318,114 +355,159 @@ const LifecycleJourney = ({ contact, onContactUpdate }) => {
             @keyframes dcRailFill { from { width: 0%; } }
           `}</style>
 
-          {/* Progress rail — one continuous read of how far along the contact
-              is, independent of how many stages the org has configured. */}
-          <div className="relative h-1.5 w-full rounded-full bg-[#F1F1F5] overflow-hidden mb-4">
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${progressPct}%`,
-                background: "linear-gradient(90deg, #0085FF 0%, #48A9FF 100%)",
-                animation: "dcRailFill 700ms ease-out",
-              }}
-            />
-          </div>
+          {/* Train track with compact milestones and pill substage */}
+          <div className="relative pt-6 pb-6 w-full flex items-center mt-2 mb-2" ref={dropdownRef}>
+            <div className="w-full flex items-center justify-between z-10">
+              {(() => {
+                const elements = [];
+                let lineDelay = 0; // ms for animation
+                const animationStep = 150; // smooth sequential delay
 
-          {/* Chevron track. Each stage is a notched segment so the track reads
-              as directional flow rather than a row of detached buttons. */}
-          <div className="flex items-stretch gap-1 w-full">
-            {allLifecycleStages.map((stage, i) => {
-              const isDone = i < currentIndex;
-              const isCurrent = i === currentIndex;
-              const isHovered = hovered === i;
-              const isFirst = i === 0;
-              const isLast = i === total - 1;
+                allLifecycleStages.forEach((stage, i) => {
+                  const isCurrent = i === currentIndex;
+                  const isDone = i < currentIndex;
+                  const statuses = lifecycleStageOptions[stage] || [];
+                  const showSubstage = isCurrent && rawStatus && rawStatus.toLowerCase() !== stage.toLowerCase();
+                  
+                  // 1. Line BEFORE main stage
+                  if (i > 0) {
+                     const activeLine = isDone || isCurrent;
+                     // We use -mr-3 (-12px) so the line reaches all the way into the 12px notch of the next block.
+                     elements.push(
+                       <div key={`line-before-${i}`} className="flex-1 h-[2px] bg-[#E1E4EA] relative z-0 -ml-1 -mr-3 min-w-[20px]">
+                          <div 
+                            className="absolute top-0 left-0 bottom-0 bg-[#0085FF] transition-all duration-700 ease-out"
+                            style={{ 
+                              width: (mounted && activeLine) ? "100%" : "0%",
+                              transitionDelay: `${lineDelay}ms`
+                            }}
+                          />
+                       </div>
+                     );
+                     if (activeLine) lineDelay += animationStep;
+                  }
 
-              const notch = 12;
-              const clip = isFirst
-                ? `polygon(0 0, calc(100% - ${notch}px) 0, 100% 50%, calc(100% - ${notch}px) 100%, 0 100%)`
-                : isLast
-                ? `polygon(0 0, 100% 0, 100% 100%, 0 100%, ${notch}px 50%)`
-                : `polygon(0 0, calc(100% - ${notch}px) 0, 100% 50%, calc(100% - ${notch}px) 100%, 0 100%, ${notch}px 50%)`;
+                  // 2. Main Stage Node (compact arrow)
+                  const notch = 12;
+                  const clipPath = (i === 0) 
+                    ? `polygon(0 0, calc(100% - ${notch}px) 0, 100% 50%, calc(100% - ${notch}px) 100%, 0 100%)`
+                    : `polygon(0 0, calc(100% - ${notch}px) 0, 100% 50%, calc(100% - ${notch}px) 100%, 0 100%, ${notch}px 50%)`;
 
-              return (
-                <button
-                  key={`${stage}-${i}`}
-                  type="button"
-                  onClick={() => setShowEdit(true)}
-                  onMouseEnter={() => setHovered(i)}
-                  onMouseLeave={() => setHovered(null)}
-                  title={`${stage} · stage ${i + 1} of ${total}`}
-                  className="flex-1 min-w-0 text-left focus:outline-none"
-                  style={{ clipPath: clip }}
-                >
-                  <div
-                    className={`h-[54px] flex items-center gap-2 transition-all duration-300 ${
-                      isFirst ? "pl-3.5 pr-4" : "pl-5 pr-4"
-                    } ${
-                      isCurrent
-                        ? "bg-[#0085FF]"
-                        : isDone
-                        ? "bg-[#E8F3FF]"
-                        : isHovered
-                        ? "bg-[#F1F1F5]"
-                        : "bg-[#F7F8FA]"
-                    }`}
-                    style={isCurrent ? { animation: "dcPulseRing 2.4s ease-out infinite" } : undefined}
-                  >
-                    <span
-                      className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
-                        isCurrent
-                          ? "bg-white/25"
-                          : isDone
-                          ? "bg-[#0085FF]"
-                          : "bg-white border border-[#E1E4EA]"
-                      }`}
-                    >
-                      {isDone ? (
-                        <Check className="w-3 h-3 text-white" strokeWidth={3} />
-                      ) : isCurrent ? (
-                        <span className="w-1.5 h-1.5 rounded-full bg-white" />
-                      ) : (
-                        <span className="text-[9px] font-semibold text-gray-400">{i + 1}</span>
+                  elements.push(
+                    <div key={`stage-${i}`} className="relative flex-[2] min-w-0 group z-10">
+                      <div 
+                        onMouseEnter={() => setHovered(i)}
+                        onMouseLeave={() => setHovered(null)}
+                        style={{ clipPath }}
+                        className={`h-[54px] w-full flex items-center gap-2.5 transition-colors duration-300 ${
+                          (i === 0) ? "pl-4 pr-[22px]" : "pl-[22px] pr-[22px]"
+                        } ${
+                          isCurrent
+                            ? "bg-[#0085FF]"
+                            : isDone
+                            ? "bg-[#E8F3FF]"
+                            : "bg-[#F1F1F5]"
+                        }`}
+                      >
+                        <span
+                          className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
+                            isCurrent
+                              ? "bg-white/25"
+                              : isDone
+                              ? "bg-[#0085FF]"
+                              : "bg-white border border-[#E1E4EA]"
+                          }`}
+                        >
+                          {isDone ? (
+                            <Check className="w-3 h-3 text-white" strokeWidth={3} />
+                          ) : isCurrent ? (
+                            <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                          ) : (
+                            <span className="text-[9px] font-semibold text-gray-400">{i + 1}</span>
+                          )}
+                        </span>
+                        
+                        <div className="flex-1 min-w-0 flex items-center gap-2 justify-between">
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className={`block text-xs font-semibold leading-tight truncate ${isCurrent ? "text-white" : isDone ? "text-[#0E121B]" : "text-gray-500"}`}>
+                              {stage}
+                            </span>
+                            <span className={`block text-[10px] leading-tight truncate ${isCurrent ? "text-white/75" : "text-gray-400"}`}>
+                              {isCurrent ? "Current stage" : isDone ? "Completed" : `Step ${i + 1}`}
+                            </span>
+                          </div>
+
+                          {statuses.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenDropdown(openDropdown === i ? null : i);
+                              }}
+                              className={`flex-shrink-0 p-1 rounded transition-colors ${
+                                isCurrent ? "text-white/80 hover:bg-white/20" : "text-gray-400 hover:bg-black/10"
+                              }`}
+                            >
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${openDropdown === i ? "rotate-180" : ""}`} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Dropdown Menu - Plain background, no header, left aligned */}
+                      {openDropdown === i && statuses.length > 0 && (
+                        <div className="absolute top-full mt-2 left-0 min-w-[160px] w-full bg-white border border-[#E1E4EA] rounded-xl shadow-xl z-50 py-1 overflow-hidden">
+                          {statuses.map((status) => (
+                            <button
+                              key={status}
+                              type="button"
+                              onClick={() => selectStatus(stage, status)}
+                              className={`w-full text-left px-4 py-2.5 text-[12px] transition-colors hover:bg-[#F7FAFF] flex items-center justify-between gap-2 ${
+                                isCurrent && status === rawStatus ? "text-[#0085FF] font-bold" : "text-[#1F2937]"
+                              }`}
+                            >
+                              <span className="truncate">{status}</span>
+                              {isCurrent && status === rawStatus && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+                            </button>
+                          ))}
+                        </div>
                       )}
-                    </span>
-                    <span className="min-w-0">
-                      <span
-                        className={`block text-xs font-semibold leading-tight truncate ${
-                          isCurrent ? "text-white" : isDone ? "text-[#0E121B]" : "text-gray-400"
-                        }`}
-                      >
-                        {stage}
-                      </span>
-                      <span
-                        className={`block text-[10px] leading-tight truncate ${
-                          isCurrent ? "text-white/75" : "text-gray-400"
-                        }`}
-                      >
-                        {isCurrent ? "Current stage" : isDone ? "Completed" : `Step ${i + 1}`}
-                      </span>
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
+                    </div>
+                  );
+
+                  // 3. Line AFTER main stage (connecting to substage)
+                  if (showSubstage) {
+                     elements.push(
+                       <div key={`line-after-main-${i}`} className="flex-1 h-[2px] bg-[#E1E4EA] relative z-0 -mx-1 min-w-[20px]">
+                          <div 
+                            className="absolute top-0 left-0 bottom-0 bg-[#0085FF] transition-all duration-700 ease-out"
+                            style={{ 
+                              width: mounted ? "100%" : "0%",
+                              transitionDelay: `${lineDelay}ms`
+                            }}
+                          />
+                       </div>
+                     );
+                     lineDelay += animationStep;
+
+                     // 4. Substage Pill
+                     elements.push(
+                        <div key={`substage-${i}`} className="flex-shrink-0 relative z-10">
+                           <div className="h-[24px] px-2.5 bg-white border border-[#0085FF] rounded-full shadow-sm flex items-center gap-1.5 transition-all duration-300">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#0085FF]" />
+                              <span className="text-[10px] font-bold text-[#0085FF] whitespace-nowrap">{rawStatus}</span>
+                           </div>
+                        </div>
+                     );
+                  }
+                });
+
+                return elements;
+              })()}
+            </div>
           </div>
 
-          {/* Footer facts — every value below comes off the contact record
-              itself, so the block stays honest when a field is missing. */}
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 pt-3 border-t border-[#E1E4EA]">
-            {showStatus && (
-              <span className="flex items-center gap-2">
-                <span className="text-[10px] font-semibold tracking-wide text-gray-400 uppercase">
-                  Status
-                </span>
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#E8F3FF] border border-[#0085FF]/25">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#0085FF]" />
-                  <span className="text-[11px] font-semibold text-[#0085FF]">{rawStatus}</span>
-                </span>
-              </span>
-            )}
             {ageDays !== null && (
               <span className="text-[11px] text-[#525866]">
                 Contact age <span className="font-semibold text-[#0E121B]">{ageDays}d</span>
@@ -546,7 +628,7 @@ const RelationshipPulse = ({ activity, loading }) => {
   const types = Object.keys(TYPE_META);
 
   return (
-    <div className="lg:col-span-2 bg-white border border-[#E1E4EA] rounded-xl px-5 py-4 flex flex-col">
+    <div className="h-full bg-white border border-[#E1E4EA] rounded-xl px-5 py-4 flex flex-col">
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -592,12 +674,12 @@ const RelationshipPulse = ({ activity, loading }) => {
       </div>
 
       {loading ? (
-        <div className="h-[220px] flex items-center justify-center">
+        <div className="flex-1 min-h-[220px] flex items-center justify-center">
           <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : (
-        <>
-          <div className="relative h-[220px] mt-4">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="relative flex-1 min-h-[220px] mt-4">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={data} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E7E7E7" vertical={false} />
@@ -649,7 +731,7 @@ const RelationshipPulse = ({ activity, loading }) => {
             )}
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 mt-3">
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 mt-3 flex-shrink-0">
             {types.map((t) => (
               <div key={t} className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-sm" style={{ background: TYPE_META[t].color }} />
@@ -665,7 +747,7 @@ const RelationshipPulse = ({ activity, loading }) => {
               </span>
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -694,8 +776,8 @@ const EngagementBalance = ({ activity, loading }) => {
   const dominant = grandTotal > 0 ? types.reduce((a, b) => (totals[b] > totals[a] ? b : a)) : null;
 
   return (
-    <div className="bg-white border border-[#E1E4EA] rounded-xl px-5 py-4 flex flex-col">
-      <div>
+    <div className="h-full bg-white border border-[#E1E4EA] rounded-xl px-4 py-3.5 flex flex-col overflow-y-auto">
+      <div className="flex-shrink-0">
         <h3 className="text-sm font-semibold text-[#0E121B]">Engagement Balance</h3>
         <p className="text-xs text-[#525866] mt-1">
           {dominant
@@ -820,12 +902,12 @@ const RecentActivity = ({ activity, loading }) => {
 
   const filteredItems = useMemo(() => {
     const base = filter === "All" ? items : items.filter((i) => i.type === TAB_TO_TYPE[filter]);
-    return base.slice(0, 8);
+    return base.slice(0, 40);
   }, [items, filter]);
 
   return (
-    <div className="h-[320px] flex flex-col bg-white border border-gray-200 rounded-lg p-5">
-      <h3 className="text-sm font-semibold text-gray-900 mb-5 flex-shrink-0">Activity Timeline</h3>
+    <div className="h-full min-h-[240px] flex flex-col bg-white border border-gray-200 rounded-lg p-5">
+      <h3 className="text-sm font-semibold text-gray-900 mb-4 flex-shrink-0">Activity Timeline</h3>
       <div className="flex items-center gap-1 mb-4 flex-wrap flex-shrink-0">
         {ACTIVITY_TABS.map((tab) => (
           <button
@@ -988,8 +1070,8 @@ const CallEffectiveness = ({ activity, loading }) => {
   const gaugeData = [{ name: "rate", value: stats.rate, fill: "#0085FF" }];
 
   return (
-    <div className="bg-white border border-[#E1E4EA] rounded-xl px-5 py-4">
-      <div className="flex items-start justify-between gap-4">
+    <div className="h-full bg-white border border-[#E1E4EA] rounded-xl px-4 py-3.5 flex flex-col overflow-y-auto">
+      <div className="flex items-start justify-between gap-4 flex-shrink-0">
         <div>
           <div className="flex items-center gap-2">
             <PhoneCall className="w-4 h-4 text-gray-400" />
@@ -1005,11 +1087,11 @@ const CallEffectiveness = ({ activity, loading }) => {
       {loading ? (
         <LoadingBlock />
       ) : (
-        <div className="flex items-center gap-6 mt-5">
+        <div className="flex items-center gap-4 mt-3">
           {/* Radial gauge — connect rate as a single glanceable figure. Sized to
               hold its own against the outcome list beside it; the ring is thick
               enough to read at a glance rather than a hairline. */}
-          <div className="relative w-[172px] h-[172px] flex-shrink-0">
+          <div className="relative w-[132px] h-[132px] flex-shrink-0">
             <ResponsiveContainer width="100%" height="100%">
               <RadialBarChart
                 data={gaugeData}
@@ -1028,9 +1110,9 @@ const CallEffectiveness = ({ activity, loading }) => {
               </RadialBarChart>
             </ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-[32px] font-bold text-[#0E121B] leading-none">{stats.rate}%</span>
-              <span className="text-[11px] text-gray-400 mt-1.5">connected</span>
-              <span className="text-[10px] text-gray-300 mt-0.5">
+              <span className="text-[22px] font-bold text-[#0E121B] leading-none">{stats.rate}%</span>
+              <span className="text-[10px] text-gray-400 mt-1">connected</span>
+              <span className="text-[9px] text-gray-300 mt-0.5">
                 {stats.connected}/{stats.attempts} calls
               </span>
             </div>
@@ -1040,17 +1122,17 @@ const CallEffectiveness = ({ activity, loading }) => {
             {/* Outcome breakdown — one row per schema-defined status. A share
                 bar fills the span between label and count so each outcome is
                 comparable at a glance instead of leaving dead width. */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {stats.byOutcome.map((o) => (
-                <div key={o.key} className="flex items-center gap-2.5">
+                <div key={o.key} className="flex items-center gap-2">
                   <span
-                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                     style={{ background: o.color }}
                   />
-                  <span className="w-[68px] flex-shrink-0 text-[11px] text-[#525866] truncate">
+                  <span className="w-[62px] flex-shrink-0 text-[10px] text-[#525866] truncate">
                     {o.key}
                   </span>
-                  <span className="flex-1 min-w-0 h-1.5 rounded-full bg-[#F1F1F5] overflow-hidden">
+                  <span className="flex-1 min-w-0 h-1 rounded-full bg-[#F1F1F5] overflow-hidden">
                     <span
                       className="block h-full rounded-full transition-all duration-500"
                       style={{
@@ -1059,7 +1141,7 @@ const CallEffectiveness = ({ activity, loading }) => {
                       }}
                     />
                   </span>
-                  <span className="w-8 flex-shrink-0 text-right text-xs font-semibold text-[#0E121B]">
+                  <span className="w-6 flex-shrink-0 text-right text-[11px] font-semibold text-[#0E121B]">
                     {o.value}
                   </span>
                 </div>
@@ -1116,8 +1198,8 @@ const CallEffectiveness = ({ activity, loading }) => {
           rate for that part of the day; untried windows render hollow so an
           untested slot is never mistaken for an unreachable one. */}
       {!loading && (
-        <div className="border-t border-[#E1E4EA] pt-3 mt-3">
-          <div className="flex items-baseline justify-between mb-2">
+        <div className="border-t border-[#E1E4EA] pt-2.5 mt-2.5">
+          <div className="flex items-baseline justify-between mb-1.5">
             <p className="text-[10px] font-semibold tracking-wide text-gray-400 uppercase">
               Best time to reach
             </p>
@@ -1143,7 +1225,7 @@ const CallEffectiveness = ({ activity, loading }) => {
                   </span>
                   <div
                     title={`${d.label} (${d.hint}) · ${d.attempts} attempt${d.attempts !== 1 ? "s" : ""}`}
-                    className="w-full h-[56px] rounded-lg flex items-end overflow-hidden"
+                    className="w-full h-[40px] rounded-lg flex items-end overflow-hidden"
                     style={{
                       background: untried
                         ? "repeating-linear-gradient(45deg, #F7F8FA, #F7F8FA 4px, #FFF 4px, #FFF 8px)"
@@ -1176,8 +1258,8 @@ const CallEffectiveness = ({ activity, loading }) => {
       )}
 
       {!loading && (
-        <div className="border-t border-[#E1E4EA] pt-3 mt-3">
-          <div className="flex items-center justify-between mb-2">
+        <div className="border-t border-[#E1E4EA] pt-2.5 mt-2.5">
+          <div className="flex items-center justify-between mb-1.5">
             <span className="text-[11px] text-[#525866]">
               Avg. talk time{" "}
               <span className="font-semibold text-[#0E121B]">
@@ -1191,7 +1273,7 @@ const CallEffectiveness = ({ activity, loading }) => {
               </span>
             </span>
           </div>
-          <p className="text-[10px] font-semibold tracking-wide text-gray-400 uppercase mb-1.5">
+          <p className="text-[10px] font-semibold tracking-wide text-gray-400 uppercase mb-1">
             Last interaction
           </p>
           {lastInteraction ? (
@@ -1293,8 +1375,8 @@ const FollowUpLoad = ({ activity, loading }) => {
   ];
 
   return (
-    <div className="bg-white border border-[#E1E4EA] rounded-xl px-5 py-4">
-      <div className="flex items-start justify-between gap-4">
+    <div className="h-full bg-white border border-[#E1E4EA] rounded-xl px-4 py-3.5 flex flex-col overflow-y-auto">
+      <div className="flex items-start justify-between gap-4 flex-shrink-0">
         <div>
           <div className="flex items-center gap-2">
             <CheckSquare className="w-4 h-4 text-gray-400" />
@@ -1460,8 +1542,8 @@ const ContactCalendar = ({ activity, loading, onNavigateTab }) => {
   const goCalendar = () => onNavigateTab?.("Calendar");
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-5">
-      <div className="flex items-center justify-between mb-4">
+    <div className="flex flex-col bg-white border border-gray-200 rounded-lg p-4 max-h-[280px]">
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
         <h3 className="text-sm font-semibold text-gray-900">Calendar</h3>
         <button
           type="button"
@@ -1477,10 +1559,10 @@ const ContactCalendar = ({ activity, loading, onNavigateTab }) => {
           <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : (
-        <>
+        <div className="flex-1 overflow-y-auto pr-2 -mr-2">
           <div className="grid grid-cols-7 gap-y-1 text-center">
             {WEEKDAYS.map((w) => (
-              <span key={w} className="text-[11px] font-medium text-gray-400 pb-1">
+              <span key={w} className="text-[10px] font-medium text-gray-400 pb-1">
                 {w}
               </span>
             ))}
@@ -1489,9 +1571,14 @@ const ContactCalendar = ({ activity, loading, onNavigateTab }) => {
               const isToday = d === todayDate;
               const hasEvent = eventDays.has(d);
               return (
-                <div key={d} className="flex flex-col items-center justify-start h-8">
+                <div key={d} className="flex flex-col items-center justify-end">
+                  {/* Event dot sits above the date in the same navy the company
+                      overview's mini calendar uses, so the two read alike. */}
+                  {hasEvent && (
+                    <span className="mb-0.5 w-1.5 h-1.5 rounded-full bg-[#1E3A8A] flex-shrink-0" />
+                  )}
                   <span
-                    className={`w-7 h-7 flex items-center justify-center rounded-full text-xs ${
+                    className={`w-[22px] h-[22px] flex items-center justify-center rounded-full text-[11px] ${
                       isToday
                         ? "bg-[#0085FF] text-white font-semibold"
                         : "text-gray-700"
@@ -1499,20 +1586,14 @@ const ContactCalendar = ({ activity, loading, onNavigateTab }) => {
                   >
                     {d}
                   </span>
-                  {hasEvent && !isToday && (
-                    <span className="w-1 h-1 rounded-full bg-[#0085FF] -mt-0.5" />
-                  )}
-                  {hasEvent && isToday && (
-                    <span className="w-1 h-1 rounded-full bg-transparent -mt-0.5" />
-                  )}
                 </div>
               );
             })}
           </div>
 
-          <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="mt-3 pt-3 border-t border-gray-100">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-semibold text-gray-900">Upcoming</h4>
+              <h4 className="text-xs font-semibold text-gray-900">Upcoming</h4>
               {upcoming.length > 0 && (
                 <button
                   type="button"
@@ -1546,7 +1627,7 @@ const ContactCalendar = ({ activity, loading, onNavigateTab }) => {
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -1598,18 +1679,29 @@ const BasicDetails = ({ contact, company, allCompanies = [], deals, onContactUpd
       {/* 2. Associated Deals (moved up — its own header + table). */}
       <DealsTable deals={deals || []} contact={contact} company={company} allCompanies={allCompanies} onDealCreated={onDealCreated} />
 
-      {/* 3. Relationship Pulse on the left (tall chart); the right column stacks
-             the Activity Timeline and Calendar to fill the space beside it. */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        <RelationshipPulse activity={activity} loading={activityLoading} />
-        <div className="space-y-4">
-          <RecentActivity activity={activity} loading={activityLoading} />
-          <ContactCalendar activity={activity} loading={activityLoading} onNavigateTab={onNavigateTab} />
+      {/* 3. Overview row: Relationship Pulse on the left (~60%), and on the
+             right (~340px) the Activity Timeline over a compact Calendar. Both
+             columns share one fixed row height, so the timeline scrolls rather
+             than stretching the page. */}
+      <div className="flex flex-col lg:flex-row gap-4 lg:h-[620px]">
+        {/* Left ~60%: the one large graph. */}
+        <div className="flex-1 min-w-0 w-full h-full">
+          <RelationshipPulse activity={activity} loading={activityLoading} />
+        </div>
+        {/* Right rail: the timeline takes the leftover height and scrolls, the
+            calendar stays compact underneath it. */}
+        <div className="w-full lg:w-[340px] flex-shrink-0 flex flex-col gap-4 h-full min-h-0">
+          <div className="flex-1 min-h-0">
+            <RecentActivity activity={activity} loading={activityLoading} />
+          </div>
+          <div className="flex-shrink-0">
+            <ContactCalendar activity={activity} loading={activityLoading} onNavigateTab={onNavigateTab} />
+          </div>
         </div>
       </div>
 
-      {/* 5. Call effectiveness + follow-up load + engagement balance */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* 4. The three supporting graphs, full width beneath the row above. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-stretch">
         <CallEffectiveness activity={activity} loading={activityLoading} />
         <FollowUpLoad activity={activity} loading={activityLoading} />
         <EngagementBalance activity={activity} loading={activityLoading} />

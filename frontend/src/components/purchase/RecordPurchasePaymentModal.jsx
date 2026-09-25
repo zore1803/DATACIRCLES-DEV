@@ -480,12 +480,19 @@ const RecordPurchasePaymentModal = ({ isOpen, onClose, purchase, onSuccess }) =>
 
         {/* Sticky footer */}
         {activeTab === "record" && (
-          <div className="flex-shrink-0 py-2.5 px-6 border-t border-gray-100 bg-white">
+          <div className="flex-shrink-0 py-2.5 px-6 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               form="rpp-form"
               disabled={loading || amountDue <= 0}
-              className="w-full py-2.5 bg-[#158FFF] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-[25px] transition-colors flex items-center justify-center gap-2"
+              className="px-6 py-2 bg-[#158FFF] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-[25px] transition-colors flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
