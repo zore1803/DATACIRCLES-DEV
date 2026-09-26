@@ -51,6 +51,24 @@ const PAYMENT_FILTER_COLUMNS = [
 
 const getPaymentFieldValue = (payment, key) => payment[key];
 
+// How a payment's allocation reads on the row: a bill it paid, a return it
+// refunded, or an invoice it settled. `allocations` is attached by the vendor
+// payments endpoint (getPaymentsForVendor); a row with none is money sitting as
+// unallocated credit.
+const ALLOCATION_LABEL = {
+  Purchase: (n) => ({ text: n ? `Bill ${n}` : "Bill", cls: "bg-blue-50 text-blue-700" }),
+  PurchaseReturn: (n) => ({ text: n ? `Refund ${n}` : "Refund", cls: "bg-emerald-50 text-emerald-700" }),
+  Invoice: (n) => ({ text: n ? `Invoice ${n}` : "Invoice", cls: "bg-violet-50 text-violet-700" }),
+};
+
+const getAllocationTags = (payment) => {
+  const allocs = Array.isArray(payment.allocations) ? payment.allocations : [];
+  return allocs.map((a) => {
+    const make = ALLOCATION_LABEL[a.documentType] || ((n) => ({ text: n || a.documentType, cls: "bg-gray-100 text-gray-600" }));
+    return make(a.number);
+  });
+};
+
 // showKPIs is now controlled by the parent page's own Financial Summary
 // strip toggle (VendorDetailsPageNew.jsx's ⋮ menu "Hide/Show Financial
 // Summary", wired to its showKPI state) instead of an independent button
@@ -80,7 +98,7 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [columnOrder, setColumnOrder] = useState(() => [
-    "selection", "reference_id", "paymentDate", "direction", "paymentType", "bank", "reference", "amount"
+    "selection", "reference_id", "paymentDate", "direction", "paymentType", "bank", "reference", "source", "amount"
   ]);
 
   // "New Entry" menu on the vendor header (VendorDetailsPageNew.jsx) sets
@@ -163,8 +181,10 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
     const term = search.trim().toLowerCase();
     if (term) {
       rows = rows.filter((p) =>
-        [p.direction, p.paymentType, p.bank, p.reference, p.notes, String(p.amount), p._id]
-          .some((v) => String(v || "").toLowerCase().includes(term)),
+        [
+          p.direction, p.paymentType, p.bank, p.reference, p.notes, String(p.amount), p._id,
+          ...(Array.isArray(p.allocations) ? p.allocations.map((a) => a.number) : []),
+        ].some((v) => String(v || "").toLowerCase().includes(term)),
       );
     }
 
@@ -545,6 +565,33 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
             {row.original.reference ? <HighlightText text={row.original.reference} query={search} /> : "—"}
           </span>
         ),
+      },
+      {
+        id: "source",
+        size: 160,
+        header: "Allocated To",
+        cell: ({ row }) => {
+          const tags = getAllocationTags(row.original);
+          if (tags.length === 0) {
+            return <span className="text-xs text-gray-400">Unallocated</span>;
+          }
+          const [first, ...rest] = tags;
+          return (
+            <div className="flex items-center gap-1 min-w-0">
+              <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium truncate ${first.cls}`} title={first.text}>
+                {first.text}
+              </span>
+              {rest.length > 0 && (
+                <span
+                  className="text-[11px] text-gray-500 flex-shrink-0"
+                  title={tags.map((t) => t.text).join(", ")}
+                >
+                  +{rest.length}
+                </span>
+              )}
+            </div>
+          );
+        },
       },
       {
         id: "amount",

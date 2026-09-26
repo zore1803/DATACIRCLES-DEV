@@ -494,6 +494,53 @@ async function reverseAllocationsForPayment(paymentId) {
   return records.length;
 }
 
+// For a set of payments, what each one settled — its allocations resolved to
+// the target document's own number (PUR-…/PR-…/INV-…), so a Gave/Got row on
+// the party's page can show the bill or return it went against. Returns a
+// Map(paymentId -> [{ documentType, documentId, number, amount }]); a payment
+// with no allocation (a standalone Gave/Got sitting as credit) is simply absent
+// from the map.
+async function getAllocationSourcesForPayments({ orgId, paymentIds }) {
+  if (!Array.isArray(paymentIds) || paymentIds.length === 0) return new Map();
+
+  const allocations = await PaymentAllocation.find({
+    organization: orgId,
+    payment: { $in: paymentIds },
+  }).lean();
+
+  // Resolve document numbers one query per type rather than per allocation.
+  const idsByType = {};
+  for (const a of allocations) {
+    (idsByType[a.documentType] ||= new Set()).add(String(a.document));
+  }
+
+  const numberByKey = new Map();
+  await Promise.all(
+    Object.entries(idsByType).map(async ([type, idSet]) => {
+      const cfg = DOC_CONFIG[type];
+      if (!cfg) return;
+      const docs = await cfg.model.find({ _id: { $in: Array.from(idSet) } }).lean();
+      for (const d of docs) {
+        numberByKey.set(`${type}:${String(d._id)}`, cfg.numberOf(d) || "");
+      }
+    })
+  );
+
+  const byPayment = new Map();
+  for (const a of allocations) {
+    const key = String(a.payment);
+    if (!byPayment.has(key)) byPayment.set(key, []);
+    byPayment.get(key).push({
+      documentType: a.documentType,
+      documentId: a.document,
+      number: numberByKey.get(`${a.documentType}:${String(a.document)}`) || "",
+      amount: round2(a.amount),
+    });
+  }
+
+  return byPayment;
+}
+
 // Allocations already recorded against one document, for display alongside
 // its own payments list.
 async function getAllocationsForDocument({ orgId, documentType, documentId }) {
@@ -930,6 +977,7 @@ module.exports = {
   reverseAllocation,
   reverseAllocationsForPayment,
   getAllocationsForDocument,
+  getAllocationSourcesForPayments,
   getCreditBalances,
   recordDocumentPayment,
   updateDocumentPayment,

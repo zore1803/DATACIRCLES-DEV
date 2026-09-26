@@ -377,12 +377,25 @@ exports.getPaymentsForVendor = async (req, res) => {
       return res.status(404).json({ error: "Vendor not found" });
     }
 
-    const payments = await Payment.find({ 
+    const payments = await Payment.find({
       vendor: req.params.vendorId,
       organization: req.user.organization
-    }).populate('vendor', 'name');
+    }).populate('vendor', 'name').lean();
 
-    res.json(payments);
+    // Tag each Gave/Got with what it settled (the bill or return it was
+    // allocated to), so the payments table can show its source instead of an
+    // opaque money row. A standalone payment sitting as credit has no
+    // allocation and simply gets an empty list.
+    const sources = await allocationService.getAllocationSourcesForPayments({
+      orgId: req.user.organization,
+      paymentIds: payments.map((p) => p._id),
+    });
+    const enriched = payments.map((p) => ({
+      ...p,
+      allocations: sources.get(String(p._id)) || [],
+    }));
+
+    res.json(enriched);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
