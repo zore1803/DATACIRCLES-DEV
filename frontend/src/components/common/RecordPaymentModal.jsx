@@ -64,7 +64,6 @@ const RecordPaymentModal = ({ isOpen, onClose, invoice, onSuccess }) => {
     paymentMethod: "Cash",
     reference: "",
     notes: "",
-    internalNotes: "",
   });
   const [wasCapped, setWasCapped] = useState(false);
 
@@ -81,7 +80,6 @@ const RecordPaymentModal = ({ isOpen, onClose, invoice, onSuccess }) => {
         paymentMethod: "Cash",
         reference: "",
         notes: "",
-        internalNotes: "",
       });
       setActiveTab("record");
       setShowMoreDetails(false);
@@ -189,7 +187,6 @@ const RecordPaymentModal = ({ isOpen, onClose, invoice, onSuccess }) => {
         paymentMethod: form.paymentMethod,
         reference: form.reference,
         notes: form.notes,
-        internalNotes: form.internalNotes,
         notifyByEmail: notifyEmail && !!customerEmail,
         customerEmail: notifyEmail ? customerEmail : undefined,
         notifyBySMS: notifySMS && !!customerPhone,
@@ -215,7 +212,7 @@ const RecordPaymentModal = ({ isOpen, onClose, invoice, onSuccess }) => {
       } else {
         toast.success(`${fmt(paymentAmount)} recorded — ${fmt(remaining)} still due`);
         setWasCapped(false);
-        setForm((p) => ({ ...p, amount: remaining.toFixed(2), reference: "", notes: "", internalNotes: "" }));
+        setForm((p) => ({ ...p, amount: remaining.toFixed(2), reference: "", notes: "" }));
         setActiveTab("history");
         onSuccess?.(updated);
       }
@@ -248,8 +245,8 @@ const RecordPaymentModal = ({ isOpen, onClose, invoice, onSuccess }) => {
   };
 
   const fieldClass =
-    "w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 disabled:bg-gray-50 disabled:text-gray-400";
-  const labelClass = "block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2";
+    "w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 disabled:bg-gray-50 disabled:text-gray-400 font-inter";
+  const labelClass = "block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2 font-inter";
 
   return (
     <>
@@ -314,40 +311,13 @@ const RecordPaymentModal = ({ isOpen, onClose, invoice, onSuccess }) => {
         <div className="flex-1 min-h-0 overflow-y-auto">
           {activeTab === "record" ? (
             <form id="rp-form" onSubmit={handleSubmit} noValidate>
-              {/* Payment gateway banner */}
-              <div className="mx-6 mt-4 mb-1 rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 flex items-start gap-3">
-                <div className="mt-0.5 text-blue-500">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="2" y="5" width="20" height="14" rx="2" />
-                    <line x1="2" y1="10" x2="22" y2="10" />
-                  </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-blue-800">Set up Payment Gateway</p>
-                  <p className="text-xs text-blue-600 mt-0.5">Want to get paid faster?</p>
-                </div>
-                <button type="button" className="text-xs font-medium text-blue-600 hover:text-blue-700 whitespace-nowrap">
-                  Connect Now
-                </button>
+              {/* Compact balance line — customer + outstanding balance. */}
+              <div className="px-6 mt-5 mb-4 flex items-center justify-between font-inter">
+                <span className="text-[13px] font-medium text-[#161618]">{customerName}</span>
+                <span className="text-[13px] font-semibold text-red-500">{fmt(amountDue)}</span>
               </div>
 
-              {/* Payment Details header */}
-              <div className="px-6 mt-4 mb-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-                    Payment Details
-                  </p>
-                </div>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-[12px] font-medium text-gray-800">{customerName}</span>
-                  <span className="text-[12px] font-semibold text-red-500">{fmt(amountDue)}</span>
-                </div>
-                <div className="flex items-center justify-between mt-0.5">
-                  <span className="text-[11px] text-gray-400">Balance</span>
-                </div>
-              </div>
-
-              <div className="px-6 space-y-6">
+              <div className="px-6 space-y-5">
                 {/* Amount input */}
                 <div>
                   <label className={labelClass}>
@@ -377,17 +347,10 @@ const RecordPaymentModal = ({ isOpen, onClose, invoice, onSuccess }) => {
                       Capped at the remaining balance of {fmt(amountDue)}.
                     </p>
                   )}
-                  {/* Total / Pending row */}
-                  <div className="flex gap-4 mt-2 text-[11px] text-gray-500">
-                    <span>
-                      Total Amount{" "}
-                      <span className="font-medium text-gray-700">{fmt(totalAmount)}</span>
-                    </span>
-                    <span>
-                      Amount Pending{" "}
-                      <span className="font-medium text-red-500">{fmt(amountDue)}</span>
-                    </span>
-                  </div>
+                  <p className="mt-2 text-[11px] text-gray-500 font-inter">
+                    Total Amount{" "}
+                    <span className="font-medium text-gray-700">{fmt(totalAmount)}</span>
+                  </p>
                 </div>
 
                 {/* Payment Date */}
@@ -459,9 +422,6 @@ const RecordPaymentModal = ({ isOpen, onClose, invoice, onSuccess }) => {
                         placeholder="Your UTR ID for the payment"
                         className={fieldClass}
                       />
-                      <p className="text-[11px] text-gray-400 mt-1.5">
-                        A unique ID for each payment.
-                      </p>
                     </div>
 
                     {/* Notes */}
@@ -477,28 +437,8 @@ const RecordPaymentModal = ({ isOpen, onClose, invoice, onSuccess }) => {
                         disabled={amountDue <= 0}
                         rows={2}
                         placeholder="Your notes on the payment"
-                        className="w-full px-3 py-2 border border-[#1F2937]/10 rounded-2xl text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all disabled:bg-gray-50 resize-none"
+                        className="w-full px-3 py-2 border border-[#1F2937]/10 rounded-2xl text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all disabled:bg-gray-50 resize-none font-inter"
                       />
-                    </div>
-
-                    {/* Internal Notes */}
-                    <div>
-                      <label className={labelClass}>
-                        Internal Notes{" "}
-                        <span className="text-gray-400 font-normal normal-case tracking-normal">(Optional)</span>
-                      </label>
-                      <textarea
-                        name="internalNotes"
-                        value={form.internalNotes}
-                        onChange={handleChange}
-                        disabled={amountDue <= 0}
-                        rows={2}
-                        placeholder="Enter notes here..."
-                        className="w-full px-3 py-2 border border-[#1F2937]/10 rounded-2xl text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all disabled:bg-gray-50 resize-none"
-                      />
-                      <p className="text-[11px] text-gray-400 mt-1.5">
-                        This note is exclusively for internal reference and will not be shown elsewhere.
-                      </p>
                     </div>
 
                     {/* Attachments */}
@@ -697,14 +637,21 @@ const RecordPaymentModal = ({ isOpen, onClose, invoice, onSuccess }) => {
           )}
         </div>
 
-        {/* Sticky footer — Record Payment button, matching the quick-drawer footer spec */}
+        {/* Sticky footer — Cancel + Record Payment, matching the quick-drawer footer spec */}
         {activeTab === "record" && (
-          <div className="flex-shrink-0 py-2.5 px-6 border-t border-gray-100 bg-white">
+          <div className="flex-shrink-0 py-2.5 px-6 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               form="rp-form"
               disabled={loading || amountDue <= 0}
-              className="w-full py-2.5 bg-[#158FFF] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-[25px] transition-colors flex items-center justify-center gap-2"
+              className="px-6 py-2 bg-[#158FFF] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-[25px] transition-colors flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>

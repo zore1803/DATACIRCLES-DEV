@@ -53,7 +53,6 @@ const RecordPurchaseReturnRefundModal = ({ isOpen, onClose, purchaseReturn, onSu
     paymentMethod: "UPI",
     reference: "",
     notes: "",
-    internalNotes: "",
   });
   const [wasCapped, setWasCapped] = useState(false);
 
@@ -72,7 +71,6 @@ const RecordPurchaseReturnRefundModal = ({ isOpen, onClose, purchaseReturn, onSu
         paymentMethod: PAYMENT_TYPES.includes(localReturn.mode) ? localReturn.mode : "UPI",
         reference: "",
         notes: "",
-        internalNotes: "",
       });
       setActiveTab("record");
       setShowMoreDetails(false);
@@ -133,7 +131,6 @@ const RecordPurchaseReturnRefundModal = ({ isOpen, onClose, purchaseReturn, onSu
         paymentMethod: form.paymentMethod,
         reference: form.reference,
         notes: form.notes,
-        internalNotes: form.internalNotes,
       });
 
       const updated = res.data?.purchaseReturn;
@@ -151,7 +148,7 @@ const RecordPurchaseReturnRefundModal = ({ isOpen, onClose, purchaseReturn, onSu
       } else {
         toast.success(`${fmt(refundAmount)} refund recorded — ${fmt(remaining)} still due`);
         setWasCapped(false);
-        setForm((p) => ({ ...p, amount: remaining.toFixed(2), reference: "", notes: "", internalNotes: "" }));
+        setForm((p) => ({ ...p, amount: remaining.toFixed(2), reference: "", notes: "" }));
         setActiveTab("history");
         onSuccess?.(updated);
       }
@@ -393,25 +390,6 @@ const RecordPurchaseReturnRefundModal = ({ isOpen, onClose, purchaseReturn, onSu
                       />
                     </div>
 
-                    {/* Internal Notes */}
-                    <div>
-                      <label className={labelClass}>
-                        Internal Notes{" "}
-                        <span className="text-gray-400 font-normal normal-case tracking-normal">(Optional)</span>
-                      </label>
-                      <textarea
-                        name="internalNotes"
-                        value={form.internalNotes}
-                        onChange={handleChange}
-                        disabled={amountDue <= 0}
-                        rows={2}
-                        placeholder="Enter notes here..."
-                        className="w-full px-3 py-2 border border-[#1F2937]/10 rounded-2xl text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all disabled:bg-gray-50 resize-none"
-                      />
-                      <p className="text-[11px] text-gray-400 mt-1.5">
-                        This note is exclusively for internal reference and will not be shown elsewhere.
-                      </p>
-                    </div>
                   </div>
                 )}
                 {!showMoreDetails && <div className="pb-2" />}

@@ -22,7 +22,7 @@ import {
   PinOff,
   CheckSquare,
   ClipboardList,
-  DollarSign,
+  RotateCcw,
   CheckCircle2,
   Share2,
   MessageCircle,
@@ -762,13 +762,17 @@ const SalesReturn = () => {
                 <EyeIcon className="w-3.5 h-3.5 text-blue-600" />
                 View
               </button>
-              <button
-                onClick={() => { close(); openEdit(row); }}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
-              >
-                <EditIcon className="w-3.5 h-3.5 text-blue-600" />
-                Edit
-              </button>
+              {/* Once a refund is recorded (Partial/Paid) the return is settled
+                  against real money and becomes view-only — matches the backend. */}
+              {!["Partial", "Paid"].includes(row.status) && (
+                <button
+                  onClick={() => { close(); openEdit(row); }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                >
+                  <EditIcon className="w-3.5 h-3.5 text-blue-600" />
+                  Edit
+                </button>
+              )}
               <button
                 onClick={() => { close(); handleDownload(row); }}
                 className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
@@ -807,9 +811,9 @@ const SalesReturn = () => {
               {["Confirmed", "Partial"].includes(row.status) && (
                 <button
                   onClick={() => { close(); setRefundReturn(row); setShowRefundModal(true); }}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-blue-600 hover:bg-blue-50 whitespace-nowrap"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
-                  <DollarSign className="w-3.5 h-3.5" />
+                  <RotateCcw className="w-3.5 h-3.5 text-emerald-600" />
                   Record Refund
                 </button>
               )}
@@ -818,7 +822,7 @@ const SalesReturn = () => {
               {row.status === "Partial" && (
                 <button
                   onClick={() => { close(); handleMarkComplete(row); }}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-emerald-700 hover:bg-emerald-50 whitespace-nowrap"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                   Mark as Complete Refund
@@ -1642,7 +1646,7 @@ const SalesReturn = () => {
         salesReturn={previewReturn}
         isOpen={showPreview}
         onClose={closePreview}
-        onEdit={() => { closePreview(); openEdit(previewReturn); }}
+        onEdit={["Partial", "Paid"].includes(previewReturn?.status) ? undefined : () => { closePreview(); openEdit(previewReturn); }}
         onDelete={() => { closePreview(); handleDelete(previewReturn._id); }}
       />
 

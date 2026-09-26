@@ -769,13 +769,17 @@ const PurchaseReturn = () => {
                     <EyeIcon className="w-3.5 h-3.5 text-blue-600" />
                     View
                   </button>
-                  <button
-                    onClick={() => { closeRowMenu(); handleEdit(p); }}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
-                  >
-                    <EditIcon className="w-3.5 h-3.5 text-blue-600" />
-                    Edit
-                  </button>
+                  {/* Once a refund is recorded (Partial/Paid) the return is settled
+                      against real money and becomes view-only — matches the backend. */}
+                  {!["Partial", "Paid"].includes(p.status) && (
+                    <button
+                      onClick={() => { closeRowMenu(); handleEdit(p); }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                    >
+                      <EditIcon className="w-3.5 h-3.5 text-blue-600" />
+                      Edit
+                    </button>
+                  )}
                   <button
                     onClick={() => { closeRowMenu(); handleDownload(p); }}
                     className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
@@ -1808,7 +1812,7 @@ const PurchaseReturn = () => {
           purchaseReturn={selectedReturn}
           isOpen={showPreview}
           onClose={() => setShowPreview(false)}
-          onEdit={() => {
+          onEdit={["Partial", "Paid"].includes(selectedReturn?.status) ? undefined : () => {
             setShowPreview(false);
             handleEdit(selectedReturn);
           }}

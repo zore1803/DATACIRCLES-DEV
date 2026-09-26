@@ -484,6 +484,16 @@ exports.updateSalesReturn = async (req, res) => {
     const salesReturn = await SalesReturn.findOne({ _id: req.params.id, organization: req.user.organization });
     if (!salesReturn) return res.status(404).json({ message: "Sales return not found" });
 
+    // Once a refund is recorded (Partial or Paid) the return is settled against
+    // real money: editing the lines would move the total away from what was
+    // refunded, so it becomes view-only. Refunds have their own endpoints and
+    // still work, as does cancelling (updateSalesReturnStatus).
+    if (salesReturn.status === "Paid" || salesReturn.status === "Partial") {
+      return res.status(400).json({
+        message: "This sales return has refunds recorded and can no longer be edited. Remove its refunds first if it needs to change.",
+      });
+    }
+
     const { items, notes, reason, status, transactionType, gstRate, refundMode, returnDate } = req.body;
 
     const oldStatus = salesReturn.status;
@@ -621,7 +631,7 @@ exports.getSalesReturnRefunds = async (req, res) => {
 // POST /sales-returns/:id/payments
 exports.addSalesReturnRefund = async (req, res) => {
   try {
-    const { amount, paymentDate, paymentMethod, reference, notes, internalNotes } = req.body;
+    const { amount, paymentDate, paymentMethod, reference, notes } = req.body;
 
     const parsedAmount = parseFloat(amount);
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
@@ -672,16 +682,6 @@ exports.addSalesReturnRefund = async (req, res) => {
     // copy of the document.
     const updated = await SalesReturn.findById(salesReturn._id);
 
-    // internalNotes has no equivalent on the money row, so it goes straight
-    // onto the subdoc the service just pushed.
-    if (internalNotes) {
-      const subdoc = updated.payments[updated.payments.length - 1];
-      if (subdoc) {
-        subdoc.internalNotes = internalNotes;
-        await updated.save({ validateModifiedOnly: true });
-      }
-    }
-
     await updated.populate(POPULATE);
     res.json({ message: "Refund recorded successfully", salesReturn: updated });
   } catch (err) {
@@ -727,7 +727,7 @@ exports.settleSalesReturnRefund = async (req, res) => {
 // PUT /sales-returns/:id/payments/:paymentId
 exports.updateSalesReturnRefund = async (req, res) => {
   try {
-    const { amount, paymentDate, paymentMethod, reference, notes, internalNotes } = req.body;
+    const { amount, paymentDate, paymentMethod, reference, notes } = req.body;
 
     let result;
     try {
@@ -751,13 +751,6 @@ exports.updateSalesReturnRefund = async (req, res) => {
     }
 
     const salesReturn = result.document;
-    if (internalNotes !== undefined) {
-      const subdoc = salesReturn.payments.id(req.params.paymentId);
-      if (subdoc) {
-        subdoc.internalNotes = internalNotes;
-        await salesReturn.save({ validateModifiedOnly: true });
-      }
-    }
 
     await salesReturn.populate(POPULATE);
     res.json({ message: "Refund updated successfully", salesReturn });

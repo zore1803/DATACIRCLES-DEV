@@ -1,5 +1,7 @@
 import PlusIcon from "../common/PlusIcon";
 import MoreIcon from "../common/MoreIcon";
+import EmptyState from "../common/EmptyState";
+import { Handshake } from "lucide-react";
 import EyeIcon from "../common/EyeIcon";
 import EditIcon from "../common/EditIcon";
 import DeleteIcon from "../common/DeleteIcon";
@@ -170,22 +172,13 @@ const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCre
               ) : (
                 <tbody>
                   <tr>
-                    <td colSpan="5" className="px-4 py-12 text-center text-gray-500">
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
-                          <PlusIcon className="w-4 h-4 text-gray-400" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900 mb-1">No deals yet</p>
-                          <p className="text-xs text-gray-600">Create your first deal to get started</p>
-                        </div>
-                        <button
-                          onClick={() => setShowQuickDealForm(true)}
-                          className="px-4 py-2 bg-[#0085FF] text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
-                        >
-                          Create Deal
-                        </button>
-                      </div>
+                    <td colSpan="5">
+                      <EmptyState
+                        icon={Handshake}
+                        noun="Deal"
+                        onCreate={() => setShowQuickDealForm(true)}
+                        className="!py-8"
+                      />
                     </td>
                   </tr>
                 </tbody>

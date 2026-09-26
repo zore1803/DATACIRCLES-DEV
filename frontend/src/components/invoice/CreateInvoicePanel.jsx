@@ -1752,35 +1752,24 @@ const CreateInvoicePanel = ({
                   the Invoice Date is edited later, the existing Due Date is
                   left as-is unless a quick-set button is clicked again. */}
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span
-                  className={`text-[11px] font-medium ${form.date ? "text-[#99A0AE]" : "text-[#C9CFD8]"}`}
-                >
+                <span className="text-[11px] font-medium text-[#99A0AE]">
                   Quick set:
                 </span>
                 {[7, 15, 30].map((days) => (
                   <button
                     key={days}
                     type="button"
-                    disabled={!form.date}
-                    title={
-                      form.date
-                        ? `Set Due Date to ${days} days after the ${docName} date`
-                        : `Select the ${docName} date first`
-                    }
+                    title={`Set Due Date to ${days} days after the ${docName} date`}
                     onClick={() => {
-                      if (!form.date) {
-                        setFieldErrors((prev) => ({ ...prev, date: true }));
-                        return;
-                      }
-                      const d = new Date(form.date);
-                      d.setDate(d.getDate() + days);
-                      setField("dueDate", d.toISOString().split("T")[0]);
+                      setForm((prev) => {
+                        // Base on the document date; if blank, fill it with today first.
+                        const start = prev.date || new Date().toISOString().split("T")[0];
+                        const d = new Date(start);
+                        d.setDate(d.getDate() + days);
+                        return { ...prev, date: start, dueDate: d.toISOString().split("T")[0] };
+                      });
                     }}
-                    className={`h-6 px-2.5 text-[11px] font-medium rounded-full border-none focus:outline-none transition-colors ${
-                      form.date
-                        ? "text-[#525866] bg-[#F5F7FA] hover:bg-[#E1E4EA] cursor-pointer"
-                        : "text-[#C9CFD8] bg-[#F5F7FA] cursor-not-allowed"
-                    }`}
+                    className="h-6 px-2.5 text-[11px] font-medium rounded-full border-none focus:outline-none transition-colors text-[#525866] bg-[#F5F7FA] hover:bg-[#E1E4EA] cursor-pointer"
                   >
                     {days} days
                   </button>

@@ -260,7 +260,7 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
   };
 
   const fieldClass =
-    "w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all";
+    "w-full border border-[#1F2937]/10 rounded-full px-3 h-8 bg-white text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all";
   const labelClass = "block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2";
 
   return (
@@ -271,10 +271,10 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
         onClick={handleClose}
       />
       <div
-        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ease-out ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
+        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0 bg-white gap-1">
           <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
             {isEditing ? `Edit Return ${editingReturn.returnNumber}` : "New Purchase Return"}
           </h2>
@@ -289,7 +289,7 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
           </button>
         </div>
 
-        <form id="pr-form" onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto px-6 py-6 space-y-6">
+        <form id="pr-form" onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto px-5 py-5 space-y-6">
           <div>
             <label className={labelClass}>Against Purchase *</label>
             <SearchableDropdown

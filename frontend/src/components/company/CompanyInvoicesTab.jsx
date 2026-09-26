@@ -232,10 +232,11 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
     if (autoOpenCreate) onAutoOpenCreateConsumed?.();
   };
   const openEditInvoice = (invoice) => {
-    // Settled invoices are view-only — guarded here so the quick-view drawer's
-    // Edit is covered too, not just the row menu. The backend refuses it as well.
-    if (invoice?.status === "Paid") {
-      toast.error("This invoice is fully paid and can no longer be edited.");
+    // Once any payment is recorded (Partially Paid/Paid) the invoice is settled
+    // and view-only — guarded here so the quick-view drawer's Edit is covered
+    // too, not just the row menu. The backend refuses it as well.
+    if (invoice?.status === "Paid" || invoice?.status === "Partially Paid") {
+      toast.error("This invoice has payments recorded and can no longer be edited.");
       return;
     }
     setEditInvoice(invoice);

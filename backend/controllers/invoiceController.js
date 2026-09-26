@@ -896,15 +896,16 @@ const updateInvoice = async (req, res) => {
       }
     }
 
-    // A Paid invoice is settled: its amount is what the customer actually paid.
-    // Editing the lines would move the total away from the money already
-    // recorded against it, so it becomes view-only. Recording or removing a
-    // payment still works — those have their own endpoints.
-    if (invoice.status === "Paid") {
+    // Once any payment is recorded (Partially Paid or Paid) the invoice is
+    // settled against real money: editing the lines would move the total away
+    // from what was collected, so it becomes view-only. Recording or removing a
+    // payment still works — those have their own endpoints, as does cancelling
+    // (updateStatus).
+    if (invoice.status === "Paid" || invoice.status === "Partially Paid") {
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({
-        error: "This invoice is fully paid and can no longer be edited. Remove a payment first if it needs to change.",
+        error: "This invoice has payments recorded and can no longer be edited. Remove its payments first if it needs to change.",
       });
     }
 
@@ -1414,7 +1415,7 @@ const bulkEmailGrouped = async (req, res) => {
 // "Save Payment" click hit a 404 and surfaced as "Failed to record payment".
 const addInvoicePayment = async (req, res) => {
   try {
-    const { amount, paymentDate, paymentMethod, reference, notes, internalNotes,
+    const { amount, paymentDate, paymentMethod, reference, notes,
       notifyByEmail, customerEmail, notifyBySMS, customerPhone, signatureUrl } = req.body;
 
     const parsedAmount = parseFloat(amount);
@@ -1463,16 +1464,6 @@ const addInvoicePayment = async (req, res) => {
 
     // Reloaded because the service wrote the subdoc and status on its own copy.
     const updated = await Invoice.findById(invoice._id);
-
-    // internalNotes has no equivalent on the money row, so it's written straight
-    // onto the subdoc the service just pushed.
-    if (internalNotes) {
-      const subdoc = updated.payments[updated.payments.length - 1];
-      if (subdoc) {
-        subdoc.internalNotes = internalNotes;
-        await updated.save({ validateModifiedOnly: true });
-      }
-    }
 
     const newTotalPaid = (updated.payments || []).reduce((sum, p) => sum + p.amount, 0);
 
@@ -1550,7 +1541,7 @@ const getInvoicePayments = async (req, res) => {
 
 const updateInvoicePayment = async (req, res) => {
   try {
-    const { amount, paymentDate, paymentMethod, reference, notes, internalNotes } = req.body;
+    const { amount, paymentDate, paymentMethod, reference, notes } = req.body;
 
     // Amount, ceiling and status are all recomputed by the service, which keeps
     // the money row (the customer's "Got") and its allocation in step with the
@@ -1578,13 +1569,6 @@ const updateInvoicePayment = async (req, res) => {
     }
 
     const invoice = result.document;
-    if (internalNotes !== undefined) {
-      const subdoc = invoice.payments.id(req.params.paymentId);
-      if (subdoc) {
-        subdoc.internalNotes = internalNotes;
-        await invoice.save({ validateModifiedOnly: true });
-      }
-    }
 
     res.json({ message: "Payment updated successfully", invoice });
   } catch (error) {

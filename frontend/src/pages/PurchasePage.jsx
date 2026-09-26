@@ -508,10 +508,11 @@ const PurchasePage = () => {
   };
 
   const handleEdit = (purchase) => {
-    // Settled purchases are view-only — guarded here so the preview drawer's
-    // Edit is covered too, not just the row menu. The backend refuses it as well.
-    if (purchase?.status === "Paid") {
-      toast.error("This purchase is fully paid and can no longer be edited.");
+    // Once any payment is recorded (Partial/Paid) the purchase is settled and
+    // view-only — guarded here so the preview drawer's Edit is covered too, not
+    // just the row menu. The backend refuses it as well.
+    if (purchase?.status === "Paid" || purchase?.status === "Partial") {
+      toast.error("This purchase has payments recorded and can no longer be edited.");
       return;
     }
     setEditingPurchase(purchase);

@@ -1768,9 +1768,13 @@ const QuotationForm = ({
                         type="button"
                         className="text-[11px] font-medium px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200 transition-colors"
                         onClick={() => {
-                          const newDate = new Date();
-                          newDate.setDate(newDate.getDate() + days);
-                          setForm(prev => ({ ...prev, dueDate: newDate.toISOString().split('T')[0] }));
+                          setForm(prev => {
+                            // Base the due date on the document date; if it's blank, fill it with today first.
+                            const start = prev.date || new Date().toISOString().split('T')[0];
+                            const due = new Date(start);
+                            due.setDate(due.getDate() + days);
+                            return { ...prev, date: start, dueDate: due.toISOString().split('T')[0] };
+                          });
                           setHasUnsavedChanges(true);
                         }}
                       >

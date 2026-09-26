@@ -319,6 +319,7 @@ export default function PaymentsTimeline() {
   const [loadingSelfTransfer, setLoadingSelfTransfer] = useState(false);
   const [fromDropdownOpen, setFromDropdownOpen] = useState(false);
   const [toDropdownOpen, setToDropdownOpen] = useState(false);
+  const [selfTransferSliding, setSelfTransferSliding] = useState(false);
 
   const [openActionMenuId,  setOpenActionMenuId]  = useState(null);
   const [actionMenuPos,     setActionMenuPos]     = useState(null);
@@ -845,7 +846,24 @@ export default function PaymentsTimeline() {
     setSelfTransferAmount("");
     setSelfTransferDate(new Date().toISOString().slice(0, 10));
     setSelfTransferNotes("");
+    setFromDropdownOpen(false);
+    setToDropdownOpen(false);
     setShowSelfTransferModal(true);
+  };
+
+  // Slide the drawer in on the next frame once it mounts.
+  useEffect(() => {
+    if (!showSelfTransferModal) return;
+    const t = requestAnimationFrame(() => setSelfTransferSliding(true));
+    return () => cancelAnimationFrame(t);
+  }, [showSelfTransferModal]);
+
+  // Slide out, then unmount after the transition.
+  const handleCloseSelfTransfer = () => {
+    setSelfTransferSliding(false);
+    setFromDropdownOpen(false);
+    setToDropdownOpen(false);
+    setTimeout(() => setShowSelfTransferModal(false), 300);
   };
 
   const handleSelfTransferSubmit = async (e) => {
@@ -912,7 +930,7 @@ export default function PaymentsTimeline() {
       });
 
       toast.success("Self transfer completed successfully!");
-      setShowSelfTransferModal(false);
+      handleCloseSelfTransfer();
       fetchData(); // Refresh timeline entries and balances
     } catch (err) {
       console.error("Self transfer failed:", err);
@@ -2337,39 +2355,52 @@ export default function PaymentsTimeline() {
         const selectedFromAcc = transferAccounts.find(a => a.id === selfTransferFromBankId);
         const selectedToAcc = transferAccounts.find(a => a.id === selfTransferToBankId);
         return (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl max-w-xl w-full p-8 shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95 duration-150 relative">
-
-              <button
-                type="button"
-                onClick={() => setShowSelfTransferModal(false)}
-                className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-full transition-colors cursor-pointer"
-              >
-                <X size={20} />
-              </button>
-
-              <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                <ArrowLeftRight size={22} className="text-[#0085FF]" />
-                Self Transfer Funds
-              </h3>
-
-              <div className="mb-5 flex items-start gap-2.5 bg-amber-50 border border-amber-200 text-amber-800 p-3.5 rounded-xl text-xs leading-relaxed">
-                <svg className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                <div>
-                  <span className="font-bold">Important Notice:</span> We aren't actually transferring money. This transfer only affects internal bank balances. It does not change actual bank balances.
-                </div>
+          <>
+            <div
+              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100000] transition-opacity duration-300"
+              style={{ opacity: selfTransferSliding ? 1 : 0 }}
+              onClick={handleCloseSelfTransfer}
+              aria-hidden="true"
+            />
+            <div
+              className={`fixed dc-panel-card dc-panel-w bg-white shadow-2xl flex flex-col z-[100001] overflow-hidden transform transition-transform duration-300 ease-out ${selfTransferSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
+                <h2 className="flex items-center gap-2 text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
+                  <ArrowLeftRight size={18} className="text-[#158FFF]" />
+                  Self Transfer Funds
+                </h2>
+                <button
+                  type="button"
+                  onClick={handleCloseSelfTransfer}
+                  title="Close"
+                  className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity"
+                  aria-label="Close"
+                >
+                  <X className="w-[18px] h-[18px]" strokeWidth={2} />
+                </button>
               </div>
 
-              <form onSubmit={handleSelfTransferSubmit} className="space-y-5">
+              <div className="overflow-y-auto flex-1 px-8 py-6">
+                <div className="mb-5 flex items-start gap-2.5 bg-amber-50 border border-amber-200 text-amber-800 p-3.5 rounded-xl text-xs leading-relaxed">
+                  <svg className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                  <div>
+                    <span className="font-bold">Important Notice:</span> We aren't actually transferring money. This transfer only affects internal bank balances. It does not change actual bank balances.
+                  </div>
+                </div>
+
+                <form id="self-transfer-form" onSubmit={handleSelfTransferSubmit} className="space-y-5">
 
                 <div className="relative">
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
                     Transfer From
                   </label>
                   <button
                     type="button"
                     onClick={() => { setFromDropdownOpen(!fromDropdownOpen); setToDropdownOpen(false); }}
-                    className="w-full h-11 px-3 py-2 border border-[#E1E4EA] rounded-lg focus:outline-none focus:border-[#0085FF] focus:ring-1 focus:ring-[#0085FF] bg-white text-sm font-medium text-gray-700 cursor-pointer flex items-center justify-between"
+                    className="w-full h-[38px] px-3 border border-[#1F2937]/10 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[13px] font-medium text-[#1F2937] cursor-pointer flex items-center justify-between transition-all"
                   >
                     <div className="flex items-center gap-2">
                       {selectedFromAcc ? (
@@ -2397,7 +2428,7 @@ export default function PaymentsTimeline() {
                   {fromDropdownOpen && (
                     <>
                       <div className="fixed inset-0 z-[10001]" onClick={() => setFromDropdownOpen(false)} />
-                      <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl py-1 z-[10002] animate-in fade-in slide-in-from-top-1 duration-100">
+                      <div className="absolute left-0 right-0 mt-1.5 max-h-60 overflow-y-auto bg-white border border-gray-100 rounded-2xl shadow-xl py-1 z-[10002] animate-in fade-in slide-in-from-top-1 duration-100">
                         {transferAccounts.map((acc) => (
                           <button
                             key={acc.id}
@@ -2442,13 +2473,13 @@ export default function PaymentsTimeline() {
                 </div>
 
                 <div className="relative">
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
                     Transfer To
                   </label>
                   <button
                     type="button"
                     onClick={() => { setToDropdownOpen(!toDropdownOpen); setFromDropdownOpen(false); }}
-                    className="w-full h-11 px-3 py-2 border border-[#E1E4EA] rounded-lg focus:outline-none focus:border-[#0085FF] focus:ring-1 focus:ring-[#0085FF] bg-white text-sm font-medium text-gray-700 cursor-pointer flex items-center justify-between"
+                    className="w-full h-[38px] px-3 border border-[#1F2937]/10 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[13px] font-medium text-[#1F2937] cursor-pointer flex items-center justify-between transition-all"
                   >
                     <div className="flex items-center gap-2">
                       {selectedToAcc ? (
@@ -2476,7 +2507,7 @@ export default function PaymentsTimeline() {
                   {toDropdownOpen && (
                     <>
                       <div className="fixed inset-0 z-[10001]" onClick={() => setToDropdownOpen(false)} />
-                      <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl py-1 z-[10002] animate-in fade-in slide-in-from-top-1 duration-100">
+                      <div className="absolute left-0 right-0 mt-1.5 max-h-60 overflow-y-auto bg-white border border-gray-100 rounded-2xl shadow-xl py-1 z-[10002] animate-in fade-in slide-in-from-top-1 duration-100">
                         {transferAccounts
                           .filter(acc => acc.id !== selfTransferFromBankId)
                           .map((acc) => (
@@ -2520,7 +2551,7 @@ export default function PaymentsTimeline() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
                     Amount (₹)
                   </label>
                   {(() => {
@@ -2534,12 +2565,12 @@ export default function PaymentsTimeline() {
                         placeholder="Enter transfer amount"
                         value={selfTransferAmount}
                         onChange={(e) => setSelfTransferAmount(e.target.value)}
-                        className={`w-full h-11 px-3 py-2 border rounded-lg focus:outline-none focus:ring-1 text-sm font-bold transition-all ${
+                        className={`w-full h-[38px] px-3 border rounded-full focus:outline-none focus:ring-1 text-[13px] font-bold transition-all ${
                           isOverdraft
                             ? "border-red-500 bg-red-50/10 focus:ring-red-500 text-red-600"
                             : selfTransferAmount
                               ? "border-emerald-300 bg-emerald-50/10 focus:border-emerald-500 focus:ring-emerald-500 text-emerald-600"
-                              : "border-[#E1E4EA] focus:border-[#0085FF] focus:ring-[#0085FF] text-gray-700"
+                              : "border-[#1F2937]/10 focus:ring-blue-500 text-[#1F2937]"
                         }`}
                       />
                     );
@@ -2547,7 +2578,7 @@ export default function PaymentsTimeline() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
                     Transfer Date
                   </label>
                   <input
@@ -2555,12 +2586,12 @@ export default function PaymentsTimeline() {
                     required
                     value={selfTransferDate}
                     onChange={(e) => setSelfTransferDate(e.target.value)}
-                    className="w-full h-11 px-3 py-2 border border-[#E1E4EA] rounded-lg focus:outline-none focus:border-[#0085FF] focus:ring-1 focus:ring-[#0085FF] text-sm cursor-pointer"
+                    className="w-full h-[38px] px-3 border border-[#1F2937]/10 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500 text-[13px] text-[#1F2937] cursor-pointer transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
                     Notes
                   </label>
                   <input
@@ -2568,36 +2599,40 @@ export default function PaymentsTimeline() {
                     placeholder="Optional internal notes..."
                     value={selfTransferNotes}
                     onChange={(e) => setSelfTransferNotes(e.target.value)}
-                    className="w-full h-11 px-3 py-2 border border-[#E1E4EA] rounded-lg focus:outline-none focus:border-[#0085FF] focus:ring-1 focus:ring-[#0085FF] text-sm"
+                    className="w-full h-[38px] px-3 border border-[#1F2937]/10 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500 text-[13px] text-[#1F2937] transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
                   />
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowSelfTransferModal(false)}
-                    className="px-5 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loadingSelfTransfer}
-                    className="px-5 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded-lg transition-colors shadow-sm cursor-pointer flex items-center gap-2"
-                  >
-                    {loadingSelfTransfer ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Transferring...
-                      </>
-                    ) : (
-                      "Transfer Funds"
-                    )}
-                  </button>
-                </div>
-              </form>
+                </form>
+              </div>
+
+              {/* Footer */}
+              <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleCloseSelfTransfer}
+                  className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  form="self-transfer-form"
+                  disabled={loadingSelfTransfer}
+                  className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                >
+                  {loadingSelfTransfer ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Transferring...
+                    </>
+                  ) : (
+                    "Transfer Funds"
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
+          </>
         );
       })()}
 

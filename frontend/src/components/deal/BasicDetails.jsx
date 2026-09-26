@@ -797,7 +797,7 @@ const BasicDetails = ({ deal }) => {
 
         {/* INVOICE AGING MATRIX (BAR CHART) */}
         <div className="bg-white p-6 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col text-left" style={{ minHeight: 300 }}>
-          <h3 className="text-sm font-semibold text-[#0E121B] mb-3">Invoice Aging Matrix</h3>
+          <h3 className="text-sm font-semibold text-[#0E121B] mb-3">Invoice Status</h3>
           <div className="flex-1" style={{ minHeight: 220 }}>
             {invoiceAging ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -850,7 +850,7 @@ const BasicDetails = ({ deal }) => {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-               <div className="flex items-center justify-center h-full text-[11px] font-medium text-gray-500">No invoices found</div>
+               <div className="flex items-center justify-center h-full text-[11px] font-medium text-gray-500">No invoices raised for this deal yet</div>
             )}
           </div>
         </div>
@@ -862,7 +862,7 @@ const BasicDetails = ({ deal }) => {
         <div className="bg-white p-6 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col text-left min-h-[300px]">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold text-[#0E121B]">Revenue Composition</h3>
+              <h3 className="text-sm font-semibold text-[#0E121B]">Revenue Breakdown</h3>
               <p className="text-xs text-[#525866] mt-1">What this deal is billing for.</p>
             </div>
             {itemsTotal > 0 && (
@@ -877,7 +877,7 @@ const BasicDetails = ({ deal }) => {
 
           {topItems.length === 0 ? (
             <div className="flex-1 flex items-center justify-center text-[11px] font-medium text-gray-500">
-              No line items invoiced yet
+              Nothing billed to this deal yet
             </div>
           ) : (
             <>
@@ -968,7 +968,7 @@ const BasicDetails = ({ deal }) => {
         <div className="bg-white p-6 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col text-left min-h-[300px]">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold text-[#0E121B]">Billing Cadence</h3>
+              <h3 className="text-sm font-semibold text-[#0E121B]">Billing Timeline</h3>
               <p className="text-xs text-[#525866] mt-1">
                 What was billed each month against what came in.
               </p>
@@ -978,7 +978,7 @@ const BasicDetails = ({ deal }) => {
 
           {!cadence ? (
             <div className="flex-1 flex items-center justify-center text-[11px] font-medium text-gray-500">
-              No invoices to chart yet
+              No billing history to show yet
             </div>
           ) : (
             <>

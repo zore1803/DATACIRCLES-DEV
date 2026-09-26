@@ -1469,11 +1469,12 @@ const Accounting = () => {
   // longer opens the legacy per-type *Form.jsx components. CreateInvoicePanel
   // does its own item/date normalization from the raw doc, same as the
   // number-click handler below.
-  // A Paid tax invoice is settled: its amount is what the customer actually
-  // paid, so it's view-only. The backend refuses the edit too.
-  const isSettledInvoice = (doc, type) => type === "tax" && doc?.status === "Paid";
+  // Once any payment is recorded (Partially Paid/Paid) a tax invoice is settled
+  // against real money, so it's view-only. The backend refuses the edit too.
+  const isSettledInvoice = (doc, type) =>
+    type === "tax" && (doc?.status === "Paid" || doc?.status === "Partially Paid");
   const refuseSettledEdit = () =>
-    toast.error("This invoice is fully paid and can no longer be edited.");
+    toast.error("This invoice has payments recorded and can no longer be edited.");
 
   const handleEdit = (doc, type) => {
     if (isSettledInvoice(doc, type)) return refuseSettledEdit();

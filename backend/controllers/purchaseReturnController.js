@@ -483,6 +483,16 @@ exports.updatePurchaseReturn = async (req, res) => {
     });
     if (!purchaseReturn) return res.status(404).json({ message: "Purchase return not found" });
 
+    // Once a refund is recorded (Partial or Paid) the return is settled against
+    // real money back from the vendor: editing the lines would move the total
+    // away from what was refunded, so it becomes view-only. Refunds have their
+    // own endpoints and still work, as does cancelling (updatePurchaseReturnStatus).
+    if (purchaseReturn.status === "Paid" || purchaseReturn.status === "Partial") {
+      return res.status(400).json({
+        message: "This purchase return has refunds recorded and can no longer be edited. Remove its refunds first if it needs to change.",
+      });
+    }
+
     const { items, notes, status, mode, reason, returnDate } = req.body;
 
     // Captured before any field changes below, so the Confirmed stock sync
@@ -791,7 +801,7 @@ exports.getPurchaseReturnRefunds = async (req, res) => {
 // POST /purchase-returns/:id/payments
 exports.addPurchaseReturnRefund = async (req, res) => {
   try {
-    const { amount, paymentDate, paymentMethod, reference, notes, internalNotes } = req.body;
+    const { amount, paymentDate, paymentMethod, reference, notes } = req.body;
 
     const parsedAmount = parseFloat(amount);
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
@@ -842,16 +852,6 @@ exports.addPurchaseReturnRefund = async (req, res) => {
     // copy of the document.
     const updated = await PurchaseReturn.findById(purchaseReturn._id);
 
-    // internalNotes has no equivalent on the money row, so it goes straight
-    // onto the subdoc the service just pushed.
-    if (internalNotes) {
-      const subdoc = updated.payments[updated.payments.length - 1];
-      if (subdoc) {
-        subdoc.internalNotes = internalNotes;
-        await updated.save({ validateModifiedOnly: true });
-      }
-    }
-
     await updated.populate(POPULATE);
     res.json({ message: "Refund recorded successfully", purchaseReturn: updated });
   } catch (err) {
@@ -862,7 +862,7 @@ exports.addPurchaseReturnRefund = async (req, res) => {
 // PUT /purchase-returns/:id/payments/:paymentId
 exports.updatePurchaseReturnRefund = async (req, res) => {
   try {
-    const { amount, paymentDate, paymentMethod, reference, notes, internalNotes } = req.body;
+    const { amount, paymentDate, paymentMethod, reference, notes } = req.body;
 
     let result;
     try {
@@ -886,13 +886,6 @@ exports.updatePurchaseReturnRefund = async (req, res) => {
     }
 
     const purchaseReturn = result.document;
-    if (internalNotes !== undefined) {
-      const subdoc = purchaseReturn.payments.id(req.params.paymentId);
-      if (subdoc) {
-        subdoc.internalNotes = internalNotes;
-        await purchaseReturn.save({ validateModifiedOnly: true });
-      }
-    }
 
     await purchaseReturn.populate(POPULATE);
     res.json({ message: "Refund updated successfully", purchaseReturn });

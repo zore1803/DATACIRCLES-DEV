@@ -487,13 +487,13 @@ exports.updatePurchase = async (req, res) => {
       return res.status(403).json({ message: "You can only edit purchases you own" });
     }
 
-    // A Paid purchase is settled: its total is what was actually paid to the
-    // vendor. Editing the lines would move that total away from the money
-    // already recorded, so it becomes view-only. Payments have their own
-    // endpoints and still work.
-    if (purchase.status === "Paid") {
+    // Once any payment is recorded (Partial or Paid) the purchase is settled
+    // against real money to the vendor. Editing the lines would move the total
+    // away from what was paid, so it becomes view-only. Payments have their own
+    // endpoints and still work, as does cancelling (updatePurchaseStatus).
+    if (purchase.status === "Paid" || purchase.status === "Partial") {
       return res.status(400).json({
-        message: "This purchase is fully paid and can no longer be edited. Remove a payment first if it needs to change.",
+        message: "This purchase has payments recorded and can no longer be edited. Remove its payments first if it needs to change.",
       });
     }
 
@@ -805,7 +805,7 @@ exports.getPurchasePayments = async (req, res) => {
 // touched here — see the note on updatePurchase/updatePurchaseStatus above.
 exports.addPurchasePayment = async (req, res) => {
   try {
-    const { amount, paymentDate, paymentMethod, reference, notes, internalNotes } = req.body;
+    const { amount, paymentDate, paymentMethod, reference, notes } = req.body;
 
     const parsedAmount = parseFloat(amount);
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
@@ -862,16 +862,6 @@ exports.addPurchasePayment = async (req, res) => {
     // handler's copy.
     const updated = await Purchase.findById(purchase._id);
 
-    // internalNotes has no equivalent on the money row, so it is written
-    // straight onto the subdoc the service just pushed.
-    if (internalNotes) {
-      const subdoc = updated.payments[updated.payments.length - 1];
-      if (subdoc) {
-        subdoc.internalNotes = internalNotes;
-        await updated.save({ validateModifiedOnly: true });
-      }
-    }
-
     // Normally a no-op (the bill is already Confirmed, so stock already
     // applied) — kept for legacy purchases that reached Paid under an older
     // flow without ever setting stockMovementStatus.
@@ -891,7 +881,7 @@ exports.addPurchasePayment = async (req, res) => {
 // PUT Purchase Payment
 exports.updatePurchasePayment = async (req, res) => {
   try {
-    const { amount, paymentDate, paymentMethod, reference, notes, internalNotes } = req.body;
+    const { amount, paymentDate, paymentMethod, reference, notes } = req.body;
 
     // Amount, ceiling and status are all recomputed by the service, which
     // keeps the money row and its allocation in step with the subdoc.
@@ -917,13 +907,6 @@ exports.updatePurchasePayment = async (req, res) => {
     }
 
     const purchase = result.document;
-    if (internalNotes !== undefined) {
-      const subdoc = purchase.payments.id(req.params.paymentId);
-      if (subdoc) {
-        subdoc.internalNotes = internalNotes;
-        await purchase.save({ validateModifiedOnly: true });
-      }
-    }
 
     res.json({ message: "Payment updated successfully", purchase });
   } catch (err) {
