@@ -6,7 +6,10 @@ import SearchableDropdown from "../contact/SearchableDropdown";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const MODES = ["Cash", "UPI", "Bank Transfer", "Cheque", "Card", "Other"];
-const STATUS_OPTIONS = ["Draft", "Pending", "Confirmed", "Paid", "Cancelled"];
+// Partial/Paid are deliberately absent: they're refund-driven (§11), set only
+// by recording a refund against the return, never chosen here. The backend
+// rejects a manual Partial/Paid, so offering them would only ever error.
+const STATUS_OPTIONS = ["Draft", "Pending", "Confirmed", "Cancelled"];
 const REASON_OPTIONS = ["Defective", "Damaged", "Wrong Item", "Excess Quantity", "Other"];
 
 const money = (n) =>
@@ -39,7 +42,8 @@ function calcLineTax(qty, unitPrice, gstRate, taxInclusive) {
  *
  * "Confirmed" is the one status that moves stock (see
  * syncPurchaseReturnStock) and is terminal once reached — the backend
- * rejects moving the STATUS off it except onward to "Paid". Item quantities
+ * rejects moving the STATUS off it except to "Cancelled"; Partial/Paid are
+ * reached only by recording refunds against the return. Item quantities
  * stay editable even after Confirmed/Paid though: the backend applies just
  * the delta between the old and new quantity (not the full new quantity
  * again), so correcting a confirmed return's Return Qty moves only the
@@ -76,15 +80,18 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
   const [saving, setSaving] = useState(false);
 
   const oldStatus = editingReturn?.status;
-  // Mirrors purchaseReturnController's isBlockedStatusChange — once
-  // Confirmed, the STATUS can only move onward to Paid. Item quantities
-  // stay editable regardless (see the module comment above).
-  const isLocked = oldStatus === "Confirmed" || oldStatus === "Paid";
+  // Mirrors purchaseReturnController's isBlockedStatusChange — once the goods
+  // have left (Confirmed onward) the only manual move is Cancelled; Partial/
+  // Paid are refund-driven and never set here. Item quantities stay editable
+  // regardless (see the module comment above).
+  const isLocked = ["Confirmed", "Partial", "Paid"].includes(oldStatus);
   const availableStatusOptions = oldStatus === "Confirmed"
-    ? ["Confirmed", "Paid"]
-    : oldStatus === "Paid"
-      ? ["Paid"]
-      : STATUS_OPTIONS.filter((s) => s !== "Paid" || isEditing);
+    ? ["Confirmed", "Cancelled"]
+    : oldStatus === "Partial"
+      ? ["Partial", "Cancelled"]
+      : oldStatus === "Paid"
+        ? ["Paid"]
+        : STATUS_OPTIONS;
 
   useEffect(() => {
     setTimeout(() => setIsSliding(true), 10);
@@ -519,8 +526,9 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
             </div>
             {isLocked && (
               <p className="text-[11px] text-gray-400 mt-1.5">
-                Goods have already left toward the vendor — status can only move on to Paid. Return Qty can still be
-                corrected; only the difference in stock will move.
+                Goods have already left toward the vendor — the status now follows the refunds you record (Partial once
+                part is refunded, Paid when it's fully refunded). Return Qty can still be corrected; only the difference
+                in stock will move.
               </p>
             )}
           </div>

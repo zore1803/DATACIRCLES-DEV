@@ -1,16 +1,19 @@
-// Backfills the money rows behind payments that were recorded ON a document
-// before the two payment systems were unified.
+// Backfills the money rows behind payments/refunds that were recorded ON a
+// document before the two payment systems were unified.
 //
 // Until Stage 1, recording a payment on a Purchase only pushed a subdocument
 // into Purchase.payments[] — no Payment row, no PaymentAllocation. So a bill
-// could read "Paid ₹10,000" while its vendor's Total Given stayed at ₹0. New
-// payments now go through paymentAllocationService.recordDocumentPayment; this
-// script gives the same treatment to everything already on file.
+// could read "Paid ₹10,000" while its vendor's Total Given stayed at ₹0.
+// Stage 3 added the same thing on Purchase Return refunds. New payments/refunds
+// now go through paymentAllocationService.recordDocumentPayment; this script
+// gives the same treatment to everything already on file.
 //
-// For every Purchase.payments[] subdoc with no PaymentAllocation pointing at
+// For every <document>.payments[] subdoc with no PaymentAllocation pointing at
 // it, this creates:
-//   Payment           direction OUT, party = the bill's vendor, isDocumentPayment
-//   PaymentAllocation Payment -> Purchase, documentPaymentId = that subdoc
+//   Purchase        -> Payment direction OUT (Gave), party = the bill's vendor
+//   PurchaseReturn  -> Payment direction IN  (Got),  party = the return's vendor
+//   plus a PaymentAllocation Payment -> document, documentPaymentId = that subdoc
+// each flagged isDocumentPayment.
 //
 // The documents themselves are NOT touched: the subdoc already exists and the
 // status it produced is already correct, so nothing is pushed, recomputed or
@@ -18,14 +21,17 @@
 // an allocation for every subdoc and writes nothing.
 //
 // Usage (from backend/):
-//   node scripts/backfillDocumentPayments.js                  # dry run
+//   node scripts/backfillDocumentPayments.js                  # dry run, both types
 //   node scripts/backfillDocumentPayments.js --apply          # write
 //   node scripts/backfillDocumentPayments.js --apply --org <organizationId>
+//   node scripts/backfillDocumentPayments.js --only Purchase        # one type only
+//   node scripts/backfillDocumentPayments.js --only PurchaseReturn
 
 require("dotenv").config();
 const mongoose = require("mongoose");
 
 const Purchase = require("../models/Purchase");
+const PurchaseReturn = require("../models/PurchaseReturn");
 const Payment = require("../models/Payment");
 const PaymentAllocation = require("../models/PaymentAllocation");
 
@@ -33,6 +39,8 @@ const args = process.argv.slice(2);
 const APPLY = args.includes("--apply");
 const orgFlag = args.indexOf("--org");
 const ORG_ID = orgFlag !== -1 ? args[orgFlag + 1] : null;
+const onlyFlag = args.indexOf("--only");
+const ONLY = onlyFlag !== -1 ? args[onlyFlag + 1] : null;
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -45,28 +53,46 @@ const VALID = new Set([
 ]);
 const toPaymentType = (method) => (VALID.has(method) ? method : "Other");
 
-async function main() {
-  const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
-  if (!uri) throw new Error("MONGO_URI is not set");
-  await mongoose.connect(uri);
-  console.log(`Connected. Mode: ${APPLY ? "APPLY (writing)" : "DRY RUN (no writes)"}`);
+// One entry per document type that carries a payments[] array. `direction` is
+// what makes a bill payment "Gave" (OUT) and a return refund "Got" (IN) on the
+// vendor's page — the single thing that differs between the two.
+const CONFIGS = [
+  {
+    documentType: "Purchase",
+    model: Purchase,
+    direction: "OUT",
+    numberField: "purchaseNumber",
+    label: "purchase",
+  },
+  {
+    documentType: "PurchaseReturn",
+    model: PurchaseReturn,
+    direction: "IN",
+    numberField: "returnNumber",
+    label: "purchase return",
+  },
+];
 
+async function backfillType(cfg) {
   const filter = { "payments.0": { $exists: true } };
   if (ORG_ID) filter.organization = ORG_ID;
 
-  const purchases = await Purchase.find(filter).select("_id purchaseNumber vendor organization user payments").lean();
-  console.log(`Scanning ${purchases.length} purchase(s) with payments...`);
+  const docs = await cfg.model
+    .find(filter)
+    .select(`_id ${cfg.numberField} vendor organization user payments createdAt`)
+    .lean();
+  console.log(`\n[${cfg.documentType}] Scanning ${docs.length} ${cfg.label}(s) with payments...`);
 
   let created = 0;
   let skippedLinked = 0;
   let skippedNoVendor = 0;
   let totalAmount = 0;
 
-  for (const purchase of purchases) {
-    for (const subdoc of purchase.payments || []) {
+  for (const doc of docs) {
+    for (const subdoc of doc.payments || []) {
       const existing = await PaymentAllocation.findOne({
-        documentType: "Purchase",
-        document: purchase._id,
+        documentType: cfg.documentType,
+        document: doc._id,
         documentPaymentId: subdoc._id,
       }).lean();
 
@@ -75,11 +101,11 @@ async function main() {
         continue;
       }
 
-      // A bill with no vendor can't be attributed to anyone's ledger. Left
+      // A document with no vendor can't be attributed to anyone's ledger. Left
       // alone and reported rather than guessed at.
-      if (!purchase.vendor) {
+      if (!doc.vendor) {
         skippedNoVendor += 1;
-        console.warn(`  ! ${purchase.purchaseNumber || purchase._id}: payment ${subdoc._id} has no vendor — skipped`);
+        console.warn(`  ! ${doc[cfg.numberField] || doc._id}: payment ${subdoc._id} has no vendor — skipped`);
         continue;
       }
 
@@ -90,43 +116,67 @@ async function main() {
       created += 1;
 
       if (!APPLY) {
-        console.log(`  would create: ${purchase.purchaseNumber || purchase._id} · ₹${amount.toFixed(2)} · ${subdoc.paymentMethod || "Other"}`);
+        console.log(`  would create: ${doc[cfg.numberField] || doc._id} · ${cfg.direction} · ₹${amount.toFixed(2)} · ${subdoc.paymentMethod || "Other"}`);
         continue;
       }
 
       const payment = await Payment.create({
-        vendor: purchase.vendor,
+        vendor: doc.vendor,
         partyType: "Vendor",
-        party: purchase.vendor,
+        party: doc.vendor,
         amount,
         allocatedAmount: amount,
-        paymentDate: subdoc.paymentDate || purchase.createdAt || new Date(),
+        paymentDate: subdoc.paymentDate || doc.createdAt || new Date(),
         paymentType: toPaymentType(subdoc.paymentMethod),
         reference: subdoc.reference || "",
         notes: subdoc.notes || "",
-        direction: "OUT",
+        direction: cfg.direction,
         isDocumentPayment: true,
-        user: subdoc.recordedBy || purchase.user,
-        organization: purchase.organization,
+        user: subdoc.recordedBy || doc.user,
+        organization: doc.organization,
       });
 
       await PaymentAllocation.create({
         payment: payment._id,
-        documentType: "Purchase",
-        document: purchase._id,
+        documentType: cfg.documentType,
+        document: doc._id,
         documentPaymentId: subdoc._id,
         amount,
-        organization: purchase.organization,
-        user: subdoc.recordedBy || purchase.user,
+        organization: doc.organization,
+        user: subdoc.recordedBy || doc.user,
       });
     }
   }
 
+  console.log(`  ${APPLY ? "Created" : "Would create"}: ${created} payment(s), ₹${round2(totalAmount).toFixed(2)}`);
+  console.log(`  Already linked (skipped): ${skippedLinked}`);
+  if (skippedNoVendor) console.log(`  Skipped, no vendor: ${skippedNoVendor}`);
+
+  return { created, amount: totalAmount };
+}
+
+async function main() {
+  const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
+  if (!uri) throw new Error("MONGO_URI is not set");
+  await mongoose.connect(uri);
+  console.log(`Connected. Mode: ${APPLY ? "APPLY (writing)" : "DRY RUN (no writes)"}`);
+
+  const configs = ONLY ? CONFIGS.filter((c) => c.documentType === ONLY) : CONFIGS;
+  if (ONLY && configs.length === 0) {
+    throw new Error(`--only ${ONLY} is not a known document type (Purchase | PurchaseReturn)`);
+  }
+
+  let grandCreated = 0;
+  let grandAmount = 0;
+  for (const cfg of configs) {
+    const { created, amount } = await backfillType(cfg);
+    grandCreated += created;
+    grandAmount += amount;
+  }
+
   console.log("");
-  console.log(`${APPLY ? "Created" : "Would create"}: ${created} payment(s), ₹${round2(totalAmount).toFixed(2)}`);
-  console.log(`Already linked (skipped): ${skippedLinked}`);
-  if (skippedNoVendor) console.log(`Skipped, no vendor: ${skippedNoVendor}`);
-  if (!APPLY) console.log("\nNothing was written. Re-run with --apply to commit.");
+  console.log(`Total ${APPLY ? "created" : "to create"}: ${grandCreated} payment(s), ₹${round2(grandAmount).toFixed(2)}`);
+  if (!APPLY) console.log("Nothing was written. Re-run with --apply to commit.");
 
   await mongoose.disconnect();
 }

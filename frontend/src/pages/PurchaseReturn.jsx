@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import API from "../services/api";
 import PurchaseReturnForm from "../components/purchase/PurchaseReturnForm";
 import PurchaseReturnPreview from "../components/purchase/PurchaseReturnPreview";
+import RecordPurchaseReturnRefundModal from "../components/purchase/RecordPurchaseReturnRefundModal";
 import ImportPurchaseReturns from "../components/purchase/ImportPurchaseReturns";
 import BulkActions from "../components/BulkActions";
 import BulkDeleteModal from "../components/common/BulkDeleteModal";
@@ -109,6 +110,10 @@ const PurchaseReturn = () => {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [selectedReturn, setSelectedReturn] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
+  // Record Refund drawer — the vendor refunding a Confirmed return, recorded as
+  // a real Payment(IN) against it (see RecordPurchaseReturnRefundModal).
+  const [refundReturn, setRefundReturn] = useState(null);
+  const [showRefundModal, setShowRefundModal] = useState(false);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const searchInputRef = useRef(null);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
@@ -249,7 +254,23 @@ const PurchaseReturn = () => {
 
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
 
-  const statusOptions = ["Draft", "Pending", "Confirmed", "Paid", "Cancelled"];
+  // Full set for filtering/badges — a return can sit at any of these.
+  const statusOptions = ["Draft", "Pending", "Confirmed", "Partial", "Paid", "Cancelled"];
+  // What a user may set BY HAND. Partial/Paid are refund-driven (§11): they're
+  // reached only by recording a refund against the return, never chosen from a
+  // dropdown — the backend rejects a manual Partial/Paid, so they're left out
+  // here to avoid offering an action that always fails.
+  const manualStatusOptions = ["Draft", "Pending", "Confirmed", "Cancelled"];
+
+  // The manual options offered for a return already in a given status. Once the
+  // goods have left (Confirmed onward) the only manual move is Cancelled;
+  // Partial keeps its (refund-driven) label, and Paid is terminal.
+  const statusMenuOptions = (status) => {
+    if (status === "Paid") return ["Paid"];
+    if (status === "Partial") return ["Partial", "Cancelled"];
+    if (status === "Confirmed") return ["Confirmed", "Cancelled"];
+    return manualStatusOptions;
+  };
 
   const returnFilterColumns = [
     { key: "returnNumber", label: "Return Number" },
@@ -383,6 +404,11 @@ const PurchaseReturn = () => {
     setShowPreview(true);
   };
 
+  const handleRecordRefund = (ret) => {
+    setRefundReturn(ret);
+    setShowRefundModal(true);
+  };
+
   const handleDelete = (id) => {
     setReturnToDelete(id);
     setShowDeleteModal(true);
@@ -502,7 +528,7 @@ const PurchaseReturn = () => {
   };
 
   const returnFieldConfig = {
-    fields: [{ key: "status", label: "Status", type: "select", options: statusOptions }],
+    fields: [{ key: "status", label: "Status", type: "select", options: manualStatusOptions }],
   };
 
   const updateSingleStatus = async (id, newStatus) => {
@@ -519,6 +545,7 @@ const PurchaseReturn = () => {
   const getStatusBadgeColor = (status) => {
     switch (status?.toLowerCase()) {
       case "paid": return "bg-green-100 text-green-800 border-transparent";
+      case "partial": return "bg-amber-100 text-amber-800 border-transparent";
       case "pending": return "bg-yellow-100 text-yellow-800 border-transparent";
       case "cancelled": return "bg-red-100 text-red-800 border-transparent";
       case "draft": return "bg-blue-100 text-blue-800 border-transparent";
@@ -813,6 +840,15 @@ const PurchaseReturn = () => {
                         Change Status
                       </span>
                       <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                    </button>
+                  )}
+                  {["Confirmed", "Partial", "Paid"].includes(p.status) && (
+                    <button
+                      onClick={() => { closeRowMenu(); handleRecordRefund(p); }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-emerald-600" />
+                      Record Refund
                     </button>
                   )}
                   <div className="w-full border-t border-[#F1F1F5] my-0.5" />
@@ -1397,7 +1433,7 @@ const PurchaseReturn = () => {
             className="fixed z-[100061] w-[160px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5"
             style={{ top: statusMenu.y, left: statusMenu.x }}
           >
-            {(statusMenu.doc.status === "Confirmed" ? ["Confirmed", "Paid"] : statusMenu.doc.status === "Paid" ? ["Paid"] : statusOptions).map((st) => (
+            {statusMenuOptions(statusMenu.doc.status).map((st) => (
               <button
                 key={st}
                 onClick={(e) => {
@@ -1416,6 +1452,12 @@ const PurchaseReturn = () => {
         </>,
         document.body
       )}
+      <RecordPurchaseReturnRefundModal
+        isOpen={showRefundModal}
+        purchaseReturn={refundReturn}
+        onClose={() => { setShowRefundModal(false); setRefundReturn(null); }}
+        onSuccess={() => fetchReturns()}
+      />
       {emailCompose && (() => {
         const dname = "Purchase Return";
         const dnum = emailCompose.doc.returnNumber;

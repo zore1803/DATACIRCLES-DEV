@@ -349,6 +349,15 @@ exports.createPurchaseReturn = async (req, res) => {
       return res.status(400).json({ message: "At least one item is required" });
     }
 
+    // §11 (money-driven status): Partial/Paid are reached only by recording
+    // real refunds against the return — never chosen at creation. A return
+    // born "Paid" would read as fully refunded while no Payment IN backs it,
+    // so the vendor's Total Got wouldn't move. Same rule the status endpoints
+    // enforce (isBlockedStatusChange), applied here on create too.
+    if (["Partial", "Paid"].includes(status)) {
+      return res.status(400).json({ message: blockedStatusMessage(null, status) });
+    }
+
     await assertQuantitiesWithinPurchase(purchaseDoc, items, req.user.organization);
 
     // Per-line tax calculation: each item carries its own gstRate/taxInclusive
@@ -756,6 +765,12 @@ exports.bulkImportPurchaseReturns = async (req, res) => {
       });
     }
 
+    // §11: Partial/Paid are refund-driven and can't be set on import (no
+    // Payment IN rows would back them); Confirmed is excluded too, since import
+    // writes rows directly without syncPurchaseReturnStock and must not claim a
+    // stock-moving status. Anything else falls back to Draft.
+    const validStatuses = ["Draft", "Pending", "Cancelled"];
+
     let imported = 0;
     const errors = [];
 
@@ -783,7 +798,7 @@ exports.bulkImportPurchaseReturns = async (req, res) => {
           subtotal,
           totalTax: 0,
           grandTotal: subtotal,
-          status: group.status,
+          status: validStatuses.includes(group.status) ? group.status : "Draft",
           mode: group.mode,
           reason: group.reason,
           notes: group.notes,

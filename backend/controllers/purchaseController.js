@@ -55,6 +55,14 @@ const calculateSubtotal = (items) => {
 // Round to 2 decimals without binary float drift (…329999), so stored money is clean.
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
+// Total actually recorded against a bill's payments[]. Used to enforce the
+// §11/cancel rule: a bill with money on it can't be Cancelled by a status flip
+// (mirrors purchaseReturnController's sumRefunds), and the delete path unwinds
+// those payments through the allocation service so no Payment/PaymentAllocation
+// row is orphaned on the vendor's ledger.
+const sumPayments = (payments) =>
+  (payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
 // Computes one item's net (pre-tax) amount and tax amount from its own gstRate/taxInclusive —
 // seeded from the variant when one was selected. Mirrors PurchaseForm.jsx's own frontend math
 // exactly (lines computing `subtotal`/`totalTax`), so stored totals never disagree with what
@@ -230,6 +238,16 @@ exports.createPurchase = async (req, res) => {
     // Validate items
     if (!items || items.length === 0) {
       return res.status(400).json({ message: "At least one item is required" });
+    }
+
+    // §11 (money-driven status): Partial/Paid are reached only by recording
+    // real payments that draw the balance down — never chosen at creation. A
+    // bill born "Paid" would read as settled while contributing nothing to the
+    // vendor's Total Given, the exact two-systems problem Stage 1 removed.
+    if (["Partial", "Paid"].includes(status)) {
+      return res.status(400).json({
+        message: `A new purchase can't be created as "${status}" — confirm it, then record a payment to reach that status.`,
+      });
     }
 
     // Calculate subtotal/tax from each item's own GST (seeded from the variant when one was
@@ -488,6 +506,16 @@ exports.updatePurchase = async (req, res) => {
       return res.status(400).json({ message });
     }
 
+    // A status flip can't undo money already paid to the vendor. If any real
+    // payment is recorded on this bill, block Cancelled — the payments have to
+    // be removed first (which unwinds their allocations). Mirrors the
+    // return-side rule in purchaseReturnController.
+    if (status === "Cancelled" && sumPayments(purchase.payments) > 0) {
+      return res.status(400).json({
+        message: "This purchase has payments recorded against it — remove those first, then cancel it.",
+      });
+    }
+
     // Snapshot before any overwrite below — only meaningful (passed on) when
     // stock was already applied for this purchase, so an item-quantity edit
     // after Confirmed moves just the delta instead of re-applying everything.
@@ -602,6 +630,16 @@ exports.updatePurchaseStatus = async (req, res) => {
         : `A ${oldStatus} purchase can't be moved back to ${status}.`;
       return res.status(400).json({ message });
     }
+
+    // A status flip can't undo money already paid to the vendor. If any real
+    // payment is recorded on this bill, block Cancelled — the payments have to
+    // be removed first (which unwinds their allocations). Mirrors the
+    // return-side rule in purchaseReturnController.
+    if (status === "Cancelled" && sumPayments(purchase.payments) > 0) {
+      return res.status(400).json({
+        message: "This purchase has payments recorded against it — remove those first, then cancel it.",
+      });
+    }
     const oldStockMovementStatus = purchase.stockMovementStatus;
 
     // When a purchase is marked Paid via the status dropdown, record the exact
@@ -670,6 +708,23 @@ exports.deletePurchase = async (req, res) => {
 
     if (req.ownOnly && !isOwnedByUser(purchase, req.user._id)) {
       return res.status(403).json({ message: "You can only delete purchases you own" });
+    }
+
+    // Payments recorded on this bill are allocations of real Payment rows on
+    // the vendor's ledger. Deleting the bill without unwinding them would leave
+    // "Gave" money pointing at a purchase that no longer exists, permanently
+    // overstating the vendor's Total Given (now that it's derived — Stage 2).
+    // Each payment is removed the same way deleting it individually would,
+    // which drops the allocation and the Payment row with no orphan left.
+    // (Legacy subdoc-only payments have no allocation; removeDocumentPayment
+    // falls back to pulling just the subdoc for those.)
+    for (const payment of [...(purchase.payments || [])]) {
+      await allocationService.removeDocumentPayment({
+        orgId: req.user.organization,
+        documentType: "Purchase",
+        documentId: purchase._id,
+        documentPaymentId: payment._id,
+      });
     }
 
     if (purchase.stockMovementStatus === 'applied') {
@@ -1048,7 +1103,13 @@ exports.bulkImportPurchases = async (req, res) => {
       });
     }
 
-    const validStatuses = ["Draft", "Pending", "Paid", "Partial", "Cancelled"];
+    // §11: Partial/Paid are money-driven and can't be set on import (no
+    // Payment rows would back them). A row asking for either falls back to
+    // Draft — the same fallback an unrecognised status already gets — so the
+    // bill can then be confirmed and paid through the normal flow. Confirmed
+    // stays excluded too, as before: import writes rows directly without
+    // syncPurchaseStock, so it must not claim a stock-moving status.
+    const validStatuses = ["Draft", "Pending", "Cancelled"];
     const errors = [];
     let imported = 0;
 
