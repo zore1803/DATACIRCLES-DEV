@@ -102,6 +102,9 @@ const DOC_CONFIG = {
     statusFor: (doc, totalRefunded) => {
       if (!["Confirmed", "Partial", "Paid"].includes(doc.status)) return doc.status;
       const total = Number(doc.grandTotal) || 0;
+      // Closed by agreement for less than the return value. Still requires real
+      // money behind it, so removing every refund drops it back out of Paid.
+      if (doc.refundSettled && totalRefunded > EPSILON) return "Paid";
       if (totalRefunded >= total - EPSILON && total > 0) return "Paid";
       if (totalRefunded > 0) return "Partial";
       return "Confirmed";

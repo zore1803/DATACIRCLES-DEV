@@ -620,14 +620,32 @@ exports.deletePurchaseReturn = async (req, res) => {
     });
     if (!purchaseReturn) return res.status(404).json({ message: "Purchase return not found" });
 
-    // Unlike cancel, delete removes the money rows too — nothing should point
-    // at a return that no longer exists.
-    for (const refund of [...(purchaseReturn.payments || [])]) {
-      await allocationService.removeDocumentPayment({
-        orgId: req.user.organization,
-        documentType: "PurchaseReturn",
-        documentId: purchaseReturn._id,
-        documentPaymentId: refund._id,
+    // A part-refunded return is a live transaction, not a stray record — undoing
+    // it is what Cancel is for (which reverses the stock and the allocation but
+    // keeps the Payment). Deleting here would have to choose between destroying
+    // a real refund or orphaning it, so it's refused instead.
+    if (purchaseReturn.status === "Partial") {
+      return res.status(400).json({
+        message: "This return has been partly refunded — cancel it instead, which reverses the stock and keeps the refund in the vendor's history.",
+      });
+    }
+
+    // A cancelled return is the record of a reversal that happened. Deleting it
+    // would erase why the stock moved back and why the vendor holds credit.
+    if (purchaseReturn.status === "Cancelled") {
+      return res.status(400).json({
+        message: "A cancelled return is kept as history and can't be deleted.",
+      });
+    }
+
+    // Paid means the refund already completed. Delete removes the document
+    // record only: the Payment stays in the vendor's history, and the stock-out
+    // is NOT reversed — the goods really did go back and the vendor really did
+    // pay. Deleting must not rewrite finished business history.
+    if (purchaseReturn.status === "Paid") {
+      await purchaseReturn.deleteOne();
+      return res.json({
+        message: "Purchase return deleted. Its completed refund stays in the vendor's payment history.",
       });
     }
 

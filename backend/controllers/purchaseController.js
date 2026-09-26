@@ -116,9 +116,10 @@ function isValidPurchaseStatusTransition(oldStatus, newStatus) {
 //
 // Rules enforced here:
 //   Draft/Pending  -> nothing (no stock has moved yet)
-//   -> Confirmed    -> STOCK IN (+), mark 'applied'  [once]
+//   -> Confirmed    -> STOCK IN (+), mark 'applied'
 //   Confirmed edit  -> apply only the item delta
-//   -> Cancelled    -> reverse the STOCK IN (-), mark 'reversed'  [once, idempotent]
+//   -> Cancelled    -> reverse the STOCK IN (-), mark 'reversed'  [idempotent]
+//   Cancelled -> Confirmed -> STOCK IN (+) again, mark 'applied'
 //   -> Paid/Partial -> payment-only, NEVER touches stock
 async function syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, userId, previousItems = null) {
   const newStatus = purchase.status;
@@ -144,10 +145,12 @@ async function syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, us
     return;
   }
 
-  // First time reaching Confirmed (or straight to Partial/Paid): apply the
-  // full stock-in exactly once. The Purchase always owns this now — the PO
-  // never applied anything to defer to.
-  if (reachedStockPhase && !wasInStockPhase && oldStockMovementStatus === "pending") {
+  // Reaching Confirmed (or straight to Partial/Paid): apply the full stock-in.
+  // Guarded on "not already applied" rather than "pending" so re-confirming a
+  // Cancelled purchase puts the stock back — its movement sits at "reversed",
+  // which the old `=== "pending"` test silently skipped, flipping the status
+  // without moving any stock.
+  if (reachedStockPhase && !wasInStockPhase && oldStockMovementStatus !== "applied") {
     await syncDocumentStock({
       organization: purchase.organization,
       documentId: purchase._id,
@@ -482,6 +485,16 @@ exports.updatePurchase = async (req, res) => {
 
     if (req.ownOnly && !isOwnedByUser(purchase, req.user._id)) {
       return res.status(403).json({ message: "You can only edit purchases you own" });
+    }
+
+    // A Paid purchase is settled: its total is what was actually paid to the
+    // vendor. Editing the lines would move that total away from the money
+    // already recorded, so it becomes view-only. Payments have their own
+    // endpoints and still work.
+    if (purchase.status === "Paid") {
+      return res.status(400).json({
+        message: "This purchase is fully paid and can no longer be edited. Remove a payment first if it needs to change.",
+      });
     }
 
     // Captured before any field changes below, so the stock sync (after

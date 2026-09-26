@@ -22,6 +22,9 @@ router.get("/:id/payments", requireAuth, subscriptionGate, c.getSalesReturnRefun
 router.post("/:id/payments", requireAuth, subscriptionGate, c.addSalesReturnRefund);
 router.put("/:id/payments/:paymentId", requireAuth, subscriptionGate, c.updateSalesReturnRefund);
 router.delete("/:id/payments/:paymentId", requireAuth, subscriptionGate, c.deleteSalesReturnRefund);
+// "Mark as Complete Refund" — closes the return at what was actually paid,
+// without creating a Payment.
+router.post("/:id/settle", requireAuth, subscriptionGate, c.settleSalesReturnRefund);
 
 router.get("/:id", requireAuth, subscriptionGate, c.getSalesReturnById);
 router.put("/:id", requireAuth, subscriptionGate, c.updateSalesReturn);

@@ -414,6 +414,9 @@ const PurchaseReturn = () => {
     setShowDeleteModal(true);
   };
 
+  // Deleting a Paid return keeps its refund, so the dialog has to say so.
+  const deletingStatus = purchaseReturns.find((p) => p._id === returnToDelete)?.status;
+
   const handleDownload = async (ret) => {
     const filename = `Purchase-Return-${ret.returnNumber || ret._id}`;
     try {
@@ -842,7 +845,9 @@ const PurchaseReturn = () => {
                       <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
                     </button>
                   )}
-                  {["Confirmed", "Partial", "Paid"].includes(p.status) && (
+                  {/* Not on Paid — nothing is left to refund, so the drawer
+                      would just open disabled. */}
+                  {["Confirmed", "Partial"].includes(p.status) && (
                     <button
                       onClick={() => { closeRowMenu(); handleRecordRefund(p); }}
                       className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
@@ -851,14 +856,20 @@ const PurchaseReturn = () => {
                       Record Refund
                     </button>
                   )}
-                  <div className="w-full border-t border-[#F1F1F5] my-0.5" />
-                  <button
-                    onClick={() => { closeRowMenu(); handleDelete(p._id); }}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-red-600 hover:bg-red-50 whitespace-nowrap"
-                  >
-                    <DeleteIcon className="w-3.5 h-3.5" />
-                    Delete
-                  </button>
+                  {/* Partial is cancelled rather than deleted, and a cancelled
+                      return is kept as history — the backend refuses both. */}
+                  {!["Partial", "Cancelled"].includes(p.status) && (
+                    <>
+                      <div className="w-full border-t border-[#F1F1F5] my-0.5" />
+                      <button
+                        onClick={() => { closeRowMenu(); handleDelete(p._id); }}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-red-600 hover:bg-red-50 whitespace-nowrap"
+                      >
+                        <DeleteIcon className="w-3.5 h-3.5" />
+                        Delete
+                      </button>
+                    </>
+                  )}
                 </>
             </div>
           </>,
@@ -1815,9 +1826,13 @@ const PurchaseReturn = () => {
               <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <DeleteIcon className="w-6 h-6 text-red-600" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2 font-sf">Delete Purchase Return</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-2 font-sf">
+                {deletingStatus === "Paid" ? "Delete Paid Purchase Return?" : "Delete Purchase Return"}
+              </h3>
               <p className="text-sm text-gray-500 font-inter mb-6">
-                Are you sure you want to delete this purchase return? This action cannot be undone.
+                {deletingStatus === "Paid"
+                  ? "This removes the Purchase Return document, but its completed refund stays recorded in the vendor's payment history. Stock is not changed."
+                  : "Are you sure you want to delete this purchase return? This action cannot be undone."}
               </p>
               <div className="flex gap-3 justify-center">
                 <button

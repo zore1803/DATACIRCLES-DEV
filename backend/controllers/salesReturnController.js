@@ -107,6 +107,8 @@ function isBlockedStatusChange(oldStatus, newStatus) {
   if (newStatus === undefined) return false;
   // A no-op: the edit form has to submit the current value, including Partial/Paid.
   if (newStatus === oldStatus) return false;
+  // Paid is terminal — the refund obligation is closed, including to Cancelled.
+  if (oldStatus === "Paid") return true;
   // Partial/Paid come from recorded refunds, never from the dropdown.
   if (newStatus === "Partial" || newStatus === "Paid") return true;
   if (newStatus === "Refunded") return true; // legacy-only, nothing may enter it
@@ -115,8 +117,14 @@ function isBlockedStatusChange(oldStatus, newStatus) {
 }
 
 function blockedStatusMessage(oldStatus, newStatus) {
-  if (newStatus === "Partial" || newStatus === "Paid") {
-    return `"${newStatus}" is set by recording a refund against this return, not from the status list.`;
+  if (oldStatus === "Paid") {
+    return "This return is fully settled — Paid is final and can't be changed.";
+  }
+  if (newStatus === "Partial") {
+    return '"Partial" is set by recording a refund against this return, not from the status list.';
+  }
+  if (newStatus === "Paid") {
+    return '"Paid" comes from recording refunds, or from "Mark as Complete Refund" — not from the status list.';
   }
   if (newStatus === "Refunded") {
     return '"Refunded" is retired — record an actual refund instead, which moves the return to Partial or Paid.';
@@ -681,6 +689,41 @@ exports.addSalesReturnRefund = async (req, res) => {
   }
 };
 
+// POST /sales-returns/:id/settle — "Mark as Complete Refund".
+// Closes the refund obligation at whatever has actually been paid: a ₹3,000
+// return settled for ₹1,000 becomes Paid with ₹1,000 of real money behind it.
+// Creates NO Payment, so the ledger never shows money that wasn't given.
+// Requires at least one recorded refund, which is what keeps this from being a
+// route to Paid with nothing settled.
+exports.settleSalesReturnRefund = async (req, res) => {
+  try {
+    const salesReturn = await SalesReturn.findOne({
+      _id: req.params.id,
+      organization: req.user.organization,
+    });
+    if (!salesReturn) return res.status(404).json({ message: "Sales return not found" });
+
+    if (salesReturn.status === "Paid") {
+      return res.status(400).json({ error: "This return is already fully settled." });
+    }
+    if (salesReturn.status !== "Partial") {
+      return res.status(400).json({
+        error: "Record a refund first — a return can only be closed once some money has actually gone back.",
+      });
+    }
+
+    salesReturn.refundSettled = true;
+    salesReturn.refundSettledAt = new Date();
+    salesReturn.status = "Paid";
+    await salesReturn.save();
+
+    await salesReturn.populate(POPULATE);
+    res.json({ message: "Return marked as fully settled", salesReturn });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to settle return: ${err.message}` });
+  }
+};
+
 // PUT /sales-returns/:id/payments/:paymentId
 exports.updateSalesReturnRefund = async (req, res) => {
   try {
@@ -743,8 +786,18 @@ exports.deleteSalesReturnRefund = async (req, res) => {
       throw err;
     }
 
-    await result.document.populate(POPULATE);
-    res.json({ message: "Refund deleted successfully", salesReturn: result.document });
+    // Removing the last refund un-settles the return. Without this the stale
+    // flag would send the next recorded refund straight to Paid.
+    const doc = result.document;
+    if (doc.refundSettled && sumRefunds(doc.payments) <= 0.01) {
+      doc.refundSettled = false;
+      doc.refundSettledAt = null;
+      if (doc.status === "Paid") doc.status = "Confirmed";
+      await doc.save({ validateModifiedOnly: true });
+    }
+
+    await doc.populate(POPULATE);
+    res.json({ message: "Refund deleted successfully", salesReturn: doc });
   } catch (err) {
     res.status(500).json({ error: `Failed to delete refund: ${err.message}` });
   }
@@ -952,21 +1005,32 @@ exports.deleteSalesReturn = async (req, res) => {
     const salesReturn = await SalesReturn.findOne({ _id: req.params.id, organization: req.user.organization });
     if (!salesReturn) return res.status(404).json({ message: "Sales return not found" });
 
-    // Unlike cancel, delete removes the money rows too — nothing should point
-    // at a return that no longer exists.
-    for (const subdoc of [...(salesReturn.payments || [])]) {
-      try {
-        await allocationService.removeDocumentPayment({
-          orgId: req.user.organization,
-          documentType: "SalesReturn",
-          documentId: salesReturn._id,
-          documentPaymentId: subdoc._id,
-        });
-      } catch (err) {
-        // A legacy subdoc with no allocation behind it has nothing to unwind;
-        // it disappears with the document itself a few lines below.
-        if (!(err instanceof allocationService.AllocationError)) throw err;
-      }
+    // A part-refunded return is a live transaction, not a stray record — undoing
+    // it is what Cancel is for (which reverses the stock and the allocation but
+    // keeps the Payment). Deleting here would have to choose between destroying
+    // a real refund or orphaning it, so it's refused instead.
+    if (salesReturn.status === "Partial") {
+      return res.status(400).json({
+        message: "This return has been partly refunded — cancel it instead, which reverses the stock and keeps the refund in the customer's history.",
+      });
+    }
+
+    // A cancelled return is the record of a reversal that happened. Deleting it
+    // would erase why the stock moved back and why the customer holds credit.
+    if (salesReturn.status === "Cancelled") {
+      return res.status(400).json({
+        message: "A cancelled return is kept as history and can't be deleted.",
+      });
+    }
+
+    // Paid means the refund already completed. Delete removes the document
+    // record only: the Payment stays in the customer's history, and the stock-in
+    // is NOT reversed. Deleting must not rewrite finished business history.
+    if (salesReturn.status === "Paid") {
+      await salesReturn.deleteOne();
+      return res.json({
+        message: "Sales return deleted. Its completed refund stays in the customer's payment history.",
+      });
     }
 
     // Reverse the stock IN if the return had already applied it — otherwise

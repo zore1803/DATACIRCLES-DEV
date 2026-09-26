@@ -232,6 +232,12 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
     if (autoOpenCreate) onAutoOpenCreateConsumed?.();
   };
   const openEditInvoice = (invoice) => {
+    // Settled invoices are view-only — guarded here so the quick-view drawer's
+    // Edit is covered too, not just the row menu. The backend refuses it as well.
+    if (invoice?.status === "Paid") {
+      toast.error("This invoice is fully paid and can no longer be edited.");
+      return;
+    }
     setEditInvoice(invoice);
     setManualInvoiceFormOpen(true);
   };
@@ -1416,10 +1422,13 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
                   <EyeIcon className="w-3.5 h-3.5 text-blue-600" />
                   View
                 </button>
-                <button type="button" className={itemCls} onClick={() => { close(); openEditInvoice(invoice); }}>
-                  <EditIcon className="w-3.5 h-3.5 text-blue-600" />
-                  Edit
-                </button>
+                {/* A Paid invoice is settled and view-only. */}
+                {invoice.status !== "Paid" && (
+                  <button type="button" className={itemCls} onClick={() => { close(); openEditInvoice(invoice); }}>
+                    <EditIcon className="w-3.5 h-3.5 text-blue-600" />
+                    Edit
+                  </button>
+                )}
                 <button type="button" className={itemCls} onClick={() => { close(); handleDownload(invoice._id); }}>
                   <DownloadIcon className="w-3.5 h-3.5 text-green-600" />
                   Download

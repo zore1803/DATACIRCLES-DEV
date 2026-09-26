@@ -23,6 +23,7 @@ import {
   CheckSquare,
   ClipboardList,
   DollarSign,
+  CheckCircle2,
   Share2,
   MessageCircle,
   Mail,
@@ -101,6 +102,15 @@ const ALL_STATUSES = ["Draft", "Pending", "Confirmed", "Partial", "Paid", "Cance
 // Goods are already back: the row can only stay put or be Cancelled.
 const GOODS_RETURNED = ["Confirmed", "Partial", "Paid", "Refunded"];
 
+// What the Change Status submenu may offer. Once the goods are back the only
+// move left is Cancel; Paid is terminal. Mirrors the backend's own gate, so the
+// menu can't offer something the server will reject.
+const statusOptionsFor = (status) => {
+  if (status === "Paid") return [];
+  if (GOODS_RETURNED.includes(status)) return [status, "Cancelled"];
+  return STATUS_OPTIONS;
+};
+
 const sumRefunds = (r) => (r?.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
 
 // Refund column: how much has actually gone back vs the return total. Legacy
@@ -109,6 +119,8 @@ const refundSummary = (r) => {
   const paid = sumRefunds(r);
   if (paid > 0) {
     const due = Math.max(0, (Number(r.grandTotal) || 0) - paid);
+    // Settled for less than the return value is closed, not outstanding.
+    if (r.refundSettled) return `₹${paid.toLocaleString("en-IN")} · Settled`;
     return due > 0
       ? `₹${paid.toLocaleString("en-IN")} of ₹${Number(r.grandTotal || 0).toLocaleString("en-IN")}`
       : `₹${paid.toLocaleString("en-IN")} · Fully refunded`;
@@ -479,6 +491,8 @@ const SalesReturn = () => {
   const handleDeselectAllExtra = () => setSelected(rows.map((r) => r._id));
 
   const handleDelete = (id) => { setToDelete(id); setShowDeleteModal(true); };
+  // Deleting a Paid return keeps its refund, so the dialog has to say so.
+  const deletingStatus = rows.find((r) => r._id === toDelete)?.status;
   const confirmDelete = async () => {
     if (!toDelete) return;
     const toastId = toast.loading("Deleting…");
@@ -531,6 +545,25 @@ const SalesReturn = () => {
 
   const srFieldConfig = {
     fields: [{ key: "status", label: "Status", type: "select", options: STATUS_OPTIONS }],
+  };
+
+  // Closes the refund obligation at what was actually paid. Creates no Payment,
+  // so a ₹3,000 return settled for ₹1,000 stays ₹1,000 on the ledger.
+  const handleMarkComplete = async (row) => {
+    const paid = sumRefunds(row);
+    const total = Number(row.grandTotal) || 0;
+    const msg = paid < total
+      ? `Close this return as fully settled at ₹${paid.toLocaleString("en-IN")} of ₹${total.toLocaleString("en-IN")}? The remaining ₹${(total - paid).toLocaleString("en-IN")} will not be refunded, and Paid is final.`
+      : "Mark this return as fully settled? Paid is final.";
+    if (!window.confirm(msg)) return;
+    try {
+      await API.post(`/sales-returns/${row._id}/settle`);
+      toast.success("Return marked as fully settled");
+      fetchRows();
+    } catch (err) {
+      toast.error(err.response?.data?.error || err.response?.data?.message || "Failed to settle return");
+    }
+    setOpenRowActionsId(null);
   };
 
   const handleStatusChange = async (row, next) => {
@@ -771,7 +804,7 @@ const SalesReturn = () => {
                 </span>
                 <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
               </button>
-              {["Confirmed", "Partial", "Paid"].includes(row.status) && (
+              {["Confirmed", "Partial"].includes(row.status) && (
                 <button
                   onClick={() => { close(); setRefundReturn(row); setShowRefundModal(true); }}
                   className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-blue-600 hover:bg-blue-50 whitespace-nowrap"
@@ -780,7 +813,18 @@ const SalesReturn = () => {
                   Record Refund
                 </button>
               )}
-              {row.status !== "Refunded" && (
+              {/* Only once real money has gone back — closes the return at
+                  whatever was actually refunded, without creating a Payment. */}
+              {row.status === "Partial" && (
+                <button
+                  onClick={() => { close(); handleMarkComplete(row); }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-emerald-700 hover:bg-emerald-50 whitespace-nowrap"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  Mark as Complete Refund
+                </button>
+              )}
+              {row.status !== "Refunded" && row.status !== "Paid" && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -809,14 +853,20 @@ const SalesReturn = () => {
                   <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
                 </button>
               )}
-              <div className="w-full border-t border-[#F1F1F5] my-0.5" />
-              <button
-                onClick={() => { close(); handleDelete(row._id); }}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-red-600 hover:bg-red-50 whitespace-nowrap"
-              >
-                <DeleteIcon className="w-3.5 h-3.5" />
-                Delete
-              </button>
+              {/* Partial is cancelled rather than deleted, and a cancelled
+                  return is kept as history — the backend refuses both. */}
+              {!["Partial", "Cancelled"].includes(row.status) && (
+                <>
+                  <div className="w-full border-t border-[#F1F1F5] my-0.5" />
+                  <button
+                    onClick={() => { close(); handleDelete(row._id); }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-red-600 hover:bg-red-50 whitespace-nowrap"
+                  >
+                    <DeleteIcon className="w-3.5 h-3.5" />
+                    Delete
+                  </button>
+                </>
+              )}
             </div>
           </>,
           document.body
@@ -1092,7 +1142,7 @@ const SalesReturn = () => {
             className="fixed z-[100012] w-[160px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5"
             style={{ top: statusMenu.y, left: statusMenu.x }}
           >
-            {STATUS_OPTIONS.map((st) => (
+            {statusOptionsFor(statusMenu.doc.status).map((st) => (
               <button
                 key={st}
                 onClick={(e) => {
@@ -1532,9 +1582,13 @@ const SalesReturn = () => {
               <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <DeleteIcon className="w-6 h-6 text-red-600" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Sales Return?</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">
+                {deletingStatus === "Paid" ? "Delete Paid Sales Return?" : "Delete Sales Return?"}
+              </h3>
               <p className="text-sm text-gray-500 mb-6">
-                If this return has been Confirmed, its stock IN will be reversed. This cannot be undone.
+                {deletingStatus === "Paid"
+                  ? "This removes the Sales Return document, but its completed refund stays recorded in the customer's payment history. Stock is not changed."
+                  : "If this return has been Confirmed, its stock IN will be reversed. This cannot be undone."}
               </p>
               <div className="flex gap-3 justify-center">
                 <button

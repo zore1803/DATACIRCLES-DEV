@@ -68,6 +68,13 @@ const salesReturnSchema = new mongoose.Schema(
       recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       recordedAt: { type: Date, default: Date.now },
     }],
+    // "Mark as Complete Refund": the refund obligation is closed by agreement
+    // even though less than grandTotal was paid (a ₹3,000 return settled for
+    // ₹1,000). Creates no Payment — it only closes the return, so the money
+    // shown is always money actually given. Without this flag the allocation
+    // engine would recompute the status straight back to Partial.
+    refundSettled: { type: Boolean, default: false },
+    refundSettledAt: { type: Date, default: null },
     // Legacy, and the default method suggested when recording a refund. Never
     // the financial source of truth — `payments` is.
     refundMode: {

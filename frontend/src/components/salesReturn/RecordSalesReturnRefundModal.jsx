@@ -242,20 +242,32 @@ const RecordSalesReturnRefundModal = ({ isOpen, onClose, salesReturn, onSuccess 
         <div className="flex-1 min-h-0 overflow-y-auto">
           {activeTab === "record" ? (
             <form id="rsrr-form" onSubmit={handleSubmit}>
-              {/* Refund Details header */}
+              {/* Refund Details */}
               <div className="px-6 mt-4 mb-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-                    Refund Details
-                  </p>
+                <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                  Refund Details
+                </p>
+                <p className="text-[12px] font-medium text-gray-800 mt-1">{customerName}</p>
+                <div className="mt-2.5 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-gray-500">Sales Return Amount</span>
+                    <span className="text-[12px] font-medium text-gray-800">{fmt(totalAmount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-gray-500">Already Refunded</span>
+                    <span className="text-[12px] font-medium text-gray-800">{fmt(totalRefunded)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-gray-500">Refund Status</span>
+                    <span className="text-[12px] font-medium text-gray-800">{localReturn.status}</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-[12px] font-medium text-gray-800">{customerName}</span>
-                  <span className="text-[12px] font-semibold text-red-500">{fmt(amountDue)}</span>
-                </div>
-                <div className="flex items-center justify-between mt-0.5">
-                  <span className="text-[11px] text-gray-400">Balance</span>
-                </div>
+                {/* The full return value need not be refunded — a settlement for
+                    less is closed with "Mark as Complete Refund" on the row menu. */}
+                <p className="text-[11px] text-gray-400 mt-2">
+                  Refunding less than the full amount is fine — close the return with
+                  “Mark as Complete Refund” when it’s settled.
+                </p>
               </div>
 
               <div className="px-6 space-y-6">

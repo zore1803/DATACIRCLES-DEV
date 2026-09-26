@@ -508,6 +508,12 @@ const PurchasePage = () => {
   };
 
   const handleEdit = (purchase) => {
+    // Settled purchases are view-only — guarded here so the preview drawer's
+    // Edit is covered too, not just the row menu. The backend refuses it as well.
+    if (purchase?.status === "Paid") {
+      toast.error("This purchase is fully paid and can no longer be edited.");
+      return;
+    }
     setEditingPurchase(purchase);
     setShowForm(true);
   };
@@ -952,13 +958,16 @@ const PurchasePage = () => {
                     <EyeIcon className="w-3.5 h-3.5 text-blue-600" />
                     View
                   </button>
-                  <button
-                    onClick={() => { closeRowMenu(); handleEdit(p); }}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
-                  >
-                    <EditIcon className="w-3.5 h-3.5 text-blue-600" />
-                    Edit
-                  </button>
+                  {/* A Paid purchase is settled and view-only. */}
+                  {p.status !== "Paid" && (
+                    <button
+                      onClick={() => { closeRowMenu(); handleEdit(p); }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                    >
+                      <EditIcon className="w-3.5 h-3.5 text-blue-600" />
+                      Edit
+                    </button>
+                  )}
                   <button
                     onClick={() => { closeRowMenu(); handleDownload(p); }}
                     className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"

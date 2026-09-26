@@ -896,6 +896,18 @@ const updateInvoice = async (req, res) => {
       }
     }
 
+    // A Paid invoice is settled: its amount is what the customer actually paid.
+    // Editing the lines would move the total away from the money already
+    // recorded against it, so it becomes view-only. Recording or removing a
+    // payment still works — those have their own endpoints.
+    if (invoice.status === "Paid") {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        error: "This invoice is fully paid and can no longer be edited. Remove a payment first if it needs to change.",
+      });
+    }
+
     const previousItems = invoice.items.map(item => ({
       itemId: item.itemId,
       variantId: item.variantId || undefined,

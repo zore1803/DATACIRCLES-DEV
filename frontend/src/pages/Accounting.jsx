@@ -1469,7 +1469,14 @@ const Accounting = () => {
   // longer opens the legacy per-type *Form.jsx components. CreateInvoicePanel
   // does its own item/date normalization from the raw doc, same as the
   // number-click handler below.
+  // A Paid tax invoice is settled: its amount is what the customer actually
+  // paid, so it's view-only. The backend refuses the edit too.
+  const isSettledInvoice = (doc, type) => type === "tax" && doc?.status === "Paid";
+  const refuseSettledEdit = () =>
+    toast.error("This invoice is fully paid and can no longer be edited.");
+
   const handleEdit = (doc, type) => {
+    if (isSettledInvoice(doc, type)) return refuseSettledEdit();
     if (activeTab !== type) setActiveTab(type);
     setEditPanelDoc(doc);
     setShowCreatePanel(true);
@@ -1774,16 +1781,18 @@ const Accounting = () => {
                     <EyeIcon className="w-3.5 h-3.5 text-blue-600" />
                     View
                   </button>
-                  <button
-                    onClick={() => {
-                      closeRowMenu();
-                      handleEdit(doc, activeTab);
-                    }}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
-                  >
-                    <EditIcon className="w-3.5 h-3.5 text-blue-600" />
-                    Edit
-                  </button>
+                  {!isSettledInvoice(doc, activeTab) && (
+                    <button
+                      onClick={() => {
+                        closeRowMenu();
+                        handleEdit(doc, activeTab);
+                      }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                    >
+                      <EditIcon className="w-3.5 h-3.5 text-blue-600" />
+                      Edit
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       closeRowMenu();
@@ -1936,6 +1945,7 @@ const Accounting = () => {
               onClick={() => {
                 // All document types open the same full two-pane edit screen;
                 // the panel adapts its fields to the active tab's type.
+                if (isSettledInvoice(doc, activeTab)) return refuseSettledEdit();
                 setEditPanelDoc(doc);
                 setShowCreatePanel(true);
               }}
