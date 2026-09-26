@@ -12,6 +12,7 @@ import PurchasePreview from "../components/purchase/PurchasePreview";
 import ImportPurchases from "../components/purchase/ImportPurchases";
 import RecordPurchasePaymentModal from "../components/purchase/RecordPurchasePaymentModal";
 import BulkActions from "../components/BulkActions";
+import BulkDeleteModal from "../components/common/BulkDeleteModal";
 import {
   ChevronUp,
   ChevronDown,
@@ -171,6 +172,7 @@ const PurchasePage = () => {
   const selectedPurchasesSet = useMemo(() => new Set(selectedPurchases), [selectedPurchases]);
   const [selectionMode, setSelectionMode] = useState(true);
   const [showBulkActions, setShowBulkActions] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
 
   // Double-click-to-type a page number in the pagination bar (mirrors Companies.jsx).
@@ -1238,15 +1240,15 @@ const PurchasePage = () => {
               const due = amountDueOf(p);
               const showDue = p.status === "Partial" && due > 0.01;
               baseContent = (
-                <div className="truncate">
-                  <div className="text-sm font-medium text-gray-700">
+                <div>
+                  <span className="text-sm font-semibold text-gray-900">
                     ₹{(p.grandTotal ?? 0).toLocaleString("en-IN", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
-                  </div>
+                  </span>
                   {showDue && (
-                    <div className="text-xs font-medium text-[#E5484D]">
+                    <div className="text-[11px] font-medium text-orange-600 mt-0.5">
                       ₹{due.toLocaleString("en-IN", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
@@ -1648,7 +1650,7 @@ const PurchasePage = () => {
                   Bulk Update
                 </button>
                 <button
-                  onClick={() => handleBulkDelete(selectedPurchases)}
+                  onClick={() => setShowBulkDeleteModal(true)}
                   disabled={bulkLoading}
                   className="h-10 px-4 -ml-px bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 disabled:opacity-50 flex-shrink-0 whitespace-nowrap"
                 >
@@ -2111,6 +2113,21 @@ const PurchasePage = () => {
         fieldConfig={purchaseFieldConfig}
         module="purchases"
         loading={bulkLoading}
+      />
+
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        message={
+          <>
+            Are you sure you want to delete <strong>{selectedPurchases.length}</strong> selected Purchases? This action cannot be undone.
+          </>
+        }
+        loading={bulkLoading}
+        onCancel={() => setShowBulkDeleteModal(false)}
+        onConfirm={async () => {
+          await handleBulkDelete(selectedPurchases);
+          setShowBulkDeleteModal(false);
+        }}
       />
 
       <ExportModal

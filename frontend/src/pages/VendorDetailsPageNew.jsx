@@ -592,7 +592,10 @@ const VendorDetailsPageNew = () => {
       .filter((p) => p.direction === "OUT")
       .reduce((sum, p) => sum + (p.amount || 0), 0)
     : 0;
-  const netBalance = vendor?.balance ?? totalReceived - totalPaid;
+  // Net Balance = Total Given - Total Got (money out, less what came back).
+  // The server derives these from the Payment ledger; the local sums are the
+  // fallback for a vendor payload fetched before that was attached.
+  const netBalance = vendor?.netBalance ?? totalPaid - totalReceived;
 
   /* ── Financial Overview chart ──
      Same design/markup as CompanyProfilePage.jsx's Financial Overview card

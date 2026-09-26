@@ -6,6 +6,7 @@ const Branding = require("../models/Branding");
 const Item = require("../models/Item");
 const purchaseDocumentPdf = require("../utils/purchaseDocumentPdf");
 const { syncDocumentStock } = require("../utils/inventorySync");
+const allocationService = require("../services/paymentAllocationService");
 
 // A purchase's per-item Purchase Price / GST% (PurchaseForm.jsx's editable Amount/GST%
 // fields) are an explicit "this is what it actually cost" entry — sync them back onto the
@@ -51,19 +52,22 @@ const calculateSubtotal = (items) => {
   return items.reduce((sum, item) => sum + calculateItemTotal(item.quantity, item.unitPrice), 0);
 };
 
+// Round to 2 decimals without binary float drift (…329999), so stored money is clean.
+const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
 // Computes one item's net (pre-tax) amount and tax amount from its own gstRate/taxInclusive —
 // seeded from the variant when one was selected. Mirrors PurchaseForm.jsx's own frontend math
 // exactly (lines computing `subtotal`/`totalTax`), so stored totals never disagree with what
-// the form displayed.
+// the form displayed. Net/tax are rounded to 2dp per line (same as the form).
 const calculateItemNetAndTax = (quantity, unitPrice, gstRate, taxInclusive) => {
   const gross = (parseFloat(quantity) || 0) * (parseFloat(unitPrice) || 0);
   const rate = parseFloat(gstRate) || 0;
-  if (rate <= 0) return { net: gross, tax: 0 };
+  if (rate <= 0) return { net: round2(gross), tax: 0 };
   if (taxInclusive) {
     const net = gross / (1 + rate / 100);
-    return { net, tax: gross - net };
+    return { net: round2(net), tax: round2(gross - net) };
   }
-  return { net: gross, tax: gross * (rate / 100) };
+  return { net: round2(gross), tax: round2(gross * (rate / 100)) };
 };
 
 // Rolls calculateItemNetAndTax up across every line into subtotal/totalTax/grandTotal —
@@ -76,7 +80,14 @@ const calculateOrderTotals = (items) => {
     subtotal += net;
     totalTax += tax;
   }
-  return { subtotal, totalTax, grandTotal: subtotal + totalTax };
+  subtotal = round2(subtotal);
+  totalTax = round2(totalTax);
+  // "Round Off": the grand total is rounded to the nearest whole rupee, and the
+  // difference is stored as roundOff (e.g. -0.05) so it can be shown as a line.
+  const rawGrand = round2(subtotal + totalTax);
+  const grandTotal = Math.round(rawGrand);
+  const roundOff = round2(grandTotal - rawGrand);
+  return { subtotal, totalTax, grandTotal, roundOff };
 };
 
 // Helper function to generate unique Purchase number per organization
@@ -224,7 +235,7 @@ exports.createPurchase = async (req, res) => {
     // Calculate subtotal/tax from each item's own GST (seeded from the variant when one was
     // selected) — not a single document-level rate, see calculateOrderTotals.
     const calculatedTransactionType = transactionType || 'intra';
-    const { subtotal, totalTax, grandTotal } = calculateOrderTotals(items);
+    const { subtotal, totalTax, grandTotal, roundOff } = calculateOrderTotals(items);
 
     // Generate Purchase Number for organization
     const purchaseNumber = await generatePurchaseNumber(req.user.organization);
@@ -235,11 +246,12 @@ exports.createPurchase = async (req, res) => {
       purchaseNumber,
       items: items.map(item => ({
         ...item,
-        total: calculateItemTotal(item.quantity, item.unitPrice) // Map 'amount' to 'total' if needed
+        total: round2(calculateItemTotal(item.quantity, item.unitPrice)) // Map 'amount' to 'total' if needed
       })),
       subtotal,
       transactionType: calculatedTransactionType,
       totalTax,
+      roundOff,
       grandTotal,
       notes,
       // A Purchase created from a PO always starts as Pending, regardless of
@@ -488,15 +500,16 @@ exports.updatePurchase = async (req, res) => {
     // If items updated, recalc subtotal and item totals
     if (items) {
       const calculatedTransactionType = transactionType || purchase.transactionType;
-      const { subtotal, totalTax, grandTotal } = calculateOrderTotals(items);
+      const { subtotal, totalTax, grandTotal, roundOff } = calculateOrderTotals(items);
 
       purchase.items = items.map(item => ({
         ...item,
-        total: calculateItemTotal(item.quantity, item.unitPrice) // Map 'amount' to 'total' if needed
+        total: round2(calculateItemTotal(item.quantity, item.unitPrice)) // Map 'amount' to 'total' if needed
       }));
       purchase.subtotal = subtotal;
       purchase.transactionType = calculatedTransactionType;
       purchase.totalTax = totalTax;
+      purchase.roundOff = roundOff;
       purchase.grandTotal = grandTotal;
     }
 
@@ -573,7 +586,7 @@ exports.updatePurchaseStatus = async (req, res) => {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    const purchase = await Purchase.findOne({ _id: req.params.id, organization: req.user.organization });
+    let purchase = await Purchase.findOne({ _id: req.params.id, organization: req.user.organization });
     if (!purchase) return res.status(404).json({ message: "Purchase not found" });
 
     // Once Confirmed (or later), status can't go back to Draft/Pending —
@@ -601,15 +614,23 @@ exports.updatePurchaseStatus = async (req, res) => {
       const totalAmount = Number(purchase.grandTotal || purchase.subtotal) || 0;
       const remaining = totalAmount - alreadyPaid;
       if (remaining > 0) {
-        purchase.payments.push({
+        // Routed through the same service the Record Payment modal uses, so
+        // this settle-the-rest shortcut produces a real Payment on the vendor
+        // too. Without it, marking a bill Paid from the dropdown would show
+        // as paid while contributing nothing to the vendor's Total Given.
+        await allocationService.recordDocumentPayment({
+          orgId: req.user.organization,
+          userId: req.user._id,
+          documentType: "Purchase",
+          documentId: purchase._id,
           amount: remaining,
-          paymentDate: new Date(),
-          paymentMethod: 'Other',
-          reference: '',
-          notes: 'Auto-recorded when status set to Paid',
-          recordedBy: req.user._id,
-          recordedAt: new Date(),
+          paymentMethod: "Other",
+          notes: "Auto-recorded when status set to Paid",
         });
+        // The service saved the subdoc and the status on its own copy of the
+        // document; reload so the save below doesn't write a stale payments
+        // array back over it.
+        purchase = await Purchase.findById(purchase._id);
       }
     }
 
@@ -744,39 +765,54 @@ exports.addPurchasePayment = async (req, res) => {
       return res.status(400).json({ error: `Payment cannot exceed the remaining balance of ₹${amountDue.toFixed(2)}.` });
     }
 
-    const oldStatus = purchase.status;
-    const oldStockMovementStatus = purchase.stockMovementStatus;
+    // One money movement, one record of it. The service creates the Payment
+    // (direction OUT, party = this bill's vendor), allocates it to the bill
+    // and pushes the payments[] subdoc, so paying a bill shows up as "Gave" on
+    // the vendor's payments page instead of living only inside the document.
+    try {
+      await allocationService.recordDocumentPayment({
+        orgId: req.user.organization,
+        userId: req.user._id,
+        documentType: "Purchase",
+        documentId: purchase._id,
+        amount: parsedAmount,
+        paymentDate,
+        paymentMethod: paymentMethod || "UPI",
+        reference,
+        notes,
+      });
+    } catch (err) {
+      if (err instanceof allocationService.AllocationError) {
+        return res.status(400).json({ error: err.message });
+      }
+      throw err;
+    }
 
-    purchase.payments.push({
-      amount: parsedAmount,
-      paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
-      paymentMethod: paymentMethod || "UPI",
-      reference: reference || "",
-      notes: notes || "",
-      internalNotes: internalNotes || "",
-      recordedBy: req.user._id,
-      recordedAt: new Date(),
-    });
+    // Reloaded because the service wrote the subdoc and status, not this
+    // handler's copy.
+    const updated = await Purchase.findById(purchase._id);
 
-    const newTotalPaid = alreadyPaid + parsedAmount;
-    purchase.status = statusForPaidAmount(purchase, newTotalPaid);
+    // internalNotes has no equivalent on the money row, so it is written
+    // straight onto the subdoc the service just pushed.
+    if (internalNotes) {
+      const subdoc = updated.payments[updated.payments.length - 1];
+      if (subdoc) {
+        subdoc.internalNotes = internalNotes;
+        await updated.save({ validateModifiedOnly: true });
+      }
+    }
 
-    // Only `payments` and `status` changed — same reasoning as
-    // invoiceController.addInvoicePayment (don't re-validate unrelated
-    // legacy fields on an older purchase).
-    await purchase.save({ validateModifiedOnly: true });
-    // Normally a no-op here (statusForPaidAmount only promotes once already
-    // Confirmed, which already applied stock) — kept for legacy purchases
-    // that reached Paid under an older flow without ever setting
-    // stockMovementStatus.
-    await syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, req.user.id);
-    await purchase.populate([
+    // Normally a no-op (the bill is already Confirmed, so stock already
+    // applied) — kept for legacy purchases that reached Paid under an older
+    // flow without ever setting stockMovementStatus.
+    await syncPurchaseStock(updated, purchase.status, purchase.stockMovementStatus, req.user.id);
+    await updated.populate([
       { path: "vendor", select: "name email phone" },
       { path: "purchaseOrder", select: "poNumber vendor" },
       { path: "payments.recordedBy", select: "name email" },
     ]);
 
-    res.json({ message: "Payment recorded successfully", purchase });
+    res.json({ message: "Payment recorded successfully", purchase: updated });
   } catch (err) {
     res.status(500).json({ error: `Failed to record payment: ${err.message}` });
   }
@@ -785,42 +821,40 @@ exports.addPurchasePayment = async (req, res) => {
 // PUT Purchase Payment
 exports.updatePurchasePayment = async (req, res) => {
   try {
-    const purchase = await Purchase.findOne({
-      _id: req.params.id,
-      organization: req.user.organization,
-    });
-    if (!purchase) return res.status(404).json({ error: "Purchase not found" });
-
-    const payment = purchase.payments.id(req.params.paymentId);
-    if (!payment) return res.status(404).json({ error: "Payment not found" });
-
     const { amount, paymentDate, paymentMethod, reference, notes, internalNotes } = req.body;
-    const parsedAmount = parseFloat(amount);
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      return res.status(400).json({ error: "A valid payment amount greater than 0 is required." });
+
+    // Amount, ceiling and status are all recomputed by the service, which
+    // keeps the money row and its allocation in step with the subdoc.
+    let result;
+    try {
+      result = await allocationService.updateDocumentPayment({
+        orgId: req.user.organization,
+        userId: req.user._id,
+        documentType: "Purchase",
+        documentId: req.params.id,
+        documentPaymentId: req.params.paymentId,
+        amount,
+        paymentDate,
+        paymentMethod,
+        reference,
+        notes,
+      });
+    } catch (err) {
+      if (err instanceof allocationService.AllocationError) {
+        return res.status(400).json({ error: err.message });
+      }
+      throw err;
     }
 
-    const otherPaid = (purchase.payments || [])
-      .filter((p) => p._id.toString() !== req.params.paymentId)
-      .reduce((sum, p) => sum + p.amount, 0);
-    const amountDue = purchase.grandTotal - otherPaid;
-    if (parsedAmount > amountDue + 0.01) {
-      return res.status(400).json({ error: `Payment cannot exceed the remaining balance of ₹${amountDue.toFixed(2)}.` });
+    const purchase = result.document;
+    if (internalNotes !== undefined) {
+      const subdoc = purchase.payments.id(req.params.paymentId);
+      if (subdoc) {
+        subdoc.internalNotes = internalNotes;
+        await purchase.save({ validateModifiedOnly: true });
+      }
     }
 
-    payment.amount = parsedAmount;
-    if (paymentDate) payment.paymentDate = new Date(paymentDate);
-    if (paymentMethod) payment.paymentMethod = paymentMethod;
-    payment.reference = reference ?? payment.reference;
-    payment.notes = notes ?? payment.notes;
-    payment.internalNotes = internalNotes ?? payment.internalNotes;
-
-    const oldStatus = purchase.status;
-    const oldStockMovementStatus = purchase.stockMovementStatus;
-    purchase.status = statusForPaidAmount(purchase, otherPaid + parsedAmount);
-
-    await purchase.save({ validateModifiedOnly: true });
-    await syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, req.user.id);
     res.json({ message: "Payment updated successfully", purchase });
   } catch (err) {
     res.status(500).json({ error: `Failed to update payment: ${err.message}` });
@@ -830,25 +864,25 @@ exports.updatePurchasePayment = async (req, res) => {
 // DELETE Purchase Payment
 exports.deletePurchasePayment = async (req, res) => {
   try {
-    const purchase = await Purchase.findOne({
-      _id: req.params.id,
-      organization: req.user.organization,
-    });
-    if (!purchase) return res.status(404).json({ error: "Purchase not found" });
+    // Reverses the allocation, pulls the subdoc, recomputes the bill's status
+    // and — when the money row was raised on this bill and settles nothing
+    // else — deletes it, so the vendor's Total Given drops by the same amount.
+    let result;
+    try {
+      result = await allocationService.removeDocumentPayment({
+        orgId: req.user.organization,
+        documentType: "Purchase",
+        documentId: req.params.id,
+        documentPaymentId: req.params.paymentId,
+      });
+    } catch (err) {
+      if (err instanceof allocationService.AllocationError) {
+        return res.status(400).json({ error: err.message });
+      }
+      throw err;
+    }
 
-    const payment = purchase.payments.id(req.params.paymentId);
-    if (!payment) return res.status(404).json({ error: "Payment not found" });
-
-    payment.deleteOne();
-
-    const oldStatus = purchase.status;
-    const oldStockMovementStatus = purchase.stockMovementStatus;
-    const totalPaid = (purchase.payments || []).reduce((sum, p) => sum + p.amount, 0);
-    purchase.status = statusForPaidAmount(purchase, totalPaid);
-
-    await purchase.save({ validateModifiedOnly: true });
-    await syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, req.user.id);
-    res.json({ message: "Payment deleted successfully" });
+    res.json({ message: "Payment deleted successfully", purchase: result.document });
   } catch (err) {
     res.status(500).json({ error: `Failed to delete payment: ${err.message}` });
   }

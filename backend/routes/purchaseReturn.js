@@ -21,6 +21,14 @@ router.post("/bulk-import", requireAuth, subscriptionGate, purchaseReturnControl
 router.get("/vendor/:vendorId", requireAuth, subscriptionGate, purchaseReturnController.getPurchaseReturnsByVendor);
 // Must come before /:id so "purchase" isn't swallowed as a return id.
 router.get("/purchase/:purchaseId/available", requireAuth, subscriptionGate, purchaseReturnController.getPurchaseItemsForReturn);
+// Refunds received from the vendor against a confirmed return. Declared
+// before "/:id" is irrelevant here (the paths are distinct) but grouped with
+// the other id-scoped routes for readability.
+router.get("/:id/payments", requireAuth, subscriptionGate, purchaseReturnController.getPurchaseReturnRefunds);
+router.post("/:id/payments", requireAuth, subscriptionGate, purchaseReturnController.addPurchaseReturnRefund);
+router.put("/:id/payments/:paymentId", requireAuth, subscriptionGate, purchaseReturnController.updatePurchaseReturnRefund);
+router.delete("/:id/payments/:paymentId", requireAuth, subscriptionGate, purchaseReturnController.deletePurchaseReturnRefund);
+
 router.get("/:id", requireAuth, subscriptionGate, purchaseReturnController.getPurchaseReturnById);
 router.put("/:id", requireAuth, subscriptionGate, purchaseReturnController.updatePurchaseReturn);
 router.put("/:id/status", requireAuth, subscriptionGate, purchaseReturnController.updatePurchaseReturnStatus);

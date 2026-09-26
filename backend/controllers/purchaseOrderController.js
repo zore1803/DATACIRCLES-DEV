@@ -12,6 +12,9 @@ async function generatePONumber(organizationId) {
   return `PO-${(count + 1).toString().padStart(5, "0")}`;
 }
 
+// Round to 2 decimals without binary float drift (…329999), for clean money.
+const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
 // Helper function to calculate item total
 function calculateItemTotal(quantity, unitPrice) {
   return (parseFloat(quantity) || 0) * (parseFloat(unitPrice) || 0);
@@ -28,26 +31,30 @@ function calculateTax(items) {
 // with what the form displayed. Shared by create and update so they can never drift apart.
 function formatOrderItems(items) {
   const formattedItems = items.map((item) => {
-    const itemTotal = calculateItemTotal(item.quantity, item.unitPrice);
+    const itemTotal = round2(calculateItemTotal(item.quantity, item.unitPrice));
     const gstRate = parseFloat(item.gstRate) || 0;
     const taxInclusive = item.taxInclusive || false;
-    const taxAmount = taxInclusive
+    const taxAmount = round2(taxInclusive
       ? itemTotal - (itemTotal / (1 + gstRate / 100))
-      : itemTotal * (gstRate / 100);
+      : itemTotal * (gstRate / 100));
 
     return { ...item, total: itemTotal, gstRate, taxInclusive, taxAmount };
   });
 
   // subtotal is net-of-tax on tax-inclusive lines — using the gross itemTotal directly would
   // double-count the tax already folded into that line's price.
-  const subtotal = formattedItems.reduce((sum, item) => {
-    const gross = calculateItemTotal(item.quantity, item.unitPrice);
-    return sum + (item.taxInclusive ? gross - item.taxAmount : gross);
-  }, 0);
-  const totalTax = calculateTax(formattedItems);
-  const grandTotal = subtotal + totalTax;
+  const subtotal = round2(formattedItems.reduce((sum, item) => {
+    const gross = item.total;
+    return sum + (item.taxInclusive ? round2(gross - item.taxAmount) : gross);
+  }, 0));
+  const totalTax = round2(calculateTax(formattedItems));
+  // "Round Off": grand total rounded to the nearest whole rupee, with the
+  // difference kept as roundOff (e.g. -0.24) for the invoice line.
+  const rawGrand = round2(subtotal + totalTax);
+  const grandTotal = Math.round(rawGrand);
+  const roundOff = round2(grandTotal - rawGrand);
 
-  return { formattedItems, subtotal, totalTax, grandTotal };
+  return { formattedItems, subtotal, totalTax, grandTotal, roundOff };
 }
 
 // Attaches a `convertedPurchase` summary ({_id, purchaseNumber}) to each PO so
@@ -116,7 +123,7 @@ exports.createPurchaseOrder = async (req, res) => {
     // Calculate totals — per-item GST (from each item's own gstRate/taxInclusive,
     // seeded from the variant when one was selected), same math the edit form already used.
     const { transactionType } = req.body;
-    const { formattedItems, subtotal, totalTax, grandTotal } = formatOrderItems(items);
+    const { formattedItems, subtotal, totalTax, grandTotal, roundOff } = formatOrderItems(items);
 
     // Generate PO Number for organization
     const poNumber = await generatePONumber(req.user.organization);
@@ -127,6 +134,7 @@ exports.createPurchaseOrder = async (req, res) => {
       items: formattedItems,
       subtotal,
       totalTax,
+      roundOff,
       grandTotal,
       totalAmount: grandTotal,
       transactionType: transactionType || undefined,
@@ -327,11 +335,12 @@ exports.updatePurchaseOrder = async (req, res) => {
     // Update fields
     if (items) {
       const { transactionType } = req.body;
-      const { formattedItems, subtotal, totalTax, grandTotal } = formatOrderItems(items);
+      const { formattedItems, subtotal, totalTax, grandTotal, roundOff } = formatOrderItems(items);
 
       purchaseOrder.items = formattedItems;
       purchaseOrder.subtotal = subtotal;
       purchaseOrder.totalTax = totalTax;
+      purchaseOrder.roundOff = roundOff;
       purchaseOrder.grandTotal = grandTotal;
       purchaseOrder.totalAmount = grandTotal;
       if (transactionType) purchaseOrder.transactionType = transactionType;

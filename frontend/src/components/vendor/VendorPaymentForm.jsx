@@ -128,10 +128,14 @@ const VendorPaymentForm = ({
       });
       onClose();
     } catch (err) {
-      toast.error(
-        err.response?.data?.error ||
-          `Failed to ${isEditMode ? "update" : "add"} payment`,
-      );
+      if (err.response?.status === 402) {
+        toast.error(err.response?.data?.message || "An active subscription is required to make changes.");
+      } else {
+        toast.error(
+          err.response?.data?.error ||
+            `Failed to ${isEditMode ? "update" : "add"} payment`,
+        );
+      }
     } finally {
       setLoading(false);
     }

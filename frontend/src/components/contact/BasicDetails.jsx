@@ -4,7 +4,6 @@ import DealsTable from "./DealsTable";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import {
-  X,
   Check,
   ChevronDown,
   PhoneCall,
@@ -35,8 +34,6 @@ import {
 } from "recharts";
 import AppToaster from "../AppToaster";
 import useContactLifecycleStore from "../../store/useContactLifecycleStore";
-import EyeIcon from "../common/EyeIcon";
-import EditIcon from "../common/EditIcon";
 import PlusIcon from "../common/PlusIcon";
 import ContactLifecycleDrawer from "./ContactLifecycleDrawer";
 
@@ -68,170 +65,12 @@ const formatActivityTime = (value) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Lifecycle Stage edit modal — the EXISTING contact lifecycle edit path, kept
-// verbatim. The journey below is display-only; this modal (opened from the
-// journey's small "Edit" affordance) remains the only way to change a contact's
-// stage/status from this page, writing through the same
-// /contacts/:id/lifecycle-stage endpoint as before.
-// ─────────────────────────────────────────────────────────────────────────────
-const LifecycleStageModal = ({ isOpen, onClose, contact, onUpdate }) => {
-  const [selectedStage, setSelectedStage] = useState(contact.lifecycleStage || "Lead");
-  const [selectedStatus, setSelectedStatus] = useState(contact.stageStatus || "New");
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  const lifecycleStageOptions = useContactLifecycleStore((s) => s.lifecycleStageOptions);
-  const allLifecycleStages = useContactLifecycleStore((s) => s.allLifecycleStages);
-  const defaultStatusForStage = useContactLifecycleStore((s) => s.defaultStatusForStage);
-  const fetchStages = useContactLifecycleStore((s) => s.fetchStages);
-
-  useEffect(() => {
-    fetchStages();
-  }, [fetchStages]);
-
-  useEffect(() => {
-    setSelectedStage(contact.lifecycleStage || "Lead");
-    setSelectedStatus(contact.stageStatus || "New");
-  }, [contact.lifecycleStage, contact.stageStatus, isOpen]);
-
-  const handleStageChange = (newStage) => {
-    setSelectedStage(newStage);
-    setSelectedStatus(defaultStatusForStage(newStage));
-  };
-
-  const handleSave = async () => {
-    try {
-      setIsUpdating(true);
-      await API.put(`/contacts/${contact._id}/lifecycle-stage`, {
-        lifecycleStage: selectedStage,
-        stageStatus: selectedStatus,
-      });
-      onUpdate?.({ ...contact, lifecycleStage: selectedStage, stageStatus: selectedStatus });
-      toast.success("Lifecycle stage updated!");
-      onClose();
-    } catch (error) {
-      console.error("Failed to update lifecycle stage:", error);
-      if (error.response?.status === 402) {
-        toast.error(error.response?.data?.message || "An active subscription is required to make changes.");
-      } else {
-        toast.error(error.response?.data?.error || "Failed to update lifecycle stage");
-      }
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const [shouldRender, setShouldRender] = useState(false);
-  const [showSlide, setShowSlide] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      setShouldRender(true);
-      setTimeout(() => setShowSlide(true), 10);
-    } else {
-      setShowSlide(false);
-      const timer = setTimeout(() => setShouldRender(false), 300);
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen]);
-
-  if (!shouldRender) return null;
-
-  return (
-    <>
-      <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
-        style={{ opacity: showSlide ? 1 : 0 }}
-        onClick={onClose}
-      />
-      <div
-        className={`fixed dc-panel-card z-[10001] dc-panel-w bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-in-out font-inter ${showSlide ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
-      >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
-          <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
-            Update Lifecycle Stage
-          </h2>
-          <button
-            onClick={onClose}
-            className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity"
-            aria-label="Close"
-          >
-            <X className="w-[18px] h-[18px]" strokeWidth={2} />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-8 py-6">
-          <div className="space-y-6">
-            <div>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Lifecycle Stage <span className="text-[#FF4935]">*</span>
-              </label>
-              <select
-                value={selectedStage}
-                onChange={(e) => handleStageChange(e.target.value)}
-                className="w-full border border-[#1F2937]/10 rounded-lg px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:border-blue-500 transition-colors bg-white font-inter"
-                disabled={isUpdating}
-              >
-                {allLifecycleStages.map((stage) => (
-                  <option key={stage} value={stage}>{stage}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Status <span className="text-[#FF4935]">*</span>
-              </label>
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full border border-[#1F2937]/10 rounded-lg px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:border-blue-500 transition-colors bg-white font-inter"
-                disabled={isUpdating}
-              >
-                {lifecycleStageOptions[selectedStage]?.map((status) => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-4 border-t border-[#D9D9D9] bg-white flex justify-end gap-3 shrink-0">
-          <button
-            onClick={onClose}
-            disabled={isUpdating}
-            className="px-6 py-2 text-[#161618] bg-white border border-[#D9D9D9] hover:bg-gray-50 rounded-lg text-[13px] font-medium transition-colors disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isUpdating}
-            className="px-6 py-2 bg-[#158FFF] text-white rounded-lg text-[13px] font-medium hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            {isUpdating ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Saving...
-              </>
-            ) : (
-              "Save Changes"
-            )}
-          </button>
-        </div>
-      </div>
-    </>
-  );
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
 // Lifecycle Journey — an interactive chevron track built from the organization-
 // configured contact lifecycle stages (useContactLifecycleStore, backed by
 // Settings → Contact Lifecycle). Stage names are never hardcoded and the
-// configured order is untouched. Hovering a stage surfaces its position in the
-// journey; clicking any stage opens the existing LifecycleStageModal, so every
-// write still goes through the same /contacts/:id/lifecycle-stage endpoint as
-// before.
+// configured order is untouched. Stage/status changes are made inline from a
+// stage's own dropdown, writing through the /contacts/:id/lifecycle-stage
+// endpoint.
 // ─────────────────────────────────────────────────────────────────────────────
 const daysBetween = (from, to = Date.now()) => {
   if (!from) return null;
@@ -241,7 +80,6 @@ const daysBetween = (from, to = Date.now()) => {
 };
 
 const LifecycleJourney = ({ contact, onContactUpdate }) => {
-  const [showEdit, setShowEdit] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [hovered, setHovered] = useState(null);
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -305,7 +143,7 @@ const LifecycleJourney = ({ contact, onContactUpdate }) => {
   };
 
   return (
-    <div className="bg-white border border-[#E1E4EA] rounded-xl px-5 py-4">
+    <div className={`relative bg-white border border-[#E1E4EA] rounded-xl px-5 py-4 ${openDropdown !== null ? "z-30" : ""}`}>
       <div className="flex items-start justify-between gap-4 mb-8">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -319,15 +157,6 @@ const LifecycleJourney = ({ contact, onContactUpdate }) => {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="hidden sm:inline text-[11px] text-gray-400">Managed from Edit</span>
-          <button
-            type="button"
-            onClick={() => setShowEdit(true)}
-            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-gray-600 border border-[#E1E4EA] rounded-full hover:bg-gray-50 transition-colors"
-          >
-            <EditIcon className="w-3 h-3" />
-            Edit
-          </button>
           <button
             type="button"
             onClick={() => setShowSettings(true)}
@@ -374,7 +203,7 @@ const LifecycleJourney = ({ contact, onContactUpdate }) => {
                      const activeLine = isDone || isCurrent;
                      // We use -mr-3 (-12px) so the line reaches all the way into the 12px notch of the next block.
                      elements.push(
-                       <div key={`line-before-${i}`} className="flex-1 h-[2px] bg-[#E1E4EA] relative z-0 -ml-1 -mr-3 min-w-[20px]">
+                       <div key={`line-before-${i}`} className="flex-1 h-[2px] bg-[#E1E4EA] relative z-0 -ml-1 -mr-3.5 min-w-[12px]">
                           <div 
                             className="absolute top-0 left-0 bottom-0 bg-[#0085FF] transition-all duration-700 ease-out"
                             style={{ 
@@ -388,19 +217,19 @@ const LifecycleJourney = ({ contact, onContactUpdate }) => {
                   }
 
                   // 2. Main Stage Node (compact arrow)
-                  const notch = 12;
+                  const notch = 14;
                   const clipPath = (i === 0) 
                     ? `polygon(0 0, calc(100% - ${notch}px) 0, 100% 50%, calc(100% - ${notch}px) 100%, 0 100%)`
                     : `polygon(0 0, calc(100% - ${notch}px) 0, 100% 50%, calc(100% - ${notch}px) 100%, 0 100%, ${notch}px 50%)`;
 
                   elements.push(
-                    <div key={`stage-${i}`} className="relative flex-[2] min-w-0 group z-10">
+                    <div key={`stage-${i}`} className="relative flex-[3] min-w-0 group z-10">
                       <div 
                         onMouseEnter={() => setHovered(i)}
                         onMouseLeave={() => setHovered(null)}
                         style={{ clipPath }}
-                        className={`h-[54px] w-full flex items-center gap-2.5 transition-colors duration-300 ${
-                          (i === 0) ? "pl-4 pr-[22px]" : "pl-[22px] pr-[22px]"
+                        className={`h-[64px] w-full flex items-center gap-3 transition-colors duration-300 ${
+                          (i === 0) ? "pl-5 pr-[26px]" : "pl-[26px] pr-[26px]"
                         } ${
                           isCurrent
                             ? "bg-[#0085FF]"
@@ -410,7 +239,7 @@ const LifecycleJourney = ({ contact, onContactUpdate }) => {
                         }`}
                       >
                         <span
-                          className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
+                          className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
                             isCurrent
                               ? "bg-white/25"
                               : isDone
@@ -419,20 +248,20 @@ const LifecycleJourney = ({ contact, onContactUpdate }) => {
                           }`}
                         >
                           {isDone ? (
-                            <Check className="w-3 h-3 text-white" strokeWidth={3} />
+                            <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
                           ) : isCurrent ? (
-                            <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                            <span className="w-2 h-2 rounded-full bg-white" />
                           ) : (
-                            <span className="text-[9px] font-semibold text-gray-400">{i + 1}</span>
+                            <span className="text-[10px] font-semibold text-gray-400">{i + 1}</span>
                           )}
                         </span>
                         
                         <div className="flex-1 min-w-0 flex items-center gap-2 justify-between">
                           <div className="flex flex-col min-w-0 flex-1">
-                            <span className={`block text-xs font-semibold leading-tight truncate ${isCurrent ? "text-white" : isDone ? "text-[#0E121B]" : "text-gray-500"}`}>
+                            <span className={`block text-sm font-semibold leading-tight truncate ${isCurrent ? "text-white" : isDone ? "text-[#0E121B]" : "text-gray-500"}`}>
                               {stage}
                             </span>
-                            <span className={`block text-[10px] leading-tight truncate ${isCurrent ? "text-white/75" : "text-gray-400"}`}>
+                            <span className={`block text-[11px] leading-tight truncate mt-0.5 ${isCurrent ? "text-white/75" : "text-gray-400"}`}>
                               {isCurrent ? "Current stage" : isDone ? "Completed" : `Step ${i + 1}`}
                             </span>
                           </div>
@@ -448,7 +277,7 @@ const LifecycleJourney = ({ contact, onContactUpdate }) => {
                                 isCurrent ? "text-white/80 hover:bg-white/20" : "text-gray-400 hover:bg-black/10"
                               }`}
                             >
-                              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${openDropdown === i ? "rotate-180" : ""}`} />
+                              <ChevronDown className={`w-4 h-4 transition-transform ${openDropdown === i ? "rotate-180" : ""}`} />
                             </button>
                           )}
                         </div>
@@ -456,7 +285,7 @@ const LifecycleJourney = ({ contact, onContactUpdate }) => {
 
                       {/* Dropdown Menu - Plain background, no header, left aligned */}
                       {openDropdown === i && statuses.length > 0 && (
-                        <div className="absolute top-full mt-2 left-0 min-w-[160px] w-full bg-white border border-[#E1E4EA] rounded-xl shadow-xl z-50 py-1 overflow-hidden">
+                        <div className="absolute top-full mt-2 left-0 min-w-[160px] w-full bg-white border border-[#E1E4EA] rounded-xl shadow-xl z-50 py-1 max-h-[220px] overflow-y-auto">
                           {statuses.map((status) => (
                             <button
                               key={status}
@@ -525,12 +354,6 @@ const LifecycleJourney = ({ contact, onContactUpdate }) => {
         </>
       )}
 
-      <LifecycleStageModal
-        isOpen={showEdit}
-        onClose={() => setShowEdit(false)}
-        contact={contact}
-        onUpdate={onContactUpdate}
-      />
     </div>
   );
 };
@@ -643,19 +466,19 @@ const RelationshipPulse = ({ activity, loading }) => {
       </div>
 
       {/* Headline reads: how much engagement, and which way it is trending. */}
-      <div className="flex items-end gap-6 mt-4 pb-4 border-b border-[#E1E4EA]">
+      <div className="flex items-start gap-8 mt-3 pb-3 border-b border-[#E1E4EA]">
         <div>
           <p className="text-[10px] font-semibold tracking-wide text-gray-400 uppercase">
             Total touchpoints
           </p>
-          <p className="text-2xl font-bold text-[#0E121B] leading-tight mt-0.5">{grandTotal}</p>
+          <p className="text-xl font-bold text-[#0E121B] leading-tight mt-0.5">{grandTotal}</p>
         </div>
         <div>
           <p className="text-[10px] font-semibold tracking-wide text-gray-400 uppercase">
             Last 4 weeks
           </p>
           <div className="flex items-center gap-1.5 mt-0.5">
-            <span className="text-2xl font-bold text-[#0E121B] leading-tight">{last4}</span>
+            <span className="text-xl font-bold text-[#0E121B] leading-tight">{last4}</span>
             {momentum !== null && momentum !== 0 && (
               <span
                 className={`inline-flex items-center gap-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${

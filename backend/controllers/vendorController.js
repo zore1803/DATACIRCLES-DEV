@@ -3,6 +3,8 @@ const Vendor = require("../models/Vendor");
 const Payment = require("../models/Payment");
 const vendorService = require("../services/vendorService");
 const { processAdditionalFields } = require("../services/fieldCoercionService");
+const partyLedger = require("../services/partyLedgerService");
+const allocationService = require("../services/paymentAllocationService");
 
 // Create Vendor
 exports.createVendor = async (req, res) => {
@@ -40,8 +42,10 @@ exports.getAllVendors = async (req, res) => {
       ];
     }
     
-    const vendors = await Vendor.find(query);
-    res.json(vendors);
+    const vendors = await Vendor.find(query).lean();
+    // Total Given / Got / Net are derived from the Payment ledger, never read
+    // from a stored field — see services/partyLedgerService.
+    res.json(await partyLedger.attachTotalsToVendors(req.user.organization, vendors));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -115,7 +119,7 @@ exports.getAllVendorsWithPagination = async (req, res) => {
     const hasPrevPage = page > 1;
     
     res.json({
-      vendors,
+      vendors: await partyLedger.attachTotalsToVendors(req.user.organization, vendors),
       pagination: {
         currentPage: page,
         totalPages,
@@ -142,13 +146,18 @@ exports.getVendorById = async (req, res) => {
     const vendor = await Vendor.findOne({
       _id: req.params.id,
       organization: req.user.organization
-    });
+    }).lean();
     
     if (!vendor) {
       return res.status(404).json({ error: "Vendor not found" });
     }
     
-    res.json(vendor);
+    const totals = await partyLedger.getPartyTotals({
+      orgId: req.user.organization,
+      partyType: "Vendor",
+      partyId: vendor._id,
+    });
+    res.json(partyLedger.withTotals(vendor, totals));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -226,6 +235,9 @@ exports.bulkImportVendors = async (req, res) => {
         continue;
       }
 
+      // Kept so an existing import file with a Balance column still loads.
+      // The stored value is not used for any calculation — responses carry the
+      // Net Balance derived from the Payment ledger instead.
       vendor.balance = parseFloat(vendor.balance) || 0;
 
       if (!vendor.address) {
@@ -342,14 +354,10 @@ exports.addPaymentForVendor = async (req, res) => {
     });
     await payment.save();
 
-    // Update vendor balance
-    if (req.body.direction === "IN") {
-      vendor.balance += req.body.amount;
-    } else {
-      vendor.balance -= req.body.amount;
-    }
-    await vendor.save();
-
+    // No vendor.balance write: Total Given / Got / Net are derived from the
+    // Payment rows themselves (services/partyLedgerService), so saving this
+    // row IS the balance update. Incrementing a stored copy here is what used
+    // to let the two disagree.
     res.status(201).json(payment);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -477,29 +485,12 @@ exports.updatePayment = async (req, res) => {
       return res.status(404).json({ error: 'Vendor not found' });
     }
 
-    // Save old amount and direction for balance update
-    const oldAmount = payment.amount;
-    const oldDirection = payment.direction;
-
     // Update payment fields
     Object.assign(payment, req.body);
     await payment.save();
 
-    // Update vendor balance accordingly
-    if (oldDirection === 'IN') {
-      vendor.balance -= oldAmount;
-    } else {
-      vendor.balance += oldAmount;
-    }
-
-    if (payment.direction === 'IN') {
-      vendor.balance += payment.amount;
-    } else {
-      vendor.balance -= payment.amount;
-    }
-
-    await vendor.save();
-
+    // The amount/direction change is the balance change — nothing stored to
+    // adjust. See addPaymentForVendor.
     res.json(payment);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -536,18 +527,17 @@ exports.deletePaymentByVendorAndId = async (req, res) => {
     const paymentAmount = payment.amount;
     const paymentDirection = payment.direction;
 
+    // Undo anything this payment settled before removing it, so the bills it
+    // paid stop showing a payment that no longer exists. Done first: a failure
+    // here leaves the payment intact rather than orphaning the subdocuments it
+    // pushed into those documents.
+    await allocationService.reverseAllocationsForPayment(paymentId);
+
     // Remove payment
     await Payment.findByIdAndDelete(paymentId);
 
-    // Revert the payment effect
-    if (paymentDirection === 'IN') {
-      vendor.balance -= paymentAmount;
-    } else {
-      vendor.balance += paymentAmount;
-    }
-
-    await vendor.save();
-
+    // Nothing to revert on the vendor — the totals are derived from the rows,
+    // and this row is gone.
     res.json({ 
       message: 'Payment deleted successfully',
       deletedPayment: {
@@ -590,18 +580,17 @@ exports.deletePaymentById = async (req, res) => {
     const paymentAmount = payment.amount;
     const paymentDirection = payment.direction;
 
+    // Undo anything this payment settled before removing it, so the bills it
+    // paid stop showing a payment that no longer exists. Done first: a failure
+    // here leaves the payment intact rather than orphaning the subdocuments it
+    // pushed into those documents.
+    await allocationService.reverseAllocationsForPayment(paymentId);
+
     // Remove payment
     await Payment.findByIdAndDelete(paymentId);
 
-    // Revert the payment effect
-    if (paymentDirection === 'IN') {
-      vendor.balance -= paymentAmount;
-    } else {
-      vendor.balance += paymentAmount;
-    }
-
-    await vendor.save();
-
+    // Nothing to revert on the vendor — the totals are derived from the rows,
+    // and this row is gone.
     res.json({ 
       message: 'Payment deleted successfully',
       deletedPayment: {

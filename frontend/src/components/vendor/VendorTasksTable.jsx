@@ -14,6 +14,7 @@ import TaskDetailsModal from "../Task/TaskDetailsModal";
 import DataTable from "../common/DataTable";
 import RowActionsMenu from "../common/RowActionsMenu";
 import BulkActionBar from "../common/BulkActionBar";
+import BulkDeleteModal from "../common/BulkDeleteModal";
 import TablePaginationFooter from "../common/TablePaginationFooter";
 import ToolbarFilterGroup from "../company/ToolbarFilterGroup";
 import FilterIcon from "../common/FilterIcon";
@@ -83,6 +84,7 @@ const VendorTasksTable = ({ vendorId, showKPIs = true, autoOpenCreate = false, o
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [columnSizing, setColumnSizing] = useState({});
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   
   const [columnOrder, setColumnOrder] = useState(() => [
     "selection", "title", "description", "assignedTo", "status", "priority", "dueDate"
@@ -276,14 +278,18 @@ const VendorTasksTable = ({ vendorId, showKPIs = true, autoOpenCreate = false, o
     exportToCSV([headers, ...rows], `tasks_export_${new Date().toISOString().split("T")[0]}.csv`);
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (!selectedItems.length) return;
-    if (!window.confirm(`Delete ${selectedItems.length} task(s)? This cannot be undone.`)) return;
+    setShowBulkDeleteModal(true);
+  };
+
+  const executeBulkDelete = async () => {
     setIsDeleting(true);
     try {
       await Promise.all(selectedItems.map((id) => API.delete(`/tasks/${id}`)));
       await refetchTasks();
       clearSelection();
+      setShowBulkDeleteModal(false);
       toast.success("Tasks deleted!");
     } catch (err) {
       console.error("Bulk delete failed:", err);
@@ -755,6 +761,18 @@ const VendorTasksTable = ({ vendorId, showKPIs = true, autoOpenCreate = false, o
           getRelatedToName={getRelatedToName}
         />
       )}
+
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        message={
+          <>
+            Are you sure you want to delete <strong>{selectedItems.length}</strong> selected Tasks? This action cannot be undone.
+          </>
+        }
+        loading={isDeleting}
+        onCancel={() => setShowBulkDeleteModal(false)}
+        onConfirm={executeBulkDelete}
+      />
     </div>
   );
 };

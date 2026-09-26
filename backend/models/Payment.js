@@ -32,9 +32,18 @@ const paymentSchema = new mongoose.Schema(
     allocatedAmount: { type: Number, default: 0, min: 0 },
     paymentDate: { type: Date, default: Date.now },
     bank: String,
+    // Widened to match the documents' own payments[].paymentMethod enum
+    // (Purchase/Invoice/PurchaseReturn). Bill-side payments now create a
+    // Payment row through paymentAllocationService.recordDocumentPayment, and
+    // that row has to be able to hold whatever method the bill was paid by --
+    // NEFT/RTGS/IMPS/TDS/Other used to be silently downgraded. Every
+    // previously valid value is still valid, so no existing row is affected.
     paymentType: {
       type: String,
-      enum: ["Card", "Cash", "Cheque", "EMI", "Net Banking", "UPI"],
+      enum: [
+        "Card", "Cash", "Cheque", "EMI", "Net Banking", "UPI",
+        "NEFT", "RTGS", "IMPS", "TDS", "Other",
+      ],
       required: true,
     },
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -61,6 +70,14 @@ const paymentSchema = new mongoose.Schema(
     // (and so a half-completed transfer is identifiable — the two POSTs are
     // not atomic).
     transferGroup: { type: String, index: true },
+    // True when this row was created by recording a payment ON a document
+    // (the Record Payment modal on a bill), rather than as a standalone
+    // Gave/Got entry on the party's payments page. It exists so removing that
+    // document payment can delete the money row it created, while a
+    // standalone payment that merely happens to be fully allocated survives
+    // as the party's credit balance. See
+    // paymentAllocationService.removeDocumentPayment.
+    isDocumentPayment: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

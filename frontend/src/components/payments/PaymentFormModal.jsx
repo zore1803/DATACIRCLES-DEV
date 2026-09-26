@@ -46,6 +46,9 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
 
   const isCredit = formData.direction === "IN";
   const partyLabel = isCredit ? "Customer" : "Vendor";
+  // Fallback only. A Credit can settle an Invoice (a customer paying us) or a
+  // Purchase Return (a vendor refunding us), so the real type comes from each
+  // fetched document — the server tags every row with its own documentType.
   const documentType = isCredit ? "Invoice" : "Purchase";
 
   const fetchParties = async (direction) => {
@@ -193,11 +196,12 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
       Object.entries(allocations)
         .map(([documentId, value]) => ({
           documentId,
-          documentType,
+          documentType:
+            openDocs.find((d) => String(d._id) === String(documentId))?.documentType || documentType,
           amount: Number(value) || 0,
         }))
         .filter((a) => a.amount > 0),
-    [allocations, documentType]
+    [allocations, documentType, openDocs]
   );
 
   const totalAllocated = useMemo(

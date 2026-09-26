@@ -26,6 +26,9 @@ const API_BASE = `${import.meta.env.VITE_APP_API_URL}/api`;
 // before it lands in the plain <input> below, which was showing raw tags.
 const stripHtml = (html) => String(html || "").replace(/<[^>]*>/g, "").trim();
 
+// Round to 2 decimals without binary float drift (…329999), for clean money.
+const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
 // Helper component for Item Search within the form
 const ItemSearchSelect = ({ value, onSelect, onAddNew, error = null }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -307,30 +310,38 @@ const PurchaseOrderForm = ({
     setItems(newItems);
   };
 
-  const subtotal = items.reduce((sum, item) => {
-    let itemTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
-    if (item.taxInclusive) {
-      itemTotal = itemTotal / (1 + (parseFloat(item.gstRate) || 0) / 100);
-    }
-    return sum + itemTotal;
-  }, 0);
+  // Same tax logic — only each line's base/tax and the totals are rounded to
+  // 2dp so no float drift leaks into subtotal/GST/grand total.
+  const subtotal = round2(
+    items.reduce((sum, item) => {
+      let itemTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
+      if (item.taxInclusive) {
+        itemTotal = itemTotal / (1 + (parseFloat(item.gstRate) || 0) / 100);
+      }
+      return sum + round2(itemTotal);
+    }, 0),
+  );
 
-  // Calculate tax
-  const totalTax = items.reduce((sum, item) => {
-    const itemTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
-    const rate = parseFloat(item.gstRate) || 0;
-    
-    if (rate <= 0) return sum;
-    
-    if (item.taxInclusive) {
-      const base = itemTotal / (1 + rate / 100);
-      return sum + (itemTotal - base);
-    } else {
-      return sum + (itemTotal * (rate / 100));
-    }
-  }, 0);
+  const totalTax = round2(
+    items.reduce((sum, item) => {
+      const itemTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
+      const rate = parseFloat(item.gstRate) || 0;
+      if (rate <= 0) return sum;
+      if (item.taxInclusive) {
+        const base = itemTotal / (1 + rate / 100);
+        return sum + round2(itemTotal - base);
+      }
+      return sum + round2(itemTotal * (rate / 100));
+    }, 0),
+  );
 
-  const grandTotal = subtotal + totalTax;
+  // "Round Off": grand total to the nearest whole rupee, paise diff shown as a line.
+  const rawGrand = round2(subtotal + totalTax);
+  const grandTotal = Math.round(rawGrand);
+  const roundOff = round2(grandTotal - rawGrand);
+  // Split the tax in halves that always sum back to totalTax exactly.
+  const cgst = round2(totalTax / 2);
+  const sgst = round2(totalTax - cgst);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -358,8 +369,7 @@ const PurchaseOrderForm = ({
         description: item.description,
         quantity: parseFloat(item.quantity) || 0,
         unitPrice: parseFloat(item.unitPrice) || 0,
-        amount:
-          (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0),
+        amount: round2((parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)),
         sku: item.sku,
         gstRate: parseFloat(item.gstRate) || 0,
         taxInclusive: item.taxInclusive || false,
@@ -728,13 +738,19 @@ const PurchaseOrderForm = ({
               <>
                 <div className="flex justify-between text-[12px] text-gray-500">
                   <span>CGST</span>
-                  <span>₹{formatNumberFixed(totalTax / 2)}</span>
+                  <span>₹{formatNumberFixed(cgst)}</span>
                 </div>
                 <div className="flex justify-between text-[12px] text-gray-500">
                   <span>SGST</span>
-                  <span>₹{formatNumberFixed(totalTax / 2)}</span>
+                  <span>₹{formatNumberFixed(sgst)}</span>
                 </div>
               </>
+            )}
+            {Math.abs(roundOff) >= 0.005 && (
+              <div className="flex justify-between text-[12px] text-gray-500">
+                <span>Round Off</span>
+                <span>{roundOff < 0 ? "-" : "+"}₹{formatNumberFixed(Math.abs(roundOff))}</span>
+              </div>
             )}
           </div>
 

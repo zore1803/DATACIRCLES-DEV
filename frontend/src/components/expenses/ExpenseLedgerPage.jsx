@@ -21,6 +21,7 @@ import ColumnSettingsPanel from "../ColumnSettingsPanel";
 import { getPinnedBoundaryOverlayStyle } from "../../utils/pinnedColumnShadow";
 import { getAncestorZoom } from "../../utils/domUtils";
 import BulkActionBar from "../common/BulkActionBar";
+import BulkDeleteModal from "../common/BulkDeleteModal";
 import BulkActions from "../BulkActions";
 import { useBulkStrip } from "../../hooks/useBulkSelection";
 import useSearchOverlayOpen from "../../hooks/useSearchOverlayOpen";
@@ -111,6 +112,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
   const [editingPage, setEditingPage] = useState(false);
   const [pageInput, setPageInput] = useState("");
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [sort, setSort] = useState({ key: null, dir: "desc" });
   const [openMenu, setOpenMenu] = useState(null);
   const [rowMenuPos, setRowMenuPos] = useState(null);
@@ -449,12 +451,15 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
     }
   };
 
-  const handleBulkDelete = async () => {
-    if (!window.confirm(`Delete ${selectedIds.length} selected ${selectedIds.length === 1 ? "entry" : "entries"}?`)) return;
+  const handleBulkDelete = () => {
+    if (!selectedIds.length) return;
+    setShowBulkDeleteModal(true);
+  };
+
+  const executeBulkDelete = async () => {
     setBulkDeleting(true);
     try {
-      // Sequential rather than Promise.all: a partial failure should leave the
-      // rest deleted and be reported, not fire an unbounded burst of requests.
+      // Sequential so a partial failure leaves the rest deleted and reported.
       let failed = 0;
       for (const id of selectedIds) {
         try {
@@ -466,6 +471,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
       if (failed) toast.error(`${failed} of ${selectedIds.length} could not be deleted`);
       else toast.success(`${selectedIds.length} deleted`);
       setSelectedIds([]);
+      setShowBulkDeleteModal(false);
       fetchData();
     } finally {
       setBulkDeleting(false);
@@ -1546,6 +1552,18 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
         fieldConfig={ledgerFieldConfig}
         module="expenses"
         loading={bulkUpdating}
+      />
+
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        message={
+          <>
+            Are you sure you want to delete <strong>{selectedIds.length}</strong> selected {selectedIds.length === 1 ? "Entry" : "Entries"}? This action cannot be undone.
+          </>
+        }
+        loading={bulkDeleting}
+        onCancel={() => setShowBulkDeleteModal(false)}
+        onConfirm={executeBulkDelete}
       />
 
     </div>

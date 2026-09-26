@@ -31,7 +31,9 @@ const purchaseOrderSchema = new mongoose.Schema({
   },
   gstRate: { type: Number, default: 0, min: 0 },
   totalTax: { type: Number, default: 0, min: 0 },
-  grandTotal: { type: Number, default: 0, min: 0 },
+  // Whole-rupee "Round Off" adjustment = grandTotal − (subtotal + totalTax).
+  roundOff: { type: Number, default: 0 },
+  grandTotal: { type: Number, default: 0, min: 0 }, // rounded to the nearest rupee
   paymentTerms: { type: String, default: "Net 30" },
   status: { type: String, enum: ["Pending", "Approved", "Rejected", "Delivered"], default: "Pending" },
   // Tracks whether this PO's Delivered transition has already added its items to

@@ -5,6 +5,7 @@ const Purchase = require("../models/Purchase");
 const Branding = require("../models/Branding");
 const purchaseDocumentPdf = require("../utils/purchaseDocumentPdf");
 const { syncDocumentStock } = require("../utils/inventorySync");
+const allocationService = require("../services/paymentAllocationService");
 
 // ── Tax helpers ────────────────────────────────────────────────────────────
 //
@@ -91,7 +92,12 @@ const POPULATE = [
 // stock, same directional sense as a sale — hence baseDirection: "out".
 async function syncPurchaseReturnStock(purchaseReturn, oldStatus, oldStockMovementStatus, userId, previousItems = null) {
   const isNowConfirmed = purchaseReturn.status === "Confirmed";
-  const wasConfirmed = oldStatus === "Confirmed" || oldStatus === "Paid";
+  // Partial and Paid are refund states that can only be reached FROM
+  // Confirmed, so the goods already left under any of the three. Listing all
+  // of them keeps a refund-driven status change from ever looking like a
+  // first arrival at Confirmed. (The stockMovementStatus guard below would
+  // catch it anyway; this makes the intent explicit.)
+  const wasConfirmed = ["Confirmed", "Partial", "Paid"].includes(oldStatus);
 
   if (isNowConfirmed && !wasConfirmed && oldStockMovementStatus !== "applied") {
     // First time reaching Confirmed: apply the full quantity, nothing to
@@ -164,10 +170,42 @@ async function syncPurchaseReturnStock(purchaseReturn, oldStatus, oldStockMoveme
 // those imply the goods never left. Mirrors Purchase's Confirmed -> Cancelled
 // reversal path.
 function isBlockedStatusChange(oldStatus, newStatus) {
-  if (oldStatus !== "Confirmed") return false;
   if (newStatus === undefined) return false;
-  return newStatus !== "Confirmed" && newStatus !== "Paid" && newStatus !== "Cancelled";
+  // Refund-tracking states belong to the money, not the dropdown: they are
+  // set by recording (or removing) a refund, via
+  // statusForRefundedAmount/the allocation service. Letting the dropdown set
+  // them would mean a return could read "Paid" with no refund behind it,
+  // which is the same two-systems problem bill payments used to have.
+  if (newStatus === "Partial" || newStatus === "Paid") return true;
+  if (oldStatus !== "Confirmed" && oldStatus !== "Partial" && oldStatus !== "Paid") return false;
+  // Once the goods have left, the only way out is Cancelled (which reverses
+  // the stock-out); it can never walk back to Draft/Pending.
+  return newStatus !== "Confirmed" && newStatus !== "Cancelled";
 }
+
+// Why a status change was refused — the rule is the same for both endpoints,
+// so the wording is too.
+function blockedStatusMessage(oldStatus, newStatus) {
+  if (newStatus === "Partial" || newStatus === "Paid") {
+    return `"${newStatus}" is set by recording a refund against this return, not from the status list.`;
+  }
+  return "A Purchase Return whose goods have already gone back can only stay Confirmed or be Cancelled.";
+}
+
+// The refund-driven status of a return, mirroring purchaseController's
+// statusForPaidAmount. Only a return that physically happened tracks refunds.
+function statusForRefundedAmount(purchaseReturn, totalRefunded) {
+  if (!["Confirmed", "Partial", "Paid"].includes(purchaseReturn.status)) {
+    return purchaseReturn.status;
+  }
+  const total = Number(purchaseReturn.grandTotal) || 0;
+  if (totalRefunded >= total - 0.01 && total > 0) return "Paid";
+  if (totalRefunded > 0) return "Partial";
+  return "Confirmed";
+}
+
+const sumRefunds = (payments) =>
+  (payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
 // How much of each line item on a Purchase has already been returned, across
 // every OTHER non-Cancelled PurchaseReturn against it — the "Already
@@ -466,7 +504,16 @@ exports.getPurchaseReturnById = async (req, res) => {
       organization: req.user.organization,
     }).populate(POPULATE);
     if (!purchaseReturn) return res.status(404).json({ message: "Purchase return not found" });
-    res.json(purchaseReturn);
+
+    // Refund position alongside the document, so the UI doesn't have to sum
+    // payments[] itself (and can't drift from what the server enforces).
+    const refundedAmount = sumRefunds(purchaseReturn.payments);
+    const total = Number(purchaseReturn.grandTotal) || 0;
+    res.json({
+      ...purchaseReturn.toObject(),
+      refundedAmount,
+      amountDue: Math.max(0, total - refundedAmount),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -491,7 +538,16 @@ exports.updatePurchaseReturn = async (req, res) => {
     // updatePurchaseReturnStatus, applied here too since this endpoint is
     // also how the edit form changes status.
     if (isBlockedStatusChange(oldStatus, status)) {
-      return res.status(400).json({ message: "A Confirmed Purchase Return can't be changed to another status." });
+      return res.status(400).json({ message: blockedStatusMessage(oldStatus, status) });
+    }
+
+    // Cancelling reverses the stock-out, but the money the vendor already
+    // refunded is not something a status flip can undo. Mirrors the rule on
+    // a Paid Purchase: remove the refunds first, then cancel.
+    if (status === "Cancelled" && sumRefunds(purchaseReturn.payments) > 0) {
+      return res.status(400).json({
+        message: "This return has refunds recorded against it — remove those first, then cancel it.",
+      });
     }
 
     // Note: vendor and purchase are intentionally not editable here — a
@@ -545,6 +601,15 @@ exports.updatePurchaseReturn = async (req, res) => {
       purchaseReturn.transactionType = transactionType;
       purchaseReturn.totalTax        = totalTax;
       purchaseReturn.grandTotal      = grandTotal;
+
+      // Editing the lines moves the total the refunds are measured against:
+      // a ₹2,000 return refunded ₹1,000 (Partial) that is trimmed to ₹1,000
+      // is now fully refunded. Recomputed from the money rather than left on
+      // a status the amounts no longer support. Only applies when the status
+      // wasn't explicitly set in this same request.
+      if (status === undefined) {
+        purchaseReturn.status = statusForRefundedAmount(purchaseReturn, sumRefunds(purchaseReturn.payments));
+      }
     }
 
     await purchaseReturn.save();
@@ -586,7 +651,16 @@ exports.updatePurchaseReturnStatus = async (req, res) => {
     // walked back through the status dropdown. (Not enforced via the enum
     // itself since Confirmed is still a perfectly valid status to reach.)
     if (isBlockedStatusChange(oldStatus, status)) {
-      return res.status(400).json({ message: "A Confirmed Purchase Return can't be changed to another status." });
+      return res.status(400).json({ message: blockedStatusMessage(oldStatus, status) });
+    }
+
+    // Cancelling reverses the stock-out, but the money the vendor already
+    // refunded is not something a status flip can undo. Mirrors the rule on
+    // a Paid Purchase: remove the refunds first, then cancel.
+    if (status === "Cancelled" && sumRefunds(purchaseReturn.payments) > 0) {
+      return res.status(400).json({
+        message: "This return has refunds recorded against it — remove those first, then cancel it.",
+      });
     }
 
     purchaseReturn.status = status;
@@ -609,6 +683,19 @@ exports.deletePurchaseReturn = async (req, res) => {
       organization: req.user.organization,
     });
     if (!purchaseReturn) return res.status(404).json({ message: "Purchase return not found" });
+
+    // Refunds recorded against this return are allocations of real Payment
+    // rows. Removing the document without unwinding them would leave money on
+    // the vendor's ledger pointing at a return that no longer exists, so each
+    // refund is removed the same way deleting it individually would.
+    for (const refund of [...(purchaseReturn.payments || [])]) {
+      await allocationService.removeDocumentPayment({
+        orgId: req.user.organization,
+        documentType: "PurchaseReturn",
+        documentId: purchaseReturn._id,
+        documentPaymentId: refund._id,
+      });
+    }
 
     // Deleting a Confirmed return must reverse its stock-out — otherwise
     // stock stays understated with no surviving document to explain why.
@@ -713,6 +800,186 @@ exports.bulkImportPurchaseReturns = async (req, res) => {
   } catch (err) {
     console.error("Bulk import purchase returns error:", err);
     res.status(500).json({ error: err.message });
+  }
+};
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Refunds
+//
+// A confirmed return means the goods went back; the vendor refunding us is a
+// separate, later event — and it can arrive in instalments. Each refund is a
+// real Payment with direction IN (so it reads as "Got" on the vendor's
+// payments page) allocated to this return, which pushes the payments[] subdoc
+// and recomputes Confirmed -> Partial -> Paid from the money. Exactly the
+// mechanism purchase bill payments use, in the opposite direction.
+//
+// Stock is untouched by all of this: it moved once, at Confirmed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /purchase-returns/:id/payments
+exports.getPurchaseReturnRefunds = async (req, res) => {
+  try {
+    const purchaseReturn = await PurchaseReturn.findOne({
+      _id: req.params.id,
+      organization: req.user.organization,
+    }).populate("payments.recordedBy", "name email");
+    if (!purchaseReturn) return res.status(404).json({ message: "Purchase return not found" });
+
+    const refunded = sumRefunds(purchaseReturn.payments);
+    const total = Number(purchaseReturn.grandTotal) || 0;
+
+    res.json({
+      payments: purchaseReturn.payments || [],
+      totalAmount: total,
+      refundedAmount: refunded,
+      amountDue: Math.max(0, total - refunded),
+      status: purchaseReturn.status,
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to fetch refunds: ${err.message}` });
+  }
+};
+
+// POST /purchase-returns/:id/payments
+exports.addPurchaseReturnRefund = async (req, res) => {
+  try {
+    const { amount, paymentDate, paymentMethod, reference, notes, internalNotes } = req.body;
+
+    const parsedAmount = parseFloat(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ error: "A valid refund amount greater than 0 is required." });
+    }
+
+    const purchaseReturn = await PurchaseReturn.findOne({
+      _id: req.params.id,
+      organization: req.user.organization,
+    });
+    if (!purchaseReturn) return res.status(404).json({ message: "Purchase return not found" });
+
+    // Nothing is owed back until the goods have actually gone back.
+    if (!["Confirmed", "Partial", "Paid"].includes(purchaseReturn.status)) {
+      return res.status(400).json({
+        error: "This return isn't confirmed yet — confirm it before recording a refund.",
+      });
+    }
+
+    const alreadyRefunded = sumRefunds(purchaseReturn.payments);
+    const amountDue = (Number(purchaseReturn.grandTotal) || 0) - alreadyRefunded;
+    if (parsedAmount > amountDue + 0.01) {
+      return res.status(400).json({
+        error: `Refund cannot exceed the remaining balance of ₹${amountDue.toFixed(2)}.`,
+      });
+    }
+
+    try {
+      await allocationService.recordDocumentPayment({
+        orgId: req.user.organization,
+        userId: req.user._id,
+        documentType: "PurchaseReturn",
+        documentId: purchaseReturn._id,
+        amount: parsedAmount,
+        paymentDate,
+        paymentMethod: paymentMethod || purchaseReturn.mode || "UPI",
+        reference,
+        notes,
+      });
+    } catch (err) {
+      if (err instanceof allocationService.AllocationError) {
+        return res.status(400).json({ error: err.message });
+      }
+      throw err;
+    }
+
+    // Reloaded because the service wrote the subdoc and the status on its own
+    // copy of the document.
+    const updated = await PurchaseReturn.findById(purchaseReturn._id);
+
+    // internalNotes has no equivalent on the money row, so it goes straight
+    // onto the subdoc the service just pushed.
+    if (internalNotes) {
+      const subdoc = updated.payments[updated.payments.length - 1];
+      if (subdoc) {
+        subdoc.internalNotes = internalNotes;
+        await updated.save({ validateModifiedOnly: true });
+      }
+    }
+
+    await updated.populate(POPULATE);
+    res.json({ message: "Refund recorded successfully", purchaseReturn: updated });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to record refund: ${err.message}` });
+  }
+};
+
+// PUT /purchase-returns/:id/payments/:paymentId
+exports.updatePurchaseReturnRefund = async (req, res) => {
+  try {
+    const { amount, paymentDate, paymentMethod, reference, notes, internalNotes } = req.body;
+
+    let result;
+    try {
+      result = await allocationService.updateDocumentPayment({
+        orgId: req.user.organization,
+        userId: req.user._id,
+        documentType: "PurchaseReturn",
+        documentId: req.params.id,
+        documentPaymentId: req.params.paymentId,
+        amount,
+        paymentDate,
+        paymentMethod,
+        reference,
+        notes,
+      });
+    } catch (err) {
+      if (err instanceof allocationService.AllocationError) {
+        return res.status(400).json({ error: err.message });
+      }
+      throw err;
+    }
+
+    const purchaseReturn = result.document;
+    if (internalNotes !== undefined) {
+      const subdoc = purchaseReturn.payments.id(req.params.paymentId);
+      if (subdoc) {
+        subdoc.internalNotes = internalNotes;
+        await purchaseReturn.save({ validateModifiedOnly: true });
+      }
+    }
+
+    await purchaseReturn.populate(POPULATE);
+    res.json({ message: "Refund updated successfully", purchaseReturn });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to update refund: ${err.message}` });
+  }
+};
+
+// DELETE /purchase-returns/:id/payments/:paymentId
+exports.deletePurchaseReturnRefund = async (req, res) => {
+  try {
+    // Reverses the allocation, pulls the subdoc, recomputes the return's
+    // status (a fully-refunded return drops back to Partial, a
+    // partially-refunded one back to Confirmed) and deletes the money row, so
+    // the vendor's Total Got falls by the same amount.
+    let result;
+    try {
+      result = await allocationService.removeDocumentPayment({
+        orgId: req.user.organization,
+        documentType: "PurchaseReturn",
+        documentId: req.params.id,
+        documentPaymentId: req.params.paymentId,
+      });
+    } catch (err) {
+      if (err instanceof allocationService.AllocationError) {
+        return res.status(400).json({ error: err.message });
+      }
+      throw err;
+    }
+
+    await result.document.populate(POPULATE);
+    res.json({ message: "Refund deleted successfully", purchaseReturn: result.document });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to delete refund: ${err.message}` });
   }
 };
 

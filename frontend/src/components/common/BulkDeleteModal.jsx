@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { AlertCircle } from "lucide-react";
 import DeleteIcon from "./DeleteIcon";
 
 // Shared bulk-delete confirmation, previously duplicated near-verbatim
@@ -16,7 +17,7 @@ import DeleteIcon from "./DeleteIcon";
 export default function BulkDeleteModal({
   isOpen,
   message,
-  confirmLabel = "Delete All",
+  confirmLabel = "Delete",
   loadingLabel = "Deleting...",
   loading = false,
   onCancel,
@@ -33,65 +34,47 @@ export default function BulkDeleteModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[10004] flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-sm sm:max-w-lg mx-4 animate-in fade-in zoom-in-95 duration-150">
-        <h3 className="text-lg font-semibold font-sf text-gray-900 mb-4">
-          Confirm bulk delete
-        </h3>
-        <p className="text-sm text-gray-600 mb-6 font-inter">
-          {message}
-        </p>
-        
-        {onExportBeforeDelete && (
-          <div className="mb-6">
-            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={keepCopy}
-                onChange={(e) => setKeepCopy(e.target.checked)}
-                className="accent-red-600"
-              />
-              Keep a copy (download as CSV)
-            </label>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100003] flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="bg-red-100 p-2 rounded-lg">
+            <AlertCircle className="w-5 h-5 text-red-600" />
           </div>
+          <h2 className="text-xl font-bold text-gray-900">Confirm Deletion</h2>
+        </div>
+
+        <p className="text-sm text-gray-600 mb-6">{message}</p>
+
+        {onExportBeforeDelete && (
+          <label className="flex items-center gap-2 text-sm text-gray-600 mb-6 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={keepCopy}
+              onChange={(e) => setKeepCopy(e.target.checked)}
+              className="accent-red-600"
+            />
+            Keep a copy (download as CSV)
+          </label>
         )}
 
-        <div className="flex justify-between gap-3">
+        <div className="flex justify-end gap-3">
           <button
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="bg-gray-200 font-sf text-gray-800 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors cursor-pointer hidden sm:block"
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium disabled:opacity-50"
           >
             Cancel
           </button>
-          
-          <div className="flex space-x-1 sm:space-x-0 w-full sm:w-auto">
-            {/* Mobile cancel button - since the other one is hidden on sm */}
-            <button
-              type="button"
-              onClick={onCancel}
-              disabled={loading}
-              className="bg-gray-200 font-sf text-gray-800 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors cursor-pointer sm:hidden flex-1"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleConfirm}
-              disabled={loading}
-              className="bg-red-600 font-sf text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors cursor-pointer flex items-center justify-center min-w-[92px] flex-1 sm:flex-none"
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white mr-2" />
-                  {loadingLabel}
-                </>
-              ) : (
-                confirmLabel
-              )}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={loading}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50"
+          >
+            <DeleteIcon className="w-4 h-4" />
+            {loading ? loadingLabel : confirmLabel}
+          </button>
         </div>
       </div>
     </div>

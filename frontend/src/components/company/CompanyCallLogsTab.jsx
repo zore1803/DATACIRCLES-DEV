@@ -40,6 +40,7 @@ import BulkActionBar from "../common/BulkActionBar";
 import { useBulkSelection, useBulkStrip } from "../../hooks/useBulkSelection";
 import { exportToCSV } from "../../utils/exportToCSV";
 import { bulkDelete } from "../../utils/bulkOperations";
+import BulkDeleteModal from "../common/BulkDeleteModal";
 import useFillToBottom from "../../hooks/useFillToBottom";
 import AppToaster from "../AppToaster";
 import SearchIcon from "../common/SearchIcon";
@@ -1356,34 +1357,17 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
         document.body,
       )}
 
-      {showBulkDeleteModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10005] p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
-            <div className="p-6 text-center">
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Confirm Delete</h3>
-              <p className="text-sm text-gray-500 mb-6">
-                Delete {selectedItems.length} selected call log{selectedItems.length !== 1 ? "s" : ""}? This action cannot be undone.
-              </p>
-              <div className="flex gap-3 justify-center">
-                <button
-                  onClick={() => setShowBulkDeleteModal(false)}
-                  disabled={bulkActionLoading}
-                  className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleBulkDelete}
-                  disabled={bulkActionLoading}
-                  className="px-5 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50"
-                >
-                  {bulkActionLoading ? "Deleting..." : "Delete"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        message={
+          <>
+            Are you sure you want to delete <strong>{selectedItems.length}</strong> selected Call Logs? This action cannot be undone.
+          </>
+        }
+        loading={bulkActionLoading}
+        onCancel={() => setShowBulkDeleteModal(false)}
+        onConfirm={handleBulkDelete}
+      />
 
       {showBulkStatusModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10005] p-4">

@@ -24,6 +24,7 @@ import {
   ArrowUp, ArrowDown } from "lucide-react";
 import toast from "react-hot-toast";
 import BulkActions from "../components/BulkActions";
+import BulkDeleteModal from "../components/common/BulkDeleteModal";
 import ItemForm from "../components/item/ItemForm";
 import QuickItemDrawer from "../components/item/QuickItemDrawer";
 import ImportItems from "../components/item/ImportItems";
@@ -402,6 +403,7 @@ function ProductsServices() {
   const selectedItemsSet = useMemo(() => new Set(selectedItems), [selectedItems]);
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -1759,7 +1761,7 @@ function ProductsServices() {
                   Bulk Update
                 </button>
                 <button
-                  onClick={() => handleBulkDeleteItems(selectedItems)}
+                  onClick={() => setShowBulkDeleteModal(true)}
                   disabled={bulkLoading}
                   className="h-10 px-4 -ml-px bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 disabled:opacity-50 flex-shrink-0 whitespace-nowrap"
                 >
@@ -2230,6 +2232,21 @@ function ProductsServices() {
         fieldConfig={itemFieldConfig}
         module="items"
         loading={bulkLoading}
+      />
+
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        message={
+          <>
+            Are you sure you want to delete <strong>{selectedItems.length}</strong> selected Items? This action cannot be undone.
+          </>
+        }
+        loading={bulkLoading}
+        onCancel={() => setShowBulkDeleteModal(false)}
+        onConfirm={async () => {
+          await handleBulkDeleteItems(selectedItems);
+          setShowBulkDeleteModal(false);
+        }}
       />
 
       <ExportModal

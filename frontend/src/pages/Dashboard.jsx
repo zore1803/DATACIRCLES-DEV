@@ -1,4 +1,5 @@
 import DeleteIcon from "../components/common/DeleteIcon";
+import BulkDeleteModal from "../components/common/BulkDeleteModal";
 import Checkbox from "../components/common/Checkbox";
 import MoreIcon from "../components/common/MoreIcon";
 import DownloadIcon from "../components/common/DownloadIcon";
@@ -2076,39 +2077,17 @@ function Dashboard() {
           />
         )}
 
-        {showBulkInvoiceDeleteModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10005] p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
-              <div className="p-6 text-center">
-                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <DeleteIcon className="w-6 h-6 text-red-600" />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2 font-sf">
-                  Confirm Delete
-                </h3>
-                <p className="text-sm text-gray-500 font-inter mb-6">
-                  Delete {selectedInvoices.length} selected invoice{selectedInvoices.length !== 1 ? "s" : ""}? This action cannot be undone.
-                </p>
-                <div className="flex gap-3 justify-center">
-                  <button
-                    onClick={() => setShowBulkInvoiceDeleteModal(false)}
-                    disabled={bulkInvoiceLoading}
-                    className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleBulkDeleteInvoices}
-                    disabled={bulkInvoiceLoading}
-                    className="px-5 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50"
-                  >
-                    {bulkInvoiceLoading ? "Deleting..." : "Delete"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <BulkDeleteModal
+          isOpen={showBulkInvoiceDeleteModal}
+          message={
+            <>
+              Are you sure you want to delete <strong>{selectedInvoices.length}</strong> selected Invoices? This action cannot be undone.
+            </>
+          }
+          loading={bulkInvoiceLoading}
+          onCancel={() => setShowBulkInvoiceDeleteModal(false)}
+          onConfirm={handleBulkDeleteInvoices}
+        />
 
         {showBulkInvoiceStatusModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10005] p-4">

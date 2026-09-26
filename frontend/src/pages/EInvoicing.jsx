@@ -48,6 +48,7 @@ import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
 import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
 import UploadIcon from "../components/common/UploadIcon";
 import EyeIcon from "../components/common/EyeIcon";
+import BulkDeleteModal from "../components/common/BulkDeleteModal";
 
 const getAncestorZoom = (el) => {
   let z = 1;
@@ -142,6 +143,8 @@ export default function EInvoicing() {
   };
 
   const [selectedIds, setSelectedIds] = useState([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const selectedIdsSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   const { columns, saveColumns, getVisibleColumns } = useColumnSettings("e-invoicing", DEFAULT_COLUMNS);
@@ -703,9 +706,13 @@ export default function EInvoicing() {
 
   const clearSelection = () => setSelectedIds([]);
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedIds.length === 0) return;
-    if (!window.confirm(`Delete ${selectedIds.length} e-invoice record${selectedIds.length !== 1 ? "s" : ""}? This cannot be undone.`)) return;
+    setShowBulkDeleteModal(true);
+  };
+
+  const executeBulkDelete = async () => {
+    setBulkDeleting(true);
     try {
       await Promise.all(selectedIds.map((id) => API.delete(`/e-invoices/${id}`)));
       toast.success(`${selectedIds.length} e-invoice${selectedIds.length !== 1 ? "s" : ""} deleted`);
@@ -713,6 +720,9 @@ export default function EInvoicing() {
       fetchRows();
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to delete selected e-invoices");
+    } finally {
+      setBulkDeleting(false);
+      setShowBulkDeleteModal(false);
     }
   };
 
@@ -1533,6 +1543,18 @@ export default function EInvoicing() {
         title="Filter E-Invoices"
         subtitle="Narrow the list by any field"
         emptyStateText="Add a rule to narrow down your e-invoice list."
+      />
+
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        message={
+          <>
+            Are you sure you want to delete <strong>{selectedIds.length}</strong> selected E-Invoices? This action cannot be undone.
+          </>
+        }
+        loading={bulkDeleting}
+        onCancel={() => setShowBulkDeleteModal(false)}
+        onConfirm={executeBulkDelete}
       />
     </div>
   );

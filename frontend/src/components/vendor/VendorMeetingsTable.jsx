@@ -16,6 +16,7 @@ import MeetingDetailsModal from "../company/MeetingDetailsModal";
 import DataTable from "../common/DataTable";
 import RowActionsMenu from "../common/RowActionsMenu";
 import BulkActionBar from "../common/BulkActionBar";
+import BulkDeleteModal from "../common/BulkDeleteModal";
 import TablePaginationFooter from "../common/TablePaginationFooter";
 import ToolbarFilterGroup from "../company/ToolbarFilterGroup";
 import FilterIcon from "../common/FilterIcon";
@@ -76,6 +77,7 @@ const VendorMeetingsTable = ({ vendorId, showKPIs = true, autoOpenCreate = false
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [columnSizing, setColumnSizing] = useState({});
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
   const [columnOrder, setColumnOrder] = useState(() => [
     "selection", "title", "description", "status", "meetingType", "priority", "scheduledAt", "duration", "location"
@@ -249,14 +251,18 @@ const VendorMeetingsTable = ({ vendorId, showKPIs = true, autoOpenCreate = false
     exportToCSV([headers, ...rows], `meetings_export_${new Date().toISOString().split("T")[0]}.csv`);
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (!selectedItems.length) return;
-    if (!window.confirm(`Delete ${selectedItems.length} meeting(s)? This cannot be undone.`)) return;
+    setShowBulkDeleteModal(true);
+  };
+
+  const executeBulkDelete = async () => {
     setIsDeleting(true);
     try {
       await Promise.all(selectedItems.map((id) => API.delete(`/meetings/${id}`)));
       await refetchMeetings();
       clearSelection();
+      setShowBulkDeleteModal(false);
       toast.success("Meetings deleted!");
     } catch (err) {
       console.error("Bulk delete failed:", err);
@@ -729,12 +735,7 @@ const VendorMeetingsTable = ({ vendorId, showKPIs = true, autoOpenCreate = false
           onSave={handleMeetingSave}
           onDelete={handleMeetingDelete}
           onClose={async () => {
-            // VendorMeetingForm has no dedicated "update succeeded" callback —
-            // it calls onClose() after both create and edit saves, so the
-            // refetch that used to only happen on create (inside
-            // handleMeetingSave) needs to happen here too, or an edited
-            // meeting's changes wouldn't show up in the table until a manual
-            // refresh.
+            // onClose fires after create and edit, so refetch here to show edits.
             setShowMeetingForm(false);
             setEditingMeeting(null);
             await refetchMeetings();
@@ -752,6 +753,18 @@ const VendorMeetingsTable = ({ vendorId, showKPIs = true, autoOpenCreate = false
           onClose={handleCloseMeetingModal}
         />
       )}
+
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        message={
+          <>
+            Are you sure you want to delete <strong>{selectedItems.length}</strong> selected Meetings? This action cannot be undone.
+          </>
+        }
+        loading={isDeleting}
+        onCancel={() => setShowBulkDeleteModal(false)}
+        onConfirm={executeBulkDelete}
+      />
     </div>
   );
 };

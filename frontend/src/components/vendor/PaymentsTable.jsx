@@ -1,4 +1,5 @@
 import DeleteIcon from "../common/DeleteIcon";
+import BulkDeleteModal from "../common/BulkDeleteModal";
 import Checkbox from "../common/Checkbox";
 import SearchIcon from "../common/SearchIcon";
 import DownloadIcon from "../common/DownloadIcon";
@@ -250,9 +251,7 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
     exportToCSV([headers, ...rows], `payments_export_${new Date().toISOString().split("T")[0]}.csv`);
   };
 
-  // Confirmation is a styled modal (see showBulkDeleteModal below), matching
-  // CompanyContactsTab.jsx's bulk-delete flow, instead of the browser's
-  // window.confirm this used previously.
+  // Bulk delete asks via the shared BulkDeleteModal.
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
   const handleBulkDelete = async () => {
@@ -273,18 +272,13 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
   };
 
   const handleAddPayment = async (payload) => {
+    // No toast here — VendorPaymentForm (which awaits this) owns the single
+    // success/error toast; errors propagate to it. Avoids the duplicate toast.
     try {
       setLoading(true);
       const res = await API.post(`/vendors/${id}/payments`, payload);
       setLocalPayments([...localPayments, res.data]);
-      toast.success("Payment added!");
       setError("");
-    } catch (err) {
-      if (err.response?.status === 402) {
-        toast.error(err.response?.data?.message || "An active subscription is required to make changes.");
-      } else {
-        toast.error(err.response?.data?.error || "Failed to add payment");
-      }
     } finally {
       setLoading(false);
     }
@@ -411,7 +405,10 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
       .reduce((sum, p) => sum + p.amount, 0),
   };
 
-  const netBalance = stats.totalAmountIn - stats.totalAmountOut;
+  // Net Balance = Total Given - Total Got, matching the derived figure the
+  // server computes from the Payment ledger (services/partyLedgerService).
+  // Positive means money is net OUT to this vendor.
+  const netBalance = stats.totalAmountOut - stats.totalAmountIn;
 
   // Period-over-period trend. Split the actual filtered payments in half by
   // date (older half = "previous", newer half = "current") instead of a
@@ -438,8 +435,8 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
       given: pctChange(sumOut(currentRows), sumOut(prevRows)),
       got: pctChange(sumIn(currentRows), sumIn(prevRows)),
       balance: pctChange(
-        sumIn(currentRows) - sumOut(currentRows),
-        sumIn(prevRows) - sumOut(prevRows),
+        sumOut(currentRows) - sumIn(currentRows),
+        sumOut(prevRows) - sumIn(prevRows),
       ),
       total: pctChange(currentRows.length, prevRows.length),
     };
@@ -884,34 +881,17 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
         />
       )}
 
-      {showBulkDeleteModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10005] p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
-            <div className="p-6 text-center">
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Confirm Delete</h3>
-              <p className="text-sm text-gray-500 mb-6">
-                Delete {selectedItems.length} selected payment{selectedItems.length !== 1 ? "s" : ""}? This action cannot be undone.
-              </p>
-              <div className="flex gap-3 justify-center">
-                <button
-                  onClick={() => setShowBulkDeleteModal(false)}
-                  disabled={isDeleting}
-                  className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleBulkDelete}
-                  disabled={isDeleting}
-                  className="px-5 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50"
-                >
-                  {isDeleting ? "Deleting..." : "Delete"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        message={
+          <>
+            Are you sure you want to delete <strong>{selectedItems.length}</strong> selected Payments? This action cannot be undone.
+          </>
+        }
+        loading={isDeleting}
+        onCancel={() => setShowBulkDeleteModal(false)}
+        onConfirm={handleBulkDelete}
+      />
     </div>
   );
 };

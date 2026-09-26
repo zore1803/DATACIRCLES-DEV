@@ -25,6 +25,10 @@ const GST_RATES = [0, 5, 12, 18, 28];
 // plain <input>, which was showing the raw tags.
 const stripHtml = (html) => String(html || "").replace(/<[^>]*>/g, "").trim();
 
+// Round to 2 decimals without binary float drift (…329999 etc). Applied to
+// line amounts, tax and totals so stored/displayed money is always clean.
+const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
 // Draft -> Pending -> Confirmed -> (Partial/Paid | Cancelled). Confirmed is
 // the physical "goods received" event (stock-in fires there — see
 // purchaseController.js's syncPurchaseStock); once reached, status can't go
@@ -240,7 +244,8 @@ const PurchaseForm = ({
           unitPrice: item.unitPrice,
           sku: item.sku || null,
           gstRate: item.gstRate || 0,
-          taxInclusive: item.taxInclusive || false
+          taxInclusive: item.taxInclusive || false,
+          mode: item.itemId ? "product" : "manual",
         })));
         if (po.notes) setNotes(po.notes);
         if (po.transactionType) setTransactionType(po.transactionType);
@@ -259,6 +264,9 @@ const PurchaseForm = ({
     setSelectedPO(poId);
     loadPurchaseOrder(poId);
   };
+  // Each item is one of two modes: "product" (picked from Product Master, which
+  // fills its name/price/GST) or "manual" (a free-typed name). The two are never
+  // shown together in a row — the mode decides which field the row renders.
   const [items, setItems] = useState([
     {
       _id: null,
@@ -268,8 +276,22 @@ const PurchaseForm = ({
       quantity: 1,
       unitPrice: "",
       sku: null,
+      gstRate: 0,
+      taxInclusive: false,
+      mode: "product",
     },
   ]);
+  // Which "Add Item" menu (Existing Product / Manual Item) is open.
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const addMenuRef = useRef(null);
+  useEffect(() => {
+    if (!showAddMenu) return;
+    const onDown = (e) => {
+      if (addMenuRef.current && !addMenuRef.current.contains(e.target)) setShowAddMenu(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [showAddMenu]);
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState("Draft");
   // Auto-derived from vendor state vs. the org's own state (see the effect
@@ -336,6 +358,7 @@ const PurchaseForm = ({
           // regardless of what it was actually saved with.
           gstRate: item.gstRate || 0,
           taxInclusive: item.taxInclusive || false,
+          mode: item.itemId ? "product" : "manual",
         })) || [],
       );
       setNotes(editingPurchase.notes || "");
@@ -364,7 +387,7 @@ const PurchaseForm = ({
     setTimeout(onRequestClose, 300);
   };
 
-  const addItem = () => {
+  const addItem = (mode = "product") => {
     setItems([
       ...items,
       {
@@ -375,12 +398,31 @@ const PurchaseForm = ({
         quantity: 1,
         unitPrice: "",
         sku: null,
+        gstRate: 0,
+        taxInclusive: false,
+        mode,
       },
     ]);
+    setShowAddMenu(false);
   };
 
   const removeItem = (index) => {
     setItems(items.filter((_, i) => i !== index));
+  };
+
+  // Clears a product row's selection so its search box reappears (the "Change"
+  // action), keeping the row's quantity.
+  const clearItemProduct = (index) => {
+    const newItems = [...items];
+    newItems[index] = {
+      ...newItems[index],
+      _id: null,
+      variantId: null,
+      name: "",
+      description: "",
+      sku: null,
+    };
+    setItems(newItems);
   };
 
   const updateItem = (index, field, value) => {
@@ -389,35 +431,51 @@ const PurchaseForm = ({
     setItems(newItems);
   };
 
-  const subtotal = items.reduce((sum, item) => {
-    let itemTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
-    if (item.taxInclusive) {
-      itemTotal = itemTotal / (1 + (parseFloat(item.gstRate) || parseFloat(gstRate) || 0) / 100);
-    }
-    return sum + itemTotal;
-  }, 0);
+  // Same tax logic as before — only each line's taxable base and tax are rounded
+  // to 2dp before summing, and the totals rounded again, so no float drift leaks
+  // into the subtotal/GST/grand total.
+  const subtotal = round2(
+    items.reduce((sum, item) => {
+      let itemTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
+      if (item.taxInclusive) {
+        itemTotal = itemTotal / (1 + (parseFloat(item.gstRate) || parseFloat(gstRate) || 0) / 100);
+      }
+      return sum + round2(itemTotal);
+    }, 0),
+  );
 
-  // Calculate tax
-  const totalTax = items.reduce((sum, item) => {
-    const itemTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
-    const rate = parseFloat(item.gstRate) || parseFloat(gstRate) || 0;
-    
-    if (rate <= 0) return sum;
-    
-    if (item.taxInclusive) {
-      const base = itemTotal / (1 + rate / 100);
-      return sum + (itemTotal - base);
-    } else {
-      return sum + (itemTotal * (rate / 100));
-    }
-  }, 0);
+  const totalTax = round2(
+    items.reduce((sum, item) => {
+      const itemTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
+      const rate = parseFloat(item.gstRate) || parseFloat(gstRate) || 0;
+      if (rate <= 0) return sum;
+      if (item.taxInclusive) {
+        const base = itemTotal / (1 + rate / 100);
+        return sum + round2(itemTotal - base);
+      }
+      return sum + round2(itemTotal * (rate / 100));
+    }, 0),
+  );
 
-  const grandTotal = subtotal + totalTax;
+  // "Round Off": grand total to the nearest whole rupee, with the paise diff
+  // shown as a Round Off line.
+  const rawGrand = round2(subtotal + totalTax);
+  const grandTotal = Math.round(rawGrand);
+  const roundOff = round2(grandTotal - rawGrand);
+  // Split the tax in halves that always sum back to totalTax exactly.
+  const cgst = round2(totalTax / 2);
+  const sgst = round2(totalTax - cgst);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!vendorId) {
       toast.error("Please select a vendor");
+      return;
+    }
+    // Every row must resolve to a name — a product row with nothing picked, or a
+    // manual row left blank, would otherwise save as "Unknown Item".
+    if (items.length === 0 || items.some((it) => !(it.name || "").trim())) {
+      toast.error("Select a product or enter a name for every item");
       return;
     }
 
@@ -432,8 +490,7 @@ const PurchaseForm = ({
         description: item.description,
         quantity: parseFloat(item.quantity) || 0,
         unitPrice: parseFloat(item.unitPrice) || 0,
-        amount:
-          (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0),
+        amount: round2((parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)),
         sku: item.sku,
         variantAttributes: item.variantAttributes,
         gstRate: parseFloat(item.gstRate) || parseFloat(gstRate) || 0,
@@ -445,6 +502,7 @@ const PurchaseForm = ({
       gstRate,
       subtotal,
       totalTax,
+      roundOff,
       grandTotal,
     };
 
@@ -598,14 +656,43 @@ const PurchaseForm = ({
           <div>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-900">Items</h3>
-              <button
-                type="button"
-                onClick={addItem}
-                className="flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium text-xs transition-colors"
-              >
-                <PlusIcon className="w-4 h-4" />
-                Add Item Manually
-              </button>
+              <div className="relative" ref={addMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddMenu((v) => !v)}
+                  className="flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium text-xs transition-colors"
+                >
+                  <PlusIcon className="w-4 h-4" />
+                  Add Item
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAddMenu ? "rotate-180" : ""}`} />
+                </button>
+                {showAddMenu && (
+                  <div className="absolute right-0 mt-1.5 w-56 bg-white border border-gray-100 rounded-xl shadow-xl z-50 py-1 animate-in fade-in zoom-in duration-150">
+                    <button
+                      type="button"
+                      onClick={() => addItem("product")}
+                      className="w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-gray-50 transition-colors"
+                    >
+                      <SearchIcon className="w-4 h-4 mt-0.5 text-gray-500 flex-shrink-0" />
+                      <span>
+                        <span className="block text-[13px] font-medium text-gray-800">Existing Product</span>
+                        <span className="block text-[11px] text-gray-500">Select from Product Master</span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addItem("manual")}
+                      className="w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-gray-50 transition-colors"
+                    >
+                      <PlusIcon className="w-4 h-4 mt-0.5 text-gray-500 flex-shrink-0" />
+                      <span>
+                        <span className="block text-[13px] font-medium text-gray-800">Manual Item</span>
+                        <span className="block text-[11px] text-gray-500">Enter an item without a product</span>
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -624,35 +711,51 @@ const PurchaseForm = ({
                     </button>
                   )}
 
-                  {/* Item Search */}
-                  <div>
-                    <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
-                      Item <span className="text-red-500">*</span>
-                    </label>
-                    <ItemSearchSelect
-                      value={item}
-                      onSelect={(data) => {
-                        const newItems = [...items];
-                        newItems[index] = { ...newItems[index], ...data };
-                        setItems(newItems);
-                      }}
-                    />
-                  </div>
-                  {/* Manual Name */}
-                  <div>
-                    <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
-                      Manual Item Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Or Enter Item Name Manually"
-                      value={item.name}
-                      onChange={(e) =>
-                        updateItem(index, "name", e.target.value)
-                      }
-                      className="w-full px-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
-                    />
-                  </div>
+                  {/* Item — a product row searches Product Master; a manual row
+                      just types a name. Never both at once. */}
+                  {item.mode === "manual" ? (
+                    <div>
+                      <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
+                        Item Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Enter item name"
+                        value={item.name}
+                        onChange={(e) => updateItem(index, "name", e.target.value)}
+                        className="w-full px-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
+                        Item <span className="text-red-500">*</span>
+                      </label>
+                      {item.name ? (
+                        // A product is selected — show it as a filled field with a
+                        // Change action to re-open the search.
+                        <div className="w-full pl-3 pr-1.5 h-8 flex items-center justify-between gap-2 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937]">
+                          <span className="truncate font-medium">{item.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => clearItemProduct(index)}
+                            className="flex-shrink-0 text-[11px] font-medium text-blue-600 hover:text-blue-700 px-2 py-0.5 rounded-full hover:bg-blue-50 transition-colors"
+                          >
+                            Change
+                          </button>
+                        </div>
+                      ) : (
+                        <ItemSearchSelect
+                          value={item}
+                          onSelect={(data) => {
+                            const newItems = [...items];
+                            newItems[index] = { ...newItems[index], ...data, mode: "product" };
+                            setItems(newItems);
+                          }}
+                        />
+                      )}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-3 gap-3">
                     {/* Quantity */}
@@ -746,7 +849,7 @@ const PurchaseForm = ({
           {/* Notes */}
           <div>
             <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Additional Notes <span className="text-red-500">*</span>
+              Additional Notes
             </label>
             <textarea
               value={notes}
@@ -821,14 +924,23 @@ const PurchaseForm = ({
                 <>
                   <div className="flex justify-between items-center text-slate-700">
                     <span className="text-sm">CGST</span>
-                    <span className="font-semibold">₹{formatNumberFixed(totalTax / 2)}</span>
+                    <span className="font-semibold">₹{formatNumberFixed(cgst)}</span>
                   </div>
                   <div className="flex justify-between items-center text-slate-700">
                     <span className="text-sm">SGST</span>
-                    <span className="font-semibold">₹{formatNumberFixed(totalTax / 2)}</span>
+                    <span className="font-semibold">₹{formatNumberFixed(sgst)}</span>
                   </div>
                 </>
               )
+            )}
+
+            {Math.abs(roundOff) >= 0.005 && (
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="text-sm">Round Off</span>
+                <span className="font-semibold">
+                  {roundOff < 0 ? "-" : "+"}₹{formatNumberFixed(Math.abs(roundOff))}
+                </span>
+              </div>
             )}
 
             <div className="flex justify-between items-center pt-3 border-t border-slate-200">

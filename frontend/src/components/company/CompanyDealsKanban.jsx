@@ -1,6 +1,7 @@
 import CalendarClockIcon from "../common/CalendarClockIcon";
 import EmptyState from "../common/EmptyState";
 import DeleteIcon from "../common/DeleteIcon";
+import BulkDeleteModal from "../common/BulkDeleteModal";
 import AvgDealSizeIcon from "../common/AvgDealSizeIcon";
 import WonDealIcon from "../common/WonDealIcon";
 import LostDealIcon from "../common/LostDealIcon";
@@ -2238,37 +2239,17 @@ export default function CompanyDealsKanban({
         </>
       )}
 
-      {showBulkDeleteModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10005] p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
-            <div className="p-6 text-center">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <DeleteIcon className="w-6 h-6 text-red-600" />
-              </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2 font-sf">Confirm Delete</h3>
-              <p className="text-sm text-gray-500 font-inter mb-6">
-                Delete {selectedDeals.length} selected deal{selectedDeals.length !== 1 ? "s" : ""}? This action cannot be undone.
-              </p>
-              <div className="flex gap-3 justify-center">
-                <button
-                  onClick={() => setShowBulkDeleteModal(false)}
-                  disabled={bulkLoading}
-                  className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleBulkDeleteDeals}
-                  disabled={bulkLoading}
-                  className="px-5 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50"
-                >
-                  {bulkLoading ? "Deleting..." : "Delete"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        message={
+          <>
+            Are you sure you want to delete <strong>{selectedDeals.length}</strong> selected Deals? This action cannot be undone.
+          </>
+        }
+        loading={bulkLoading}
+        onCancel={() => setShowBulkDeleteModal(false)}
+        onConfirm={handleBulkDeleteDeals}
+      />
 
       {showBulkStatusModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10005] p-4">

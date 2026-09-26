@@ -20,11 +20,13 @@ const paymentAllocationSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    // Which collection `document` lives in. IN (Credit) payments settle
-    // against Invoices; OUT (Debit) payments settle against Purchases.
+    // Which collection `document` lives in, and therefore which way the money
+    // moved. OUT (Debit) payments settle Purchases. IN (Credit) payments
+    // settle Invoices (a customer paying us) or Purchase Returns (a vendor
+    // refunding us for goods sent back).
     documentType: {
       type: String,
-      enum: ["Invoice", "Purchase"],
+      enum: ["Invoice", "Purchase", "PurchaseReturn"],
       required: true,
     },
     document: {

@@ -144,7 +144,11 @@ const RecordPurchasePaymentModal = ({ isOpen, onClose, purchase, onSuccess }) =>
         : 0;
 
       if (remaining <= 0) {
-        toast.success(`Payment of ${fmt(paymentAmount)} recorded — Purchase fully paid!`);
+        // Closing the modal right after can interrupt react-hot-toast's own
+        // auto-dismiss timer (compounded by the app's duplicated Toasters), so
+        // dismiss this toast explicitly instead of relying on it.
+        const toastId = toast.success(`Payment of ${fmt(paymentAmount)} recorded — Purchase fully paid!`);
+        setTimeout(() => toast.dismiss(toastId), 4000);
         onSuccess?.(updated);
         handleClose();
       } else {

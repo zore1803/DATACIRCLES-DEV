@@ -39,6 +39,13 @@ const vendorSchema = new mongoose.Schema({
     pincode: String,
     country: { type: String, default: "India" }
   },
+  // DEPRECATED as a source of truth. Total Given / Total Got / Net Balance are
+  // derived from the Payment collection on read (services/partyLedgerService),
+  // and the API responses overwrite `balance` with that derived Net Balance.
+  // Nothing writes this field any more except the CSV import below, which
+  // keeps accepting an imported column so existing import files don't break.
+  // Do not use it for financial calculations, and do not reintroduce
+  // incremental += / -= updates: that is exactly what used to drift.
   balance: { type: Number, default: 0 },
   avatar: String,
   socialMedia: { 

@@ -66,12 +66,40 @@ const purchaseReturnSchema = new mongoose.Schema(
     // stock (a return can be Confirmed long before the refund is settled).
     status: {
       type: String,
-      enum: ["Draft", "Pending", "Confirmed", "Paid", "Cancelled"],
+      // Draft -> Pending -> Confirmed -> Partial -> Paid is the full life of a
+      // return. Confirmed is the physical event (goods left toward the
+      // vendor) and is the only status that moves stock. Partial/Paid are
+      // refund-tracking states reached only from Confirmed onward, driven by
+      // real refunds recorded against `payments` below — never by a status
+      // flip alone. Cancelled from Confirmed reverses the stock-out.
+      enum: ["Draft", "Pending", "Confirmed", "Partial", "Paid", "Cancelled"],
       default: "Draft",
     },
-    // How the refund from the vendor was/will be settled — a single field
-    // (not a payments sub-array like Purchase.payments) since a return is
-    // one settlement, not an installment plan.
+    // Refunds received from the vendor against this return. Same shape as
+    // Purchase.payments, so a refund is tracked exactly the way a bill payment
+    // is — including partial refunds: a ₹2,000 return can take ₹1,000 now
+    // (status Partial) and ₹1,000 later (status Paid). Each subdoc is pushed
+    // by paymentAllocationService alongside a real Payment row with
+    // direction IN, which is what makes the refund show as "Got" on the
+    // vendor's payments page.
+    payments: [{
+      amount: { type: Number, required: true },
+      paymentDate: { type: Date, default: Date.now },
+      paymentMethod: {
+        type: String,
+        enum: ["Cash", "UPI", "Net Banking", "Cheque", "Card", "NEFT", "RTGS", "IMPS", "EMI", "TDS", "Other"],
+        default: "UPI",
+      },
+      reference: { type: String, default: "" },
+      notes: { type: String, default: "" },
+      internalNotes: { type: String, default: "" },
+      recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      recordedAt: { type: Date, default: Date.now },
+    }],
+    // How the refund from the vendor was/will be settled. Superseded by
+    // `payments` above (which records the actual refunds, partial or full)
+    // and kept for the returns created before that existed, plus as the
+    // default method suggested when recording a refund.
     mode: {
       type: String,
       enum: ["", "Cash", "UPI", "Bank Transfer", "Cheque", "Card", "Other"],

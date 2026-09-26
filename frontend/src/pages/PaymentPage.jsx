@@ -1,5 +1,6 @@
 import CalendarIcon from "../components/common/CalendarIcon";
 import DeleteIcon from "../components/common/DeleteIcon";
+import BulkDeleteModal from "../components/common/BulkDeleteModal";
 import Checkbox from "../components/common/Checkbox";
 import PlusIcon from "../components/common/PlusIcon";
 import MoreIcon from "../components/common/MoreIcon";
@@ -55,6 +56,7 @@ const PaymentPage = () => {
 
   // Modals
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [paymentToPreview, setPaymentToPreview] = useState(null);
@@ -476,6 +478,21 @@ const PaymentPage = () => {
         loading={bulkLoading}
       />
 
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        message={
+          <>
+            Are you sure you want to delete <strong>{selectedPayments.length}</strong> selected Payments? This action cannot be undone.
+          </>
+        }
+        loading={bulkLoading}
+        onCancel={() => setShowBulkDeleteModal(false)}
+        onConfirm={async () => {
+          await handleBulkDelete(selectedPayments);
+          setShowBulkDeleteModal(false);
+        }}
+      />
+
       <div className="">
         {/* Header */}
         <div className="md:flex justify-between items-center mb-6">
@@ -541,7 +558,7 @@ const PaymentPage = () => {
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => setShowBulkActions(true)}
+                onClick={() => setShowBulkDeleteModal(true)}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2"
               >
                 <DeleteIcon className="w-4 h-4" />

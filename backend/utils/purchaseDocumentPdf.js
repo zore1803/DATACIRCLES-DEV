@@ -104,6 +104,8 @@ function buildHtml(doc, orgDetails, vendor, type) {
   const subtotal = doc.subtotal || 0;
   const totalTax = doc.totalTax || 0;
   const grandTotal = doc.grandTotal || (isPO ? doc.totalAmount : subtotal + totalTax) || 0;
+  // "Round Off" adjustment stored on the document (grandTotal is whole-rupee).
+  const roundOff = Number(doc.roundOff) || 0;
   const isIntra = doc.transactionType !== "inter";
   // Summed per line rather than from doc.gstRate: that document-level field
   // is a vestige that's never actually populated (each line carries its own
@@ -111,20 +113,20 @@ function buildHtml(doc, orgDetails, vendor, type) {
   // IGST as ₹0 even when totalTax was correctly nonzero. CGST/SGST/IGST
   // together must always equal totalTax, so they're derived from the same
   // per-line tax this document's totalTax was itself built from.
+  const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+  // Split the document's own (already-rounded) totalTax exactly the way the
+  // forms do, so CGST + SGST always sums back to totalTax and stays consistent
+  // with subtotal + tax = grandTotal. (Deriving from doc.gstRate is unreliable —
+  // it's a vestige that's never populated.)
   let cgstAmount = 0, sgstAmount = 0, igstAmount = 0;
-  items.forEach((item) => {
-    const itemGstRate = parseFloat(item.gstRate) || 0;
-    if (itemGstRate <= 0) return;
-    const itemGross = (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
-    const itemTaxable = item.taxInclusive ? itemGross / (1 + itemGstRate / 100) : itemGross;
-    const itemTax = itemTaxable * (itemGstRate / 100);
+  if (totalTax > 0) {
     if (isIntra) {
-      cgstAmount += itemTax / 2;
-      sgstAmount += itemTax / 2;
+      cgstAmount = round2(totalTax / 2);
+      sgstAmount = round2(totalTax - cgstAmount);
     } else {
-      igstAmount += itemTax;
+      igstAmount = round2(totalTax);
     }
-  });
+  }
 
   const docLabel = isReturn ? "PURCHASE RETURN" : isPO ? "PURCHASE ORDER" : "PURCHASE";
   const numberLabel = isReturn ? "Return Number" : isPO ? "PO Number" : "Purchase Number";
@@ -286,6 +288,11 @@ function buildHtml(doc, orgDetails, vendor, type) {
               ? `<div class="totals-row"><span>CGST:</span><span class="mono">₹ ${money(cgstAmount)}</span></div>
                  <div class="totals-row"><span>SGST:</span><span class="mono">₹ ${money(sgstAmount)}</span></div>`
               : `<div class="totals-row"><span>IGST:</span><span class="mono">₹ ${money(igstAmount)}</span></div>`
+            : ""
+        }
+        ${
+          Math.abs(roundOff) >= 0.005
+            ? `<div class="totals-row"><span>Round Off:</span><span class="mono">${roundOff < 0 ? "-" : "+"}₹ ${money(Math.abs(roundOff))}</span></div>`
             : ""
         }
         <div class="totals-grand"><span>Grand Total:</span><span class="mono">₹ ${money(grandTotal)}</span></div>

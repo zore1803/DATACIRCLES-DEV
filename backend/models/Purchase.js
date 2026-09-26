@@ -42,7 +42,10 @@ const purchaseSchema = new mongoose.Schema(
     },
     gstRate: { type: Number, default: 0, min: 0 },
     totalTax: { type: Number, default: 0, min: 0 }, // CGST + SGST or IGST
-    grandTotal: { type: Number, default: 0, min: 0 },
+    // Difference between the whole-rupee grandTotal and (subtotal + totalTax),
+    // e.g. -0.05 — the standard invoice "Round Off" adjustment.
+    roundOff: { type: Number, default: 0 },
+    grandTotal: { type: Number, default: 0, min: 0 }, // rounded to the nearest rupee
     status: {
       type: String,
       // Draft -> Pending -> Confirmed -> (Partial/Paid | Cancelled). Confirmed

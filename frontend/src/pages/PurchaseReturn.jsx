@@ -11,6 +11,7 @@ import PurchaseReturnForm from "../components/purchase/PurchaseReturnForm";
 import PurchaseReturnPreview from "../components/purchase/PurchaseReturnPreview";
 import ImportPurchaseReturns from "../components/purchase/ImportPurchaseReturns";
 import BulkActions from "../components/BulkActions";
+import BulkDeleteModal from "../components/common/BulkDeleteModal";
 import {
   ChevronUp,
   ChevronDown,
@@ -156,6 +157,7 @@ const PurchaseReturn = () => {
   const [selectionMode, setSelectionMode] = useState(true);
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
   const [editingPage, setEditingPage] = useState(false);
   const [pageInput, setPageInput] = useState("");
@@ -1015,7 +1017,7 @@ const PurchaseReturn = () => {
               );
             } else if (vc.key === "grandTotal") {
               baseContent = (
-                <div className="truncate text-sm font-medium text-gray-700">
+                <div className="truncate text-sm font-semibold text-gray-900">
                   ₹{(p.grandTotal ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               );
@@ -1720,6 +1722,21 @@ const PurchaseReturn = () => {
         loading={bulkLoading}
       />
 
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        message={
+          <>
+            Are you sure you want to delete <strong>{selectedReturns.length}</strong> selected Purchase Returns? This action cannot be undone.
+          </>
+        }
+        loading={bulkLoading}
+        onCancel={() => setShowBulkDeleteModal(false)}
+        onConfirm={async () => {
+          await handleBulkDelete(selectedReturns);
+          setShowBulkDeleteModal(false);
+        }}
+      />
+
       {showForm && (
         <PurchaseReturnForm
           editingReturn={editingReturn}
@@ -1802,7 +1819,7 @@ const PurchaseReturn = () => {
                   Bulk Update
                 </button>
                 <button
-                  onClick={() => handleBulkDelete(selectedReturns)}
+                  onClick={() => setShowBulkDeleteModal(true)}
                   disabled={bulkLoading}
                   className="h-10 px-4 -ml-px bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 disabled:opacity-50 flex-shrink-0 whitespace-nowrap"
                 >

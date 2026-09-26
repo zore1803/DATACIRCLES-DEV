@@ -19,6 +19,7 @@ import PurchaseOrderForm from "../components/purchaseOrder/PurchaseOrderForm";
 import PurchaseOrderPreview from "../components/purchaseOrder/PurchaseOrderPreview";
 import ImportPurchaseOrders from "../components/purchaseOrder/ImportPurchaseOrders";
 import BulkActions from "../components/BulkActions";
+import BulkDeleteModal from "../components/common/BulkDeleteModal";
 import {
   ChevronUp,
   ChevronDown,
@@ -232,6 +233,7 @@ const PurchaseOrderPage = () => {
   const selectedPOSet = useMemo(() => new Set(selectedPurchaseOrders), [selectedPurchaseOrders]);
   const [selectionMode, setSelectionMode] = useState(true);
   const [showBulkActions, setShowBulkActions] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
 
   // Double-click-to-type a page number in the pagination bar (mirrors Companies.jsx).
@@ -1285,7 +1287,7 @@ const PurchaseOrderPage = () => {
               );
             } else if (vc.key === "totalAmount") {
               baseContent = (
-                <div className="truncate text-sm font-medium text-gray-700">
+                <div className="truncate text-sm font-semibold text-gray-900">
                   ₹{(po.totalAmount ?? 0).toLocaleString("en-IN", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
@@ -1662,7 +1664,7 @@ const PurchaseOrderPage = () => {
                   Bulk Update
                 </button>
                 <button
-                  onClick={() => handleBulkDelete(selectedPurchaseOrders)}
+                  onClick={() => setShowBulkDeleteModal(true)}
                   disabled={bulkLoading}
                   className="h-10 px-4 -ml-px bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 disabled:opacity-50 flex-shrink-0 whitespace-nowrap"
                 >
@@ -2127,6 +2129,21 @@ const PurchaseOrderPage = () => {
         fieldConfig={poFieldConfig}
         module="purchase orders"
         loading={bulkLoading}
+      />
+
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        message={
+          <>
+            Are you sure you want to delete <strong>{selectedPurchaseOrders.length}</strong> selected Purchase Orders? This action cannot be undone.
+          </>
+        }
+        loading={bulkLoading}
+        onCancel={() => setShowBulkDeleteModal(false)}
+        onConfirm={async () => {
+          await handleBulkDelete(selectedPurchaseOrders);
+          setShowBulkDeleteModal(false);
+        }}
       />
 
       <ExportModal

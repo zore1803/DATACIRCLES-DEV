@@ -21,6 +21,7 @@ import JournalLedgerDrawer from "../components/journal/JournalLedgerDrawer";
 import PayInOutModal from "../components/journal/PayInOutModal";
 import BulkJournalUpdateModal from "../components/journal/BulkJournalUpdateModal";
 import ConfirmDialog from "../components/common/ConfirmDialog";
+import BulkDeleteModal from "../components/common/BulkDeleteModal";
 import API from "../services/api";
 import * as XLSX from "xlsx";
 import EyeIcon from "../components/common/EyeIcon";
@@ -108,6 +109,7 @@ export default function Journals() {
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [isClosingBulk, setIsClosingBulk] = useState(false);
   const [isCancellingBulk, setIsCancellingBulk] = useState(false);
   const [isReopeningBulk, setIsReopeningBulk] = useState(false);
@@ -155,7 +157,7 @@ export default function Journals() {
   }, [fetchJournals]);
 
   const handleBulkDelete = () => {
-    setDeleteConfirm({ open: true, type: "bulk", target: null });
+    setShowBulkDeleteModal(true);
   };
 
   const executeBulkDelete = async () => {
@@ -176,6 +178,7 @@ export default function Journals() {
       fetchJournals(); // Refresh to see what succeeded
     } finally {
       setIsDeleting(false);
+      setShowBulkDeleteModal(false);
       setDeleteConfirm({ open: false, type: null, target: null });
     }
   };
@@ -1061,6 +1064,18 @@ export default function Journals() {
         confirmLabel={isDeleting ? "Deleting..." : "Delete"}
         onCancel={() => setDeleteConfirm({ open: false, type: null, target: null })}
         onConfirm={deleteConfirm.type === "bulk" ? executeBulkDelete : () => executeSingleDelete(deleteConfirm.target)}
+      />
+
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        message={
+          <>
+            Are you sure you want to delete <strong>{selectedJournals.length}</strong> selected Journals? This action cannot be undone.
+          </>
+        }
+        loading={isDeleting}
+        onCancel={() => setShowBulkDeleteModal(false)}
+        onConfirm={executeBulkDelete}
       />
 
       {/* ── Bulk selection strip ─────────────────────────────────────── */}

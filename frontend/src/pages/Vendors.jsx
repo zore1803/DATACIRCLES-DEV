@@ -1029,18 +1029,18 @@ function Vendors() {
   const handleAddPayment = async (payload) => {
     try {
       await API.post(`/vendors/${payload.vendor}/payments`, payload);
+      // Net Balance is Total Given - Total Got, derived server-side from the
+      // Payment rows. Adjust the row optimistically in the same direction the
+      // server will compute, rather than by the old inverted rule.
       setVendors((prevVendors) =>
-        prevVendors.map((vendor) =>
-          vendor._id === payload.vendor
-            ? {
-                ...vendor,
-                balance:
-                  payload.direction === "IN"
-                    ? vendor.balance + parseFloat(payload.amount)
-                    : vendor.balance - parseFloat(payload.amount),
-              }
-            : vendor,
-        ),
+        prevVendors.map((vendor) => {
+          if (vendor._id !== payload.vendor) return vendor;
+          const amount = parseFloat(payload.amount) || 0;
+          const isOut = payload.direction === "OUT";
+          const totalGiven = (vendor.totalGiven || 0) + (isOut ? amount : 0);
+          const totalGot = (vendor.totalGot || 0) + (isOut ? 0 : amount);
+          return { ...vendor, totalGiven, totalGot, netBalance: totalGiven - totalGot, balance: totalGiven - totalGot };
+        }),
       );
       toast.success("Payment added successfully");
     } catch (err) {

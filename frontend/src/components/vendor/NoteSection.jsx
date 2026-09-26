@@ -1,5 +1,6 @@
 import CalendarIcon from "../common/CalendarIcon";
 import DeleteIcon from "../common/DeleteIcon";
+import BulkDeleteModal from "../common/BulkDeleteModal";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import MoreIcon from "../common/MoreIcon";
@@ -771,9 +772,7 @@ const NoteSection = ({ showKPIs = true, autoOpenCreate = false, onAutoOpenCreate
   });
   const { visible: stripVisible, closing: stripClosing } = useBulkStrip(selectedItems.length);
 
-  // Confirmation is a styled modal (see showBulkDeleteModal below), matching
-  // CompanyContactsTab.jsx / PaymentsTable.jsx's bulk-delete flow, instead
-  // of the browser's window.confirm this used previously.
+  // Bulk delete asks via the shared BulkDeleteModal.
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
   const handleBulkDelete = async () => {
@@ -1263,34 +1262,17 @@ const NoteSection = ({ showKPIs = true, autoOpenCreate = false, onAutoOpenCreate
         createdAt={viewingNote?.createdAt}
       />
 
-      {showBulkDeleteModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10005] p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
-            <div className="p-6 text-center">
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Confirm Delete</h3>
-              <p className="text-sm text-gray-500 mb-6">
-                Delete {selectedItems.length} selected note{selectedItems.length !== 1 ? "s" : ""}? This action cannot be undone.
-              </p>
-              <div className="flex gap-3 justify-center">
-                <button
-                  onClick={() => setShowBulkDeleteModal(false)}
-                  disabled={isDeleting}
-                  className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleBulkDelete}
-                  disabled={isDeleting}
-                  className="px-5 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50"
-                >
-                  {isDeleting ? "Deleting..." : "Delete"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <BulkDeleteModal
+        isOpen={showBulkDeleteModal}
+        message={
+          <>
+            Are you sure you want to delete <strong>{selectedItems.length}</strong> selected Notes? This action cannot be undone.
+          </>
+        }
+        loading={isDeleting}
+        onCancel={() => setShowBulkDeleteModal(false)}
+        onConfirm={handleBulkDelete}
+      />
 
       <style jsx="true" global="true">{`
   /* Quill Editor Styles */
