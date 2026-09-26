@@ -55,14 +55,6 @@ const calculateSubtotal = (items) => {
 // Round to 2 decimals without binary float drift (…329999), so stored money is clean.
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
-// Total actually recorded against a bill's payments[]. Used to enforce the
-// §11/cancel rule: a bill with money on it can't be Cancelled by a status flip
-// (mirrors purchaseReturnController's sumRefunds), and the delete path unwinds
-// those payments through the allocation service so no Payment/PaymentAllocation
-// row is orphaned on the vendor's ledger.
-const sumPayments = (payments) =>
-  (payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-
 // Computes one item's net (pre-tax) amount and tax amount from its own gstRate/taxInclusive —
 // seeded from the variant when one was selected. Mirrors PurchaseForm.jsx's own frontend math
 // exactly (lines computing `subtotal`/`totalTax`), so stored totals never disagree with what
@@ -506,16 +498,6 @@ exports.updatePurchase = async (req, res) => {
       return res.status(400).json({ message });
     }
 
-    // A status flip can't undo money already paid to the vendor. If any real
-    // payment is recorded on this bill, block Cancelled — the payments have to
-    // be removed first (which unwinds their allocations). Mirrors the
-    // return-side rule in purchaseReturnController.
-    if (status === "Cancelled" && sumPayments(purchase.payments) > 0) {
-      return res.status(400).json({
-        message: "This purchase has payments recorded against it — remove those first, then cancel it.",
-      });
-    }
-
     // Snapshot before any overwrite below — only meaningful (passed on) when
     // stock was already applied for this purchase, so an item-quantity edit
     // after Confirmed moves just the delta instead of re-applying everything.
@@ -590,14 +572,27 @@ exports.updatePurchase = async (req, res) => {
     // PO is stock-free, so this Purchase's Confirmed always owns the movement.
     await syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, req.user.id, items ? previousItemsSnapshot : null);
 
+    // Cancelling keeps the Payment history but reverses its settlement of this
+    // bill — see the matching block in updatePurchaseStatus for the full
+    // rationale. Paid is terminal (blocked above) and never reaches here.
+    let responseDoc = purchase;
+    if (status === "Cancelled" && oldStatus !== "Cancelled") {
+      await allocationService.reverseDocumentAllocations({
+        orgId: req.user.organization,
+        documentType: "Purchase",
+        documentId: purchase._id,
+      });
+      responseDoc = await Purchase.findById(purchase._id);
+    }
+
     // Populate references
-    await purchase.populate([
+    await responseDoc.populate([
       { path: 'vendor', select: 'name email phone' },
       { path: 'purchaseOrder', select: 'poNumber vendor' },
       { path: 'items.itemId', select: 'name description purchasePrice hsnSac gstRate' }
     ]);
 
-    res.json(purchase);
+    res.json(responseDoc);
   } catch (err) {
     console.error("Update purchase error:", err);
     res.status(400).json({ error: err.message });
@@ -631,15 +626,6 @@ exports.updatePurchaseStatus = async (req, res) => {
       return res.status(400).json({ message });
     }
 
-    // A status flip can't undo money already paid to the vendor. If any real
-    // payment is recorded on this bill, block Cancelled — the payments have to
-    // be removed first (which unwinds their allocations). Mirrors the
-    // return-side rule in purchaseReturnController.
-    if (status === "Cancelled" && sumPayments(purchase.payments) > 0) {
-      return res.status(400).json({
-        message: "This purchase has payments recorded against it — remove those first, then cancel it.",
-      });
-    }
     const oldStockMovementStatus = purchase.stockMovementStatus;
 
     // When a purchase is marked Paid via the status dropdown, record the exact
@@ -681,13 +667,29 @@ exports.updatePurchaseStatus = async (req, res) => {
     // stock now.
     await syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, req.user.id);
 
-    await purchase.populate([
+    // Cancelling keeps the real Payment history but reverses its settlement of
+    // this bill: the allocations are unwound (payments[] emptied, the money
+    // freed to the vendor as unallocated credit) while the Payment rows stay on
+    // the ledger and still count toward Total Given. The money was really paid;
+    // it's just no longer settled against this cancelled bill. Paid is terminal
+    // and never reaches here (isValidPurchaseStatusTransition blocks it).
+    let responseDoc = purchase;
+    if (status === "Cancelled" && oldStatus !== "Cancelled") {
+      await allocationService.reverseDocumentAllocations({
+        orgId: req.user.organization,
+        documentType: "Purchase",
+        documentId: purchase._id,
+      });
+      responseDoc = await Purchase.findById(purchase._id);
+    }
+
+    await responseDoc.populate([
       { path: 'vendor', select: 'name email phone' },
       { path: 'purchaseOrder', select: 'poNumber vendor' },
       { path: 'items.itemId', select: 'name description purchasePrice hsnSac gstRate' },
     ]);
 
-    res.json(purchase);
+    res.json(responseDoc);
   } catch (err) {
     console.error("Update purchase status error:", err);
     res.status(400).json({ error: err.message });

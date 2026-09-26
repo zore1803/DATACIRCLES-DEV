@@ -311,6 +311,19 @@ const PurchasePage = () => {
     (s) => !PAYMENT_DERIVED_STATUSES.includes(s),
   );
 
+  // The manual options offered for a bill already in a given status. Once goods
+  // are received (Confirmed onward) the only manual move is Cancelled — which
+  // now keeps the recorded payments as vendor credit and just unwinds their
+  // settlement of this bill (see reverseDocumentAllocations). Partial keeps its
+  // own (payment-derived) label alongside Cancelled; Paid is terminal and never
+  // gets this menu (the row hides Change Status for Paid). A not-yet-received
+  // bill still uses the full manual list.
+  const statusMenuOptions = (status) => {
+    if (status === "Partial") return ["Partial", "Cancelled"];
+    if (status === "Confirmed") return ["Confirmed", "Cancelled"];
+    return manualStatusOptions;
+  };
+
   // Columns available in the rule-builder filter panel (mirrors Companies.jsx pattern).
   const purchaseFilterColumns = [
     { key: "purchaseNumber", label: "Purchase Number" },
@@ -2266,7 +2279,7 @@ const PurchasePage = () => {
             className="fixed z-[100061] w-[160px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5"
             style={{ top: statusMenu.y, left: statusMenu.x }}
           >
-            {manualStatusOptions.map((st) => (
+            {statusMenuOptions(statusMenu.doc.status).map((st) => (
               <button
                 key={st}
                 onClick={(e) => {

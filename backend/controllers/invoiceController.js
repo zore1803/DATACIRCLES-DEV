@@ -17,6 +17,7 @@ const sendGridMail = require("../utils/sendGridMail");
 const { renderEmail } = require("../utils/emailLayout");
 const { syncDocumentStock } = require("../utils/inventorySync");
 const { getOwnedDealIds } = require("../utils/ownedCompanies");
+const allocationService = require("../services/paymentAllocationService");
 
 const calculateItemAmount = (item) => {
   const rate = parseFloat(item.rate) || 0;
@@ -391,8 +392,11 @@ const duplicateInvoice = async (req, res) => {
 
 const getAllInvoices = async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, deal } = req.query;
     let query = { organization: req.user.organization };
+
+    // Scope to a single deal when requested (deal detail page's Invoices tab).
+    if (deal) query.deal = deal;
 
     if (search) {
       query.$or = [
@@ -409,7 +413,8 @@ const getAllInvoices = async (req, res) => {
       const ownedDealIds = await getOwnedDealIds(req.user._id, req.user.organization);
       const ownFilter = { $or: [{ user: req.user._id }, { deal: { $in: ownedDealIds } }] };
       if (query.$or) {
-        query = { organization: query.organization, $and: [{ $or: query.$or }, ownFilter] };
+        const { $or, ...rest } = query;
+        query = { ...rest, $and: [{ $or }, ownFilter] };
       } else {
         Object.assign(query, ownFilter);
       }
@@ -718,6 +723,22 @@ const deleteInvoice = async (req, res) => {
       }
     }
 
+    // Payments recorded on this invoice are allocations of real Payment rows on
+    // the customer's ledger. Deleting the invoice without unwinding them would
+    // leave "Got" money pointing at an invoice that no longer exists. Each is
+    // removed the same way deleting it individually would (dropping the
+    // allocation and, for money raised on this invoice, the Payment row), so no
+    // orphan is left. Done before the delete because the service needs the live
+    // document, and outside the transaction because it's session-unaware.
+    for (const payment of [...(invoice.payments || [])]) {
+      await allocationService.removeDocumentPayment({
+        orgId: req.user.organization,
+        documentType: "Invoice",
+        documentId: invoice._id,
+        documentPaymentId: payment._id,
+      });
+    }
+
     if (invoice.stockMovementStatus === 'applied') {
       await syncDocumentStock({
         organization: req.user.organization,
@@ -752,6 +773,7 @@ const deleteInvoice = async (req, res) => {
 const updateInvoice = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
+  let committed = false;
 
   try {
     const {
@@ -880,6 +902,10 @@ const updateInvoice = async (req, res) => {
       quantity: item.quantity
     }));
 
+    // Captured before the overwrite below so the post-commit money step can
+    // tell whether this edit transitioned the invoice INTO Cancelled.
+    const oldStatus = invoice.status;
+
     // Update fields
     invoice.deal = deal;
     invoice.date = date;
@@ -924,15 +950,32 @@ const updateInvoice = async (req, res) => {
     }
 
     await session.commitTransaction();
+    committed = true;
     session.endSession();
+
+    // Cancelling via the edit form keeps the Payment history but reverses its
+    // settlement of this invoice — same model as updateStatus. Runs outside the
+    // (now committed) transaction because the allocation service is
+    // session-unaware.
+    let responseDoc = invoice;
+    if (invoice.status === 'Cancelled' && oldStatus !== 'Cancelled') {
+      await allocationService.reverseDocumentAllocations({
+        orgId: req.user.organization,
+        documentType: "Invoice",
+        documentId: invoice._id,
+      });
+      responseDoc = await Invoice.findById(invoice._id);
+    }
 
     res.json({
       message: "Invoice updated successfully",
-      invoice,
+      invoice: responseDoc,
     });
   } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
+    if (!committed) {
+      await session.abortTransaction();
+      session.endSession();
+    }
     res.status(500).json({ error: err.message });
   }
 };
@@ -940,6 +983,7 @@ const updateInvoice = async (req, res) => {
 const updateStatus = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
+  let committed = false;
 
   try {
     const { status } = req.body;
@@ -957,28 +1001,6 @@ const updateStatus = async (req, res) => {
 
     const oldStatus = invoice.status;
     invoice.status = status;
-
-    // When an invoice is marked Paid via the status dropdown, record the exact
-    // remaining unpaid balance as a payment entry so the Payment Timeline
-    // reflects the actual cash movement. Method is "Other" because the
-    // status-only UI has no payment-method field — using a neutral label is
-    // more honest than silently inventing "UPI".
-    // Skipped when the invoice is already fully paid (remaining ≤ 0).
-    if (status === 'Paid' && oldStatus !== 'Paid') {
-      const alreadyPaid = (invoice.payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-      const remaining = (Number(invoice.amount) || 0) - alreadyPaid;
-      if (remaining > 0) {
-        invoice.payments.push({
-          amount: remaining,
-          paymentDate: new Date(),
-          paymentMethod: 'Other',
-          reference: '',
-          notes: 'Auto-recorded when status set to Paid',
-          recordedBy: req.user._id,
-          recordedAt: new Date(),
-        });
-      }
-    }
 
     if (status === 'Cancelled' && invoice.stockMovementStatus === 'applied') {
       await syncDocumentStock({
@@ -1000,15 +1022,56 @@ const updateStatus = async (req, res) => {
     await invoice.save({ session, validateModifiedOnly: true });
 
     await session.commitTransaction();
+    committed = true;
     session.endSession();
 
+    // Money operations run OUTSIDE the transaction: the allocation service is
+    // session-unaware (and on a standalone deployment has no transaction at
+    // all), so doing them after the commit keeps ledger writes from being
+    // stranded by an aborted status/stock change.
+    if (status === 'Paid' && oldStatus !== 'Paid') {
+      // Marking an invoice Paid records the exact remaining balance as a real
+      // Payment (IN) on the customer — the same settle-the-rest shortcut
+      // purchases use — so the money shows as "Got" instead of only flipping a
+      // badge. Skipped when already fully paid.
+      const fresh = await Invoice.findById(invoice._id);
+      const alreadyPaid = (fresh.payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+      const remaining = (Number(fresh.amount) || 0) - alreadyPaid;
+      if (remaining > 0.01) {
+        await allocationService.recordDocumentPayment({
+          orgId: req.user.organization,
+          userId: req.user._id,
+          documentType: "Invoice",
+          documentId: fresh._id,
+          amount: remaining,
+          paymentMethod: "Other",
+          notes: "Auto-recorded when status set to Paid",
+        });
+      }
+    } else if (status === 'Cancelled' && oldStatus !== 'Cancelled') {
+      // Cancelling keeps the real Payment history but reverses its settlement
+      // of this invoice: allocations are unwound (payments[] emptied, the money
+      // freed to the customer as unallocated credit) while the Payment rows
+      // stay on the ledger and still count toward their Total Got. The money
+      // was really received; it's just no longer settled against this cancelled
+      // invoice.
+      await allocationService.reverseDocumentAllocations({
+        orgId: req.user.organization,
+        documentType: "Invoice",
+        documentId: invoice._id,
+      });
+    }
+
+    const responseDoc = await Invoice.findById(invoice._id);
     res.json({
       message: "Invoice status updated successfully",
-      invoice,
+      invoice: responseDoc,
     });
   } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
+    if (!committed) {
+      await session.abortTransaction();
+      session.endSession();
+    }
     res.status(500).json({ error: err.message });
   }
 };
@@ -1023,33 +1086,51 @@ const bulkUpdateStatus = async (req, res) => {
       return res.status(400).json({ error: "ids and status are required" });
     }
 
-    // For non-Paid bulk updates, the fast updateMany path is fine.
-    // For Paid, fetch each invoice so we can compute the remaining balance
-    // and push one payment record — same logic as the single updateStatus.
+    // For plain status changes the fast updateMany path is fine. Paid and
+    // Cancelled both move money through the ledger, so they're handled per
+    // invoice — same behaviour as the single updateStatus, just batched.
     if (status === 'Paid') {
       const invoices = await Invoice.find({
         _id: { $in: ids },
         organization: req.user.organization,
       });
-      const now = new Date();
-      await Promise.all(invoices.map(async (invoice) => {
-        if (invoice.status === 'Paid') return; // already paid — skip
+      for (const invoice of invoices) {
+        if (invoice.status === 'Paid') continue; // already paid — skip
         const alreadyPaid = (invoice.payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         const remaining = (Number(invoice.amount) || 0) - alreadyPaid;
-        invoice.status = 'Paid';
-        if (remaining > 0) {
-          invoice.payments.push({
+        if (remaining > 0.01) {
+          // Real Payment (IN) on the customer, so bulk-marking Paid moves their
+          // Total Got just like recording each payment individually would.
+          await allocationService.recordDocumentPayment({
+            orgId: req.user.organization,
+            userId: req.user._id,
+            documentType: "Invoice",
+            documentId: invoice._id,
             amount: remaining,
-            paymentDate: now,
-            paymentMethod: 'Other',
-            reference: '',
-            notes: 'Auto-recorded when status set to Paid',
-            recordedBy: req.user._id,
-            recordedAt: now,
+            paymentMethod: "Other",
+            notes: "Auto-recorded when status set to Paid",
           });
+        } else {
+          invoice.status = 'Paid';
+          await invoice.save({ validateModifiedOnly: true });
         }
+      }
+    } else if (status === 'Cancelled') {
+      const invoices = await Invoice.find({
+        _id: { $in: ids },
+        organization: req.user.organization,
+      });
+      for (const invoice of invoices) {
+        if (invoice.status === 'Cancelled') continue;
+        invoice.status = 'Cancelled';
         await invoice.save({ validateModifiedOnly: true });
-      }));
+        // Keep the Payment history, reverse its settlement of this invoice.
+        await allocationService.reverseDocumentAllocations({
+          orgId: req.user.organization,
+          documentType: "Invoice",
+          documentId: invoice._id,
+        });
+      }
     } else {
       await Invoice.updateMany(
         { _id: { $in: ids }, organization: req.user.organization },
@@ -1343,32 +1424,45 @@ const addInvoicePayment = async (req, res) => {
       return res.status(400).json({ error: `Payment cannot exceed the remaining balance of ₹${amountDue.toFixed(2)}.` });
     }
 
-    invoice.payments.push({
-      amount: parsedAmount,
-      paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
-      paymentMethod: paymentMethod || "UPI",
-      reference: reference || "",
-      notes: notes || "",
-      internalNotes: internalNotes || "",
-      recordedBy: req.user._id,
-      recordedAt: new Date(),
-    });
-
-    // Fully paid off → reflect it on the document's own status, same as the
-    // manual status dropdown would, so the list/board view doesn't need a
-    // separate signal to know this invoice is settled.
-    const newTotalPaid = alreadyPaid + parsedAmount;
-    if (newTotalPaid >= invoice.amount - 0.01) {
-      invoice.status = "Paid";
-    } else if (newTotalPaid > 0) {
-      invoice.status = "Partially Paid";
+    // One money movement, one record of it. The service creates the Payment
+    // (direction IN, party = this invoice's customer, resolved from its deal),
+    // allocates it to the invoice and pushes the payments[] subdoc — so a
+    // customer payment shows up as "Got" on their payments page instead of
+    // living only inside the document. It also recomputes the invoice's status
+    // (Paid / Partially Paid) exactly as the old inline logic did.
+    try {
+      await allocationService.recordDocumentPayment({
+        orgId: req.user.organization,
+        userId: req.user._id,
+        documentType: "Invoice",
+        documentId: invoice._id,
+        amount: parsedAmount,
+        paymentDate,
+        paymentMethod: paymentMethod || "UPI",
+        reference,
+        notes,
+      });
+    } catch (err) {
+      if (err instanceof allocationService.AllocationError) {
+        return res.status(400).json({ error: err.message });
+      }
+      throw err;
     }
 
-    // Recording a payment only touches `payments` and `status` — validating
-    // the whole document would fail on unrelated legacy fields (e.g. an
-    // older invoice with a `signatureType` value from before the enum was
-    // tightened) that have nothing to do with this payment.
-    await invoice.save({ validateModifiedOnly: true });
+    // Reloaded because the service wrote the subdoc and status on its own copy.
+    const updated = await Invoice.findById(invoice._id);
+
+    // internalNotes has no equivalent on the money row, so it's written straight
+    // onto the subdoc the service just pushed.
+    if (internalNotes) {
+      const subdoc = updated.payments[updated.payments.length - 1];
+      if (subdoc) {
+        subdoc.internalNotes = internalNotes;
+        await updated.save({ validateModifiedOnly: true });
+      }
+    }
+
+    const newTotalPaid = (updated.payments || []).reduce((sum, p) => sum + p.amount, 0);
 
     // Non-blocking notifications — failure must never affect the payment save response
     const branding = (notifyByEmail || notifyBySMS)
@@ -1402,7 +1496,7 @@ const addInvoicePayment = async (req, res) => {
       }).catch((err) => console.error("Payment receipt SMS failed:", err.message));
     }
 
-    res.json({ message: "Payment recorded successfully", invoice });
+    res.json({ message: "Payment recorded successfully", invoice: updated });
   } catch (error) {
     res.status(500).json({ error: `Failed to record payment: ${error.message}` });
   }
@@ -1444,46 +1538,42 @@ const getInvoicePayments = async (req, res) => {
 
 const updateInvoicePayment = async (req, res) => {
   try {
-    const invoice = await Invoice.findOne({
-      _id: req.params.id,
-      organization: req.user.organization,
-    });
-    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-
-    const payment = invoice.payments.id(req.params.paymentId);
-    if (!payment) return res.status(404).json({ error: "Payment not found" });
-
     const { amount, paymentDate, paymentMethod, reference, notes, internalNotes } = req.body;
-    const parsedAmount = parseFloat(amount);
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      return res.status(400).json({ error: "A valid payment amount greater than 0 is required." });
+
+    // Amount, ceiling and status are all recomputed by the service, which keeps
+    // the money row (the customer's "Got") and its allocation in step with the
+    // subdoc. Legacy payments with no allocation still work — the service falls
+    // back to editing just the subdoc for those.
+    let result;
+    try {
+      result = await allocationService.updateDocumentPayment({
+        orgId: req.user.organization,
+        userId: req.user._id,
+        documentType: "Invoice",
+        documentId: req.params.id,
+        documentPaymentId: req.params.paymentId,
+        amount,
+        paymentDate,
+        paymentMethod,
+        reference,
+        notes,
+      });
+    } catch (err) {
+      if (err instanceof allocationService.AllocationError) {
+        return res.status(400).json({ error: err.message });
+      }
+      throw err;
     }
 
-    const otherPaid = (invoice.payments || [])
-      .filter((p) => p._id.toString() !== req.params.paymentId)
-      .reduce((sum, p) => sum + p.amount, 0);
-    const amountDue = invoice.amount - otherPaid;
-    if (parsedAmount > amountDue + 0.01) {
-      return res.status(400).json({ error: `Payment cannot exceed the remaining balance of ₹${amountDue.toFixed(2)}.` });
+    const invoice = result.document;
+    if (internalNotes !== undefined) {
+      const subdoc = invoice.payments.id(req.params.paymentId);
+      if (subdoc) {
+        subdoc.internalNotes = internalNotes;
+        await invoice.save({ validateModifiedOnly: true });
+      }
     }
 
-    payment.amount = parsedAmount;
-    if (paymentDate) payment.paymentDate = new Date(paymentDate);
-    if (paymentMethod) payment.paymentMethod = paymentMethod;
-    payment.reference = reference ?? payment.reference;
-    payment.notes = notes ?? payment.notes;
-    payment.internalNotes = internalNotes ?? payment.internalNotes;
-
-    const newTotalPaid = otherPaid + parsedAmount;
-    if (newTotalPaid >= invoice.amount - 0.01) {
-      invoice.status = "Paid";
-    } else if (newTotalPaid > 0) {
-      invoice.status = "Partially Paid";
-    } else {
-      invoice.status = "Unpaid";
-    }
-
-    await invoice.save({ validateModifiedOnly: true });
     res.json({ message: "Payment updated successfully", invoice });
   } catch (error) {
     res.status(500).json({ error: `Failed to update payment: ${error.message}` });
@@ -1492,28 +1582,27 @@ const updateInvoicePayment = async (req, res) => {
 
 const deleteInvoicePayment = async (req, res) => {
   try {
-    const invoice = await Invoice.findOne({
-      _id: req.params.id,
-      organization: req.user.organization,
-    });
-    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-
-    const payment = invoice.payments.id(req.params.paymentId);
-    if (!payment) return res.status(404).json({ error: "Payment not found" });
-
-    payment.deleteOne();
-
-    const totalPaid = (invoice.payments || []).reduce((sum, p) => sum + p.amount, 0);
-    if (totalPaid >= invoice.amount - 0.01) {
-      invoice.status = "Paid";
-    } else if (totalPaid > 0) {
-      invoice.status = "Partially Paid";
-    } else {
-      invoice.status = "Unpaid";
+    // Reverses the allocation, pulls the subdoc, recomputes the invoice's
+    // status and — when the money row was raised on this invoice and settles
+    // nothing else — deletes it, so the customer's Total Got drops by the same
+    // amount. Legacy payments with no allocation fall back to subdoc-only
+    // removal, exactly as before.
+    let result;
+    try {
+      result = await allocationService.removeDocumentPayment({
+        orgId: req.user.organization,
+        documentType: "Invoice",
+        documentId: req.params.id,
+        documentPaymentId: req.params.paymentId,
+      });
+    } catch (err) {
+      if (err instanceof allocationService.AllocationError) {
+        return res.status(400).json({ error: err.message });
+      }
+      throw err;
     }
 
-    await invoice.save({ validateModifiedOnly: true });
-    res.json({ message: "Payment deleted successfully" });
+    res.json({ message: "Payment deleted successfully", invoice: result.document });
   } catch (error) {
     res.status(500).json({ error: `Failed to delete payment: ${error.message}` });
   }

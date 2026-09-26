@@ -538,7 +538,7 @@ const ContactMeetingForm = ({ open, mode, meetingData, calendarDate, contactId, 
                   />
                 </FormField>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-2 gap-4">
                   {!calendarDate ? (
                     <FormField label="Date" required error={errors.date} icon={CalendarIcon}>
                       <input
@@ -562,7 +562,7 @@ const ContactMeetingForm = ({ open, mode, meetingData, calendarDate, contactId, 
                     </FormField>
                   )}
 
-                  <FormField label="Time" required icon={Clock}>
+                  <FormField label="Time" icon={Clock}>
                     <input
                       type="time"
                       value={form.time}

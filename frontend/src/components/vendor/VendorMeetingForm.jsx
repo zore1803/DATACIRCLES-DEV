@@ -460,7 +460,7 @@ const VendorMeetingForm = ({
                   />
                 </FormField>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-2 gap-4">
                   {!calendarDate ? (
                     <FormField label="Date" required error={errors.date}>
                       <input
@@ -483,7 +483,7 @@ const VendorMeetingForm = ({
                     </FormField>
                   )}
 
-                  <FormField label="Time" required>
+                  <FormField label="Time">
                     <input
                       type="time"
                       value={form.time}

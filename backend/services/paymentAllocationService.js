@@ -61,12 +61,17 @@ const DOC_CONFIG = {
     totalOf: (doc) => Number(doc.amount) || 0,
     numberOf: (doc) => doc.invoiceNumber,
     dateOf: (doc) => doc.date || doc.createdAt,
-    // Mirrors invoiceController.addInvoicePayment's status transitions.
+    // Mirrors invoiceController's own add/update/deleteInvoicePayment status
+    // transitions: Paid when settled, Partially Paid above zero, Unpaid when
+    // cleared. A Cancelled invoice keeps its status — reversing its allocations
+    // (the cancel-keeps-payment model) must never flip it back to Unpaid, the
+    // same guard purchase's statusFor has for its own terminal states.
     statusFor: (doc, totalPaid) => {
+      if (doc.status === "Cancelled") return doc.status;
       const total = Number(doc.amount) || 0;
-      if (totalPaid >= total - EPSILON) return "Paid";
+      if (totalPaid >= total - EPSILON && total > 0) return "Paid";
       if (totalPaid > 0) return "Partially Paid";
-      return doc.status;
+      return "Unpaid";
     },
   },
   Purchase: {
@@ -491,6 +496,40 @@ async function reverseAllocationsForPayment(paymentId) {
   for (const record of records) {
     await reverseAllocation(record);
   }
+  return records.length;
+}
+
+// Cancels a document's SETTLEMENT without destroying the money behind it.
+// Every allocation against the document is unwound (its subdoc pulled, its
+// status recomputed, the allocation row deleted) but the parent Payment row is
+// KEPT — its allocatedAmount is decremented so the amount now reads as
+// unallocated credit on the party. This is the cancellation model: the real
+// money movement is permanent history (still "Gave"/"Got" on the party's page,
+// still counted in their derived total), only its link to THIS document is
+// reversed. Deleting a document is different — that removes the money rows too
+// (removeDocumentPayment), because a deleted document can't own history.
+async function reverseDocumentAllocations({ orgId, documentType, documentId }) {
+  const records = await PaymentAllocation.find({
+    organization: orgId,
+    documentType,
+    document: documentId,
+  });
+
+  for (const record of records) {
+    const paymentId = record.payment;
+    // Pulls the subdoc, recomputes the (soon-to-be-Cancelled) document's
+    // status from what's left, and deletes the allocation row.
+    await reverseAllocation(record);
+
+    // Keep the Payment; just free up the amount it was holding against this
+    // document so it surfaces as credit rather than vanishing.
+    const payment = await Payment.findById(paymentId);
+    if (payment) {
+      payment.allocatedAmount = Math.max(0, round2((Number(payment.allocatedAmount) || 0) - record.amount));
+      await payment.save({ validateModifiedOnly: true });
+    }
+  }
+
   return records.length;
 }
 
@@ -976,6 +1015,7 @@ module.exports = {
   applyAllocations,
   reverseAllocation,
   reverseAllocationsForPayment,
+  reverseDocumentAllocations,
   getAllocationsForDocument,
   getAllocationSourcesForPayments,
   getCreditBalances,

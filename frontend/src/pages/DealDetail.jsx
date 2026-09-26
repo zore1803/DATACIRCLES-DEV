@@ -334,7 +334,7 @@ function DealDetail() {
   const companyId = deal.company?._id || deal.company;
 
   return (
-    <div className="min-h-screen bg-white -mt-6 -mx-4 sm:-mx-6 lg:-mx-8 pt-6 px-6">
+    <div className="bg-white -mt-6 -mx-4 sm:-mx-6 lg:-mx-8 pt-6 px-6">
       {showForm && (
         <QuickDealForm
           companies={companies}

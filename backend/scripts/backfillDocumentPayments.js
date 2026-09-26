@@ -32,6 +32,8 @@ const mongoose = require("mongoose");
 
 const Purchase = require("../models/Purchase");
 const PurchaseReturn = require("../models/PurchaseReturn");
+const Invoice = require("../models/Invoice");
+const Deal = require("../models/Deal");
 const Payment = require("../models/Payment");
 const PaymentAllocation = require("../models/PaymentAllocation");
 
@@ -54,8 +56,12 @@ const VALID = new Set([
 const toPaymentType = (method) => (VALID.has(method) ? method : "Other");
 
 // One entry per document type that carries a payments[] array. `direction` is
-// what makes a bill payment "Gave" (OUT) and a return refund "Got" (IN) on the
-// vendor's page — the single thing that differs between the two.
+// what makes a bill payment "Gave" (OUT) and a return refund/customer payment
+// "Got" (IN). `resolveParty` maps a document to the ledger party the money
+// belongs to: a Vendor for the purchase side, or (for an invoice) the
+// customer — Company or Contact — hanging off its Deal. It returns null when
+// the party can't be determined, so that row is reported and skipped rather
+// than guessed at.
 const CONFIGS = [
   {
     documentType: "Purchase",
@@ -63,6 +69,8 @@ const CONFIGS = [
     direction: "OUT",
     numberField: "purchaseNumber",
     label: "purchase",
+    resolveParty: (doc) =>
+      doc.vendor ? { partyType: "Vendor", party: doc.vendor, vendor: doc.vendor } : null,
   },
   {
     documentType: "PurchaseReturn",
@@ -70,6 +78,25 @@ const CONFIGS = [
     direction: "IN",
     numberField: "returnNumber",
     label: "purchase return",
+    resolveParty: (doc) =>
+      doc.vendor ? { partyType: "Vendor", party: doc.vendor, vendor: doc.vendor } : null,
+  },
+  {
+    documentType: "Invoice",
+    model: Invoice,
+    direction: "IN",
+    numberField: "invoiceNumber",
+    label: "invoice",
+    // An invoice's customer lives on its Deal (company or contact), not on the
+    // invoice itself — same resolution paymentAllocationService.partyForDocument
+    // uses. No vendor: an IN payment from a customer carries party/partyType.
+    resolveParty: async (doc) => {
+      if (!doc.deal) return null;
+      const deal = await Deal.findById(doc.deal).select("company contact").lean();
+      if (deal?.company) return { partyType: "Company", party: deal.company };
+      if (deal?.contact) return { partyType: "Contact", party: deal.contact };
+      return null;
+    },
   },
 ];
 
@@ -79,13 +106,13 @@ async function backfillType(cfg) {
 
   const docs = await cfg.model
     .find(filter)
-    .select(`_id ${cfg.numberField} vendor organization user payments createdAt`)
+    .select(`_id ${cfg.numberField} vendor deal organization user payments createdAt`)
     .lean();
   console.log(`\n[${cfg.documentType}] Scanning ${docs.length} ${cfg.label}(s) with payments...`);
 
   let created = 0;
   let skippedLinked = 0;
-  let skippedNoVendor = 0;
+  let skippedNoParty = 0;
   let totalAmount = 0;
 
   for (const doc of docs) {
@@ -101,11 +128,13 @@ async function backfillType(cfg) {
         continue;
       }
 
-      // A document with no vendor can't be attributed to anyone's ledger. Left
-      // alone and reported rather than guessed at.
-      if (!doc.vendor) {
-        skippedNoVendor += 1;
-        console.warn(`  ! ${doc[cfg.numberField] || doc._id}: payment ${subdoc._id} has no vendor — skipped`);
+      // A document whose party can't be resolved (no vendor, or an invoice
+      // whose deal has neither company nor contact) can't be attributed to
+      // anyone's ledger. Left alone and reported rather than guessed at.
+      const party = await cfg.resolveParty(doc);
+      if (!party) {
+        skippedNoParty += 1;
+        console.warn(`  ! ${doc[cfg.numberField] || doc._id}: payment ${subdoc._id} has no resolvable party — skipped`);
         continue;
       }
 
@@ -121,9 +150,9 @@ async function backfillType(cfg) {
       }
 
       const payment = await Payment.create({
-        vendor: doc.vendor,
-        partyType: "Vendor",
-        party: doc.vendor,
+        vendor: party.vendor,
+        partyType: party.partyType,
+        party: party.party,
         amount,
         allocatedAmount: amount,
         paymentDate: subdoc.paymentDate || doc.createdAt || new Date(),
@@ -150,7 +179,7 @@ async function backfillType(cfg) {
 
   console.log(`  ${APPLY ? "Created" : "Would create"}: ${created} payment(s), ₹${round2(totalAmount).toFixed(2)}`);
   console.log(`  Already linked (skipped): ${skippedLinked}`);
-  if (skippedNoVendor) console.log(`  Skipped, no vendor: ${skippedNoVendor}`);
+  if (skippedNoParty) console.log(`  Skipped, no party: ${skippedNoParty}`);
 
   return { created, amount: totalAmount };
 }
@@ -163,7 +192,7 @@ async function main() {
 
   const configs = ONLY ? CONFIGS.filter((c) => c.documentType === ONLY) : CONFIGS;
   if (ONLY && configs.length === 0) {
-    throw new Error(`--only ${ONLY} is not a known document type (Purchase | PurchaseReturn)`);
+    throw new Error(`--only ${ONLY} is not a known document type (Purchase | PurchaseReturn | Invoice)`);
   }
 
   let grandCreated = 0;

@@ -641,6 +641,9 @@ const AdminMeetingForm = ({
   // Quick-create shortcuts behind the "+" buttons on Link Deal / Link Invoice.
   const [quickDealOpen, setQuickDealOpen] = useState(false);
   const [quickContactOpen, setQuickContactOpen] = useState(false);
+  // Where a freshly created contact should land: the single "Link Contact"
+  // picker ("linked") or the "Client Contacts" multi-select ("participants").
+  const [quickContactTarget, setQuickContactTarget] = useState("linked");
   const [quickInvoiceOpen, setQuickInvoiceOpen] = useState(false);
   const [dealFormCompanies, setDealFormCompanies] = useState([]);
   const documentDefaults = useDocumentDefaults();
@@ -1144,7 +1147,8 @@ const AdminMeetingForm = ({
     setQuickDealOpen(true);
   };
 
-  const openQuickContact = async () => {
+  const openQuickContact = async (target = "linked") => {
+    setQuickContactTarget(target);
     if (dealFormCompanies.length === 0) {
       try {
         const res = await API.get("/companies");
@@ -1157,7 +1161,8 @@ const AdminMeetingForm = ({
   };
 
   // QuickContactForm's callback carries no payload, so refetch and link
-  // whichever contact is newest.
+  // whichever contact is newest — into the Link Contact picker or the Client
+  // Contacts multi-select, depending on which "+" was used.
   const handleQuickContactCreated = async () => {
     setQuickContactOpen(false);
     try {
@@ -1165,7 +1170,18 @@ const AdminMeetingForm = ({
       const list = res.data || [];
       setCompanyContacts(list.filter((c) => !form.companyId || c.company?._id === form.companyId));
       const newest = [...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-      if (newest) setForm((f) => ({ ...f, linkedContactId: newest._id }));
+      if (newest) {
+        if (quickContactTarget === "participants") {
+          setForm((f) => ({
+            ...f,
+            participants: (f.participants || []).includes(newest._id)
+              ? f.participants
+              : [...(f.participants || []), newest._id],
+          }));
+        } else {
+          setForm((f) => ({ ...f, linkedContactId: newest._id }));
+        }
+      }
     } catch {
       toast.error("Failed to refresh contacts");
     }
@@ -1483,7 +1499,7 @@ const AdminMeetingForm = ({
                 <div className="grid grid-cols-3 gap-4">
                   {/* Date */}
                   <div ref={dateInputRef}>
-                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Date</label>
+                    <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Date <span className="text-[#FF4935]">*</span></label>
                     <input
                       type="date"
                       value={form.date || calendarDate || ""}
@@ -1550,15 +1566,29 @@ const AdminMeetingForm = ({
                     and vendors have no contacts in this model. */}
                 {form.linkedTo === "company" && (
                   <div ref={participantsRef}>
-                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Client Contacts</label>
-                    <MultiSelectDropdown
-                      users={scopedCompanyContacts}
-                      selectedUsers={form.participants}
-                      onSelectionChange={(participants) => handleChange("participants", participants)}
-                      placeholder={form.companyId ? "Add client contacts" : "Select a company first"}
-                      isOpen={openDropdown === "clientContacts"}
-                      onOpenChange={(open) => setOpenDropdown(open ? "clientContacts" : null)}
-                    />
+                    <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Client Contacts <span className="text-[#FF4935]">*</span></label>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <MultiSelectDropdown
+                          users={scopedCompanyContacts}
+                          selectedUsers={form.participants}
+                          onSelectionChange={(participants) => handleChange("participants", participants)}
+                          placeholder={form.companyId ? "Add client contacts" : "Select a company first"}
+                          isOpen={openDropdown === "clientContacts"}
+                          onOpenChange={(open) => setOpenDropdown(open ? "clientContacts" : null)}
+                        />
+                      </div>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={() => openQuickContact("participants")}
+                          className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] flex items-center justify-center hover:opacity-90 transition-opacity"
+                          title="Create a new contact for this deal"
+                        >
+                          <PlusIcon className="w-4 h-4 text-white" />
+                        </button>
+                      )}
+                    </div>
                     {errors.participants && <p className="text-red-500 text-xs mt-1 font-inter">{errors.participants}</p>}
                   </div>
                 )}
@@ -1621,7 +1651,7 @@ const AdminMeetingForm = ({
                     {!readOnly && (
                       <button
                         type="button"
-                        onClick={openQuickContact}
+                        onClick={() => openQuickContact("linked")}
                         className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] flex items-center justify-center hover:opacity-90 transition-opacity"
                         title="Create a new contact"
                       >

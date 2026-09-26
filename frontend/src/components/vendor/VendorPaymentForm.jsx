@@ -255,8 +255,8 @@ const VendorPaymentForm = ({
           </div>
 
           <div>
-            <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Bank <span className="text-[#FF4935]">*</span>
+            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
+              Bank
             </label>
             <input
               type="text"
@@ -281,8 +281,8 @@ const VendorPaymentForm = ({
           </div>
 
           <div>
-            <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Notes <span className="text-[#FF4935]">*</span>
+            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
+              Notes
             </label>
             <textarea
               value={form.notes}

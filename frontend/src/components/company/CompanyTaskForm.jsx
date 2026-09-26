@@ -766,8 +766,8 @@ const CompanyTaskForm = ({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                  Selected Date
+                <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
+                  Selected Date <span className="text-[#FF4935]">*</span>
                 </label>
                 <input
                   type="date"
@@ -779,8 +779,8 @@ const CompanyTaskForm = ({
               </div>
 
               <div>
-                <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                  Due Date
+                <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
+                  Due Date <span className="text-[#FF4935]">*</span>
                 </label>
                 <input
                   type="date"

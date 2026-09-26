@@ -778,7 +778,7 @@ const VendorDetailsPageNew = () => {
 
   /* ═══════════════════ RENDER ═══════════════════ */
   return (
-    <div className="min-h-screen bg-white -mt-6 -mx-4 sm:-mx-6 lg:-mx-8 pt-6 overflow-x-hidden">
+    <div className="bg-white -mt-6 -mx-4 sm:-mx-6 lg:-mx-8 pt-6 overflow-x-hidden">
       {/* ── Edit Form Modal ── */}
       {showForm && (
         <QuickVendorForm
