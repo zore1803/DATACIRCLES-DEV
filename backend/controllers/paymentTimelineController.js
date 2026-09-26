@@ -57,22 +57,15 @@ exports.getPaymentsTimeline = async (req, res) => {
         .lean()
     ]);
 
-    // An allocated payment writes a subdocument into the Invoice/Purchase it
-    // settled — that's what keeps every Paid/Pending figure in the app
-    // correct without touching those screens. But the timeline reads BOTH the
-    // Payment collection and those subdocuments, so without this the same
-    // cash movement would be listed twice and counted twice in the Credit /
-    // Debit / Net KPIs. The Payment row is the canonical one (it carries the
-    // party and the full split), so the subdocuments it created are skipped.
+    // The timeline reads both the Payment collection and the subdocs those
+    // payments pushed, so the subdocs are skipped to avoid double-counting.
+    // The Payment row is canonical — it carries the party and the full split.
     const allocatedSubdocIds = new Set(
       allocations.filter((a) => a.documentPaymentId).map((a) => String(a.documentPaymentId))
     );
 
-    // Maps a payment method string to a `bank` tag for account-card bucketing.
-    // "Cash" → goes into the Cash card (paymentTimelineController filters on
-    // t.type === "Cash" for that card). All electronic methods leave bank blank
-    // so they appear as general IN/OUT without inflating a specific bank card
-    // (the user's bank cards are matched by bank *name*, not payment method).
+    // Buckets a payment method onto an account card. Bank cards match by bank
+    // NAME, so electronic methods leave it blank rather than guessing a card.
     const methodToBank = (method) => {
       if (!method) return "";
       if (method === "Cash") return "Cash";
@@ -80,6 +73,20 @@ exports.getPaymentsTimeline = async (req, res) => {
       // → generic electronic; leave blank so it counts in the aggregate
       // Credit/Debit/Net totals but not inside any named bank card.
       return "";
+    };
+
+    // paymentDate was historically stored date-only (UTC-midnight, which reads
+    // as 05:30 IST and leaves ties unsortable). createdAt always holds the real
+    // recording instant, so fall back to it when paymentDate carries no time.
+    const recordedAt = (paymentDate, createdAt) => {
+      if (!paymentDate) return createdAt || paymentDate;
+      const pd = new Date(paymentDate);
+      const isDateOnly =
+        pd.getUTCHours() === 0 &&
+        pd.getUTCMinutes() === 0 &&
+        pd.getUTCSeconds() === 0 &&
+        pd.getUTCMilliseconds() === 0;
+      return isDateOnly && createdAt ? createdAt : paymentDate;
     };
 
     const formattedPayments = payments.map((p) => {
@@ -107,14 +114,12 @@ exports.getPaymentsTimeline = async (req, res) => {
         unallocatedAmount: unallocated,
         direction: p.direction,
         type: p.paymentType || "Payment",
-        date: p.paymentDate,
+        date: recordedAt(p.paymentDate, p.createdAt),
         bank: p.bank || "",
         notes: p.notes || "",
         reference: p.reference || "",
         // Legacy rows predate the flag, so fall back to the note text the old
-        // self-transfer path always wrote ("Self Transfer to X" / "from X").
-        // Without this, every transfer recorded before this change keeps
-        // inflating the KPIs.
+        // self-transfer path wrote — otherwise they keep inflating the KPIs.
         isInternalTransfer:
           p.isInternalTransfer === true || /^Self Transfer (to|from) /.test(p.notes || ""),
         transferGroup: p.transferGroup || null,
@@ -123,10 +128,8 @@ exports.getPaymentsTimeline = async (req, res) => {
       };
     });
 
-    // STRICTLY ACTUAL PAYMENTS ONLY — iterate each Invoice's payments[]
-    // sub-array instead of mapping the whole invoice as a single cash-in.
-    // Unpaid invoices produce ZERO rows here; partially-paid invoices produce
-    // one row per payment, each at the real paymentDate/amount/method.
+    // Actual payments only: one row per payments[] entry, not one per invoice.
+    // An unpaid invoice produces no rows.
     const formattedInvoices = invoices.flatMap((inv) => {
       if (!inv.payments || inv.payments.length === 0) return [];
 
@@ -204,16 +207,12 @@ exports.getPaymentsTimeline = async (req, res) => {
       status: sub.status
     }));
 
-    // Expenses (money out) and Indirect Income (money in). These are
-    // standalone ledger entries with no document to settle, so they never go
-    // through the allocation engine — but they ARE real cash, so they belong
-    // in the totals and in the per-account balances.
+    // Expenses and Indirect Income settle no document, so they skip the
+    // allocation engine — but they're real cash and belong in the totals.
     const formattedExpenses = expenses.map((e) => {
       const isIncome = e.kind === "income";
-      // The account cards are matched by bank NAME, so the chosen account's
-      // name is what lets this row land on the right card. Cash has no bank
-      // record, so it's tagged by method instead — same convention
-      // methodToBank() uses for invoice/purchase payments.
+      // Account cards match by bank NAME. Cash has no bank record, so it's
+      // tagged by method instead.
       const bankTag = e.bankAccount?.bank
         ? e.bankAccount.bank
         : e.paymentType === "Cash"
@@ -340,19 +339,10 @@ exports.getPaymentsTimeline = async (req, res) => {
     const endIndex = page * limit;
     const paginatedTransactions = allTransactions.slice(startIndex, endIndex);
 
-    // KPI totals over every matching transaction (all pages), not just the
-    // slice being returned — the frontend was computing these from
-    // `documents` alone, which is only the current page (10 rows), so the
-    // Total Credit/Debit/Net/Transactions cards read wildly low against the
-    // real "534 total" count.
-    // Internal transfers are excluded here. Moving ₹50,000 from a bank
-    // account to Cash writes an OUT leg and an IN leg, which added ₹50,000 to
-    // BOTH Total Credit and Total Debit even though no money entered or left
-    // the business. (Net happened to survive, since the two legs cancel — the
-    // Credit and Debit cards were the ones reading high.) The legs stay in
-    // `allTransactions`, so they're still listed in the table and still move
-    // the per-account balances computed below, which is exactly what a
-    // transfer should do.
+    // KPI totals over every matching transaction, not just the page slice.
+    // Internal transfers are excluded — both legs are the same money, so
+    // counting them inflates Credit and Debit. They stay in allTransactions,
+    // so they still appear in the table and move the per-account balances.
     let totalCredit = 0;
     let totalDebit = 0;
     let totalTransferred = 0;
@@ -453,10 +443,8 @@ exports.getPaymentsTimeline = async (req, res) => {
   }
 };
 
-// Backs the timeline's "View" action — fetches the full record (the list
-// endpoint above only returns a flattened summary row) plus its party, in the
-// shape PaymentReceiptModal expects. Every timeline source is normalized into
-// one receipt shape so the View action behaves consistently across tabs.
+// Backs the "View" action: the full record plus its party, normalized into the
+// one receipt shape PaymentReceiptModal expects for every timeline source.
 exports.getPaymentReceipt = async (req, res) => {
   try {
     const orgId = req.user.organization;
@@ -562,11 +550,8 @@ exports.getPaymentReceipt = async (req, res) => {
   }
 };
 
-// GET /api/payments-timeline/parties?direction=IN|OUT&search=
-// Who a payment of this direction can be attributed to. A Credit/IN payment
-// comes from a customer, and a customer is whoever a Deal points at (a
-// Company or a Contact) — that's the only link an Invoice has to a party. A
-// Debit/OUT payment goes to a Vendor.
+// Who a payment of this direction can be attributed to: IN comes from a
+// customer (the Company or Contact a Deal points at), OUT goes to a Vendor.
 exports.getPaymentParties = async (req, res) => {
   try {
     const orgId = req.user.organization;
@@ -595,11 +580,8 @@ exports.getPaymentParties = async (req, res) => {
           .lean(),
       ]);
 
-      // Names repeat — a CRM routinely holds several distinct contacts with
-      // the same name — and a picker showing five identical rows is
-      // unusable. `subtitle` carries whatever tells them apart, falling back
-      // to a short id so two otherwise-identical records are still
-      // separable.
+      // Names repeat, so `subtitle` carries whatever tells two apart, falling
+      // back to a short id.
       const subtitleFor = (c, type) =>
         c.email || c.phone || `${type} · ${String(c._id).slice(-6)}`;
 
@@ -680,10 +662,8 @@ exports.getOpenDocuments = async (req, res) => {
   }
 };
 
-// GET /api/payments-timeline/open-documents/all?direction=IN|OUT
-// Every open document in the org with its party name attached — backs the
-// "search any invoice" picker, since credit isn't restricted to the customer
-// it came from.
+// Every open document in the org with its party name — backs the "search any"
+// picker, since credit isn't restricted to the party it came from.
 exports.getAllOpenDocuments = async (req, res) => {
   try {
     const direction = (req.query.direction || "").trim().toUpperCase();
@@ -701,10 +681,8 @@ exports.getAllOpenDocuments = async (req, res) => {
   }
 };
 
-// GET /api/payments-timeline/credit-balances?direction=IN|OUT
-// Unallocated money sitting against each party. For IN that's a customer who
-// has paid ahead of their invoices; for OUT it's an advance to a vendor.
-// Either way it's spendable against a future document.
+// Unallocated money per party — a customer paid ahead, or an advance to a
+// vendor. Either way it's spendable against a future document.
 exports.getCreditBalances = async (req, res) => {
   try {
     const direction = req.query.direction ? req.query.direction.trim().toUpperCase() : null;
@@ -726,10 +704,8 @@ exports.getCreditBalances = async (req, res) => {
   }
 };
 
-// POST /api/payments-timeline/credit/apply
-// Spends a party's accumulated credit balance against their open documents.
-// Separate from the per-payment endpoint because the credit can span several
-// earlier payments — the service draws them down oldest-first.
+// Spends a party's credit against their open documents. Separate from the
+// per-payment endpoint because credit can span several payments (drawn FIFO).
 exports.applyCreditBalance = async (req, res) => {
   try {
     const { partyType, partyId, direction, allocations } = req.body;
@@ -786,11 +762,8 @@ exports.createPayment = async (req, res) => {
       return res.status(400).json({ error: "A valid payment amount greater than 0 is required." });
     }
 
-    // Resolve the party. A Credit/IN payment comes from a customer (Company
-    // or Contact); a Debit/OUT payment goes to a Vendor. The vendor-only
-    // fields are still honoured so the existing callers keep working, and an
-    // OUT payment sets both `vendor` and `party` so nothing reading the
-    // legacy pointer regressed.
+    // IN comes from a customer, OUT goes to a vendor. An OUT sets both `vendor`
+    // and `party` so callers reading the legacy pointer keep working.
     let resolvedPartyType = partyType;
     let resolvedPartyId = party;
     let vendorId = vendor;
@@ -798,11 +771,8 @@ exports.createPayment = async (req, res) => {
     const internalTransfer = Boolean(isInternalTransfer);
 
     if (internalTransfer) {
-      // A transfer between the org's own accounts has no counterparty. It
-      // still needs a vendor pointer (every pre-existing screen reads one),
-      // but it must reuse ONE placeholder per org — the old path ran
-      // `new Vendor()` on every leg of every transfer, which is why the
-      // vendor list fills up with duplicate "Self Transfer" entries.
+      // A self-transfer has no counterparty but still needs a vendor pointer,
+      // so reuse ONE placeholder per org instead of creating one per leg.
       const label = vendorName || "Self Transfer";
       let placeholder = await Vendor.findOne({ name: label, organization: orgId });
       if (!placeholder) {
@@ -895,10 +865,8 @@ exports.createPayment = async (req, res) => {
   }
 };
 
-// POST /api/payments-timeline/:id/allocations
-// Spends a payment's leftover credit balance against documents later, after
-// the payment was already recorded. Same validation and same writes as doing
-// it at creation time.
+// Spends a payment's leftover credit later, after it was already recorded.
+// Same validation and writes as allocating at creation time.
 exports.allocateExistingPayment = async (req, res) => {
   try {
     const orgId = req.user.organization;
@@ -1100,10 +1068,8 @@ exports.deleteTimelineEntry = async (req, res) => {
         return res.status(400).json({ error: `Unknown source: ${source}` });
     }
 
-    // Undo any allocations first, so the invoices/bills this payment settled
-    // stop showing a payment that no longer exists. Done before the delete so
-    // a failure here leaves the payment intact rather than orphaning the
-    // subdocuments it pushed.
+    // Undo allocations before the delete, so a failure here leaves the payment
+    // intact rather than orphaning the subdocs it pushed.
     if (source === "Payment") {
       await allocationService.reverseAllocationsForPayment(id);
     }

@@ -20,10 +20,8 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
   const amountInputRef = useRef(null);
   const paymentDateInputRef = useRef(null);
 
-  // Party selection. Which side of the ledger a party comes from is decided
-  // by the direction: a Credit/IN payment is received from a customer (a
-  // Company or Contact — whichever the deal behind the invoice points at),
-  // a Debit/OUT payment is made to a Vendor.
+  // Direction decides the party: IN from a customer (Company/Contact), OUT to
+  // a Vendor.
   const [parties, setParties] = useState([]);
   const [partySearch, setPartySearch] = useState("");
   const [selectedParty, setSelectedParty] = useState(null);
@@ -116,18 +114,14 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
         reference: "",
         notes: ""
       });
-      // notesEditorRef is an uncontrolled contentEditable (see execCmd below)
-      // so re-opening the panel must also clear its live DOM content, not
-      // just the notes state — otherwise the previous payment's notes (and
-      // formatting) would still be visible underneath the reset state.
+      // The notes editor is an uncontrolled contentEditable, so its live DOM
+      // has to be cleared too — resetting state alone leaves the old content.
       if (notesEditorRef.current) notesEditorRef.current.innerHTML = "";
     }
   }, [isOpen]);
 
-  // Switching direction switches which side of the ledger we're settling
-  // against, so the party list, the chosen party and any split against their
-  // documents all have to go — a vendor bill can't be settled by a customer
-  // receipt.
+  // Switching direction switches which side of the ledger we settle against,
+  // so the party and any split against their documents are cleared.
   useEffect(() => {
     if (!isOpen) return;
     fetchParties(formData.direction);
@@ -168,10 +162,8 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
     return () => { cancelled = true; };
   }, [selectedParty, formData.direction, isOpen]);
 
-  // execCommand is deprecated but still the simplest way to drive a handful
-  // of basic rich-text commands (bold/italic/underline/lists) against a
-  // contentEditable div without pulling in an editor library — same pattern
-  // Accounting.jsx's email composer uses.
+  // execCommand is deprecated but still the simplest way to drive basic
+  // rich-text commands without pulling in an editor library.
   const execNotesCmd = (cmd, value = null) => {
     notesEditorRef.current?.focus();
     document.execCommand(cmd, false, value);
@@ -268,8 +260,12 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
 
     setLoading(true);
     try {
+      const [y, m, d] = formData.paymentDate.split("-").map(Number);
+      const now = new Date();
+      const localDate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
       const payload = {
         ...formData,
+        paymentDate: localDate.toISOString(),
         partyType: selectedParty?.partyType,
         party: selectedParty?._id,
         // Legacy vendor fields — still what the server uses to create a new

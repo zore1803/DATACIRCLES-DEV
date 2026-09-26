@@ -6,6 +6,16 @@ const Branding = require("../models/Branding");
 const htmlDocumentPdf = require("../utils/htmlDocumentPdf");
 const getDefaultBankDetails = require("../utils/getDefaultBankDetails");
 const { syncDocumentStock } = require("../utils/inventorySync");
+const allocationService = require("../services/paymentAllocationService");
+
+const sumRefunds = (payments) =>
+  (payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+// Statuses under which the stock-in has already happened.
+const GOODS_RETURNED_STATUSES = ["Confirmed", "Partial", "Paid", "Refunded"];
+
+// Legacy "Refunded" excluded: those rows have no Payment behind them.
+const REFUNDABLE_STATUSES = ["Confirmed", "Partial", "Paid"];
 
 // Same math shape as invoiceController — kept parallel so return totals stay
 // comparable line-for-line to the original invoice line values.
@@ -33,16 +43,30 @@ const POPULATE = [
   { path: "items.itemId", select: "name description sellingPrice hsnSac gstRate variants type" },
 ];
 
-// Applies the stock IN for a Sales Return transitioning into Confirmed.
-// Mirrors purchaseReturnController.syncPurchaseReturnStock — but sales
-// returns bring goods BACK into stock, so baseDirection is "in".
-//
-// oldStatus === Confirmed/Refunded means "already applied" — the delta
-// branch handles item-quantity edits on an already-Confirmed return so the
-// system never re-applies the full quantity on top of the previous one.
+// Stock IN on Confirm, delta on edit, reversal on cancel. Idempotent via
+// stockMovementStatus, so nothing applies or reverses twice.
 async function syncSalesReturnStock(salesReturn, oldStatus, oldStockMovementStatus, userId, previousItems = null) {
-  const isNowConfirmed = salesReturn.status === "Confirmed" || salesReturn.status === "Refunded";
-  const wasConfirmed = oldStatus === "Confirmed" || oldStatus === "Refunded";
+  const isNowConfirmed = GOODS_RETURNED_STATUSES.includes(salesReturn.status);
+  const wasConfirmed = GOODS_RETURNED_STATUSES.includes(oldStatus);
+
+  // Cancelled after an applied Confirm: reverse the stock-in exactly once.
+  if (salesReturn.status === "Cancelled" && oldStockMovementStatus === "applied") {
+    await syncDocumentStock({
+      organization: salesReturn.organization,
+      documentId: salesReturn._id,
+      documentModel: "SalesReturn",
+      documentNumber: salesReturn.returnNumber,
+      items: salesReturn.items,
+      previousItems: [],
+      baseDirection: "in",
+      userId,
+      reason: "adjustment",
+      isReversal: true,
+    });
+    salesReturn.stockMovementStatus = "reversed";
+    await salesReturn.save({ validateModifiedOnly: true });
+    return;
+  }
 
   if (isNowConfirmed && !wasConfirmed && oldStockMovementStatus !== "applied") {
     await syncDocumentStock({
@@ -78,12 +102,39 @@ async function syncSalesReturnStock(salesReturn, oldStatus, oldStockMovementStat
   }
 }
 
-// Once Confirmed, physical goods came back in — status can only move onward
-// to Refunded (financial-only), never back to Draft/Pending/Cancelled.
+// Once the goods are back the status can only stay put or be Cancelled.
 function isBlockedStatusChange(oldStatus, newStatus) {
-  if (oldStatus !== "Confirmed") return false;
   if (newStatus === undefined) return false;
-  return newStatus !== "Confirmed" && newStatus !== "Refunded";
+  // A no-op: the edit form has to submit the current value, including Partial/Paid.
+  if (newStatus === oldStatus) return false;
+  // Partial/Paid come from recorded refunds, never from the dropdown.
+  if (newStatus === "Partial" || newStatus === "Paid") return true;
+  if (newStatus === "Refunded") return true; // legacy-only, nothing may enter it
+  if (!GOODS_RETURNED_STATUSES.includes(oldStatus)) return false;
+  return newStatus !== "Confirmed" && newStatus !== "Cancelled";
+}
+
+function blockedStatusMessage(oldStatus, newStatus) {
+  if (newStatus === "Partial" || newStatus === "Paid") {
+    return `"${newStatus}" is set by recording a refund against this return, not from the status list.`;
+  }
+  if (newStatus === "Refunded") {
+    return '"Refunded" is retired — record an actual refund instead, which moves the return to Partial or Paid.';
+  }
+  return "A Sales Return whose goods have already come back can only stay Confirmed or be Cancelled.";
+}
+
+// Cancelling keeps the refund Payments (permanent history) and only reverses
+// their allocation, leaving the money as unallocated customer credit. Deleting
+// the return is what removes them. Returns the reloaded doc.
+async function unwindRefundsOnCancel({ orgId, salesReturn, oldStatus }) {
+  if (salesReturn.status !== "Cancelled" || oldStatus === "Cancelled") return salesReturn;
+  await allocationService.reverseDocumentAllocations({
+    orgId,
+    documentType: "SalesReturn",
+    documentId: salesReturn._id,
+  });
+  return (await SalesReturn.findById(salesReturn._id)) || salesReturn;
 }
 
 // Sum of quantities already returned across every OTHER non-Cancelled sales
@@ -115,10 +166,8 @@ async function getReturnedQuantities(invoiceId, organization, excludeReturnId) {
   return map;
 }
 
-// GET /sales-returns/invoice/:invoiceId/available — hydrates the create/edit
-// form: original invoice lines enriched with alreadyReturned + remaining.
-// Services are excluded (they were never stocked, so they can't come back
-// through inventory).
+// Hydrates the create/edit form: invoice lines + alreadyReturned/remaining.
+// Services are excluded — they were never stocked.
 exports.getInvoiceItemsForReturn = async (req, res) => {
   try {
     const { invoiceId } = req.params;
@@ -176,9 +225,8 @@ exports.getInvoiceItemsForReturn = async (req, res) => {
   }
 };
 
-// Enforces max returnable per line — rejects a quantity that would push
-// (already returned across other returns + this return) past the invoiced
-// quantity. Shared by create & update (excludeReturnId omitted / set).
+// Rejects a quantity that would push the total returned past what was
+// invoiced. Shared by create & update (excludeReturnId omitted / set).
 async function assertQuantitiesWithinInvoice(invoice, items, organization, excludeReturnId) {
   const returnedMap = await getReturnedQuantities(invoice._id, organization, excludeReturnId);
 
@@ -208,9 +256,14 @@ async function assertQuantitiesWithinInvoice(invoice, items, organization, exclu
 
 exports.createSalesReturn = async (req, res) => {
   try {
-    const { invoice, items, notes, reason, status, transactionType, gstRate, refundMode, refundReference, returnDate } = req.body;
+    const { invoice, items, notes, reason, status, transactionType, gstRate, refundMode, returnDate } = req.body;
 
     if (!invoice) return res.status(400).json({ message: "A Sales Return must reference an existing Invoice" });
+
+    // No refunds exist yet, so a money-driven status here would be a backdoor.
+    if (["Partial", "Paid", "Refunded"].includes(status)) {
+      return res.status(400).json({ message: blockedStatusMessage(null, status) });
+    }
 
     const invoiceDoc = await Invoice.findOne({ _id: invoice, organization: req.user.organization }).populate("items.itemId", "type");
     if (!invoiceDoc) return res.status(404).json({ message: "Invoice not found" });
@@ -243,7 +296,6 @@ exports.createSalesReturn = async (req, res) => {
       grandTotal,
       status: status || "Draft",
       refundMode: refundMode || "",
-      refundReference: refundReference || "",
       reason: reason || "",
       notes: notes || "",
       user: req.user.id,
@@ -252,9 +304,7 @@ exports.createSalesReturn = async (req, res) => {
 
     await salesReturn.save();
 
-    // Handles the "create directly as Confirmed" case (e.g. recording a
-    // historical return). oldStatus null => never was Confirmed, so this
-    // applies exactly once and is guarded by stockMovementStatus.
+    // Covers creating directly as Confirmed; guarded by stockMovementStatus.
     await syncSalesReturnStock(salesReturn, null, salesReturn.stockMovementStatus, req.user.id);
 
     await salesReturn.populate(POPULATE);
@@ -309,14 +359,9 @@ exports.getAllSalesReturnsWithPagination = async (req, res) => {
       return res.json({ ids: all.map((x) => x._id) });
     }
 
-    // "invoice" and "customer" aren't real fields on this document — invoice
-    // is only a reference id (sorting by it wouldn't match the invoice
-    // number shown), and "customer" is a display-time fallback chain
-    // (deal.contact.name -> deal.company.name -> deal.title) with no
-    // stored field at all. Both need a join to sort correctly, which plain
-    // .sort({[sortBy]: ...}) can't do — resolve the sorted/paginated id
-    // order via aggregation first, then fetch+populate those same rows the
-    // normal way so the response shape is unchanged.
+    // "invoice" and "customer" aren't stored fields (a ref id and a display
+    // fallback chain), so sorting on them needs a join. Aggregate to get the
+    // sorted/paginated ids, then fetch+populate normally to keep the shape.
     const JOINED_SORT_FIELDS = ["invoice", "customer"];
     let salesReturns, totalCount;
     if (JOINED_SORT_FIELDS.includes(sortBy)) {
@@ -431,25 +476,22 @@ exports.updateSalesReturn = async (req, res) => {
     const salesReturn = await SalesReturn.findOne({ _id: req.params.id, organization: req.user.organization });
     if (!salesReturn) return res.status(404).json({ message: "Sales return not found" });
 
-    const { items, notes, reason, status, transactionType, gstRate, refundMode, refundReference, returnDate } = req.body;
+    const { items, notes, reason, status, transactionType, gstRate, refundMode, returnDate } = req.body;
 
     const oldStatus = salesReturn.status;
     const oldStockMovementStatus = salesReturn.stockMovementStatus;
 
     if (isBlockedStatusChange(oldStatus, status)) {
-      return res.status(400).json({ message: "A Confirmed Sales Return can only move to Refunded." });
+      return res.status(400).json({ message: blockedStatusMessage(oldStatus, status) });
     }
 
-    // deal / invoice deliberately not editable — a return is against the
-    // Invoice it was created for; changing either would silently invalidate
-    // the already-returned/remaining math.
+    // deal / invoice not editable — changing them would invalidate the
+    // already-returned/remaining math.
     if (returnDate !== undefined) salesReturn.returnDate = returnDate;
     if (notes !== undefined) salesReturn.notes = notes;
     if (reason !== undefined) salesReturn.reason = reason;
     if (status !== undefined) salesReturn.status = status;
     if (refundMode !== undefined) salesReturn.refundMode = refundMode;
-    if (refundReference !== undefined) salesReturn.refundReference = refundReference;
-    if (status === "Refunded" && !salesReturn.refundedAt) salesReturn.refundedAt = new Date();
 
     let previousItemsSnapshot = null;
 
@@ -482,12 +524,17 @@ exports.updateSalesReturn = async (req, res) => {
 
     await salesReturn.save();
 
-    // Confirmed-transition stock IN, or delta stock IN for an already-
-    // Confirmed edit. Idempotent via stockMovementStatus + previousItems.
+    // Stock IN on Confirm, delta on edit, or reversal if this edit cancelled it.
     await syncSalesReturnStock(salesReturn, oldStatus, oldStockMovementStatus, req.user.id, previousItemsSnapshot);
 
-    await salesReturn.populate(POPULATE);
-    res.json(salesReturn);
+    const settled = await unwindRefundsOnCancel({
+      orgId: req.user.organization,
+      salesReturn,
+      oldStatus,
+    });
+
+    await settled.populate(POPULATE);
+    res.json(settled);
   } catch (err) {
     console.error("Update sales return error:", err);
     res.status(400).json({ error: err.message });
@@ -497,8 +544,15 @@ exports.updateSalesReturn = async (req, res) => {
 exports.updateSalesReturnStatus = async (req, res) => {
   try {
     const { status } = req.body;
-    const valid = ["Draft", "Pending", "Confirmed", "Refunded", "Cancelled"];
-    if (!valid.includes(status)) return res.status(400).json({ message: "Invalid status" });
+    // Partial/Paid/Refunded absent on purpose — they come from refunds, not here.
+    const valid = ["Draft", "Pending", "Confirmed", "Cancelled"];
+    if (!valid.includes(status)) {
+      return res.status(400).json({
+        message: ["Partial", "Paid", "Refunded"].includes(status)
+          ? blockedStatusMessage(null, status)
+          : "Invalid status",
+      });
+    }
 
     const salesReturn = await SalesReturn.findOne({ _id: req.params.id, organization: req.user.organization });
     if (!salesReturn) return res.status(404).json({ message: "Sales return not found" });
@@ -507,30 +561,197 @@ exports.updateSalesReturnStatus = async (req, res) => {
     const oldStockMovementStatus = salesReturn.stockMovementStatus;
 
     if (isBlockedStatusChange(oldStatus, status)) {
-      return res.status(400).json({ message: "A Confirmed Sales Return can only move to Refunded." });
+      return res.status(400).json({ message: blockedStatusMessage(oldStatus, status) });
     }
 
     salesReturn.status = status;
-    if (status === "Refunded" && !salesReturn.refundedAt) salesReturn.refundedAt = new Date();
     await salesReturn.save();
 
     await syncSalesReturnStock(salesReturn, oldStatus, oldStockMovementStatus, req.user.id);
 
-    await salesReturn.populate(POPULATE);
-    res.json(salesReturn);
+    const settled = await unwindRefundsOnCancel({
+      orgId: req.user.organization,
+      salesReturn,
+      oldStatus,
+    });
+
+    await settled.populate(POPULATE);
+    res.json(settled);
   } catch (err) {
     console.error("Update sales return status error:", err);
     res.status(400).json({ error: err.message });
   }
 };
 
-// Builds the plain object shape shared/documentTemplates.js's buildDocumentHtml
-// (and htmlDocumentPdf, which wraps it) expects — same shape an Invoice
-// document already has. Sales Return items don't carry a discount or `rate`
-// field of their own (unitPrice + gstRate + taxInclusive, snapshotted from
-// the original invoice line at creation), so they're mapped here rather than
-// changing the shared renderer, which every other document type also relies
-// on staying invoice-shaped.
+// Refunds — money OUT to the customer, recorded through
+// paymentAllocationService as a real Payment + PaymentAllocation.
+
+// GET /sales-returns/:id/payments
+exports.getSalesReturnRefunds = async (req, res) => {
+  try {
+    const salesReturn = await SalesReturn.findOne({
+      _id: req.params.id,
+      organization: req.user.organization,
+    }).populate("payments.recordedBy", "name email");
+    if (!salesReturn) return res.status(404).json({ message: "Sales return not found" });
+
+    const refunded = sumRefunds(salesReturn.payments);
+    const total = Number(salesReturn.grandTotal) || 0;
+
+    res.json({
+      payments: salesReturn.payments || [],
+      totalAmount: total,
+      refundedAmount: refunded,
+      amountDue: Math.max(0, total - refunded),
+      status: salesReturn.status,
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to fetch refunds: ${err.message}` });
+  }
+};
+
+// POST /sales-returns/:id/payments
+exports.addSalesReturnRefund = async (req, res) => {
+  try {
+    const { amount, paymentDate, paymentMethod, reference, notes, internalNotes } = req.body;
+
+    const parsedAmount = parseFloat(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ error: "A valid refund amount greater than 0 is required." });
+    }
+
+    const salesReturn = await SalesReturn.findOne({
+      _id: req.params.id,
+      organization: req.user.organization,
+    });
+    if (!salesReturn) return res.status(404).json({ message: "Sales return not found" });
+
+    // Nothing is owed to the customer until the goods have actually come back.
+    if (!REFUNDABLE_STATUSES.includes(salesReturn.status)) {
+      return res.status(400).json({
+        error: "This return isn't confirmed yet — confirm it before recording a refund.",
+      });
+    }
+
+    const alreadyRefunded = sumRefunds(salesReturn.payments);
+    const amountDue = (Number(salesReturn.grandTotal) || 0) - alreadyRefunded;
+    if (parsedAmount > amountDue + 0.01) {
+      return res.status(400).json({
+        error: `Refund cannot exceed the remaining balance of ₹${amountDue.toFixed(2)}.`,
+      });
+    }
+
+    try {
+      await allocationService.recordDocumentPayment({
+        orgId: req.user.organization,
+        userId: req.user._id,
+        documentType: "SalesReturn",
+        documentId: salesReturn._id,
+        amount: parsedAmount,
+        paymentDate,
+        paymentMethod: paymentMethod || salesReturn.refundMode || "UPI",
+        reference,
+        notes,
+      });
+    } catch (err) {
+      if (err instanceof allocationService.AllocationError) {
+        return res.status(400).json({ error: err.message });
+      }
+      throw err;
+    }
+
+    // Reloaded because the service wrote the subdoc and the status on its own
+    // copy of the document.
+    const updated = await SalesReturn.findById(salesReturn._id);
+
+    // internalNotes has no equivalent on the money row, so it goes straight
+    // onto the subdoc the service just pushed.
+    if (internalNotes) {
+      const subdoc = updated.payments[updated.payments.length - 1];
+      if (subdoc) {
+        subdoc.internalNotes = internalNotes;
+        await updated.save({ validateModifiedOnly: true });
+      }
+    }
+
+    await updated.populate(POPULATE);
+    res.json({ message: "Refund recorded successfully", salesReturn: updated });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to record refund: ${err.message}` });
+  }
+};
+
+// PUT /sales-returns/:id/payments/:paymentId
+exports.updateSalesReturnRefund = async (req, res) => {
+  try {
+    const { amount, paymentDate, paymentMethod, reference, notes, internalNotes } = req.body;
+
+    let result;
+    try {
+      result = await allocationService.updateDocumentPayment({
+        orgId: req.user.organization,
+        userId: req.user._id,
+        documentType: "SalesReturn",
+        documentId: req.params.id,
+        documentPaymentId: req.params.paymentId,
+        amount,
+        paymentDate,
+        paymentMethod,
+        reference,
+        notes,
+      });
+    } catch (err) {
+      if (err instanceof allocationService.AllocationError) {
+        return res.status(400).json({ error: err.message });
+      }
+      throw err;
+    }
+
+    const salesReturn = result.document;
+    if (internalNotes !== undefined) {
+      const subdoc = salesReturn.payments.id(req.params.paymentId);
+      if (subdoc) {
+        subdoc.internalNotes = internalNotes;
+        await salesReturn.save({ validateModifiedOnly: true });
+      }
+    }
+
+    await salesReturn.populate(POPULATE);
+    res.json({ message: "Refund updated successfully", salesReturn });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to update refund: ${err.message}` });
+  }
+};
+
+// DELETE /sales-returns/:id/payments/:paymentId
+exports.deleteSalesReturnRefund = async (req, res) => {
+  try {
+    // Reverses the allocation, pulls the subdoc, recomputes status and deletes
+    // the money row, so the customer's Total Given falls by the same amount.
+    let result;
+    try {
+      result = await allocationService.removeDocumentPayment({
+        orgId: req.user.organization,
+        documentType: "SalesReturn",
+        documentId: req.params.id,
+        documentPaymentId: req.params.paymentId,
+      });
+    } catch (err) {
+      if (err instanceof allocationService.AllocationError) {
+        return res.status(400).json({ error: err.message });
+      }
+      throw err;
+    }
+
+    await result.document.populate(POPULATE);
+    res.json({ message: "Refund deleted successfully", salesReturn: result.document });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to delete refund: ${err.message}` });
+  }
+};
+
+// Maps a return into the invoice-shaped object the shared PDF renderer
+// expects, rather than changing that renderer for every document type.
 function toPrintableDoc(salesReturn) {
   const deal = salesReturn.deal || {};
   const company = deal.company || {};
@@ -599,14 +820,9 @@ exports.downloadSalesReturn = async (req, res) => {
   }
 };
 
-// Bulk import — groups CSV rows by returnNumber::invoiceNumber (case-
-// insensitive) into one SalesReturn per group with multiple line items,
-// mirroring purchaseReturnController.bulkImportPurchaseReturns's grouping
-// strategy. Unlike a Purchase Return import (which free-types item/rate),
-// every row here must resolve against a real Invoice line so the historical
-// rate/GST/taxInclusive values and the returnable-quantity cap are enforced
-// exactly the same as the interactive form — the CSV can't invent prices or
-// bypass the "can't return more than was sold" rule.
+// Groups CSV rows by returnNumber::invoiceNumber into one return each. Every
+// row must resolve against a real Invoice line, so the CSV can't invent prices
+// or bypass the returnable-quantity cap.
 exports.bulkImportSalesReturns = async (req, res) => {
   try {
     const { rows } = req.body;
@@ -625,7 +841,11 @@ exports.bulkImportSalesReturns = async (req, res) => {
         groups.set(groupKey, {
           returnNumber: (row.returnNumber || "").trim(),
           invoiceNumber,
-          status: row.status || "Draft",
+          // Import has no Payment records — it can stage goods movement but
+          // never refund state.
+          status: ["Partial", "Paid", "Refunded"].includes(row.status)
+            ? "Confirmed"
+            : row.status || "Draft",
           refundMode: row.refundMode || "",
           reason: row.reason || "",
           notes: row.notes || "",
@@ -731,6 +951,23 @@ exports.deleteSalesReturn = async (req, res) => {
   try {
     const salesReturn = await SalesReturn.findOne({ _id: req.params.id, organization: req.user.organization });
     if (!salesReturn) return res.status(404).json({ message: "Sales return not found" });
+
+    // Unlike cancel, delete removes the money rows too — nothing should point
+    // at a return that no longer exists.
+    for (const subdoc of [...(salesReturn.payments || [])]) {
+      try {
+        await allocationService.removeDocumentPayment({
+          orgId: req.user.organization,
+          documentType: "SalesReturn",
+          documentId: salesReturn._id,
+          documentPaymentId: subdoc._id,
+        });
+      } catch (err) {
+        // A legacy subdoc with no allocation behind it has nothing to unwind;
+        // it disappears with the document itself a few lines below.
+        if (!(err instanceof allocationService.AllocationError)) throw err;
+      }
+    }
 
     // Reverse the stock IN if the return had already applied it — otherwise
     // deleting silently leaves inventory overstated with no surviving doc.

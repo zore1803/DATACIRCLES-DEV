@@ -1,32 +1,21 @@
-// Payment allocation engine.
+// Payment allocation engine. One payment is split across one or more open
+// documents; both directions run the same code path, with the per-type
+// differences captured in DOC_CONFIG below.
 //
-// One payment (a receipt from a customer, or a payment made to a vendor) is
-// split across one or more open documents. Credit/IN payments settle
-// Invoices; Debit/OUT payments settle Purchase bills. The two directions run
-// through the exact same code path — only the model and its total field
-// differ, which is what DOC_CONFIG below captures.
-//
-// Design note: allocating pushes a real subdocument into the target
-// document's own `payments[]` array, the same array
-// invoiceController.addInvoicePayment / purchaseController.addPurchasePayment
-// write to. That's deliberate — every Paid/Pending figure in the app is
-// already computed from that array, so allocations show up everywhere with
-// no other file needing to change. The PaymentAllocation row alongside it is
-// the link back to the parent Payment, and holds the subdoc's _id so the push
-// can be undone.
+// Allocating pushes a subdoc into the target document's own payments[] — the
+// array every Paid/Pending figure in the app already reads — and writes a
+// PaymentAllocation row holding that subdoc's _id so the push can be undone.
 
 const mongoose = require("mongoose");
 const Invoice = require("../models/Invoice");
 const Purchase = require("../models/Purchase");
 const PurchaseReturn = require("../models/PurchaseReturn");
+const SalesReturn = require("../models/SalesReturn");
 const Deal = require("../models/Deal");
 const Payment = require("../models/Payment");
 const PaymentAllocation = require("../models/PaymentAllocation");
-// Payment.party is a refPath pointing at one of these three, so mongoose has
-// to have all three registered before it can populate it. Required here
-// rather than left to whatever else happened to load first — a script or job
-// that only pulls in this service would otherwise fail on
-// MissingSchemaError.
+// Payment.party is a refPath, so all three must be registered before populate.
+// Required here so a script loading only this service doesn't MissingSchemaError.
 require("../models/Company");
 require("../models/Contact");
 require("../models/Vendor");
@@ -40,11 +29,8 @@ const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const sumPayments = (payments) =>
   (payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-// Payment.paymentType and the documents' payments[].paymentMethod are
-// different enums: paymentType is a subset (Card/Cash/Cheque/EMI/Net
-// Banking/UPI) of paymentMethod (which adds NEFT/RTGS/IMPS/TDS/Other), so
-// every paymentType is already a valid paymentMethod. Anything unrecognised
-// falls back to "Other" rather than failing the subdoc's enum validation.
+// paymentType is a subset of paymentMethod, so it's always valid. Anything
+// unrecognised falls back to "Other" instead of failing enum validation.
 const VALID_METHODS = new Set([
   "Cash", "UPI", "Net Banking", "Cheque", "Card",
   "NEFT", "RTGS", "IMPS", "EMI", "TDS", "Other",
@@ -61,11 +47,7 @@ const DOC_CONFIG = {
     totalOf: (doc) => Number(doc.amount) || 0,
     numberOf: (doc) => doc.invoiceNumber,
     dateOf: (doc) => doc.date || doc.createdAt,
-    // Mirrors invoiceController's own add/update/deleteInvoicePayment status
-    // transitions: Paid when settled, Partially Paid above zero, Unpaid when
-    // cleared. A Cancelled invoice keeps its status — reversing its allocations
-    // (the cancel-keeps-payment model) must never flip it back to Unpaid, the
-    // same guard purchase's statusFor has for its own terminal states.
+    // Cancelled is terminal: reversing allocations must never flip it back.
     statusFor: (doc, totalPaid) => {
       if (doc.status === "Cancelled") return doc.status;
       const total = Number(doc.amount) || 0;
@@ -83,12 +65,8 @@ const DOC_CONFIG = {
     // Mirrors purchaseController.statusForPaidAmount, including the terminal
     // Cancelled rule and Draft-stays-Draft-at-zero.
     statusFor: (doc, totalPaid) => {
-      // Only the payment-tracking band is recomputed from money; a Draft /
-      // Pending / Cancelled bill keeps whatever it is. Reversing the last
-      // payment on a Confirmed bill therefore lands back on Confirmed (goods
-      // are still received) rather than walking it back to Pending. Kept
-      // character-for-character in step with purchaseController's own
-      // statusForPaidAmount, which is the other caller of this rule.
+      // Only the payment band is money-driven; other statuses stay put. Kept in
+      // step with purchaseController.statusForPaidAmount.
       if (!["Confirmed", "Partial", "Paid"].includes(doc.status)) return doc.status;
       const total = Number(doc.grandTotal) || 0;
       if (totalPaid >= total - EPSILON && total > 0) return "Paid";
@@ -96,19 +74,31 @@ const DOC_CONFIG = {
       return "Confirmed";
     },
   },
-  // A return is goods going back to the vendor, so the money comes back to
-  // us — an IN payment, "Got" on the vendor's page. Refunds can be partial:
-  // ₹1,000 against a ₹2,000 return leaves it Partial until the rest arrives.
+  // Goods go back to the vendor, so money comes back to us. Refunds can be partial.
   PurchaseReturn: {
     model: PurchaseReturn,
     direction: "IN",
     totalOf: (doc) => Number(doc.grandTotal) || 0,
     numberOf: (doc) => doc.returnNumber,
     dateOf: (doc) => doc.returnDate || doc.createdAt,
-    // Only a return that has physically happened tracks refunds. Draft /
-    // Pending / Cancelled keep their status whatever the money does, and
-    // reversing the last refund on a Confirmed return lands back on
-    // Confirmed — the goods still left, they just aren't refunded yet.
+    // Only a Confirmed return tracks refunds; other statuses stay put.
+    statusFor: (doc, totalRefunded) => {
+      if (!["Confirmed", "Partial", "Paid"].includes(doc.status)) return doc.status;
+      const total = Number(doc.grandTotal) || 0;
+      if (totalRefunded >= total - EPSILON && total > 0) return "Paid";
+      if (totalRefunded > 0) return "Partial";
+      return "Confirmed";
+    },
+  },
+  // PurchaseReturn inverted: goods come back from the customer, so money goes
+  // OUT to them. Refunds can be partial.
+  SalesReturn: {
+    model: SalesReturn,
+    direction: "OUT",
+    totalOf: (doc) => Number(doc.grandTotal) || 0,
+    numberOf: (doc) => doc.returnNumber,
+    dateOf: (doc) => doc.returnDate || doc.createdAt,
+    // Only a Confirmed return tracks refunds; other statuses stay put.
     statusFor: (doc, totalRefunded) => {
       if (!["Confirmed", "Partial", "Paid"].includes(doc.status)) return doc.status;
       const total = Number(doc.grandTotal) || 0;
@@ -119,10 +109,8 @@ const DOC_CONFIG = {
   },
 };
 
-// The default target for a direction. IN is ambiguous — a credit can settle an
-// Invoice or a Purchase Return — so this is only the fallback used when the
-// caller doesn't name a type; every caller that can settle a return passes
-// `documentType` explicitly.
+// Fallback only — both directions are ambiguous, so callers that can settle a
+// return pass documentType explicitly.
 const docTypeForDirection = (direction) =>
   direction === "IN" ? "Invoice" : "Purchase";
 
@@ -130,14 +118,11 @@ const docTypeForDirection = (direction) =>
 const docTypesForDirection = (direction) =>
   Object.keys(DOC_CONFIG).filter((type) => DOC_CONFIG[type].direction === direction);
 
-// ---------------------------------------------------------------------------
-// Reading open documents
-// ---------------------------------------------------------------------------
+// --- Reading open documents ---
 
-// Invoices belong to a Deal, and the Deal is what carries the customer
-// (company or contact) — there is no direct Invoice to Company link. So for a
-// customer we resolve their deals first, then the invoices on those deals.
-async function invoiceQueryForParty(orgId, partyType, partyId) {
+// Invoices and Sales Returns reach their customer through a Deal, not directly,
+// so resolve the party's deals first and scope on those.
+async function dealScopedQueryForParty(orgId, partyType, partyId) {
   const dealFilter = { organization: orgId };
   if (partyType === "Company") dealFilter.company = partyId;
   else if (partyType === "Contact") dealFilter.contact = partyId;
@@ -147,24 +132,30 @@ async function invoiceQueryForParty(orgId, partyType, partyId) {
   return { organization: orgId, deal: { $in: deals.map((d) => d._id) } };
 }
 
-// Every not-fully-settled document for this party, with how much each one
-// still owes. Cancelled purchases are excluded — they cannot be paid — but
-// nothing else is filtered on status: an invoice sitting at "Draft" that
-// carries a real balance is still a legitimate allocation target, and status
-// strings vary too much across the app to be trusted as the source of truth.
-// The money is.
+// Every not-fully-settled document for this party. Only Cancelled is filtered
+// out — the money, not the status string, decides what's still open.
 async function getOpenDocuments({ orgId, direction, partyType, partyId, documentType: requestedType }) {
-  // IN from a Vendor can only mean a refund on a Purchase Return — a vendor
-  // has no invoices of ours to pay. IN from a customer means an Invoice.
+  // The party disambiguates when the caller didn't name a type: IN from a
+  // vendor is a PurchaseReturn refund, OUT to a customer a SalesReturn refund.
+  const isCustomer = partyType === "Company" || partyType === "Contact";
   const documentType =
     requestedType ||
-    (direction === "IN" && partyType === "Vendor" ? "PurchaseReturn" : docTypeForDirection(direction));
+    (direction === "IN" && partyType === "Vendor"
+      ? "PurchaseReturn"
+      : direction === "OUT" && isCustomer
+        ? "SalesReturn"
+        : docTypeForDirection(direction));
   const cfg = DOC_CONFIG[documentType];
 
   let filter;
   if (documentType === "Invoice") {
-    filter = await invoiceQueryForParty(orgId, partyType, partyId);
+    filter = await dealScopedQueryForParty(orgId, partyType, partyId);
     if (!filter) return { documentType, documents: [] };
+  } else if (documentType === "SalesReturn") {
+    // Only a Confirmed return can be refunded. Scoped through the deal.
+    filter = await dealScopedQueryForParty(orgId, partyType, partyId);
+    if (!filter) return { documentType, documents: [] };
+    filter.status = { $in: ["Confirmed", "Partial", "Paid"] };
   } else if (documentType === "PurchaseReturn") {
     // Only a Confirmed return can be refunded — the goods have to have left
     // before the vendor owes anything back.
@@ -202,11 +193,8 @@ async function getOpenDocuments({ orgId, direction, partyType, partyId, document
   return { documentType, documents };
 }
 
-// Every open document in the org, whoever it belongs to, each tagged with its
-// party name. Credit is the organization's money once received, so it can
-// settle ANY customer's invoice — which means the natural way to find the
-// target is to search invoices directly (by number, or by the company on
-// them) rather than to pick a party first and drill in.
+// Every open document in the org, tagged with its party name — credit isn't
+// restricted to the party it came from, so this backs the "search any" picker.
 async function getAllOpenDocuments({ orgId, direction }) {
   const documentType = docTypeForDirection(direction);
   const cfg = DOC_CONFIG[documentType];
@@ -286,9 +274,7 @@ async function getAllOpenDocuments({ orgId, direction }) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Applying allocations
-// ---------------------------------------------------------------------------
+// --- Applying allocations ---
 
 class AllocationError extends Error {
   constructor(message) {
@@ -298,16 +284,11 @@ class AllocationError extends Error {
   }
 }
 
-// Validates a requested split without writing anything: right document type
-// for the direction, documents actually belong to this org, no line exceeds
-// what its document still owes, no duplicate lines, and the split does not
-// exceed the payment amount. Returns the loaded documents so the caller does
-// not have to re-fetch them.
+// Validates a split without writing: correct type, same org, no line over what
+// its document owes, no duplicates, total within the payment. Returns the docs.
 async function validateAllocations({ orgId, direction, amount, allocations, documentType: requestedType }) {
-  // A direction no longer implies one target: IN settles an Invoice or a
-  // Purchase Return. The type can come from the caller or from the lines
-  // themselves; without either, fall back to the direction's default so every
-  // pre-existing caller behaves exactly as before.
+  // Type comes from the caller or the lines; without either, fall back to the
+  // direction's default so older callers behave unchanged.
   const lineType = allocations.find((a) => a && a.documentType)?.documentType;
   const documentType = requestedType || lineType || docTypeForDirection(direction);
 
@@ -382,13 +363,9 @@ async function validateAllocations({ orgId, direction, amount, allocations, docu
   return { documentType, cleaned, docs: byId, totalAllocated };
 }
 
-// Writes a validated split: one payments[] subdoc per target document (so all
-// the existing Paid/Pending math picks it up), one PaymentAllocation row
-// linking it back, and the running total on the Payment itself.
-//
-// Standalone Mongo deployments have no transactions available here, so a
-// mid-way failure is undone by reversing whatever already landed — the same
-// reversal path used when a payment is deleted.
+// Writes a validated split: a payments[] subdoc per document, a
+// PaymentAllocation linking it back, and the Payment's running total. No
+// transactions on standalone Mongo, so a mid-way failure reverses what landed.
 async function applyAllocations({ orgId, userId, payment, allocations, documentType: requestedType }) {
   if (!Array.isArray(allocations) || allocations.length === 0) {
     return { allocations: [], totalAllocated: 0 };
@@ -424,9 +401,8 @@ async function applyAllocations({ orgId, userId, payment, allocations, documentT
       const subdoc = doc.payments[doc.payments.length - 1];
       doc.status = cfg.statusFor(doc, alreadyPaid + alloc.amount);
 
-      // validateModifiedOnly for the same reason the payment controllers use
-      // it: older documents can carry legacy field values that would fail a
-      // full re-validation, and none of that is what we are touching here.
+      // validateModifiedOnly: legacy field values on older docs would fail a
+      // full re-validation, and we aren't touching them.
       await doc.save({ validateModifiedOnly: true });
 
       const record = await PaymentAllocation.create({
@@ -461,9 +437,7 @@ async function applyAllocations({ orgId, userId, payment, allocations, documentT
   return { allocations: written, totalAllocated };
 }
 
-// ---------------------------------------------------------------------------
-// Reversing
-// ---------------------------------------------------------------------------
+// --- Reversing ---
 
 // Pulls the subdoc this allocation pushed back out of its document, restores
 // the document's status from what is left, and deletes the allocation row.
@@ -488,9 +462,8 @@ async function reverseAllocation(record) {
   await PaymentAllocation.deleteOne({ _id: record._id });
 }
 
-// Undoes every allocation on a payment — called when the payment itself is
-// deleted, so the invoices/bills it settled go back to showing that balance
-// as outstanding instead of silently keeping a phantom payment.
+// Undoes every allocation on a payment, so the documents it settled go back to
+// showing that balance as outstanding. Called when the payment is deleted.
 async function reverseAllocationsForPayment(paymentId) {
   const records = await PaymentAllocation.find({ payment: paymentId });
   for (const record of records) {
@@ -499,15 +472,9 @@ async function reverseAllocationsForPayment(paymentId) {
   return records.length;
 }
 
-// Cancels a document's SETTLEMENT without destroying the money behind it.
-// Every allocation against the document is unwound (its subdoc pulled, its
-// status recomputed, the allocation row deleted) but the parent Payment row is
-// KEPT — its allocatedAmount is decremented so the amount now reads as
-// unallocated credit on the party. This is the cancellation model: the real
-// money movement is permanent history (still "Gave"/"Got" on the party's page,
-// still counted in their derived total), only its link to THIS document is
-// reversed. Deleting a document is different — that removes the money rows too
-// (removeDocumentPayment), because a deleted document can't own history.
+// Cancels a document's settlement without destroying the money. Allocations are
+// unwound but the Payment rows are KEPT, becoming unallocated party credit.
+// Deleting a document instead removes them (removeDocumentPayment).
 async function reverseDocumentAllocations({ orgId, documentType, documentId }) {
   const records = await PaymentAllocation.find({
     organization: orgId,
@@ -533,12 +500,9 @@ async function reverseDocumentAllocations({ orgId, documentType, documentId }) {
   return records.length;
 }
 
-// For a set of payments, what each one settled — its allocations resolved to
-// the target document's own number (PUR-…/PR-…/INV-…), so a Gave/Got row on
-// the party's page can show the bill or return it went against. Returns a
-// Map(paymentId -> [{ documentType, documentId, number, amount }]); a payment
-// with no allocation (a standalone Gave/Got sitting as credit) is simply absent
-// from the map.
+// What each payment settled, resolved to the document's own number. Returns
+// Map(paymentId -> [{documentType, documentId, number, amount}]); unallocated
+// payments are absent.
 async function getAllocationSourcesForPayments({ orgId, paymentIds }) {
   if (!Array.isArray(paymentIds) || paymentIds.length === 0) return new Map();
 
@@ -592,14 +556,9 @@ async function getAllocationsForDocument({ orgId, documentType, documentId }) {
     .lean();
 }
 
-// ---------------------------------------------------------------------------
-// Credit balances
-// ---------------------------------------------------------------------------
+// --- Credit balances ---
 
-// Unallocated money per party — a customer who paid more than their open
-// invoices covered, or a vendor we are in advance with. This is the
-// "2k of a 10k receipt is still sitting there" figure, and it is what a later
-// allocation draws down.
+// Unallocated money per party — what a later allocation draws down.
 async function getCreditBalances({ orgId, direction = null, partyType = null, partyId = null }) {
   const filter = { organization: orgId };
   if (direction) filter.direction = direction;
@@ -608,12 +567,9 @@ async function getCreditBalances({ orgId, direction = null, partyType = null, pa
     filter.party = partyId;
   }
 
-  // Deliberately NOT using .populate() here. `party` is a refPath, and a
-  // lean populate that misses (the company/contact/vendor was deleted after
-  // the payment was recorded) returns null with the original id gone — which
-  // would make real unapplied money vanish from this list, the one place it
-  // is visible. Names are resolved in a second batched pass instead, so a
-  // dangling reference costs the label and nothing else.
+  // No .populate(): a lean populate that misses a deleted party returns null
+  // and would make real unapplied money vanish. Names are resolved separately
+  // so a dangling reference costs only the label.
   const payments = await Payment.find(filter).lean();
 
   const buckets = new Map();
@@ -690,14 +646,9 @@ async function getCreditBalances({ orgId, direction = null, partyType = null, pa
   return Array.from(buckets.values()).sort((a, b) => b.creditBalance - a.creditBalance);
 }
 
-// Spends a party's accumulated credit balance against their open documents.
-//
-// The credit can be spread over several earlier payments (three ₹2,000
-// overpayments are ₹6,000 of credit), while an allocation always belongs to
-// ONE payment. So each requested line is drawn from the party's unallocated
-// payments oldest-first, splitting across payments where a single one can't
-// cover it. That FIFO order matters: it retires the oldest money first, which
-// is what makes a credit balance age out predictably.
+// Spends a party's credit against their open documents. Credit can span several
+// payments while an allocation belongs to one, so each line is drawn FIFO from
+// the oldest unallocated payments, splitting where one can't cover it.
 async function applyCreditBalance({ orgId, userId, partyType, partyId, direction, allocations }) {
   if (!Array.isArray(allocations) || allocations.length === 0) {
     throw new AllocationError("At least one allocation is required.");
@@ -779,26 +730,13 @@ async function applyCreditBalance({ orgId, userId, partyType, partyId, direction
   };
 }
 
-// ---------------------------------------------------------------------------
-// Document-side payments
-// ---------------------------------------------------------------------------
-//
-// Recording a payment ON a bill (the Record Payment modal) and recording one
-// on the party's payments page are the same event seen from two sides, so they
-// must produce the same rows. These three functions are the bill-side entry
-// points, and they go through applyAllocations/reverseAllocation like every
-// other allocation, so a bill payment shows up as real money on the vendor's
-// page (Gave/Got) instead of living only inside the document.
-//
-// The Payment row they create is flagged `isDocumentPayment`, which is what
-// lets removeDocumentPayment delete the money row along with the document
-// line. A standalone Gave/Got that merely happens to be fully allocated is not
-// flagged, so unallocating it from a bill leaves the money on the party as
-// credit rather than destroying the entry the user made.
+// Document-side payments — the bill-side entry points. They run through the
+// same allocation path, so a bill payment also shows as real money on the
+// party's page. The Payment they create is flagged isDocumentPayment, which is
+// what lets removeDocumentPayment delete the money row with the document line;
+// a standalone Gave/Got isn't flagged, so unallocating it leaves it as credit.
 
 // The party a document's payment is with, and which way the money moved.
-// A Purchase is money going OUT to its vendor; an Invoice is money coming IN
-// from the customer on its deal.
 async function partyForDocument(documentType, doc) {
   if (documentType === "Purchase") {
     if (!doc.vendor) throw new AllocationError("This purchase has no vendor, so a payment can't be attributed.");
@@ -810,6 +748,15 @@ async function partyForDocument(documentType, doc) {
   if (documentType === "PurchaseReturn") {
     if (!doc.vendor) throw new AllocationError("This return has no vendor, so a refund can't be attributed.");
     return { direction: "IN", partyType: "Vendor", party: doc.vendor, vendor: doc.vendor };
+  }
+
+  // A sales return refund goes OUT to the customer, resolved via the return's
+  // own deal the same way an invoice's is.
+  if (documentType === "SalesReturn") {
+    const srDeal = doc.deal ? await Deal.findById(doc.deal).select("company contact").lean() : null;
+    if (srDeal?.company) return { direction: "OUT", partyType: "Company", party: srDeal.company };
+    if (srDeal?.contact) return { direction: "OUT", partyType: "Contact", party: srDeal.contact };
+    return { direction: "OUT", partyType: undefined, party: undefined };
   }
 
   // Invoice -> Deal -> customer (company or contact). Left unresolved rather
@@ -894,10 +841,8 @@ async function allocationForDocumentPayment({ orgId, documentType, documentId, d
   });
 }
 
-// Changes the amount/details of a payment already recorded on a document,
-// keeping the money row, the allocation and the subdoc in step. Ids are
-// preserved (rather than delete-and-recreate) so the payment keeps its place
-// in the party's ledger.
+// Edits a payment already on a document, keeping the money row, allocation and
+// subdoc in step. Ids are preserved so it keeps its place in the party's ledger.
 async function updateDocumentPayment({
   orgId, userId, documentType, documentId, documentPaymentId, amount,
   paymentDate, paymentMethod, reference, notes,
@@ -959,10 +904,8 @@ async function updateDocumentPayment({
   return { document: await cfg.model.findById(doc._id) };
 }
 
-// Removes one of a document's payments. With an allocation behind it the
-// reversal runs through reverseAllocation (which pulls the subdoc, recomputes
-// the status and drops the allocation row); the money row goes too when it was
-// raised on the document and nothing else is allocated against it.
+// Removes one of a document's payments via reverseAllocation; the money row
+// goes too when it was raised on the document and nothing else uses it.
 async function removeDocumentPayment({ orgId, documentType, documentId, documentPaymentId }) {
   const cfg = DOC_CONFIG[documentType];
   if (!cfg) throw new AllocationError(`Unsupported document type: ${documentType}`);

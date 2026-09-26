@@ -6,7 +6,13 @@ import SearchableDropdown from "../contact/SearchableDropdown";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
 const MODES = ["Cash", "UPI", "Bank Transfer", "Cheque", "Card", "Credit Note", "Other"];
-const STATUS_OPTIONS = ["Draft", "Pending", "Confirmed", "Refunded", "Cancelled"];
+// Partial/Paid/Refunded absent on purpose — they come from recorded refunds,
+// not this dropdown, and the backend rejects them here too.
+const STATUS_OPTIONS = ["Draft", "Pending", "Confirmed", "Cancelled"];
+
+// Statuses under which the goods have already come back, so the stock-in has
+// happened and the status can only stay put or be Cancelled.
+const GOODS_RETURNED = ["Confirmed", "Partial", "Paid", "Refunded"];
 const REASON_OPTIONS = ["Damaged", "Defective", "Wrong Item", "Wrong Size/Variant", "Customer Changed Mind", "Other"];
 
 const money = (n) =>
@@ -14,26 +20,14 @@ const money = (n) =>
 
 const lineKey = (itemId, variantId) => `${itemId || ""}|${variantId || "none"}`;
 
-/*
- * Right-drawer create/edit form for a Sales Return.
- *
- * Mirrors PurchaseReturnForm's UI edge-to-edge — drawer chrome, pill inputs,
- * stacked per-item cards, subtotal row, mode pills, uppercase title, styled
- * footer — so Sales Return / Purchase Return / Purchase / Purchase Order all
- * read as one family of forms.
- *
- * A Sales Return is ALWAYS against an existing Invoice. The backend derives
- * customer/deal from that Invoice and refuses any Sales Return without one.
- * Flow: pick Invoice -> customer + invoice items auto-load with Original /
- * Already Returned / Remaining -> enter Return Qty + Reason per line coming
- * back -> Draft or Confirm.
- *
- * "Confirmed" is the single status that moves stock (Sales Return brings
- * goods IN — see salesReturnController.syncSalesReturnStock) and is terminal
- * once reached; STATUS can only move onward to Refunded (financial only).
- * Item quantities remain editable after Confirmed: the backend applies the
- * delta between the old and new quantity, never the full new quantity again.
- */
+// Right-drawer create/edit form for a Sales Return, styled to match
+// PurchaseReturnForm. A return is always against an existing Invoice, which the
+// backend derives customer/deal from.
+//
+// Confirmed is the only stock-moving status and is terminal — from there a
+// return can only stay Confirmed or be Cancelled. Partial/Paid follow from
+// recorded refunds. Item quantities stay editable after Confirmed; the backend
+// applies only the delta.
 const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) => {
   const isEditing = !!editingReturn;
   const [isSliding, setIsSliding] = useState(false);
@@ -49,30 +43,28 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
 
   // key (itemId|variantId) -> { returnQty, reason }
   const [lines, setLines] = useState({});
-  // key -> this return's own ORIGINAL saved qty (set once from editingReturn,
-  // never mutated by further typing) — the /available endpoint's
-  // alreadyReturned/remaining exclude this return's own contribution, so the
-  // Return Qty input's ceiling stays this line's true headroom while editing,
-  // but the Returned/Returnable columns should still show the whole picture.
+  // key -> this return's own originally-saved qty. The API excludes it from
+  // alreadyReturned/remaining, so it's added back for display only.
   const [originalQuantities, setOriginalQuantities] = useState({});
 
   const [returnDate, setReturnDate] = useState(new Date().toISOString().split("T")[0]);
   const [refundMode, setRefundMode] = useState("");
-  const [refundReference, setRefundReference] = useState("");
   const [overallReason, setOverallReason] = useState("");
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState("Draft");
   const [saving, setSaving] = useState(false);
 
   const oldStatus = editingReturn?.status;
-  // Once Confirmed, STATUS can only move onward to Refunded. Item quantities
-  // stay editable regardless (see the module comment above).
-  const isLocked = oldStatus === "Confirmed" || oldStatus === "Refunded";
-  const availableStatusOptions = oldStatus === "Confirmed"
-    ? ["Confirmed", "Refunded"]
-    : oldStatus === "Refunded"
-      ? ["Refunded"]
-      : STATUS_OPTIONS.filter((s) => s !== "Refunded" || isEditing);
+  // Once the goods are back, the status can only stay where it is or be
+  // Cancelled. Item quantities stay editable regardless (see the module
+  // comment above). Partial/Paid move on their own as refunds are recorded.
+  const isLocked = GOODS_RETURNED.includes(oldStatus);
+  const availableStatusOptions = isLocked
+    // The current status is listed so the select has a valid selected value —
+    // for Partial/Paid/legacy-Refunded that is the only non-Cancel choice, and
+    // re-submitting it is a no-op the backend accepts.
+    ? [oldStatus, "Cancelled"]
+    : STATUS_OPTIONS;
 
   useEffect(() => {
     setTimeout(() => setIsSliding(true), 10);
@@ -125,7 +117,6 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
         : new Date().toISOString().split("T")[0]
     );
     setRefundMode(editingReturn.refundMode || "");
-    setRefundReference(editingReturn.refundReference || "");
     setOverallReason(editingReturn.reason || "");
     setNotes(editingReturn.notes || "");
     setStatus(editingReturn.status || "Draft");
@@ -227,7 +218,6 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
           reason: l.reason,
         })),
         refundMode,
-        refundReference,
         reason: overallReason,
         notes,
         status,
@@ -322,24 +312,14 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
             ) : availableItems.length === 0 ? (
               <p className="text-[12px] text-gray-400 py-4 text-center">This Invoice has no items.</p>
             ) : (
-              // Stacked cards, not a wide multi-column table — this drawer is
-              // only ~440px wide (.dc-panel-w's min-width), nowhere near
-              // enough for Item/Sold/Returned/Returnable/Return Qty/Reason/
-              // Amount side by side. Each item gets its own card: name+amount
-              // on top, a compact Sold/Returned/Returnable stat row, then
-              // Return Qty + Reason inputs full-width below.
+              // Stacked cards, not a table — the drawer is only ~440px wide.
               <div className="space-y-2">
                 {availableItems.map((item) => {
                   const key = lineKey(item.itemId, item.variantId);
                   const line = lines[key] || { returnQty: "", reason: "" };
                   const qty = parseFloat(line.returnQty) || 0;
-                  // item.alreadyReturned/remaining come from the API excluding
-                  // THIS return's own contribution (that's the true editing
-                  // ceiling, matching what the backend validates against).
-                  // For display, add this return's own originally-saved qty
-                  // back in so "Returned"/"Returnable" reflect the whole
-                  // picture — e.g. reopening a Confirmed return with qty 4
-                  // shows Returned 4 / Returnable 8, not 0 / 12.
+                  // The API excludes this return's own qty (that's the editing
+                  // ceiling), so add it back for the displayed totals.
                   const ownQty = originalQuantities[key] || 0;
                   const displayReturned = item.alreadyReturned + ownQty;
                   const displayReturnable = (item.originalQuantity ?? item.purchasedQuantity ?? 0) - displayReturned;
@@ -428,16 +408,6 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}>Refund Reference</label>
-              <input
-                type="text"
-                value={refundReference}
-                onChange={(e) => setRefundReference(e.target.value)}
-                placeholder="UTR / cheque #"
-                className={fieldClass}
-              />
-            </div>
-            <div>
               <label className={labelClass}>Overall Reason</label>
               <div className="relative">
                 <select
@@ -471,8 +441,8 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
             </div>
             {isLocked && (
               <p className="text-[11px] text-gray-400 mt-1.5">
-                Goods have already come back in stock — status can only move on to Refunded. Return Qty can still be
-                corrected; only the difference in stock will move.
+                Goods have already come back in stock — this return can only stay as it is or be Cancelled. Refunds move
+                it to Partial / Paid on their own. Return Qty can still be corrected; only the difference in stock will move.
               </p>
             )}
           </div>

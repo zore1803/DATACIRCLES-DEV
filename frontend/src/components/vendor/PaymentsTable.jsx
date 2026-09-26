@@ -51,10 +51,20 @@ const PAYMENT_FILTER_COLUMNS = [
 
 const getPaymentFieldValue = (payment, key) => payment[key];
 
-// How a payment's allocation reads on the row: a bill it paid, a return it
-// refunded, or an invoice it settled. `allocations` is attached by the vendor
-// payments endpoint (getPaymentsForVendor); a row with none is money sitting as
-// unallocated credit.
+// paymentDate was historically stored date-only (UTC-midnight, which reads as
+// 05:30 IST and leaves ties unsortable). createdAt always holds the real
+// recording instant, so fall back to it when paymentDate carries no time.
+const effectiveDate = (p) => {
+  if (!p?.paymentDate) return p?.createdAt || p?.paymentDate;
+  const d = new Date(p.paymentDate);
+  const isDateOnly =
+    d.getUTCHours() === 0 && d.getUTCMinutes() === 0 &&
+    d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0;
+  return isDateOnly && p.createdAt ? p.createdAt : p.paymentDate;
+};
+
+// What a payment settled. `allocations` comes from getPaymentsForVendor; a row
+// with none is unallocated credit.
 const ALLOCATION_LABEL = {
   Purchase: (n) => ({ text: n ? `Bill ${n}` : "Bill", cls: "bg-blue-50 text-blue-700" }),
   PurchaseReturn: (n) => ({ text: n ? `Refund ${n}` : "Refund", cls: "bg-emerald-50 text-emerald-700" }),
@@ -69,13 +79,8 @@ const getAllocationTags = (payment) => {
   });
 };
 
-// showKPIs is now controlled by the parent page's own Financial Summary
-// strip toggle (VendorDetailsPageNew.jsx's ⋮ menu "Hide/Show Financial
-// Summary", wired to its showKPI state) instead of an independent button
-// here — one toggle for both the page-level strip and this section's own
-// KPI row, instead of two that could disagree. Defaults true for any
-// caller that doesn't pass it (e.g. the older VendorDetailsPage.jsx, which
-// has no such toggle to wire up and previously always showed this row).
+// showKPIs is driven by the parent page's Financial Summary toggle so the two
+// can't disagree. Defaults true for callers that don't pass it.
 const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = false, onAutoOpenCreateConsumed }) => {
   const { id } = useParams();
   const [localPayments, setLocalPayments] = useState(payments || []);
@@ -113,7 +118,7 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
   }, [autoOpenCreate, onAutoOpenCreateConsumed]);
   const [hiddenColumns, setHiddenColumns] = useState(new Set());
   const [pinnedColumns, setPinnedColumns] = useState([]);
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
+  const [sortConfig, setSortConfig] = useState({ key: "paymentDate", direction: "desc" });
 
   const handleColumnReorder = (draggedKey, targetKey) => {
     setColumnOrder((prev) => {
@@ -214,8 +219,8 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
       let aVal = getPaymentFieldValue(a, sortConfig.key) ?? "";
       let bVal = getPaymentFieldValue(b, sortConfig.key) ?? "";
       if (sortConfig.key === "paymentDate") {
-        aVal = new Date(a.paymentDate).getTime();
-        bVal = new Date(b.paymentDate).getTime();
+        aVal = new Date(effectiveDate(a)).getTime();
+        bVal = new Date(effectiveDate(b)).getTime();
       } else if (sortConfig.key === "reference_id") {
         aVal = a._id;
         bVal = b._id;
@@ -430,13 +435,9 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
   // Positive means money is net OUT to this vendor.
   const netBalance = stats.totalAmountOut - stats.totalAmountIn;
 
-  // Period-over-period trend. Split the actual filtered payments in half by
-  // date (older half = "previous", newer half = "current") instead of a
-  // fixed last-30-vs-prior-30-calendar-days window — a fixed wall-clock
-  // window meant an edit to any payment dated outside it silently couldn't
-  // move the percentage at all, which looked hardcoded/stuck even though it
-  // wasn't. A data-relative split always includes every payment, in one
-  // half or the other, so any add/edit/delete visibly recomputes this.
+  // Period-over-period trend, split by date into older/newer halves rather
+  // than a fixed calendar window — a wall-clock window left edits outside it
+  // unable to move the number, which read as stuck.
   const trendStats = useMemo(() => {
     const sorted = [...filteredPayments].sort(
       (a, b) => new Date(a.paymentDate) - new Date(b.paymentDate),
@@ -505,10 +506,10 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
         cell: ({ row }) => (
           <div className="flex flex-col leading-tight">
             <span className="text-sm font-medium text-gray-900">
-              {new Date(row.original.paymentDate).toLocaleDateString()}
+              {new Date(effectiveDate(row.original)).toLocaleDateString()}
             </span>
             <span className="text-xs text-gray-500">
-              {new Date(row.original.paymentDate).toLocaleTimeString([], {
+              {new Date(effectiveDate(row.original)).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
               })}
@@ -610,11 +611,8 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
     [paginatedPayments, selectedItems, selectAll, clearSelection, toggleItem],
   );
 
-  // No dedicated "Actions" column — a single ⋮ button (RowActionsMenu) that
-  // pops Edit/Delete/View as a small action card renders inside whichever
-  // column currently ends up last (via the wrap below), the same way
-  // CompanyContactsTab.jsx puts its "open contact" icon on the last visible
-  // column instead of pinning a fixed Actions column.
+  // No fixed Actions column — the ⋮ button renders inside whichever column
+  // ends up last (see the wrap below).
   const paymentActionButtons = (payment) => (
     <RowActionsMenu
       actions={[
@@ -646,12 +644,9 @@ const PaymentsTable = ({ payments, vendor, showKPIs = true, autoOpenCreate = fal
       ...rightCols,
     ];
 
-    // Action icons live inside whichever column is currently last, instead
-    // of a fixed pinned "Actions" column — wrap a COPY of that column's cell
-    // renderer to append them after its own content. Copying (not mutating
-    // the shared baseColumns object) matters: the "last" column changes as
-    // columns get reordered/hidden, so mutating in place would leave a
-    // stale action-button wrapper on a column that's no longer last.
+    // Wrap a COPY of the last column's cell renderer to append the actions.
+    // Copying matters: "last" changes as columns move, and mutating in place
+    // would leave a stale wrapper on a column that's no longer last.
     let lastIdx = -1;
     for (let i = ordered.length - 1; i >= 0; i--) {
       if (ordered[i].id !== "selection") {

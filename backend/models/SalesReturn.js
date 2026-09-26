@@ -1,35 +1,23 @@
-// models/SalesReturn.js
-//
-// Goods returned by a customer, always against a specific Invoice (see
-// salesReturnController.createSalesReturn, which requires `invoice` and
-// derives `customer`/`deal` from it). Mirrors PurchaseReturn's shape but
-// inverted: Purchase Return sends goods OUT to a vendor, Sales Return
-// brings goods IN from a customer — so its Confirmed stock effect uses
-// baseDirection: "in" via inventorySync.syncDocumentStock.
+// Goods returned by a customer against an Invoice. Mirrors PurchaseReturn
+// inverted: Confirmed brings stock back IN and refunds go OUT to the customer.
 const mongoose = require("mongoose");
 
 const salesReturnItemSchema = new mongoose.Schema(
   {
     itemId: { type: mongoose.Schema.Types.ObjectId, ref: "Item" },
-    // The specific variant subdocument id on the parent Item, when the
-    // original invoice line was against a variant. Required for correct
-    // per-variant stock IN on Confirm.
+    // Set when the invoice line was a variant — needed for per-variant stock IN.
     variantId: { type: mongoose.Schema.Types.ObjectId, default: null },
     parentItemId: { type: mongoose.Schema.Types.ObjectId, ref: "Item", default: null },
     isVariant: { type: Boolean, default: false },
     name: { type: String, required: true },
     description: { type: String, default: "" },
     hsn: { type: String, default: "" },
-    // Historical values snapshotted from the original invoice line — the
-    // Sales Return must preserve the transaction values from the Invoice,
-    // not look them up live from the Product master.
+    // Snapshotted from the invoice line, not looked up live from the Item master.
     quantity: { type: Number, required: true, min: 0 },
     unitPrice: { type: Number, required: true, min: 0 },
     gstRate: { type: Number, default: 0, min: 0, max: 100 },
     taxInclusive: { type: Boolean, default: false },
     total: { type: Number, min: 0 },
-    // Per-line reason so different lines in the same return can carry
-    // different reasons (2 damaged + 1 wrong item, etc.).
     reason: {
       type: String,
       enum: ["", "Damaged", "Defective", "Wrong Item", "Wrong Size/Variant", "Customer Changed Mind", "Other"],
@@ -41,11 +29,9 @@ const salesReturnItemSchema = new mongoose.Schema(
 
 const salesReturnSchema = new mongoose.Schema(
   {
-    // Auto-derived server-side from `invoice.deal` — never trusted from the
-    // client so a return can't be attributed to the wrong customer.
+    // Derived server-side from `invoice.deal`, never trusted from the client.
     deal: { type: mongoose.Schema.Types.ObjectId, ref: "Deal", required: true },
-    // The invoice being returned against. Required at the controller level;
-    // schema-level default kept null-tolerant for safe reads on any legacy row.
+    // Null-tolerant at schema level for legacy rows; the controller requires it.
     invoice: { type: mongoose.Schema.Types.ObjectId, ref: "Invoice", default: null },
 
     returnNumber: { type: String, required: true },
@@ -58,33 +44,41 @@ const salesReturnSchema = new mongoose.Schema(
     totalTax: { type: Number, default: 0, min: 0 },
     grandTotal: { type: Number, default: 0, min: 0 },
 
-    // Draft -> Pending -> Confirmed -> Refunded is the physical-goods
-    // workflow. Confirmed is the single stock-moving event (goods actually
-    // came back in). Refunded is a financial-settlement marker only — no
-    // stock effect. Cancelled is only valid pre-Confirmed.
+    // Confirmed is the only stock-moving status. Partial/Paid follow from real
+    // refunds in `payments`, never from a status flip. "Refunded" is legacy
+    // only — existing rows keep it, nothing new can reach it (not yet migrated).
     status: {
       type: String,
-      enum: ["Draft", "Pending", "Confirmed", "Refunded", "Cancelled"],
+      enum: ["Draft", "Pending", "Confirmed", "Partial", "Paid", "Cancelled", "Refunded"],
       default: "Draft",
     },
-    // How the refund was/will be settled. Single field (not a payments array)
-    // since a return is one settlement, not an installment plan.
+    // Settlement view of refunds paid to the customer. Each subdoc is pushed by
+    // paymentAllocationService alongside a real Payment row (direction OUT).
+    payments: [{
+      amount: { type: Number, required: true },
+      paymentDate: { type: Date, default: Date.now },
+      paymentMethod: {
+        type: String,
+        enum: ["Cash", "UPI", "Net Banking", "Cheque", "Card", "NEFT", "RTGS", "IMPS", "EMI", "TDS", "Other"],
+        default: "UPI",
+      },
+      reference: { type: String, default: "" },
+      notes: { type: String, default: "" },
+      internalNotes: { type: String, default: "" },
+      recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      recordedAt: { type: Date, default: Date.now },
+    }],
+    // Legacy, and the default method suggested when recording a refund. Never
+    // the financial source of truth — `payments` is.
     refundMode: {
       type: String,
       enum: ["", "Cash", "UPI", "Bank Transfer", "Cheque", "Card", "Credit Note", "Other"],
       default: "",
     },
-    refundReference: { type: String, default: "" },
-    refundedAt: { type: Date, default: null },
-    // Free-text document-level reason (independent of the per-line reason on
-    // each items[i]).
     reason: { type: String, default: "" },
     notes: { type: String, default: "" },
 
-    // Guards the inventory stock-in from double-applying — mirrors
-    // PurchaseReturn.stockMovementStatus. "Confirmed" is terminal for the
-    // stock event; reversal is via delete or an explicit cancel-with-reverse
-    // pathway (see salesReturnController).
+    // Guards the stock-in from double-applying.
     stockMovementStatus: {
       type: String,
       enum: ["pending", "applied", "reversed"],

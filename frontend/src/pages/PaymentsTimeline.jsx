@@ -59,19 +59,12 @@ const MIN_COL_WIDTH = 60;
 // Matches Deals.jsx's KPI band desktop height (h-[104px]) so the two pages'
 // header/stats layout lines up the same way.
 const KPI_BAND_HEIGHT = 104;
-// Bottom edge of the fixed toolbar (top-16 = 64px offset + header height).
-// The KPI band and the table both hang off this, so they sit flush against the
-// toolbar and against each other — hardcoding 126/130 here left a 2px overlap
-// above and a 4px white gap between the KPI band and the table header.
-// Header height grew from 64px to 144px to fit the account-cards row (Total
-// Funds + Wallet/Cash/Bank cards) ported from the signatures branch.
+// Bottom edge of the fixed toolbar. The KPI band and table both hang off this
+// so they sit flush; hardcoding it left a 2px overlap and a 4px gap.
 const HEADER_HEIGHT = 144;
 const TOOLBAR_BOTTOM = 64 + HEADER_HEIGHT;
-// The bulk-action strip gets its own band between the account cards and the
-// KPI row. It used to take over the header entirely, which hid the Total
-// Funds / Wallet / Cash / bank cards the moment anything was selected — the
-// account balances are context you want WHILE acting on rows, not something
-// to trade away for the toolbar.
+// The bulk-action strip gets its own band so it doesn't hide the account
+// cards — those balances are context you want while acting on rows.
 const BULK_STRIP_HEIGHT = 64;
 
 const ALL_COLUMNS = [
@@ -121,11 +114,8 @@ export default function PaymentsTimeline() {
   // The party whose credit is being applied — set from the Unapplied panel,
   // drives the Apply Credit drawer.
   const [creditParty, setCreditParty] = useState(null);
-  // The account-cards strip scrolls horizontally, so a panel positioned
-  // inside one of those cards gets clipped by that scroll container (and
-  // scrolls away with it). Portalled to document.body and positioned from the
-  // card's measured rect instead — same approach PickerSelect and the column
-  // menu already use on this page.
+  // The cards strip scrolls horizontally, so a panel inside it gets clipped.
+  // Portalled to body and positioned from the card's measured rect instead.
   const creditCardRef = useRef(null);
   const creditPanelRef = useRef(null);
   const [creditPanelStyle, setCreditPanelStyle] = useState({});
@@ -252,10 +242,8 @@ export default function PaymentsTimeline() {
   const [allSelectableDocs, setAllSelectableDocs] = useState(null);
   const [showLoadingSkeleton, setShowLoadingSkeleton] = useState(true);
   useTopLoadingSignal(showLoadingSkeleton);
-  // Full-page skeleton (same as Deals.jsx/Companies.jsx) only for the very
-  // first load of this page — subsequent refetches (page change, search,
-  // sort) keep the header/KPIs/pagination visible and only skeleton the
-  // table rows, so navigating away and back doesn't re-flash the whole page.
+  // Full-page skeleton only on first load; later refetches skeleton just the
+  // rows so navigating back doesn't re-flash the whole page.
   const hasLoadedOnceRef = useRef(false);
 
   /* search */
@@ -273,7 +261,7 @@ export default function PaymentsTimeline() {
   const { columns, saveColumns, getVisibleColumns } = useColumnSettings("paymentsTimeline", defaultColumns);
   const [colWidths, setColWidths]     = useState(DEFAULT_COL_WIDTHS);
   const [pinnedCols, setPinnedCols]   = useState({});
-  const [sortConfig, setSortConfig]   = useState({ key: null, direction: null });
+  const [sortConfig, setSortConfig]   = useState({ key: "date", direction: "desc" });
   const [showColumnSettings, setShowColumnSettings] = useState(false);
 
   /* Column header menu */
@@ -364,11 +352,8 @@ export default function PaymentsTimeline() {
 
   const openColumnMenu = (e, colId) => {
     e.stopPropagation();
-    // Anchor the menu's RIGHT edge to the chevron button's right edge (same
-    // formula as DealsTable.jsx's renderHeaderMenu), not the button's left
-    // edge — anchoring left made the menu grow rightward off a narrow
-    // column's trigger and overshoot into the next column instead of
-    // staying over the column it belongs to.
+    // Anchor the menu's RIGHT edge to the button's right edge — anchoring left
+    // made it overshoot into the next column on narrow columns.
     const zMenu = getAncestorZoom(document.body);
     const MENU_W = 220;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -525,12 +510,9 @@ export default function PaymentsTimeline() {
       const res = await API.get(`/payments-timeline?${params.toString()}`);
       const allDocs = res.data.documents || [];
       setSelectedIds(allDocs.map(d => d._id));
-      // The KPI band narrows to the selection (paymentStats below), which
-      // needs each selected row's actual amount/direction — but this fetch
-      // is the ONLY place that has every matching record; the page-level
-      // `documents` state only ever holds the current page's 10. Cached here
-      // so "selected" totals cover the real full selection, not just
-      // whichever of those 534 happen to also be on the visible page.
+      // This fetch is the only place holding every matching record, and the
+      // selection KPIs need each row's amount/direction — so cache it here,
+      // otherwise "selected" totals only cover the visible page.
       setAllSelectableDocs(allDocs);
       toast.success(`Selected all ${allDocs.length} record(s).`, { id: tid });
     } catch (err) {
@@ -578,13 +560,9 @@ export default function PaymentsTimeline() {
   /* ── KPI stats — narrows to the current selection when one exists,
      same behavior as Deals.jsx's dealStatistics ─────────────────── */
   const paymentStats = useMemo(() => {
-    // Selecting specific rows narrows the KPIs to just that selection —
-    // necessarily a client-side sum since it's an arbitrary subset. Looks up
-    // each selected id against allSelectableDocs FIRST (the full fetch
-    // fetchAllIds/"Select All" populates, covering every matching record)
-    // and falls back to the current page's filteredDocs for ids selected by
-    // hand — using filteredDocs alone silently truncated "534 selected" down
-    // to whatever subset of those also happened to be on the visible page.
+    // A selection narrows the KPIs, summed client-side. Resolve ids against
+    // allSelectableDocs first (every matching record) and fall back to the
+    // current page — using the page alone truncated the totals.
     if (selectedIds.length > 0) {
       const byId = new Map();
       (allSelectableDocs || []).forEach(d => byId.set(d._id, d));
@@ -649,10 +627,8 @@ export default function PaymentsTimeline() {
      3 fields updateTimelineEntry's generic fallback branch actually
      applies uniformly across every source: paymentDate, notes, bank. */
   const paymentFieldConfig = {
-    // Keys match the normalized doc's own property names (so BulkActions'
-    // hasOwnProperty check against selected rows passes for every source) —
-    // "date" gets translated to the backend's expected "paymentDate" body
-    // key in handleBulkUpdatePayments below.
+    // Keys match the normalized doc's property names so BulkActions' check
+    // passes; "date" is translated to "paymentDate" on submit.
     fields: [
       { key: "date", label: "Date", type: "date" },
       { key: "bank", label: "Bank Account", type: "text" },
@@ -1108,11 +1084,8 @@ export default function PaymentsTimeline() {
               setActionMenuPos(null);
               return;
             }
-            // Same zoom correction + row-center anchor + viewport clamp as
-            // DealsTable.jsx's row-actions menu — this previously used the
-            // raw (unzoomed) rect and anchored to the button's top edge with
-            // no clamping at all, which under the app's CSS zoom drifted the
-            // portal far from the row that was actually clicked.
+            // Zoom correction + row-center anchor + viewport clamp; the raw
+            // rect drifted the portal away from the clicked row under CSS zoom.
             const zMenu = getAncestorZoom(document.body);
             const MENU_W = 160; // matches w-40 below
             const MENU_H = 189; // 5 buttons (~36px each) + 1 divider (~9px)
@@ -1705,11 +1678,8 @@ export default function PaymentsTimeline() {
               { label: "Total Debit", value: `₹${paymentStats.totalDebit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, icon: TrendingDown, iconClass: "text-red-600" },
               { label: "Net", value: `₹${paymentStats.net.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, icon: Wallet, iconClass: paymentStats.net >= 0 ? "text-green-600" : "text-red-600" },
               { label: "Transactions", value: paymentStats.count, icon: ListChecks, iconClass: "text-[#0085FF]" },
-              // Money moved between the org's own accounts. Deliberately kept
-              // out of Credit/Debit/Net — it's neither income nor expense —
-              // but shown when there is any, so excluding it doesn't look
-              // like the figure went missing. Hidden entirely at zero rather
-              // than adding a dead card to every other org's KPI row.
+              // Self-transfers are kept out of Credit/Debit/Net but shown when
+              // non-zero, so the exclusion doesn't look like missing money.
               ...(Number(paymentStats.totalTransferred) > 0
                 ? [{
                     label: "Self Transfers",

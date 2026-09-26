@@ -47,14 +47,9 @@ const downloadSampleCSV = () => {
   URL.revokeObjectURL(url);
 };
 
-/*
- * Right-drawer CSV/Excel import for Sales Returns — same dc-panel-card shell
- * and "parse -> preview -> confirm -> bulk-import" flow as
- * ImportPurchaseReturns.jsx. Item name, rate, GST and tax-inclusive flag are
- * always resolved server-side from the matching Invoice line (never taken
- * from the CSV) so an import can't invent a price or bypass the returnable-
- * quantity cap the interactive form enforces.
- */
+// CSV/Excel import drawer for Sales Returns: parse -> preview -> confirm ->
+// bulk-import. Rate, GST and tax flags are resolved server-side from the
+// matching Invoice line, so an import can't invent a price or bypass the cap.
 const ImportSalesReturns = ({ isOpen, onClose, onImportSuccess }) => {
   const [isSliding, setIsSliding] = useState(false);
   const [rows, setRows] = useState(null);

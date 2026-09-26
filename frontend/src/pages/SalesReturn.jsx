@@ -57,6 +57,7 @@ import { exportClientSide, formatINR } from "../utils/clientExport";
 import SalesReturnForm from "../components/salesReturn/SalesReturnForm";
 import SalesReturnPreview from "../components/salesReturn/SalesReturnPreview";
 import ImportSalesReturns from "../components/salesReturn/ImportSalesReturns";
+import RecordSalesReturnRefundModal from "../components/salesReturn/RecordSalesReturnRefundModal";
 import UploadIcon from "../components/common/UploadIcon";
 import {
   useReactTable,
@@ -67,15 +68,8 @@ import {
 import EyeIcon from "../components/common/EyeIcon";
 import EditIcon from "../components/common/EditIcon";
 
-/*
- * Sales Returns — edge-to-edge list.
- *
- * Mirrors Companies.jsx exactly for shell (fixed toolbar at top, fixed
- * pagination at bottom, table filling the rest, sticky/pinned columns,
- * drag-to-reorder headers, per-column pin/sort/hide menu, bulk-selection
- * animated strip). See salesReturnController for backend rules — Confirmed is
- * the only stock-moving state, Refunded is financial only.
- */
+// Sales Returns list. Same shell as Companies.jsx. Confirmed is the only
+// stock-moving state; Partial/Paid come from real refunds, never a status menu.
 const getAncestorZoom = (el) => {
   let z = 1;
   let node = el;
@@ -91,10 +85,37 @@ const STATUS_STYLES = {
   Draft: "bg-[#EEF2F9] text-[#56698A]",
   Pending: "bg-[#FDF3E6] text-[#EA9927]",
   Confirmed: "bg-[#E6F7EF] text-[#1FA971]",
-  Refunded: "bg-[#E6F8FD] text-[#27B4EA]",
+  Partial: "bg-[#FFF4E5] text-[#D97A0B]",
+  Paid: "bg-[#E6F8FD] text-[#27B4EA]",
   Cancelled: "bg-[#FCEAEA] text-[#EA4B4B]",
+  // Legacy single-marker status from before refunds were real Payments. Still
+  // rendered so old rows read correctly; nothing can newly reach it.
+  Refunded: "bg-[#E6F8FD] text-[#27B4EA]",
 };
-const STATUS_OPTIONS = ["Draft", "Pending", "Confirmed", "Refunded", "Cancelled"];
+// Settable from the UI. Partial/Paid are absent on purpose — they follow from
+// recorded refunds, and the backend rejects them from any status endpoint.
+const STATUS_OPTIONS = ["Draft", "Pending", "Confirmed", "Cancelled"];
+// Every status the list can display or filter on, including the money-driven
+// and legacy ones.
+const ALL_STATUSES = ["Draft", "Pending", "Confirmed", "Partial", "Paid", "Cancelled", "Refunded"];
+// Goods are already back: the row can only stay put or be Cancelled.
+const GOODS_RETURNED = ["Confirmed", "Partial", "Paid", "Refunded"];
+
+const sumRefunds = (r) => (r?.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+// Refund column: how much has actually gone back vs the return total. Legacy
+// "Refunded" rows have no payments, so they fall back to their recorded mode.
+const refundSummary = (r) => {
+  const paid = sumRefunds(r);
+  if (paid > 0) {
+    const due = Math.max(0, (Number(r.grandTotal) || 0) - paid);
+    return due > 0
+      ? `₹${paid.toLocaleString("en-IN")} of ₹${Number(r.grandTotal || 0).toLocaleString("en-IN")}`
+      : `₹${paid.toLocaleString("en-IN")} · Fully refunded`;
+  }
+  if (r.status === "Refunded") return r.refundMode || "Settled (legacy)";
+  return r.refundMode || "—";
+};
 
 const customerOf = (r) =>
   r.deal?.contact?.name ||
@@ -128,6 +149,11 @@ const SalesReturn = () => {
   const [editingReturn, setEditingReturn] = useState(null);
   const [previewReturn, setPreviewReturn] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
+  // Record Refund drawer — refunding the customer for a Confirmed return,
+  // recorded as a real Payment(OUT) against it. Partial/Paid follow from that
+  // money (see RecordSalesReturnRefundModal).
+  const [refundReturn, setRefundReturn] = useState(null);
+  const [showRefundModal, setShowRefundModal] = useState(false);
 
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
@@ -136,10 +162,8 @@ const SalesReturn = () => {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportButtonRef = useRef(null);
 
-  // Share via WhatsApp/Email/SMS — same pattern as Purchase/PurchaseOrder/
-  // PurchaseReturn's row-actions menu, reusing the org's saved Message
-  // Templates + Branding (Settings -> Message Templates) so content stays
-  // consistent across modules.
+  // Share via WhatsApp/Email/SMS, reusing the org's saved Message Templates
+  // and Branding so content stays consistent across modules.
   const [shareMenu, setShareMenu] = useState(null);
   const [shareMenuChannel, setShareMenuChannel] = useState(null);
   // Change-status flyout (submenu opened from the row's "Change Status" action),
@@ -255,10 +279,8 @@ const SalesReturn = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, statusFilter]);
 
-  // Latest-request guard, same as Vendors.jsx: every fetch takes an id, and a response is only
-  // applied if no newer fetch has started since. Without it an older, slower response (a
-  // previous keystroke's search, or the page-2 request fired just before a search reset the
-  // list to page 1) could land last and overwrite the newer results.
+  // Latest-request guard: a response is only applied if no newer fetch has
+  // started, so a slow earlier request can't overwrite fresher results.
   const fetchRequestIdRef = useRef(0);
   const fetchRows = async () => {
     const requestId = ++fetchRequestIdRef.current;
@@ -358,7 +380,9 @@ const SalesReturn = () => {
       { key: "customer", label: "Customer", visible: true, order: 2, sortable: true },
       { key: "returnDate", label: "Return Date", visible: true, order: 3, sortable: true },
       { key: "grandTotal", label: "Amount", visible: true, order: 4, sortable: true },
-      { key: "status", label: "Status", visible: true, order: 5, sortable: true, options: STATUS_OPTIONS },
+      // Filtering must be able to reach the money-driven and legacy statuses,
+      // even though they can't be set from the UI.
+      { key: "status", label: "Status", visible: true, order: 5, sortable: true, options: ALL_STATUSES },
       { key: "refund", label: "Refund", visible: true, order: 6, sortable: false },
       { key: "reason", label: "Reason", visible: false, order: 7, sortable: true },
       { key: "notes", label: "Notes", visible: false, order: 8, sortable: true },
@@ -377,10 +401,7 @@ const SalesReturn = () => {
       return r.returnDate ? new Date(r.returnDate).toLocaleDateString("en-IN") : "";
     if (key === "grandTotal") return money(r.grandTotal);
     if (key === "status") return r.status || "";
-    if (key === "refund")
-      return r.status === "Refunded"
-        ? `${r.refundMode || "Settled"}${r.refundReference ? ` · ${r.refundReference}` : ""}`
-        : r.refundMode || "—";
+    if (key === "refund") return refundSummary(r);
     if (key === "reason") return r.reason || "";
     if (key === "notes") return r.notes || "";
     return "";
@@ -412,10 +433,7 @@ const SalesReturn = () => {
 
   const textToEmailHtml = (text) => (text || "").replace(/\n/g, "<br>");
 
-  // Same org-wide message templates + branding Purchase/PurchaseOrder/
-  // PurchaseReturn's share flow pulls from (Settings -> Message Templates /
-  // Branding) — reused as-is so WhatsApp/Email/SMS content stays consistent
-  // across modules.
+  // The same org-wide message templates and branding the other share flows use.
   const fetchShareSettings = async () => {
     try {
       const [settingsRes, brandingRes] = await Promise.all([
@@ -533,7 +551,7 @@ const SalesReturn = () => {
     { label: "Return Date", value: (r) => new Date(r.returnDate || r.createdAt).toLocaleDateString() },
     { label: "Amount", value: (r) => formatINR(r.grandTotal) },
     { label: "Status", value: (r) => r.status },
-    { label: "Refund", value: (r) => (r.status === "Refunded" ? "Refunded" : r.refundMode || "—") },
+    { label: "Refund", value: (r) => refundSummary(r) },
   ];
   const handleExport = (format) => {
     if (!window.confirm(`Export in ${format}?`)) return;
@@ -547,7 +565,7 @@ const SalesReturn = () => {
 
   const srFilterColumns = [
     { key: "returnNumber", label: "SR Number" },
-    { key: "status", label: "Status", options: STATUS_OPTIONS },
+    { key: "status", label: "Status", options: ALL_STATUSES },
     { key: "grandTotal", label: "Amount" },
     { key: "reason", label: "Reason" },
     { key: "notes", label: "Notes" },
@@ -753,13 +771,13 @@ const SalesReturn = () => {
                 </span>
                 <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
               </button>
-              {row.status === "Confirmed" && (
+              {["Confirmed", "Partial", "Paid"].includes(row.status) && (
                 <button
-                  onClick={() => { close(); handleStatusChange(row, "Refunded"); }}
+                  onClick={() => { close(); setRefundReturn(row); setShowRefundModal(true); }}
                   className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-blue-600 hover:bg-blue-50 whitespace-nowrap"
                 >
                   <DollarSign className="w-3.5 h-3.5" />
-                  Mark Refunded
+                  Record Refund
                 </button>
               )}
               {row.status !== "Refunded" && (
@@ -1004,11 +1022,7 @@ const SalesReturn = () => {
               );
             } else if (vc.key === "refund") {
               baseContent = (
-                <span className="text-xs text-gray-600">
-                  {r.status === "Refunded"
-                    ? `${r.refundMode || "Settled"}${r.refundReference ? ` · ${r.refundReference}` : ""}`
-                    : r.refundMode || "—"}
-                </span>
+                <span className="text-xs text-gray-600">{refundSummary(r)}</span>
               );
             } else if (vc.key === "reason" || vc.key === "notes") {
               const val = r[vc.key] || "";
@@ -1017,11 +1031,8 @@ const SalesReturn = () => {
               baseContent = "—";
             }
 
-            // The row's ⋮ menu is appended to whichever column currently sits
-            // last — pin/drag can move that around — same pattern as
-            // Companies.jsx/PurchaseOrderPage.jsx, instead of a hover-only
-            // affordance tucked into one specific column that's easy to miss
-            // (or that scrolls out of view once other columns are pinned).
+            // The ⋮ menu is appended to whichever column currently sits last,
+            // since pin/drag can move that around.
             if (vc.key === lastColumnKey) {
               return (
                 <div className="flex items-center justify-between w-full gap-2">
@@ -1579,6 +1590,13 @@ const SalesReturn = () => {
         onClose={closePreview}
         onEdit={() => { closePreview(); openEdit(previewReturn); }}
         onDelete={() => { closePreview(); handleDelete(previewReturn._id); }}
+      />
+
+      <RecordSalesReturnRefundModal
+        isOpen={showRefundModal}
+        salesReturn={refundReturn}
+        onClose={() => { setShowRefundModal(false); setRefundReturn(null); }}
+        onSuccess={() => fetchRows()}
       />
 
       <ImportSalesReturns

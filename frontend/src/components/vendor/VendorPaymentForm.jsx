@@ -6,12 +6,9 @@ import QuickVendorForm from "./QuickVendorForm";
 import toast from "react-hot-toast";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
-// Module-level so the fallback keeps the SAME reference across renders. As an
-// inline `vendors = []` default it was re-created on every render, and the
-// `[vendors]` effect below (which compares by reference) then fired on every
-// render — setLocalVendors → re-render → new [] → fire again, i.e. "Maximum
-// update depth exceeded". Only callers that omit the prop hit this, which is
-// why it surfaced from PaymentsTable and not from Vendors/PaymentPage.
+// Module-level so the fallback keeps the same reference across renders. An
+// inline `vendors = []` default made the [vendors] effect below re-fire every
+// render — "Maximum update depth exceeded".
 const EMPTY_VENDORS = [];
 
 const VendorPaymentForm = ({
@@ -98,10 +95,13 @@ const VendorPaymentForm = ({
     }
     setLoading(true);
     try {
+      const [y, m, d] = form.paymentDate.split("-").map(Number);
+      const now = new Date();
+      const localDate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
       const payload = {
         vendor: form.vendorId,
         amount: parseFloat(form.amount),
-        paymentDate: form.paymentDate,
+        paymentDate: localDate.toISOString(),
         paymentType: form.paymentType,
         bank: form.bank,
         reference: form.reference,
