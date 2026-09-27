@@ -7,6 +7,7 @@ const Item = require("../models/Item");
 const purchaseDocumentPdf = require("../utils/purchaseDocumentPdf");
 const { syncDocumentStock } = require("../utils/inventorySync");
 const allocationService = require("../services/paymentAllocationService");
+const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
 
 // A purchase's per-item Purchase Price / GST% (PurchaseForm.jsx's editable Amount/GST%
 // fields) are an explicit "this is what it actually cost" entry — sync them back onto the
@@ -90,10 +91,28 @@ const calculateOrderTotals = (items) => {
   return { subtotal, totalTax, grandTotal, roundOff };
 };
 
-// Helper function to generate unique Purchase number per organization
-async function generatePurchaseNumber(organizationId) {
-  const count = await Purchase.countDocuments({ organization: organizationId });
-  return `PUR-${(count + 1).toString().padStart(5, "0")}`;
+// Generates the Purchase number for an organization, using the org's configured
+// Purchase prefix/suffix (Settings → Numbering, key "purchase") as a prefix +
+// suffix + financial-year series — the same scheme the Invoice family uses.
+// Falls back to the "PUR-" default when nothing is configured. Pass
+// `providedNumber` to honour a manually entered number (validated for
+// uniqueness), and `prefix`/`suffix` to override the configured ones for this
+// one document.
+async function generatePurchaseNumber(organizationId, opts = {}) {
+  const settings = await getDocumentSettingsForOrganization(organizationId);
+  const typeSettings = settings.documentTypeSettings?.purchase || {};
+  const prefix = (opts.prefix ?? typeSettings.prefix ?? "PUR-").toString().trim() || "PUR-";
+  const suffix = (opts.suffix ?? typeSettings.suffix ?? "").toString().trim();
+  return resolveDocumentNumber({
+    Model: Purchase,
+    numberField: "purchaseNumber",
+    organization: organizationId,
+    documentTypeKey: "purchase",
+    prefix,
+    suffix,
+    providedNumber: opts.providedNumber ?? null,
+    date: opts.date,
+  });
 }
 
 // Once Confirmed (or later), status can never go back to Draft/Pending — and
@@ -193,6 +212,10 @@ async function syncPurchaseStock(purchase, oldStatus, oldStockMovementStatus, us
 exports.createPurchase = async (req, res) => {
   try {
     const { vendor, purchaseOrder, items, notes, status, transactionType } = req.body;
+    // Optional numbering overrides: a manually entered number, or a one-off
+    // prefix/suffix chosen in the create form's header. Omitted → the org's
+    // configured Purchase series auto-allocates the next number.
+    const { purchaseNumber: providedPurchaseNumber, prefix: numberPrefix, suffix: numberSuffix, purchaseDate } = req.body;
 
     // Validate vendor within organization
     const vendorExists = await Vendor.findOne({
@@ -250,13 +273,28 @@ exports.createPurchase = async (req, res) => {
     const calculatedTransactionType = transactionType || 'intra';
     const { subtotal, totalTax, grandTotal, roundOff } = calculateOrderTotals(items);
 
-    // Generate Purchase Number for organization
-    const purchaseNumber = await generatePurchaseNumber(req.user.organization);
+    // Generate Purchase Number for organization (settings-driven series). A
+    // manual number that's already taken this financial year is rejected with
+    // 400 rather than silently duplicating.
+    let purchaseNumber;
+    try {
+      purchaseNumber = await generatePurchaseNumber(req.user.organization, {
+        providedNumber: typeof providedPurchaseNumber === "string" && providedPurchaseNumber.trim()
+          ? providedPurchaseNumber.trim()
+          : null,
+        prefix: numberPrefix,
+        suffix: numberSuffix,
+        date: purchaseDate,
+      });
+    } catch (numErr) {
+      return res.status(400).json({ message: numErr.message });
+    }
 
     const purchase = new Purchase({
       vendor,
       purchaseOrder: purchaseOrder || null,
       purchaseNumber,
+      ...(purchaseDate ? { purchaseDate } : {}),
       items: items.map(item => ({
         ...item,
         total: round2(calculateItemTotal(item.quantity, item.unitPrice)) // Map 'amount' to 'total' if needed

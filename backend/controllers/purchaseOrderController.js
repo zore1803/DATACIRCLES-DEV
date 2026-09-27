@@ -5,11 +5,27 @@ const Vendor = require("../models/Vendor");
 const Branding = require("../models/Branding");
 const purchaseDocumentPdf = require("../utils/purchaseDocumentPdf");
 const { syncDocumentStock } = require("../utils/inventorySync");
+const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
 
-// Helper function to generate unique PO number per organization
-async function generatePONumber(organizationId) {
-  const count = await PurchaseOrder.countDocuments({ organization: organizationId });
-  return `PO-${(count + 1).toString().padStart(5, "0")}`;
+// Generates the Purchase Order number using the org's configured PO prefix/suffix
+// (Settings → Numbering, key "purchaseOrder") as a prefix + suffix + financial-year
+// series, mirroring the Invoice family. Falls back to "PO-". Pass `providedNumber`
+// for a manual number, and `prefix`/`suffix` to override for this one document.
+async function generatePONumber(organizationId, opts = {}) {
+  const settings = await getDocumentSettingsForOrganization(organizationId);
+  const typeSettings = settings.documentTypeSettings?.purchaseOrder || {};
+  const prefix = (opts.prefix ?? typeSettings.prefix ?? "PO-").toString().trim() || "PO-";
+  const suffix = (opts.suffix ?? typeSettings.suffix ?? "").toString().trim();
+  return resolveDocumentNumber({
+    Model: PurchaseOrder,
+    numberField: "poNumber",
+    organization: organizationId,
+    documentTypeKey: "purchaseOrder",
+    prefix,
+    suffix,
+    providedNumber: opts.providedNumber ?? null,
+    date: opts.date,
+  });
 }
 
 // Round to 2 decimals without binary float drift (…329999), for clean money.
@@ -107,6 +123,8 @@ async function syncPurchaseOrderDeliveryStock(/* purchaseOrder, oldStatus, oldSt
 exports.createPurchaseOrder = async (req, res) => {
   try {
     const { vendorId, items, paymentTerms, notes } = req.body;
+    // Optional numbering overrides from the create form (see createPurchase).
+    const { poNumber: providedPONumber, prefix: numberPrefix, suffix: numberSuffix, orderDate } = req.body;
 
     // Validate vendor within organization
     const vendor = await Vendor.findOne({
@@ -125,12 +143,26 @@ exports.createPurchaseOrder = async (req, res) => {
     const { transactionType } = req.body;
     const { formattedItems, subtotal, totalTax, grandTotal, roundOff } = formatOrderItems(items);
 
-    // Generate PO Number for organization
-    const poNumber = await generatePONumber(req.user.organization);
+    // Generate PO Number for organization (settings-driven series). A manual
+    // number already used this financial year is rejected with 400.
+    let poNumber;
+    try {
+      poNumber = await generatePONumber(req.user.organization, {
+        providedNumber: typeof providedPONumber === "string" && providedPONumber.trim()
+          ? providedPONumber.trim()
+          : null,
+        prefix: numberPrefix,
+        suffix: numberSuffix,
+        date: orderDate,
+      });
+    } catch (numErr) {
+      return res.status(400).json({ message: numErr.message });
+    }
 
     const purchaseOrder = new PurchaseOrder({
       vendor: vendorId,
       poNumber,
+      ...(orderDate ? { orderDate } : {}),
       items: formattedItems,
       subtotal,
       totalTax,

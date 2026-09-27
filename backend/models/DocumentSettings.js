@@ -25,6 +25,24 @@ const defaultDocumentTypeSettings = {
     prefixes: ['DC'],
     suffixes: [],
   },
+  purchase: {
+    prefix: 'PUR-',
+    suffix: '',
+    prefixes: ['PUR-'],
+    suffixes: [],
+  },
+  purchaseOrder: {
+    prefix: 'PO-',
+    suffix: '',
+    prefixes: ['PO-'],
+    suffixes: [],
+  },
+  purchaseReturn: {
+    prefix: 'PR-',
+    suffix: '',
+    prefixes: ['PR-'],
+    suffixes: [],
+  },
 };
 
 const documentSettingsSchema = new mongoose.Schema(

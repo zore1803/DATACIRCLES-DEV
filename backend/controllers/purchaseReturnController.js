@@ -6,6 +6,7 @@ const Branding = require("../models/Branding");
 const purchaseDocumentPdf = require("../utils/purchaseDocumentPdf");
 const { syncDocumentStock } = require("../utils/inventorySync");
 const allocationService = require("../services/paymentAllocationService");
+const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
 
 // Tax helpers. Per-line math mirrors purchaseDocumentPdf.js exactly so saved
 // numbers always match the PDF: taxable = taxInclusive ? gross/(1+rate) : gross,
@@ -42,11 +43,26 @@ function calcTotalsFromItems(items, transactionType) {
 const calculateItemGross = (quantity, unitPrice) =>
   parseFloat((parseFloat(quantity) * parseFloat(unitPrice)).toFixed(2));
 
-// Count-based "PR-00001", mirroring generatePurchaseNumber (not the
-// Counter-based scheme the Invoice family uses).
-async function generateReturnNumber(organizationId) {
-  const count = await PurchaseReturn.countDocuments({ organization: organizationId });
-  return `PR-${(count + 1).toString().padStart(5, "0")}`;
+// Generates the Purchase Return number using the org's configured Return
+// prefix/suffix (Settings → Numbering, key "purchaseReturn") as a prefix +
+// suffix + financial-year series, mirroring the Invoice family. Falls back to
+// "PR-". Pass `providedNumber` for a manual number, and `prefix`/`suffix` to
+// override for this one document.
+async function generateReturnNumber(organizationId, opts = {}) {
+  const settings = await getDocumentSettingsForOrganization(organizationId);
+  const typeSettings = settings.documentTypeSettings?.purchaseReturn || {};
+  const prefix = (opts.prefix ?? typeSettings.prefix ?? "PR-").toString().trim() || "PR-";
+  const suffix = (opts.suffix ?? typeSettings.suffix ?? "").toString().trim();
+  return resolveDocumentNumber({
+    Model: PurchaseReturn,
+    numberField: "returnNumber",
+    organization: organizationId,
+    documentTypeKey: "purchaseReturn",
+    prefix,
+    suffix,
+    providedNumber: opts.providedNumber ?? null,
+    date: opts.date,
+  });
 }
 
 const POPULATE = [
@@ -286,6 +302,8 @@ async function assertQuantitiesWithinPurchase(purchase, items, organization, exc
 exports.createPurchaseReturn = async (req, res) => {
   try {
     const { purchase, items, notes, status, mode, returnDate } = req.body;
+    // Optional numbering overrides from the create form (see createPurchase).
+    const { returnNumber: providedReturnNumber, prefix: numberPrefix, suffix: numberSuffix } = req.body;
 
     if (!purchase) {
       return res.status(400).json({ message: "A Purchase Return must reference an existing Purchase" });
@@ -315,7 +333,21 @@ exports.createPurchaseReturn = async (req, res) => {
     // amounts (not gross), so grand total = subtotal + totalTax.
     const { subtotal, totalTax, grandTotal } = calcTotalsFromItems(items, transactionType);
 
-    const returnNumber = await generateReturnNumber(req.user.organization);
+    // Settings-driven series; a manual number already used this financial year
+    // is rejected with 400.
+    let returnNumber;
+    try {
+      returnNumber = await generateReturnNumber(req.user.organization, {
+        providedNumber: typeof providedReturnNumber === "string" && providedReturnNumber.trim()
+          ? providedReturnNumber.trim()
+          : null,
+        prefix: numberPrefix,
+        suffix: numberSuffix,
+        date: returnDate,
+      });
+    } catch (numErr) {
+      return res.status(400).json({ message: numErr.message });
+    }
 
     const purchaseReturn = new PurchaseReturn({
       vendor,

@@ -9,6 +9,12 @@ const DEFAULT_DOCUMENT_TYPES = {
   quote: { label: 'Quote', prefix: 'QT', suffix: '', prefixes: ['QT', 'QTN'], suffixes: [] },
   proformaInvoice: { label: 'Proforma Invoice', prefix: 'PI', suffix: '', prefixes: ['PI', 'PFI'], suffixes: [] },
   deliveryChallan: { label: 'Delivery Challan', prefix: 'DC', suffix: '', prefixes: ['DC'], suffixes: [] },
+  // Purchase-side documents. Numbered as the same prefix + suffix + financial-year
+  // series as the sales documents above (their DB date fields differ, so each
+  // series entry below carries its own dateField).
+  purchase: { label: 'Purchase', prefix: 'PUR-', suffix: '', prefixes: ['PUR-'], suffixes: [] },
+  purchaseOrder: { label: 'Purchase Order', prefix: 'PO-', suffix: '', prefixes: ['PO-'], suffixes: [] },
+  purchaseReturn: { label: 'Purchase Return', prefix: 'PR-', suffix: '', prefixes: ['PR-'], suffixes: [] },
 };
 
 function toList(values) {
@@ -366,12 +372,25 @@ function invoiceSeries({ organization, prefix, suffix, date, documentTypeKey = '
 // converterController historically passed 'quotation' where quotationController
 // passes 'quote', which pointed the same document type at two different
 // counters; both normalise to 'quote' here.
+// `dateField` is the model field the financial-year filter runs on. The sales
+// documents all store it as `date`; the purchase-side documents each use their
+// own name (purchaseDate / orderDate / returnDate), so it's declared per entry.
 const SERIES_DOC_TYPES = {
-  invoice:         { model: '../models/Invoice',         numberField: 'invoiceNumber' },
-  quote:           { model: '../models/quotation',       numberField: 'quotationNumber' },
-  proformaInvoice: { model: '../models/ProformaInvoice', numberField: 'performaInvoiceNumber' },
-  deliveryChallan: { model: '../models/deliveryChallan', numberField: 'deliveryChallanNumber' },
+  invoice:         { model: '../models/Invoice',         numberField: 'invoiceNumber',         dateField: 'date' },
+  quote:           { model: '../models/quotation',       numberField: 'quotationNumber',       dateField: 'date' },
+  proformaInvoice: { model: '../models/ProformaInvoice', numberField: 'performaInvoiceNumber', dateField: 'date' },
+  deliveryChallan: { model: '../models/deliveryChallan', numberField: 'deliveryChallanNumber', dateField: 'date' },
+  purchase:        { model: '../models/Purchase',        numberField: 'purchaseNumber',        dateField: 'purchaseDate' },
+  purchaseOrder:   { model: '../models/PurchaseOrder',   numberField: 'poNumber',              dateField: 'orderDate' },
+  purchaseReturn:  { model: '../models/PurchaseReturn',  numberField: 'returnNumber',          dateField: 'returnDate' },
 };
+
+// Date field a series document type filters its financial year on. Defaults to
+// `date` for anything not explicitly registered.
+function seriesDateField(key) {
+  const entry = SERIES_DOC_TYPES[normalizeDocTypeKey(key)];
+  return (entry && entry.dateField) || 'date';
+}
 
 function normalizeDocTypeKey(key) {
   const k = key || 'invoice';
@@ -387,7 +406,7 @@ function loadSeriesModel(key) {
   const entry = SERIES_DOC_TYPES[normalizeDocTypeKey(key)];
   if (!entry) return null;
   // eslint-disable-next-line global-require
-  return { Model: require(entry.model), numberField: entry.numberField };
+  return { Model: require(entry.model), numberField: entry.numberField, dateField: entry.dateField || 'date' };
 }
 
 function loadInvoiceModel() {
@@ -396,10 +415,10 @@ function loadInvoiceModel() {
   return require('../models/Invoice');
 }
 
-async function highestUsedInSeries(series, organization, Model = loadInvoiceModel(), numberField = 'invoiceNumber') {
+async function highestUsedInSeries(series, organization, Model = loadInvoiceModel(), numberField = 'invoiceNumber', dateField = 'date') {
   const docs = await Model.find({
     organization,
-    date: { $gte: series.dateRange.start, $lt: series.dateRange.end },
+    [dateField]: { $gte: series.dateRange.start, $lt: series.dateRange.end },
     [numberField]: { $regex: series.pattern },
   }).select(numberField).lean();
   let max = 0;
@@ -427,11 +446,11 @@ async function raiseInvoiceCounter(counterId, value, session) {
   }
 }
 
-function numberInUse(Model, numberField, organization, number, series, session) {
+function numberInUse(Model, numberField, organization, number, series, session, dateField = 'date') {
   const query = Model.findOne({
     organization,
     [numberField]: number,
-    date: { $gte: series.dateRange.start, $lt: series.dateRange.end },
+    [dateField]: { $gte: series.dateRange.start, $lt: series.dateRange.end },
   }).select('_id');
   if (session) query.session(session);
   return query.lean();
@@ -466,14 +485,14 @@ function releaseOnAbort(session, release) {
   session.__invoiceNumberReleases.push(release);
 }
 
-async function resolveInvoiceNumberInSeries({ Model, numberField, organization, prefix, suffix, date, providedNumber, session, documentTypeKey = 'invoice' }) {
+async function resolveInvoiceNumberInSeries({ Model, numberField, organization, prefix, suffix, date, providedNumber, session, documentTypeKey = 'invoice', dateField = 'date' }) {
   const series = invoiceSeries({ organization, prefix, suffix, date, documentTypeKey });
 
   // Manual number: must be unused within its financial year. Moves the counter past it (never
   // back), inside the caller's transaction so a failed create doesn't move it.
   if (providedNumber !== null && providedNumber !== undefined && providedNumber !== '') {
     const number = buildInvoiceNumber({ prefix: series.prefix, number: providedNumber, suffix: series.suffix });
-    if (await numberInUse(Model, numberField, organization, number, series, session)) {
+    if (await numberInUse(Model, numberField, organization, number, series, session, dateField)) {
       const err = new Error(`${number} is already in use.`);
       err.code = 'DUPLICATE_NUMBER';
       throw err;
@@ -488,7 +507,7 @@ async function resolveInvoiceNumberInSeries({ Model, numberField, organization, 
   // atomically. Deliberately outside the caller's transaction: a counter write inside a
   // transaction conflicts with any concurrent create, which would fail it instead of giving it
   // the next number. Failure is covered by releaseOnAbort.
-  await raiseInvoiceCounter(series.counterId, await highestUsedInSeries(series, organization, Model, numberField));
+  await raiseInvoiceCounter(series.counterId, await highestUsedInSeries(series, organization, Model, numberField, dateField));
   for (let attempt = 0; attempt < 1000; attempt += 1) {
     const { seq } = await Counter.findOneAndUpdate(
       { _id: series.counterId },
@@ -496,7 +515,7 @@ async function resolveInvoiceNumberInSeries({ Model, numberField, organization, 
       { new: true, upsert: true, setDefaultsOnInsert: true }
     );
     const number = buildInvoiceNumber({ prefix: series.prefix, number: seq, suffix: series.suffix });
-    if (!(await numberInUse(Model, numberField, organization, number, series))) {
+    if (!(await numberInUse(Model, numberField, organization, number, series, null, dateField))) {
       releaseOnAbort(session, () => releaseInvoiceNumber(series, seq));
       return number;
     }
@@ -518,15 +537,16 @@ async function peekNextInvoiceNumber({ organization, prefix, suffix, date, docum
   const loaded = loadSeriesModel(documentTypeKey);
   const Model = loaded ? loaded.Model : loadInvoiceModel();
   const numberField = loaded ? loaded.numberField : 'invoiceNumber';
+  const dateField = loaded ? loaded.dateField : 'date';
   const series = invoiceSeries({ organization, prefix, suffix, date, documentTypeKey });
   const [counter, highest] = await Promise.all([
     Counter.findById(series.counterId).lean(),
-    highestUsedInSeries(series, organization, Model, numberField),
+    highestUsedInSeries(series, organization, Model, numberField, dateField),
   ]);
   let next = Math.max(counter?.seq || 0, highest) + 1;
   for (let i = 0; i < 1000; i += 1) {
     const number = buildInvoiceNumber({ prefix: series.prefix, number: next, suffix: series.suffix });
-    if (!(await numberInUse(Model, numberField, organization, number, series))) break;
+    if (!(await numberInUse(Model, numberField, organization, number, series, null, dateField))) break;
     next += 1;
   }
   return next;
@@ -541,7 +561,7 @@ async function applyNextInvoiceNumberSetting({ organization, prefix, suffix, nex
   const series = invoiceSeries({ organization, prefix, suffix, documentTypeKey });
   const loaded = loadSeriesModel(documentTypeKey);
   const highest = loaded
-    ? await highestUsedInSeries(series, organization, loaded.Model, loaded.numberField)
+    ? await highestUsedInSeries(series, organization, loaded.Model, loaded.numberField, loaded.dateField)
     : await highestUsedInSeries(series, organization);
   await raiseInvoiceCounter(series.counterId, highest);
   await raiseInvoiceCounter(series.counterId, Math.floor(n) - 1);
@@ -584,12 +604,13 @@ async function getNextNumberPreviews(organizationId) {
 // identical separator handling. Pass the create call's transaction `session`
 // through so the uniqueness check and counter increment see a consistent
 // snapshot with the rest of that request.
-async function resolveDocumentNumber({ Model, numberField, organization, documentTypeKey, prefix, suffix = '', providedNumber, session, date }) {
-  // Every sales document runs as a prefix + financial-year series; anything else
-  // keeps the plain per-type counter below.
+async function resolveDocumentNumber({ Model, numberField, organization, documentTypeKey, prefix, suffix = '', providedNumber, session, date, dateField }) {
+  // Every sales and purchase document runs as a prefix + financial-year series;
+  // anything else keeps the plain per-type counter below.
   if (isSeriesDocType(documentTypeKey)) {
     return resolveInvoiceNumberInSeries({
       Model, numberField, organization, prefix, suffix, date, providedNumber, session, documentTypeKey,
+      dateField: dateField || seriesDateField(documentTypeKey),
     });
   }
   const normalizedPrefix = (prefix || '').toString().trim() || DEFAULT_PREFIX;

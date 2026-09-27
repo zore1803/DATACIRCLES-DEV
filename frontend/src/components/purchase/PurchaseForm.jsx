@@ -5,8 +5,11 @@ import React, { useEffect, useState, useRef } from "react";
 import {  X,
   ChevronDown,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import SearchableDropdown from "../contact/SearchableDropdown";
 import QuickVendorForm from "../vendor/QuickVendorForm";
+import PurchaseOrderForm from "../purchaseOrder/PurchaseOrderForm";
+import DocumentNumberHeader from "../common/DocumentNumberHeader";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import { formatNumberFixed } from "../../utils/numberFormatter";
@@ -218,10 +221,22 @@ const PurchaseForm = ({
   // "Link to Purchase Order" dropdown below.
   initialPurchaseOrderId = null,
 }) => {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   useBodyScrollLock(isOpen);
   const [loading, setLoading] = useState(false);
   const [showQuickVendorForm, setShowQuickVendorForm] = useState(false);
+  // Editable document numbering (prefix/suffix), mirroring the invoice screen.
+  // Loaded from the org's Purchase series config; the number itself is
+  // auto-allocated on save.
+  const [numberPrefix, setNumberPrefix] = useState("");
+  const [numberSuffix, setNumberSuffix] = useState("");
+  const [prefixOptions, setPrefixOptions] = useState([]);
+  const [suffixOptions, setSuffixOptions] = useState([]);
+  const [nextNumber, setNextNumber] = useState(null);
+  // Opens the Purchase Order quick drawer from the "no PO for this vendor"
+  // empty state, pre-filled with the currently selected vendor.
+  const [showQuickPOForm, setShowQuickPOForm] = useState(false);
   const [localVendors, setLocalVendors] = useState(vendors || []);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
 
@@ -302,27 +317,51 @@ const PurchaseForm = ({
   // InvoiceFormFull.jsx/PurchaseOrderForm.jsx use to resolve intra vs inter.
   const [sellerState, setSellerState] = useState("");
 
-  // Fetch POs
+  // Fetch POs. Kept as a component-level function (not buried in the effect)
+  // so it can be re-run after a new PO is created from the empty-state drawer.
+  const fetchPOs = async () => {
+    try {
+      const res = await API.get("/purchase-orders");
+      const all = res.data.purchaseOrders || res.data || [];
+      // An Approved or Delivered PO can be converted to a Purchase
+      // (enforced server-side too, in purchaseController.js) — a Pending/
+      // Rejected one shouldn't even be selectable here. Already-converted
+      // POs are excluded too — picking one would just 400 on save.
+      setPurchaseOrders(
+        all.filter(
+          (po) => (po.status === "Approved" || po.status === "Delivered") && !po.convertedPurchase
+        )
+      );
+    } catch (err) {
+      console.error("Failed to fetch POs", err);
+    }
+  };
   useEffect(() => {
-    const fetchPOs = async () => {
-      try {
-        const res = await API.get("/purchase-orders");
-        const all = res.data.purchaseOrders || res.data || [];
-        // An Approved or Delivered PO can be converted to a Purchase
-        // (enforced server-side too, in purchaseController.js) — a Pending/
-        // Rejected one shouldn't even be selectable here. Already-converted
-        // POs are excluded too — picking one would just 400 on save.
-        setPurchaseOrders(
-          all.filter(
-            (po) => (po.status === "Approved" || po.status === "Delivered") && !po.convertedPurchase
-          )
-        );
-      } catch (err) {
-        console.error("Failed to fetch POs", err);
-      }
-    };
     fetchPOs();
   }, []);
+
+  // Load the org's Purchase numbering config (prefix/suffix options + the next
+  // auto number) so the header can show and let the user pick them, exactly
+  // like the invoice create screen. Only needed while creating.
+  useEffect(() => {
+    if (editingPurchase) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await API.get("/document-settings");
+        if (cancelled) return;
+        const section = res.data?.documentTypeSettings?.purchase || {};
+        setPrefixOptions(section.prefixes?.length ? section.prefixes : (section.prefix ? [section.prefix] : ["PUR-"]));
+        setSuffixOptions(section.suffixes || []);
+        setNumberPrefix(section.prefix || "PUR-");
+        setNumberSuffix(section.suffix || "");
+        setNextNumber(res.data?.nextNumbers?.purchase ?? null);
+      } catch (err) {
+        console.error("Failed to load purchase numbering settings", err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [editingPurchase]);
 
   // Arrived via "Convert to Purchase" on a specific Delivered PO — pre-link
   // and pre-fill from it instead of leaving the form blank.
@@ -483,6 +522,9 @@ const PurchaseForm = ({
     const payload = {
       vendor: vendorId,
       purchaseOrder: selectedPO || null,
+      // Chosen numbering — the server allocates the actual number in this
+      // prefix/suffix series (ignored on edit).
+      ...(editingPurchase ? {} : { prefix: numberPrefix, suffix: numberSuffix }),
       items: items.map((item) => ({
         itemId: item._id,
         variantId: item.variantId,
@@ -537,6 +579,12 @@ const PurchaseForm = ({
     }
   };
 
+  // POs linkable for the currently selected vendor. Drives both the dropdown
+  // options and the "no PO for this vendor" empty state below.
+  const vendorPOs = purchaseOrders.filter(
+    (po) => !vendorId || (po.vendor?._id || po.vendor) === vendorId
+  );
+
   const today = new Date();
   const dateStr = today.toLocaleDateString("en-GB", {
     day: "numeric",
@@ -569,10 +617,26 @@ const PurchaseForm = ({
         `}
       >
         {/* Header */}
-        <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center flex-shrink-0">
-          <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
-            {editingPurchase ? "EDIT PURCHASE" : "CREATE NEW PURCHASE"}
-          </h2>
+        <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center flex-shrink-0 gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide truncate">
+              {editingPurchase ? "EDIT PURCHASE" : "CREATE NEW PURCHASE"}
+            </h2>
+            {!editingPurchase && (
+              <DocumentNumberHeader
+                compact
+                docLabel="Purchase"
+                prefix={numberPrefix}
+                suffix={numberSuffix}
+                onPrefixChange={setNumberPrefix}
+                onSuffixChange={setNumberSuffix}
+                prefixOptions={prefixOptions}
+                suffixOptions={suffixOptions}
+                nextNumber={nextNumber}
+                onManageNumbering={() => navigate("/settings/document-settings")}
+              />
+            )}
+          </div>
           <div className="flex items-center gap-4">
             {editingPurchase && (
               <>
@@ -620,7 +684,7 @@ const PurchaseForm = ({
                 <button
                   type="button"
                   onClick={() => setShowQuickVendorForm(true)}
-                  className="w-12 h-12 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors flex-shrink-0"
+                  className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] border border-[#1F2937]/10 flex items-center justify-center hover:opacity-90 transition-opacity cursor-pointer text-white"
                   aria-label="Add new vendor"
                 >
                   <PlusIcon className="w-4 h-4" />
@@ -632,23 +696,47 @@ const PurchaseForm = ({
               <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                 Link to Purchase Order (Optional)
               </label>
-              <div className="relative">
-                <select
-                  value={selectedPO}
-                  onChange={handlePOChange}
-                  className="w-full appearance-none px-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all cursor-pointer"
-                >
-                  <option value="">Select Purchase Order</option>
-                  {purchaseOrders.map((po) => (
-                    <option key={po._id} value={po._id}>
-                      {po.poNumber} - {po.vendor?.name}
-                    </option>
-                  ))}
-                </select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
-                  <ChevronDown className="w-4 h-4" />
+              {vendorId && vendorPOs.length === 0 ? (
+                // Vendor picked but it has no linkable PO — say so, and offer a
+                // "+" that opens the Purchase Order quick drawer pre-filled with
+                // this vendor. Once created, fetchPOs (in onSuccess) refreshes
+                // the list and the dropdown reappears.
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 px-3 h-8 flex items-center bg-gray-50 border border-[#1F2937]/10 rounded-full text-[12px] text-gray-400">
+                    No purchase order created
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickPOForm(true)}
+                    className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] border border-[#1F2937]/10 flex items-center justify-center hover:opacity-90 transition-opacity cursor-pointer text-white"
+                    aria-label="Create purchase order for this vendor"
+                  >
+                    <PlusIcon className="w-4 h-4" />
+                  </button>
                 </div>
-              </div>
+              ) : (
+                <div className="relative">
+                  <select
+                    value={selectedPO}
+                    onChange={handlePOChange}
+                    className="w-full appearance-none px-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all cursor-pointer"
+                  >
+                    <option value="">Select Purchase Order</option>
+                    {/* Only the selected vendor's POs are linkable — showing
+                        every vendor's POs here let the user link a PO that
+                        belongs to a different vendor. With no vendor picked yet,
+                        fall back to showing all. */}
+                    {vendorPOs.map((po) => (
+                      <option key={po._id} value={po._id}>
+                        {po.poNumber} - {po.vendor?.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
+                    <ChevronDown className="w-4 h-4" />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -984,6 +1072,21 @@ const PurchaseForm = ({
             setShowQuickVendorForm(false);
           }}
           onRequestClose={() => setShowQuickVendorForm(false)}
+        />
+      )}
+
+      {showQuickPOForm && (
+        <PurchaseOrderForm
+          vendors={localVendors}
+          initialVendorId={vendorId}
+          onRequestClose={() => setShowQuickPOForm(false)}
+          onSuccess={() => {
+            // Refresh so the new PO shows up in the dropdown for this vendor.
+            fetchPOs();
+            setShowQuickPOForm(false);
+            toast.success("Purchase Order created");
+          }}
+          onError={(msg) => toast.error(msg || "Failed to create Purchase Order")}
         />
       )}
     </>

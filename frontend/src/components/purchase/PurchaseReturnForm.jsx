@@ -4,6 +4,8 @@ import API from "../../services/api";
 import toast from "react-hot-toast";
 import SearchableDropdown from "../contact/SearchableDropdown";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { useNavigate } from "react-router-dom";
+import DocumentNumberHeader from "../common/DocumentNumberHeader";
 
 const MODES = ["Cash", "UPI", "Bank Transfer", "Cheque", "Card", "Other"];
 // Partial/Paid are deliberately absent: they're refund-driven (§11), set only
@@ -51,8 +53,37 @@ function calcLineTax(qty, unitPrice, gstRate, taxInclusive) {
  */
 const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) => {
   const isEditing = !!editingReturn;
+  const navigate = useNavigate();
   const [isSliding, setIsSliding] = useState(false);
   useBodyScrollLock(isSliding);
+
+  // Editable document numbering (prefix/suffix), mirroring the invoice screen.
+  const [numberPrefix, setNumberPrefix] = useState("");
+  const [numberSuffix, setNumberSuffix] = useState("");
+  const [prefixOptions, setPrefixOptions] = useState([]);
+  const [suffixOptions, setSuffixOptions] = useState([]);
+  const [nextNumber, setNextNumber] = useState(null);
+
+  // Load the org's Purchase Return numbering config (only while creating).
+  useEffect(() => {
+    if (isEditing) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await API.get("/document-settings");
+        if (cancelled) return;
+        const section = res.data?.documentTypeSettings?.purchaseReturn || {};
+        setPrefixOptions(section.prefixes?.length ? section.prefixes : (section.prefix ? [section.prefix] : ["PR-"]));
+        setSuffixOptions(section.suffixes || []);
+        setNumberPrefix(section.prefix || "PR-");
+        setNumberSuffix(section.suffix || "");
+        setNextNumber(res.data?.nextNumbers?.purchaseReturn ?? null);
+      } catch (err) {
+        console.error("Failed to load purchase return numbering settings", err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isEditing]);
 
   const [purchases, setPurchases] = useState([]);
   const [purchaseId, setPurchaseId] = useState("");
@@ -228,6 +259,8 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
       const payload = {
         purchase: purchaseId,
         returnDate,
+        // Chosen numbering — server allocates the number in this series (ignored on edit).
+        ...(isEditing ? {} : { prefix: numberPrefix, suffix: numberSuffix }),
         items: selectedLines.map((l) => ({
           itemId:       l.item.itemId    || undefined,
           variantId:    l.item.variantId || undefined,
@@ -274,15 +307,31 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
         className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0 bg-white gap-1">
-          <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
-            {isEditing ? `Edit Return ${editingReturn.returnNumber}` : "New Purchase Return"}
-          </h2>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0 bg-white gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide truncate">
+              {isEditing ? `Edit Return ${editingReturn.returnNumber}` : "New Purchase Return"}
+            </h2>
+            {!isEditing && (
+              <DocumentNumberHeader
+                compact
+                docLabel="Purchase Return"
+                prefix={numberPrefix}
+                suffix={numberSuffix}
+                onPrefixChange={setNumberPrefix}
+                onSuffixChange={setNumberSuffix}
+                prefixOptions={prefixOptions}
+                suffixOptions={suffixOptions}
+                nextNumber={nextNumber}
+                onManageNumbering={() => navigate("/settings/document-settings")}
+              />
+            )}
+          </div>
           <button
             type="button"
             onClick={handleClose}
             title="Close"
-            className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity"
+            className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity flex-shrink-0"
             aria-label="Close"
           >
             <X className="w-[18px] h-[18px]" strokeWidth={2} />
@@ -290,6 +339,7 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
         </div>
 
         <form id="pr-form" onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto px-5 py-5 space-y-6">
+
           <div>
             <label className={labelClass}>Against Purchase *</label>
             <SearchableDropdown

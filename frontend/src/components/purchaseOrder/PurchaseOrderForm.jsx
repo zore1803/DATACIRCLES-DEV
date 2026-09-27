@@ -20,6 +20,8 @@ import ReactQuill from "react-quill-new";
 import SearchIcon from "../common/SearchIcon";
 import FilterIcon from "../common/FilterIcon";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { useNavigate } from "react-router-dom";
+import DocumentNumberHeader from "../common/DocumentNumberHeader";
 const API_BASE = `${import.meta.env.VITE_APP_API_URL}/api`;
 // The product's description is rich text ("<p>...</p>" etc, same as
 // PurchaseForm.jsx/InvoiceForm.jsx's own stripHtml) — strip the markup
@@ -200,11 +202,42 @@ const PurchaseOrderForm = ({
   onRequestClose,
   onSuccess,
   onError,
+  // Vendor to pre-select on a brand-new PO, e.g. when opened from the
+  // Purchase form's "no PO for this vendor" empty state.
+  initialVendorId = null,
 }) => {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Editable document numbering (prefix/suffix), mirroring the invoice screen.
+  const [numberPrefix, setNumberPrefix] = useState("");
+  const [numberSuffix, setNumberSuffix] = useState("");
+  const [prefixOptions, setPrefixOptions] = useState([]);
+  const [suffixOptions, setSuffixOptions] = useState([]);
+  const [nextNumber, setNextNumber] = useState(null);
 
   useBodyScrollLock(isOpen);
+
+  // Load the org's Purchase Order numbering config (only while creating).
+  useEffect(() => {
+    if (editingPO) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await API.get("/document-settings");
+        if (cancelled) return;
+        const section = res.data?.documentTypeSettings?.purchaseOrder || {};
+        setPrefixOptions(section.prefixes?.length ? section.prefixes : (section.prefix ? [section.prefix] : ["PO-"]));
+        setSuffixOptions(section.suffixes || []);
+        setNumberPrefix(section.prefix || "PO-");
+        setNumberSuffix(section.suffix || "");
+        setNextNumber(res.data?.nextNumbers?.purchaseOrder ?? null);
+      } catch (err) {
+        console.error("Failed to load purchase order numbering settings", err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [editingPO]);
 
   const statusOptions = [
     { value: "Pending", label: "Pending", icon: Clock, className: "bg-yellow-50 text-yellow-700" },
@@ -263,10 +296,12 @@ const PurchaseOrderForm = ({
       // silently reset back to "intra" regardless of what it was actually
       // saved with, until the vendor-derived effect below overwrote it again.
       if (editingPO.transactionType) setTransactionType(editingPO.transactionType);
+    } else if (initialVendorId) {
+      setVendorId(initialVendorId);
     }
     setLocalVendors(vendors);
     API.get("/branding").then((r) => setSellerState((r.data?.state || "").trim())).catch(() => {});
-  }, [editingPO, vendors]);
+  }, [editingPO, vendors, initialVendorId]);
 
   // Vendor state vs. the org's own state decides CGST+SGST (same state) or
   // IGST (different state) — the user never picks this manually. Re-runs
@@ -362,6 +397,8 @@ const PurchaseOrderForm = ({
     setLoading(true);
     const payload = {
       vendorId,
+      // Chosen numbering — server allocates the number in this series (ignored on edit).
+      ...(editingPO ? {} : { prefix: numberPrefix, suffix: numberSuffix }),
       items: items.map((item) => ({
         itemId: item._id,
         variantId: item.variantId,
@@ -451,10 +488,26 @@ const PurchaseOrderForm = ({
         `}
       >
         {/* Header */}
-        <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center flex-shrink-0">
-          <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
-            {editingPO ? "EDIT PURCHASE ORDER" : "CREATE NEW PURCHASE ORDER"}
-          </h2>
+        <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center flex-shrink-0 gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide truncate">
+              {editingPO ? "EDIT PURCHASE ORDER" : "CREATE NEW PURCHASE ORDER"}
+            </h2>
+            {!editingPO && (
+              <DocumentNumberHeader
+                compact
+                docLabel="Purchase Order"
+                prefix={numberPrefix}
+                suffix={numberSuffix}
+                onPrefixChange={setNumberPrefix}
+                onSuffixChange={setNumberSuffix}
+                prefixOptions={prefixOptions}
+                suffixOptions={suffixOptions}
+                nextNumber={nextNumber}
+                onManageNumbering={() => navigate("/settings/document-settings")}
+              />
+            )}
+          </div>
           <div className="flex items-center gap-4">
             {editingPO && (
               <>
@@ -501,7 +554,7 @@ const PurchaseOrderForm = ({
               <button
                 type="button"
                 onClick={() => setShowQuickVendorForm(true)}
-                className="w-12 h-12 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors flex-shrink-0"
+                className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] border border-[#1F2937]/10 flex items-center justify-center hover:opacity-90 transition-opacity cursor-pointer text-white"
                 aria-label="Add new vendor"
               >
                 <PlusIcon className="w-4 h-4" />

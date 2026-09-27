@@ -93,6 +93,9 @@ const documentTypeMeta = [
   { key: "quote", label: "Quote" },
   { key: "proformaInvoice", label: "Proforma Invoice" },
   { key: "deliveryChallan", label: "Delivery Challan" },
+  { key: "purchase", label: "Purchase" },
+  { key: "purchaseOrder", label: "Purchase Order" },
+  { key: "purchaseReturn", label: "Purchase Return" },
 ];
 
 // Notes/Terms are stored server-side keyed by the document's own type string
@@ -111,6 +114,9 @@ const createDefaultDocumentTypeSettings = () => ({
   quote: { prefix: "QT", suffix: "", prefixes: ["QT", "QTN"], suffixes: [] },
   proformaInvoice: { prefix: "PI", suffix: "", prefixes: ["PI", "PFI"], suffixes: [] },
   deliveryChallan: { prefix: "DC", suffix: "", prefixes: ["DC"], suffixes: [] },
+  purchase: { prefix: "PUR-", suffix: "", prefixes: ["PUR-"], suffixes: [] },
+  purchaseOrder: { prefix: "PO-", suffix: "", prefixes: ["PO-"], suffixes: [] },
+  purchaseReturn: { prefix: "PR-", suffix: "", prefixes: ["PR-"], suffixes: [] },
 });
 
 function DocumentSettings() {
@@ -136,6 +142,9 @@ function DocumentSettings() {
     quote: { prefix: "", suffix: "" },
     proformaInvoice: { prefix: "", suffix: "" },
     deliveryChallan: { prefix: "", suffix: "" },
+    purchase: { prefix: "", suffix: "" },
+    purchaseOrder: { prefix: "", suffix: "" },
+    purchaseReturn: { prefix: "", suffix: "" },
   });
   const [activeTab, setActiveTab] = useState("prefix");
   const [activeDocumentType, setActiveDocumentType] = useState("invoice");
@@ -246,6 +255,9 @@ function DocumentSettings() {
             quote: normalizeSection("quote", { prefix: "QT", suffix: "", prefixes: ["QT", "QTN"], suffixes: [] }),
             proformaInvoice: normalizeSection("proformaInvoice", { prefix: "PI", suffix: "", prefixes: ["PI", "PFI"], suffixes: [] }),
             deliveryChallan: normalizeSection("deliveryChallan", { prefix: "DC", suffix: "", prefixes: ["DC"], suffixes: [] }),
+            purchase: normalizeSection("purchase", { prefix: "PUR-", suffix: "", prefixes: ["PUR-"], suffixes: [] }),
+            purchaseOrder: normalizeSection("purchaseOrder", { prefix: "PO-", suffix: "", prefixes: ["PO-"], suffixes: [] }),
+            purchaseReturn: normalizeSection("purchaseReturn", { prefix: "PR-", suffix: "", prefixes: ["PR-"], suffixes: [] }),
           },
           pdfFilenameFormats: res.data?.pdfFilenameFormats || DEFAULT_FORMATS,
           eInvoiceDefaults: {
@@ -488,7 +500,7 @@ function DocumentSettings() {
           </div>
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Document Settings</h3>
-            <p className="text-sm text-gray-500">Manage saved prefixes and suffixes for invoices, quotes, proforma invoices, and delivery challans.</p>
+            <p className="text-sm text-gray-500">Manage saved prefixes and suffixes for invoices, quotes, proforma invoices, delivery challans, purchases, purchase orders, and purchase returns.</p>
           </div>
         </div>
 
@@ -602,6 +614,11 @@ function DocumentSettings() {
 
             {(() => {
               const footerKey = FOOTER_TYPE_KEY[activeDocumentType];
+              // The per-type default Notes & Terms library is a sales-document
+              // feature. Purchase-side types (no FOOTER_TYPE_KEY) only expose
+              // prefix/suffix numbering, so skip the footer editor for them —
+              // otherwise it would look editable but silently not persist.
+              if (!footerKey) return null;
               const activeLabel = documentTypeMeta.find((item) => item.key === activeDocumentType)?.label || "";
               const notesOverride = form.defaultNotesByType[footerKey];
               const termsOverride = form.defaultTermsByType[footerKey];
