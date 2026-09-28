@@ -30,6 +30,9 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
+          # The default 30s SSH handshake timeout is too tight when the VPS
+          # network path is temporarily slow, causing intermittent dial timeouts.
+          timeout: 2m
           # An uncontended build+up takes ~4m; the previous 10m default left
           # no margin once a build ran under any real load (a full rebuild
           # hit ~6m on the frontend step alone during the contention above).
