@@ -168,42 +168,15 @@ export default function PaymentsTimeline() {
   const cashSummary   = useMemo(() => accountsSummary.find(a => a.type === "cash"),   [accountsSummary]);
   const bankSummaries = useMemo(() => accountsSummary.filter(a => a.type === "bank"), [accountsSummary]);
 
-  // Ported from the signatures branch: the account-cards row (Wallet/Cash/Bank), its
-  // "include in total" filter, and the Self Transfer picker all key off this flat list.
-  const transferAccounts = useMemo(() => {
-    const list = [];
-    if (walletSummary) {
-      list.push({
-        id: "wallet-card",
-        type: "wallet",
-        title: "Wallet",
-        accountNumber: "Prepaid Credits",
-        currentBalance: walletSummary.currentBalance
-      });
-    }
-    if (cashSummary) {
-      list.push({
-        id: "cash-card",
-        type: "cash",
-        title: "Cash",
-        accountNumber: "Physical Cash",
-        currentBalance: cashSummary.currentBalance
-      });
-    }
-    list.push(...bankSummaries);
-    return list;
-  }, [walletSummary, cashSummary, bankSummaries]);
-
   // ----- Funds filter state (which accounts to include in the Total Funds card) -----
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterDropdownPos, setFilterDropdownPos] = useState(null);
   const filterBtnRef = useRef(null);
   const cardsScrollRef = useRef(null);
 
-  // Default select all accounts (wallet + cash + all banks)
+  // Total Funds is denominated in rupees; Wallet.balance is prepaid credits.
   const defaultSelected = useMemo(() => {
     const ids = [];
-    if (walletSummary?.id) ids.push(walletSummary.id);
     if (cashSummary?.id)   ids.push(cashSummary.id);
     ids.push(...bankSummaries.map(b => b.id));
     return ids;
@@ -220,9 +193,6 @@ export default function PaymentsTimeline() {
   // Total for selected accounts only — what the Total Funds card shows
   const filteredTotal = useMemo(() => {
     let total = 0;
-    if (selectedAccountIds.includes(walletSummary?.id)) {
-      total += Number(walletSummary?.currentBalance ?? 0);
-    }
     if (cashSummary && selectedAccountIds.includes(cashSummary.id)) {
       total += Number(cashSummary.currentBalance ?? 0);
     }
@@ -230,7 +200,7 @@ export default function PaymentsTimeline() {
       if (selectedAccountIds.includes(b.id)) total += Number(b.currentBalance ?? 0);
     });
     return total;
-  }, [selectedAccountIds, walletSummary, cashSummary, bankSummaries]);
+  }, [selectedAccountIds, cashSummary, bankSummaries]);
 
 
   const [pagination, setPagination] = useState({
@@ -311,18 +281,6 @@ export default function PaymentsTimeline() {
   const [modalStartDate, setModalStartDate] = useState("");
   const [modalEndDate, setModalEndDate] = useState("");
   const [showModalOptions, setShowModalOptions] = useState(false);
-
-  /* Self Transfer modal — ported from the signatures branch */
-  const [showSelfTransferModal, setShowSelfTransferModal] = useState(false);
-  const [selfTransferFromBankId, setSelfTransferFromBankId] = useState("");
-  const [selfTransferToBankId, setSelfTransferToBankId] = useState("");
-  const [selfTransferAmount, setSelfTransferAmount] = useState("");
-  const [selfTransferDate, setSelfTransferDate] = useState(new Date().toISOString().slice(0, 10));
-  const [selfTransferNotes, setSelfTransferNotes] = useState("");
-  const [loadingSelfTransfer, setLoadingSelfTransfer] = useState(false);
-  const [fromDropdownOpen, setFromDropdownOpen] = useState(false);
-  const [toDropdownOpen, setToDropdownOpen] = useState(false);
-  const [selfTransferSliding, setSelfTransferSliding] = useState(false);
 
   const [openActionMenuId,  setOpenActionMenuId]  = useState(null);
   const [actionMenuPos,     setActionMenuPos]     = useState(null);
@@ -841,117 +799,6 @@ export default function PaymentsTimeline() {
     setIsPaymentModalOpen(true);
   };
 
-  /* ── Self Transfer — ported from the signatures branch. Reuses the same
-     create-payment endpoint PaymentFormModal already posts to (two calls: a
-     debit on the source account, a credit on the destination) rather than a
-     new dedicated transfer endpoint. ───────────────────────────────────── */
-  const handleOpenSelfTransfer = (acc) => {
-    setSelfTransferFromBankId(acc.id);
-    setSelfTransferToBankId("");
-    setSelfTransferAmount("");
-    setSelfTransferDate(new Date().toISOString().slice(0, 10));
-    setSelfTransferNotes("");
-    setFromDropdownOpen(false);
-    setToDropdownOpen(false);
-    setShowSelfTransferModal(true);
-  };
-
-  // Slide the drawer in on the next frame once it mounts.
-  useEffect(() => {
-    if (!showSelfTransferModal) return;
-    const t = requestAnimationFrame(() => setSelfTransferSliding(true));
-    return () => cancelAnimationFrame(t);
-  }, [showSelfTransferModal]);
-
-  // Slide out, then unmount after the transition.
-  const handleCloseSelfTransfer = () => {
-    setSelfTransferSliding(false);
-    setFromDropdownOpen(false);
-    setToDropdownOpen(false);
-    setTimeout(() => setShowSelfTransferModal(false), 300);
-  };
-
-  const handleSelfTransferSubmit = async (e) => {
-    e.preventDefault();
-    if (!selfTransferFromBankId || !selfTransferToBankId) {
-      toast.error("Please select both from and to accounts");
-      return;
-    }
-    if (selfTransferFromBankId === selfTransferToBankId) {
-      toast.error("Source and destination accounts cannot be the same");
-      return;
-    }
-    if (!selfTransferAmount || Number(selfTransferAmount) <= 0) {
-      toast.error("Please enter a valid amount");
-      return;
-    }
-
-    setLoadingSelfTransfer(true);
-    let debitPosted = false;
-    try {
-      const fromAcc = transferAccounts.find(a => a.id === selfTransferFromBankId);
-      const toAcc = transferAccounts.find(a => a.id === selfTransferToBankId);
-
-      const noteSuffix = selfTransferNotes ? `: ${selfTransferNotes}` : "";
-
-      const [year, month, day] = selfTransferDate.split("-").map(Number);
-      const now = new Date();
-      const localDateObj = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
-      const payloadDate = localDateObj.toISOString();
-
-      // Shared by both legs so they're identifiable as one movement (and a
-      // half-completed transfer can be spotted — the two POSTs below are not
-      // atomic).
-      const transferGroup = `xfer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-      // 1. Post Debit (OUT) to source account
-      await API.post("/payments-timeline", {
-        vendorName: "Self Transfer",
-        // Both legs are flagged, so the timeline can keep them in the
-        // per-account balances (the point of a transfer) while leaving them
-        // out of Total Credit / Total Debit (no money entered or left).
-        isInternalTransfer: true,
-        transferGroup,
-        amount: Number(selfTransferAmount),
-        paymentDate: payloadDate,
-        direction: "OUT",
-        paymentType: fromAcc.type === "cash" ? "Cash" : fromAcc.type === "wallet" ? "Wallet" : "Net Banking",
-        bank: (fromAcc.type === "cash" || fromAcc.type === "wallet") ? "" : fromAcc.title,
-        notes: `Self Transfer to ${toAcc.title}${noteSuffix}`
-      });
-      debitPosted = true;
-
-      // 2. Post Credit (IN) to destination account
-      await API.post("/payments-timeline", {
-        vendorName: "Self Transfer",
-        isInternalTransfer: true,
-        transferGroup,
-        amount: Number(selfTransferAmount),
-        paymentDate: payloadDate,
-        direction: "IN",
-        paymentType: toAcc.type === "cash" ? "Cash" : toAcc.type === "wallet" ? "Wallet" : "Net Banking",
-        bank: (toAcc.type === "cash" || toAcc.type === "wallet") ? "" : toAcc.title,
-        notes: `Self Transfer from ${fromAcc.title}${noteSuffix}`
-      });
-
-      toast.success("Self transfer completed successfully!");
-      handleCloseSelfTransfer();
-      fetchData(); // Refresh timeline entries and balances
-    } catch (err) {
-      console.error("Self transfer failed:", err);
-      // The two POSTs aren't atomic — if the credit leg fails after the debit
-      // already landed, say so explicitly instead of leaving a silent
-      // orphaned debit with no matching credit.
-      toast.error(
-        debitPosted
-          ? "Debit recorded but the matching credit failed — check the timeline and add it manually if needed."
-          : (err.response?.data?.error || "Failed to complete self transfer")
-      );
-    } finally {
-      setLoadingSelfTransfer(false);
-    }
-  };
-
   /* ── pagination ─────────────────────────────────────────────────── */
   const handlePageChange  = newPage   => { if (newPage > 0 && newPage <= pagination.totalPages) setPagination(p => ({ ...p, currentPage: newPage })); };
   const handleLimitChange = newLimit  => setPagination(p => ({ ...p, limit: newLimit, currentPage: 1 }));
@@ -1188,7 +1035,23 @@ export default function PaymentsTimeline() {
     let content;
     switch (colId) {
       case "amount":
-        content = `₹${Number(doc.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        content = (
+          <div className="flex flex-col truncate">
+            <span className="font-medium text-gray-700 block truncate">
+              ₹{Number(doc.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            {doc.unallocatedAmount > 0 && (
+              <span className="text-[10px] text-amber-600 font-semibold mt-0.5 block truncate">
+                ₹{Number(doc.unallocatedAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} unapplied
+              </span>
+            )}
+            {doc.allocatedAmount > 0 && (
+              <span className="text-[10px] text-emerald-600 font-semibold mt-0.5 block truncate">
+                ₹{Number(doc.allocatedAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} applied
+              </span>
+            )}
+          </div>
+        );
         break;
       case "date":
         content = doc.date ? new Date(doc.date).toLocaleString() : "";
@@ -1470,16 +1333,8 @@ export default function PaymentsTimeline() {
                     </div>
                   </div>
                   <span className={`text-xl font-semibold tracking-tight leading-none ${isNegative ? "text-red-600" : "text-emerald-600"}`}>
-                    ₹{balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} credits
                   </span>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); handleOpenSelfTransfer(walletSummary); }}
-                    className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-gray-800 hover:bg-gray-900 border-none p-1.5 rounded-lg text-white hover:text-[#0085FF] shadow-md cursor-pointer flex items-center justify-center"
-                    title="Self Transfer"
-                  >
-                    <ArrowLeftRight size={14} />
-                  </button>
                 </div>
               );
             })()}
@@ -1506,14 +1361,6 @@ export default function PaymentsTimeline() {
                   <span className={`text-xl font-semibold tracking-tight leading-none ${isNegative ? "text-red-600" : "text-emerald-600"}`}>
                     ₹{balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); handleOpenSelfTransfer(cashSummary); }}
-                    className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-gray-800 hover:bg-gray-900 border-none p-1.5 rounded-lg text-white hover:text-[#0085FF] shadow-md cursor-pointer flex items-center justify-center"
-                    title="Self Transfer"
-                  >
-                    <ArrowLeftRight size={14} />
-                  </button>
                 </div>
               );
             })()}
@@ -1542,14 +1389,6 @@ export default function PaymentsTimeline() {
                     <span className={`text-xl font-semibold tracking-tight leading-none ${isNegative ? "text-red-600" : "text-emerald-600"}`}>
                       ₹{balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); handleOpenSelfTransfer(bank); }}
-                      className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-gray-800 hover:bg-gray-900 border-none p-1.5 rounded-lg text-white hover:text-[#0085FF] shadow-md cursor-pointer flex items-center justify-center"
-                      title="Self Transfer"
-                    >
-                      <ArrowLeftRight size={14} />
-                    </button>
                   </div>
                 );
               })
@@ -2195,12 +2034,13 @@ export default function PaymentsTimeline() {
                     className="mt-1 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline transition-colors"
                   >
                     {showBalance
-                      ? `Balance: ₹${selectedAccountDetail.currentBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      ? `${selectedAccountDetail.type === "wallet" ? "Balance: " : "Balance: ₹"}${selectedAccountDetail.currentBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${selectedAccountDetail.type === "wallet" ? " credits" : ""}`
                       : `See current ${selectedAccountDetail.type === "bank" ? "bank" : selectedAccountDetail.type === "cash" ? "cash" : "wallet"} balance`}
                   </button>
                 </div>
               </div>
 
+              {selectedAccountDetail.type !== "wallet" && (
               <div className="flex items-center gap-2.5 mr-10">
                 <button
                   type="button"
@@ -2257,6 +2097,7 @@ export default function PaymentsTimeline() {
                   )}
                 </div>
               </div>
+              )}
             </div>
 
             <div className="flex flex-col sm:flex-row items-center gap-3 mb-4 flex-shrink-0 bg-gray-50 p-3 py-2.5 rounded-xl border border-gray-100">
@@ -2370,292 +2211,6 @@ export default function PaymentsTimeline() {
           </div>
         </div>
       )}
-
-      {/* ── Self Transfer Modal — ported from the signatures branch ─────── */}
-      {showSelfTransferModal && (() => {
-        const selectedFromAcc = transferAccounts.find(a => a.id === selfTransferFromBankId);
-        const selectedToAcc = transferAccounts.find(a => a.id === selfTransferToBankId);
-        return (
-          <>
-            <div
-              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100000] transition-opacity duration-300"
-              style={{ opacity: selfTransferSliding ? 1 : 0 }}
-              onClick={handleCloseSelfTransfer}
-              aria-hidden="true"
-            />
-            <div
-              className={`fixed dc-panel-card dc-panel-w bg-white shadow-2xl flex flex-col z-[100001] overflow-hidden transform transition-transform duration-300 ease-out ${selfTransferSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
-                <h2 className="flex items-center gap-2 text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
-                  <ArrowLeftRight size={18} className="text-[#158FFF]" />
-                  Self Transfer Funds
-                </h2>
-                <button
-                  type="button"
-                  onClick={handleCloseSelfTransfer}
-                  title="Close"
-                  className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity"
-                  aria-label="Close"
-                >
-                  <X className="w-[18px] h-[18px]" strokeWidth={2} />
-                </button>
-              </div>
-
-              <div className="overflow-y-auto flex-1 px-8 py-6">
-                <div className="mb-5 flex items-start gap-2.5 bg-amber-50 border border-amber-200 text-amber-800 p-3.5 rounded-xl text-xs leading-relaxed">
-                  <svg className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                  <div>
-                    <span className="font-bold">Important Notice:</span> We aren't actually transferring money. This transfer only affects internal bank balances. It does not change actual bank balances.
-                  </div>
-                </div>
-
-                <form id="self-transfer-form" onSubmit={handleSelfTransferSubmit} className="space-y-5">
-
-                <div className="relative">
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
-                    Transfer From
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => { setFromDropdownOpen(!fromDropdownOpen); setToDropdownOpen(false); }}
-                    className="w-full h-[38px] px-3 border border-[#1F2937]/10 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[13px] font-medium text-[#1F2937] cursor-pointer flex items-center justify-between transition-all"
-                  >
-                    <div className="flex items-center gap-2">
-                      {selectedFromAcc ? (
-                        <>
-                          {selectedFromAcc.type === "bank" ? (
-                            <BankLogo bankName={selectedFromAcc.title} size={20} className="rounded overflow-hidden flex-shrink-0" />
-                          ) : selectedFromAcc.type === "cash" ? (
-                            <div className="w-5 h-5 rounded bg-green-100 flex items-center justify-center flex-shrink-0">
-                              <svg className="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                            </div>
-                          ) : (
-                            <div className="w-5 h-5 rounded bg-gray-100 flex items-center justify-center flex-shrink-0">
-                              <Wallet className="w-3 h-3 text-gray-500" />
-                            </div>
-                          )}
-                          <span>{selectedFromAcc.title} {selectedFromAcc.accountNumber ? `(${selectedFromAcc.accountNumber})` : ""}</span>
-                        </>
-                      ) : (
-                        <span className="text-gray-400">Select Account</span>
-                      )}
-                    </div>
-                    <ChevronDown size={16} className="text-gray-400" />
-                  </button>
-
-                  {fromDropdownOpen && (
-                    <>
-                      <div className="fixed inset-0 z-[10001]" onClick={() => setFromDropdownOpen(false)} />
-                      <div className="absolute left-0 right-0 mt-1.5 max-h-60 overflow-y-auto bg-white border border-gray-100 rounded-2xl shadow-xl py-1 z-[10002] animate-in fade-in slide-in-from-top-1 duration-100">
-                        {transferAccounts.map((acc) => (
-                          <button
-                            key={acc.id}
-                            type="button"
-                            onClick={() => {
-                              setSelfTransferFromBankId(acc.id);
-                              setFromDropdownOpen(false);
-                              if (acc.id === selfTransferToBankId) {
-                                setSelfTransferToBankId("");
-                              }
-                            }}
-                            className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-gray-50 text-left transition-colors cursor-pointer ${
-                              acc.id === selfTransferFromBankId ? "bg-blue-50/50 font-semibold text-[#0085FF]" : "text-gray-700"
-                            }`}
-                          >
-                            {acc.type === "bank" ? (
-                              <BankLogo bankName={acc.title} size={20} className="rounded overflow-hidden flex-shrink-0" />
-                            ) : acc.type === "cash" ? (
-                              <div className="w-5 h-5 rounded bg-green-100 flex items-center justify-center flex-shrink-0">
-                                <svg className="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                              </div>
-                            ) : (
-                              <div className="w-5 h-5 rounded bg-gray-100 flex items-center justify-center flex-shrink-0">
-                                <Wallet className="w-3 h-3 text-gray-500" />
-                              </div>
-                            )}
-                            <span className="truncate">{acc.title} {acc.accountNumber ? `(${acc.accountNumber})` : ""}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-
-                  {selectedFromAcc && (() => {
-                    const isNeg = Number(selectedFromAcc.currentBalance) < 0;
-                    return (
-                      <p className="text-xs font-semibold text-gray-500 mt-2 ml-1">
-                        Available Balance: <span className={`font-bold transition-colors ${isNeg ? "text-red-600" : "text-emerald-600"}`}>₹{Number(selectedFromAcc.currentBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </p>
-                    );
-                  })()}
-                </div>
-
-                <div className="relative">
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
-                    Transfer To
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => { setToDropdownOpen(!toDropdownOpen); setFromDropdownOpen(false); }}
-                    className="w-full h-[38px] px-3 border border-[#1F2937]/10 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-[13px] font-medium text-[#1F2937] cursor-pointer flex items-center justify-between transition-all"
-                  >
-                    <div className="flex items-center gap-2">
-                      {selectedToAcc ? (
-                        <>
-                          {selectedToAcc.type === "bank" ? (
-                            <BankLogo bankName={selectedToAcc.title} size={20} className="rounded overflow-hidden flex-shrink-0" />
-                          ) : selectedToAcc.type === "cash" ? (
-                            <div className="w-5 h-5 rounded bg-green-100 flex items-center justify-center flex-shrink-0">
-                              <svg className="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                            </div>
-                          ) : (
-                            <div className="w-5 h-5 rounded bg-gray-100 flex items-center justify-center flex-shrink-0">
-                              <Wallet className="w-3 h-3 text-gray-500" />
-                            </div>
-                          )}
-                          <span>{selectedToAcc.title} {selectedToAcc.accountNumber ? `(${selectedToAcc.accountNumber})` : ""}</span>
-                        </>
-                      ) : (
-                        <span className="text-gray-400">Select Account</span>
-                      )}
-                    </div>
-                    <ChevronDown size={16} className="text-gray-400" />
-                  </button>
-
-                  {toDropdownOpen && (
-                    <>
-                      <div className="fixed inset-0 z-[10001]" onClick={() => setToDropdownOpen(false)} />
-                      <div className="absolute left-0 right-0 mt-1.5 max-h-60 overflow-y-auto bg-white border border-gray-100 rounded-2xl shadow-xl py-1 z-[10002] animate-in fade-in slide-in-from-top-1 duration-100">
-                        {transferAccounts
-                          .filter(acc => acc.id !== selfTransferFromBankId)
-                          .map((acc) => (
-                            <button
-                              key={acc.id}
-                              type="button"
-                              onClick={() => {
-                                setSelfTransferToBankId(acc.id);
-                                setToDropdownOpen(false);
-                              }}
-                              className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-gray-50 text-left transition-colors cursor-pointer ${
-                                acc.id === selfTransferToBankId ? "bg-blue-50/50 font-semibold text-[#0085FF]" : "text-gray-700"
-                              }`}
-                            >
-                              {acc.type === "bank" ? (
-                                <BankLogo bankName={acc.title} size={20} className="rounded overflow-hidden flex-shrink-0" />
-                              ) : acc.type === "cash" ? (
-                                <div className="w-5 h-5 rounded bg-green-100 flex items-center justify-center flex-shrink-0">
-                                  <svg className="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                                </div>
-                              ) : (
-                                <div className="w-5 h-5 rounded bg-gray-100 flex items-center justify-center flex-shrink-0">
-                                  <Wallet className="w-3 h-3 text-gray-500" />
-                                </div>
-                              )}
-                              <span className="truncate">{acc.title} {acc.accountNumber ? `(${acc.accountNumber})` : ""}</span>
-                            </button>
-                          ))}
-                      </div>
-                    </>
-                  )}
-
-                  {selectedToAcc && (() => {
-                    const isNeg = Number(selectedToAcc.currentBalance) < 0;
-                    return (
-                      <p className="text-xs font-semibold text-gray-500 mt-2 ml-1">
-                        Available Balance: <span className={`font-bold transition-colors ${isNeg ? "text-red-600" : "text-emerald-600"}`}>₹{Number(selectedToAcc.currentBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </p>
-                    );
-                  })()}
-                </div>
-
-                <div>
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
-                    Amount (₹)
-                  </label>
-                  {(() => {
-                    const isOverdraft = selectedFromAcc && selfTransferAmount && Number(selfTransferAmount) > Number(selectedFromAcc.currentBalance);
-                    return (
-                      <input
-                        type="number"
-                        required
-                        min="0.01"
-                        step="0.01"
-                        placeholder="Enter transfer amount"
-                        value={selfTransferAmount}
-                        onChange={(e) => setSelfTransferAmount(e.target.value)}
-                        className={`w-full h-[38px] px-3 border rounded-full focus:outline-none focus:ring-1 text-[13px] font-bold transition-all ${
-                          isOverdraft
-                            ? "border-red-500 bg-red-50/10 focus:ring-red-500 text-red-600"
-                            : selfTransferAmount
-                              ? "border-emerald-300 bg-emerald-50/10 focus:border-emerald-500 focus:ring-emerald-500 text-emerald-600"
-                              : "border-[#1F2937]/10 focus:ring-blue-500 text-[#1F2937]"
-                        }`}
-                      />
-                    );
-                  })()}
-                </div>
-
-                <div>
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
-                    Transfer Date
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={selfTransferDate}
-                    onChange={(e) => setSelfTransferDate(e.target.value)}
-                    className="w-full h-[38px] px-3 border border-[#1F2937]/10 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500 text-[13px] text-[#1F2937] cursor-pointer transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
-                    Notes
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Optional internal notes..."
-                    value={selfTransferNotes}
-                    onChange={(e) => setSelfTransferNotes(e.target.value)}
-                    className="w-full h-[38px] px-3 border border-[#1F2937]/10 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500 text-[13px] text-[#1F2937] transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
-                  />
-                </div>
-
-                </form>
-              </div>
-
-              {/* Footer */}
-              <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={handleCloseSelfTransfer}
-                  className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  form="self-transfer-form"
-                  disabled={loadingSelfTransfer}
-                  className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                >
-                  {loadingSelfTransfer ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Transferring...
-                    </>
-                  ) : (
-                    "Transfer Funds"
-                  )}
-                </button>
-              </div>
-            </div>
-          </>
-        );
-      })()}
 
       {/* ── Custom Delete Warning Modal ───────────────────────────── */}
       {deleteConfirmState.isOpen && (

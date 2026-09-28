@@ -1,67 +1,158 @@
-import React from "react";
-import { PackageX, X } from "lucide-react";
+import React, { useEffect } from "react";
+import { PackageX } from "lucide-react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "motion/react";
 
-// Parses backend inventorySync.js's thrown message — either
-// "Insufficient stock for product: <name>" or
-// "Insufficient stock for variant of: <name>" — into just the product name,
-// so the dialog can bold it instead of repeating the raw sentence.
 const parseItemName = (message) => {
   const match = /Insufficient stock for (?:variant of: )?(.+)$/i.exec(message || "");
   return match ? match[1].trim() : null;
 };
 
-// Centered confirmation-style dialog shown instead of a toast when a
-// document save fails specifically because an item's quantity exceeds
-// available stock.
 const InsufficientStockDialog = ({ isOpen, message, onClose }) => {
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add("error-modal-open");
+    } else {
+      document.body.classList.remove("error-modal-open");
+    }
+    return () => document.body.classList.remove("error-modal-open");
+  }, [isOpen]);
+
+  const handleClose = () => {
+    document.body.classList.remove("error-modal-open");
+    if (onClose) onClose();
+  };
 
   const itemName = parseItemName(message);
 
+  let portal = document.getElementById("error-modal-portal");
+  if (!portal && typeof document !== "undefined") {
+    portal = document.createElement("div");
+    portal.id = "error-modal-portal";
+    portal.style.cssText = "position:fixed;inset:0;z-index:999999;pointer-events:none;";
+    document.body.appendChild(portal);
+  }
+
+  if (!portal) return null;
+
   return createPortal(
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100030] flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-start justify-between gap-3 mb-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-red-100 p-2 rounded-lg flex-shrink-0">
-              <PackageX className="w-5 h-5 text-red-600" />
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="dc-error-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          style={{ pointerEvents: "auto" }}
+          className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+        >
+          <motion.div
+            key="dc-error-card"
+            initial={{ scale: 0.84, y: 20, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            exit={{ scale: 0.9, y: 10, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 400, damping: 28, mass: 0.85 }}
+            className="relative bg-white rounded-2xl overflow-hidden w-full max-w-sm mx-4"
+            style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.18), 0 4px 16px rgba(239,68,68,0.12)" }}
+          >
+            {/* Brand red top accent bar */}
+            <div style={{ height: 4, background: "linear-gradient(90deg,#EF4444,#DC2626)" }} />
+
+            <div className="px-7 pt-7 pb-3">
+              {/* Animated red icon circle */}
+              <div className="flex justify-center mb-5">
+                <motion.div
+                  initial={{ scale: 0, rotate: -20 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: "spring", stiffness: 340, damping: 20, delay: 0.08 }}
+                  className="relative flex items-center justify-center"
+                  style={{
+                    width: 64, height: 64, borderRadius: "50%",
+                    background: "linear-gradient(135deg,#EF4444,#DC2626)",
+                    boxShadow: "0 6px 24px rgba(239,68,68,0.4)",
+                  }}
+                >
+                  <motion.div
+                    className="absolute inset-0 rounded-full"
+                    style={{ border: "2px solid #EF4444" }}
+                    initial={{ scale: 1, opacity: 0.7 }}
+                    animate={{ scale: 1.65, opacity: 0 }}
+                    transition={{ duration: 0.75, delay: 0.28, ease: "easeOut" }}
+                  />
+                  <PackageX color="white" size={32} />
+                </motion.div>
+              </div>
+
+              <motion.h2
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.32, duration: 0.28 }}
+                style={{ textAlign: "center", fontSize: 16, fontWeight: 700, color: "#1F2937", fontFamily: "Inter,sans-serif", lineHeight: 1.35 }}
+              >
+                Insufficient Stock
+              </motion.h2>
+
+              <motion.p
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.42, duration: 0.25 }}
+                style={{ textAlign: "center", fontSize: 13, color: "#525866", fontFamily: "Inter,sans-serif", marginTop: 6 }}
+              >
+                {itemName ? (
+                  <>
+                    <strong style={{ color: "#1F2937", fontWeight: 600 }}>{itemName}</strong> doesn't have
+                    enough stock to cover the quantity on this document.
+                  </>
+                ) : (
+                  message || "One or more items don't have enough stock to cover the quantity on this document."
+                )}
+                <br style={{ display: "block", content: '""', marginTop: 4 }} />
+                Reduce the quantity or restock the item, then try again.
+              </motion.p>
             </div>
-            <h2 className="text-lg font-semibold font-sf text-gray-900">
-              Insufficient Stock
-            </h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1 -m-1 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
-          >
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
 
-        <p className="text-sm text-gray-600 font-inter leading-relaxed mb-6">
-          {itemName ? (
-            <>
-              <span className="font-semibold text-gray-900">{itemName}</span> doesn't have
-              enough stock to cover the quantity on this document.
-            </>
-          ) : (
-            message || "One or more items don't have enough stock to cover the quantity on this document."
-          )}
-          <br className="hidden sm:block" /> Reduce the quantity or restock the item, then try again.
-        </p>
+            <div style={{ padding: "16px 28px 24px" }}>
+              <motion.button
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.48, duration: 0.22 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={handleClose}
+                style={{
+                  width: "100%", padding: "10px 0", borderRadius: 12, border: "none",
+                  background: "linear-gradient(135deg,#EF4444,#DC2626)",
+                  color: "#fff", fontSize: 14, fontWeight: 600,
+                  fontFamily: "Inter,sans-serif", cursor: "pointer",
+                  boxShadow: "0 3px 12px rgba(239,68,68,0.35)",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 5px 20px rgba(239,68,68,0.5)"; }}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 3px 12px rgba(239,68,68,0.35)"; }}
+              >
+                Got it
+              </motion.button>
+            </div>
 
-        <div className="flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
-          >
-            Got it
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
+            <button
+              onClick={handleClose}
+              style={{
+                position: "absolute", top: 14, right: 14,
+                background: "none", border: "none", cursor: "pointer",
+                color: "#99A0AE", padding: 6, borderRadius: 8,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "#FEF2F2"; e.currentTarget.style.color = "#EF4444"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = ""; e.currentTarget.style.color = "#99A0AE"; }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    portal
   );
 };
 

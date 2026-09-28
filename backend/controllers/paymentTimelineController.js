@@ -368,8 +368,7 @@ exports.getPaymentsTimeline = async (req, res) => {
       type: "wallet",
       title: "DataCircles Wallet",
       accountNumber: "Prepaid Credits",
-      currentBalance: walletBalance,
-      credits: wallet ? wallet.credits || 0 : 0
+      currentBalance: walletBalance
     };
 
     // 3. Cash balance: all transactions across every source where the bank
@@ -718,20 +717,11 @@ exports.createPayment = async (req, res) => {
     let resolvedPartyId = party;
     let vendorId = vendor;
 
-    const internalTransfer = Boolean(isInternalTransfer);
+    if (isInternalTransfer || transferGroup) {
+      return res.status(400).json({ error: "Internal transfers are no longer supported" });
+    }
 
-    if (internalTransfer) {
-      // A self-transfer has no counterparty but still needs a vendor pointer,
-      // so reuse ONE placeholder per org instead of creating one per leg.
-      const label = vendorName || "Self Transfer";
-      let placeholder = await Vendor.findOne({ name: label, organization: orgId });
-      if (!placeholder) {
-        placeholder = await Vendor.create({ name: label, organization: orgId, user: userId });
-      }
-      vendorId = placeholder._id;
-      resolvedPartyType = "Vendor";
-      resolvedPartyId = vendorId;
-    } else if (direction === "OUT" || resolvedPartyType === "Vendor") {
+    if (direction === "OUT" || resolvedPartyType === "Vendor") {
       if (!vendorId && resolvedPartyType === "Vendor") vendorId = resolvedPartyId;
       if (!vendorId && vendorName) {
         // Reuse an existing vendor with this name before creating one —
@@ -776,8 +766,6 @@ exports.createPayment = async (req, res) => {
       bank,
       notes,
       reference,
-      isInternalTransfer: internalTransfer,
-      transferGroup: internalTransfer ? transferGroup : undefined,
       organization: orgId,
       user: userId,
     });
