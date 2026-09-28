@@ -21,6 +21,7 @@ import {
   Pin,
   PinOff,
   CheckSquare,
+  Check,
   Repeat,
   Zap,
   ArrowUp, ArrowDown } from "lucide-react";
@@ -145,6 +146,7 @@ const SalesSubscription = () => {
 
   const [openRowActionsId, setOpenRowActionsId] = useState(null);
   const [rowActionsPos, setRowActionsPos] = useState(null);
+  const [statusMenuState, setStatusMenuState] = useState(null);
   const rowActionsRef = useRef(null);
   const [openColumnMenuKey, setOpenColumnMenuKey] = useState(null);
   const [columnMenuPos, setColumnMenuPos] = useState(null);
@@ -426,6 +428,17 @@ const SalesSubscription = () => {
     }
   };
 
+  const handleStatusChange = async (id, newStatus) => {
+    const loadingToast = toast.loading("Updating status…");
+    try {
+      await API.put(`/sales-subscriptions/${id}/status`, { status: newStatus });
+      toast.success("Status updated", { id: loadingToast });
+      fetchRows();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to update status", { id: loadingToast });
+    }
+  };
+
   const EXPORT_COLUMNS = [
     { label: "Subscription ID", value: (s) => s.subscriptionNumber },
     { label: "Customer", value: (s) => customerOf(s) },
@@ -598,19 +611,41 @@ const SalesSubscription = () => {
             <div className="fixed inset-0 z-[9998]" onClick={close} />
             <div
               style={{ position: "fixed", top: rowActionsPos.top, left: rowActionsPos.left }}
-              className="w-[160px] z-[9999] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right"
+              className="w-48 z-[9999] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right"
             >
               {canGenerate && (
                 <button
                   onClick={() => handleGenerateInvoice(row)}
                   disabled={generatingId === row._id}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap disabled:opacity-50"
                 >
-                  <Zap className="w-3.5 h-3.5" />
+                  <Zap className="w-3.5 h-3.5 text-blue-600" />
                   {generatingId === row._id ? "Generating…" : "Generate Invoice Now"}
                 </button>
               )}
               {canGenerate && <div className="w-full border-t border-[#F1F1F5] my-0.5" />}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const GAP = 4;
+                  const DROPDOWN_W = 192; // w-48
+                  const zMenu = getAncestorZoom(e.currentTarget);
+                  setStatusMenuState({
+                    doc: row,
+                    x: Math.max(4, rect.left / zMenu - DROPDOWN_W - GAP),
+                    y: rect.top / zMenu,
+                  });
+                }}
+                className="w-full flex items-center justify-between px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+              >
+                <span className="flex items-center gap-2">
+                  <Repeat className="w-3.5 h-3.5 text-orange-600" />
+                  Change Status
+                </span>
+                <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+              </button>
+              <div className="w-full border-t border-[#F1F1F5] my-0.5" />
               <button
                 onClick={() => { close(); openEdit(row); }}
                 className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
@@ -626,6 +661,38 @@ const SalesSubscription = () => {
                 <DeleteIcon className="w-4 h-4 text-[#CD3636]" />
                 Delete
               </button>
+            </div>
+          </>,
+          document.body
+        )}
+
+        {statusMenuState && createPortal(
+          <>
+            <div className="fixed inset-0 z-[9998]" onClick={() => setStatusMenuState(null)} />
+            <div
+              className="w-48 z-[9999] bg-white border border-gray-100 rounded-lg shadow-lg p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150"
+              style={{ position: "fixed", left: statusMenuState.x, top: statusMenuState.y }}
+            >
+              {STATUS_OPTIONS.map((status) => (
+                <button
+                  key={status}
+                  onClick={() => {
+                    handleStatusChange(statusMenuState.doc._id, status);
+                    setStatusMenuState(null);
+                    setOpenRowActionsId(null);
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium text-left ${
+                    statusMenuState.doc.status === status
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  {statusMenuState.doc.status === status && <Check className="w-4 h-4 shrink-0 text-blue-600" />}
+                  <span className={statusMenuState.doc.status === status ? "ml-0" : "ml-6"}>
+                    {status}
+                  </span>
+                </button>
+              ))}
             </div>
           </>,
           document.body

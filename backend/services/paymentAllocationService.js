@@ -588,7 +588,7 @@ async function getCreditBalances({ orgId, direction = null, partyType = null, pa
     if (!type || !rawId) continue;
 
     const id = String(rawId);
-    const key = `${type}:${id}`;
+    const key = `${type}:${id}:${p.direction}`;
 
     if (!buckets.has(key)) {
       buckets.set(key, {

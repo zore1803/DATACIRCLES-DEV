@@ -503,19 +503,19 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className={labelClass}>Repeat every</label>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 min-w-0">
                     <input
                       type="number"
                       min={1}
                       value={intervalValue}
                       onChange={(e) => setIntervalValue(e.target.value)}
-                      className={`${inputClass} w-20 flex-shrink-0`}
+                      className={`${inputClass} w-16 md:w-20 flex-shrink-0`}
                     />
-                    <SelectWrapper className="flex-1">
+                    <SelectWrapper className="flex-1 min-w-0">
                       <select
                         value={intervalUnit}
                         onChange={(e) => setIntervalUnit(e.target.value)}
-                        className={`${selectClass} w-full`}
+                        className={`${selectClass} w-full min-w-0`}
                       >
                         {UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
                       </select>

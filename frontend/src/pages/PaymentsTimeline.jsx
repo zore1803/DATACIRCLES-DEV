@@ -1295,7 +1295,7 @@ export default function PaymentsTimeline() {
                         <div className="min-w-0">
                           <p className="text-[12px] font-medium text-gray-900 truncate">{b.partyName}</p>
                           <p className="text-[10.5px] text-gray-400">
-                            {b.direction === "IN" ? "From customer" : "Advance to vendor"} ·{" "}
+                            {b.partyType === "Vendor" ? "Advance to vendor" : "From customer"} ·{" "}
                             {b.payments.length} {b.payments.length === 1 ? "payment" : "payments"}
                           </p>
                         </div>

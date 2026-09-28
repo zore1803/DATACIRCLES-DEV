@@ -32,6 +32,7 @@ import EditIcon from "../common/EditIcon";
 import TableSkeletonRows from "../common/TableSkeletonRows";
 import Skeleton from "../common/Skeleton";
 import { useTopLoadingSignal } from "../common/TopLoadingBar";
+import StatTile from "../common/StatTile";
 
 /*
  * Ledger page for Expenses and Indirect Income.
@@ -847,20 +848,12 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
             ))
           ) : (
             [
-              { label: `Total ${title}`, value: money(summary?.total), TileIcon: isIncome ? TrendingUp : TrendingDown, iconClass: isIncome ? "text-green-600" : "text-red-600" },
-              { label: "This Month", value: money(summary?.thisMonthTotal), TileIcon: CalendarDays, iconClass: "text-[#0085FF]" },
-              { label: "Avg / Entry", value: money(summary?.count ? summary.total / summary.count : 0), TileIcon: Calculator, iconClass: "text-[#78788D]" },
-              { label: "Entries", value: summary?.count ?? 0, TileIcon: ListChecks, iconClass: "text-[#0085FF]" },
-            ].map(({ label, value, TileIcon, iconClass }) => (
-              <div key={label} className="flex items-center gap-3 flex-1 rounded-xl border border-[#E1E4EA] bg-white px-4 py-3 min-w-0">
-                <div className="w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
-                  {React.createElement(TileIcon, { className: `w-4 h-4 ${iconClass}` })}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[11px] uppercase tracking-wide text-[#78788D] leading-tight truncate">{label}</p>
-                  <p className="text-[15px] font-semibold text-[#0E121B] leading-tight truncate">{value}</p>
-                </div>
-              </div>
+              { label: `Total ${title}`, value: money(summary?.total), icon: isIncome ? TrendingUp : TrendingDown, iconClass: isIncome ? "text-green-600" : "text-red-600" },
+              { label: "This Month", value: money(summary?.thisMonthTotal), icon: CalendarDays, iconClass: "text-[#0085FF]" },
+              { label: "Avg / Entry", value: money(summary?.count ? summary.total / summary.count : 0), icon: Calculator, iconClass: "text-[#78788D]" },
+              { label: "Entries", value: summary?.count ?? 0, icon: ListChecks, iconClass: "text-[#0085FF]" },
+            ].map((kpi) => (
+              <StatTile key={kpi.label} tile={kpi} />
             ))
           )}
         </div>

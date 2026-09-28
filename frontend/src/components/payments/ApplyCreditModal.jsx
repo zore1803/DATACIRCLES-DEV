@@ -30,8 +30,8 @@ export default function ApplyCreditModal({ party, onClose, onSuccess }) {
   // name rather than by choosing a party up front.
   const [docSearch, setDocSearch] = useState("");
 
-  const isCredit = party?.direction === "IN";
-  const documentType = isCredit ? "Invoice" : "Purchase";
+  const isCustomer = party?.partyType === "Company" || party?.partyType === "Contact";
+  const documentType = isCustomer ? "Invoice" : "Purchase";
   const creditBalance = Number(party?.creditBalance) || 0;
 
   useEffect(() => {
@@ -58,7 +58,7 @@ export default function ApplyCreditModal({ party, onClose, onSuccess }) {
       setDocsLoading(true);
       try {
         const res = await API.get("/payments-timeline/open-documents/all", {
-          params: { direction: party.direction },
+          params: { direction: isCustomer ? "IN" : "OUT" },
         });
         if (!cancelled) setOpenDocs(res.data.documents || []);
       } catch (err) {
@@ -177,7 +177,7 @@ export default function ApplyCreditModal({ party, onClose, onSuccess }) {
                 {formatMoney(creditBalance)}
               </p>
               <p className="text-[11px] text-amber-800 mt-0.5">
-                {isCredit ? "unapplied credit from this customer" : "advance held with this vendor"}
+                {isCustomer ? "unapplied credit from this customer" : "advance held with this vendor"}
                 {party.payments?.length > 1
                   ? ` · across ${party.payments.length} payments, applied oldest first`
                   : ""}
@@ -186,7 +186,7 @@ export default function ApplyCreditModal({ party, onClose, onSuccess }) {
 
             <div>
               <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Find {isCredit ? "invoices" : "bills"} to settle
+                Find {isCustomer ? "invoices" : "bills"} to settle
               </label>
               {/* Searching documents directly, rather than picking a party
                   first: an invoice is identified by its number or by the
@@ -197,13 +197,13 @@ export default function ApplyCreditModal({ party, onClose, onSuccess }) {
                 type="text"
                 value={docSearch}
                 onChange={(e) => setDocSearch(e.target.value)}
-                placeholder={isCredit ? "Invoice number or company name..." : "Bill number or vendor name..."}
+                placeholder={isCustomer ? "Invoice number or company name..." : "Bill number or vendor name..."}
                 className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
               />
               <p className="mt-1.5 text-[11px] text-[#1F2937] opacity-50">
                 {docsLoading
                   ? "Loading open documents..."
-                  : `${visibleDocs.length} of ${openDocs.length} open ${isCredit ? "invoices" : "bills"}${docSearch ? " match" : ""} — any party's can be settled from this credit.`}
+                  : `${visibleDocs.length} of ${openDocs.length} open ${isCustomer ? "invoices" : "bills"}${docSearch ? " match" : ""} — any party's can be settled from this credit.`}
               </p>
             </div>
 
