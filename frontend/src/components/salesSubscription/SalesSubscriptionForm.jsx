@@ -3,7 +3,7 @@ import SearchIcon from "../common/SearchIcon";
 import PlusIcon from "../common/PlusIcon";
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { X, ChevronDown } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import SearchableDropdown from "../contact/SearchableDropdown";
@@ -46,7 +46,17 @@ const labelClass = "block text-[13px] font-medium text-[#161618] tracking-[-0.05
 const inputClass =
   "w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50";
 const selectClass =
-  "w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all";
+  "w-full border border-[#1F2937]/10 rounded-full pl-3 pr-8 h-[38px] text-[13px] text-[#1F2937] bg-white appearance-none focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all";
+// Native <select> arrows render inconsistently inside a rounded-full pill
+// (the artifact you get is a clipped/misplaced browser arrow) — every other
+// custom select in the app (e.g. DeliveryChallanFormFull's suffix picker)
+// hides it with appearance-none and draws its own ChevronDown instead.
+const SelectWrapper = ({ className = "", children }) => (
+  <div className={`relative ${className}`}>
+    {children}
+    <ChevronDown className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+  </div>
+);
 const textareaClass =
   "w-full border border-[#1F2937]/10 rounded-2xl px-3 py-2 text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-none";
 
@@ -254,7 +264,8 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
     if (!dealId) return toast.error("Select a customer — only Won deals can be subscribed");
     if (lines.length === 0) return toast.error("Add at least one product or service");
     if (!startDate) return toast.error("Select a start date");
-    if (endDate && new Date(endDate) < new Date(startDate)) return toast.error("End date can't be before the start date");
+    if (!endDate) return toast.error("Select an end date");
+    if (new Date(endDate) <= new Date(startDate)) return toast.error("End date must be after the start date");
 
     setSaving(true);
     try {
@@ -425,13 +436,13 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
 
                 <div className="border border-[#1F2937]/10 rounded-2xl overflow-hidden">
                   <table className="w-full text-xs">
-                    <thead className="bg-gray-50 text-gray-500 uppercase tracking-wider">
+                    <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-3 py-2 text-left">Item</th>
-                        <th className="px-3 py-2 text-right w-20">Qty</th>
-                        <th className="px-3 py-2 text-right w-28">Rate</th>
-                        <th className="px-3 py-2 text-right w-20" title="Each item is taxed at its own GST rate — there's no single overall rate for the document.">GST %</th>
-                        <th className="px-3 py-2 text-right">Amount</th>
+                        <th className="px-3 py-2 text-left text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Item</th>
+                        <th className="px-3 py-2 text-right w-20 text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Qty</th>
+                        <th className="px-3 py-2 text-right w-28 text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Rate</th>
+                        <th className="px-3 py-2 text-right w-20 text-[13px] font-medium text-[#161618] tracking-[-0.05em]" title="Each item is taxed at its own GST rate — there's no single overall rate for the document.">GST %</th>
+                        <th className="px-3 py-2 text-right text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Amount</th>
                         <th className="px-3 py-2 w-10" />
                       </tr>
                     </thead>
@@ -452,7 +463,7 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
                                 min={1}
                                 value={l.quantity}
                                 onChange={(e) => updateLine(l._key, { quantity: e.target.value })}
-                                className="w-16 px-2 py-1 text-right border border-[#1F2937]/10 rounded-lg"
+                                className="w-16 px-2 py-1 text-right border border-[#1F2937]/10 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500"
                               />
                             </td>
                             <td className="px-3 py-2">
@@ -462,7 +473,7 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
                                 step="0.01"
                                 value={l.rate}
                                 onChange={(e) => updateLine(l._key, { rate: e.target.value })}
-                                className="w-24 px-2 py-1 text-right border border-[#1F2937]/10 rounded-lg"
+                                className="w-24 px-2 py-1 text-right border border-[#1F2937]/10 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500"
                               />
                             </td>
                             <td className="px-3 py-2">
@@ -472,7 +483,7 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
                                 max={100}
                                 value={l.gstRate}
                                 onChange={(e) => updateLine(l._key, { gstRate: e.target.value })}
-                                className="w-16 px-2 py-1 text-right border border-[#1F2937]/10 rounded-lg"
+                                className="w-16 px-2 py-1 text-right border border-[#1F2937]/10 rounded-full focus:outline-none focus:ring-1 focus:ring-blue-500"
                               />
                             </td>
                             <td className="px-3 py-2 text-right font-medium">{money(calcItemAmount(l))}</td>
@@ -500,24 +511,28 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
                       onChange={(e) => setIntervalValue(e.target.value)}
                       className={`${inputClass} w-20 flex-shrink-0`}
                     />
-                    <select
-                      value={intervalUnit}
-                      onChange={(e) => setIntervalUnit(e.target.value)}
-                      className={`${selectClass} flex-1`}
-                    >
-                      {UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
-                    </select>
+                    <SelectWrapper className="flex-1">
+                      <select
+                        value={intervalUnit}
+                        onChange={(e) => setIntervalUnit(e.target.value)}
+                        className={`${selectClass} w-full`}
+                      >
+                        {UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
+                      </select>
+                    </SelectWrapper>
                   </div>
                 </div>
                 <div>
                   <label className={labelClass}>Status</label>
-                  <select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                    className={selectClass}
-                  >
-                    {availableStatusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  <SelectWrapper>
+                    <select
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value)}
+                      className={selectClass}
+                    >
+                      {availableStatusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </SelectWrapper>
                 </div>
                 <div>
                   <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
@@ -532,36 +547,44 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>End Date (optional)</label>
+                  <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
+                    End Date <span className="text-[#FF4935]">*</span>
+                  </label>
                   <input
                     type="date"
                     value={endDate}
+                    min={startDate || new Date().toISOString().split("T")[0]}
                     onChange={(e) => setEndDate(e.target.value)}
                     className={inputClass}
+                    required
                   />
                 </div>
                 <div>
                   <label className={labelClass}>Transaction Type</label>
-                  <select
-                    value={transactionType}
-                    onChange={(e) => setTransactionType(e.target.value)}
-                    className={selectClass}
-                  >
-                    <option value="intra">Intra-state</option>
-                    <option value="inter">Inter-state</option>
-                  </select>
+                  <SelectWrapper>
+                    <select
+                      value={transactionType}
+                      onChange={(e) => setTransactionType(e.target.value)}
+                      className={selectClass}
+                    >
+                      <option value="intra">Intra-state</option>
+                      <option value="inter">Inter-state</option>
+                    </select>
+                  </SelectWrapper>
                   <p className="text-[13px] font-inter text-[#A0A0A0] mt-1.5">Auto-set from your business state vs. the customer's — change it here if that doesn't apply.</p>
                 </div>
                 <div>
                   <label className={labelClass}>Discount Type</label>
-                  <select
-                    value={discountType}
-                    onChange={(e) => setDiscountType(e.target.value)}
-                    className={selectClass}
-                  >
-                    <option value="fixed">Fixed</option>
-                    <option value="percentage">Percentage</option>
-                  </select>
+                  <SelectWrapper>
+                    <select
+                      value={discountType}
+                      onChange={(e) => setDiscountType(e.target.value)}
+                      className={selectClass}
+                    >
+                      <option value="fixed">Fixed</option>
+                      <option value="percentage">Percentage</option>
+                    </select>
+                  </SelectWrapper>
                 </div>
                 <div>
                   <label className={labelClass}>Discount Value</label>

@@ -87,7 +87,7 @@ export function html(ctx) {
   <div class="mo-two">
     <div>
       <div class="mo-lbl">${esc(org.companyName || "YOUR COMPANY")}</div>
-      <div class="mo-addr">${esc(org.address || "")}</div>
+      <div class="mo-addr">${esc((typeof org.address === "string" ? org.address : formatPostalAddress(org.address).replace(/\n/g, ", ")) || "")}</div>
       <div>GSTIN : ${esc(org.gstin || "-")}</div>
       ${org.mobile ? `<div>Phone : ${esc(org.mobile)}</div>` : ""}
       ${org.email ? `<div>Email : ${esc(org.email)}</div>` : ""}

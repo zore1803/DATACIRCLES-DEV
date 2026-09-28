@@ -44,7 +44,7 @@ export function html(ctx) {
     <div style="text-align:right;">
       <div class="srv-company">${esc(org.companyName || "Your Company")}</div>
       ${org.gstin ? `<div class="srv-gstin">GSTIN ${esc(org.gstin)}</div>` : ""}
-      <div class="srv-addr">${esc(org.address || "")}</div>
+      <div class="srv-addr">${esc((typeof org.address === "string" ? org.address : formatPostalAddress(org.address).replace(/\n/g, ", ")) || "")}</div>
     </div>
   </div>
   <div class="srv-meta-row">

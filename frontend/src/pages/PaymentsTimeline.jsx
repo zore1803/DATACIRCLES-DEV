@@ -1218,8 +1218,6 @@ export default function PaymentsTimeline() {
           "Self Transfer": "bg-indigo-50 text-indigo-700",
           "Wallet": "bg-amber-50 text-amber-700",
           "Refund": "bg-orange-50 text-orange-700",
-          "Expense": "bg-red-50 text-red-700",
-          "Income": "bg-green-50 text-green-700",
         }[cat] || "bg-gray-100 text-gray-700";
         content = (
           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${catClass}`}>

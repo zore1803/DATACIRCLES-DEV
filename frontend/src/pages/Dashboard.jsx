@@ -1100,6 +1100,11 @@ function Dashboard() {
     return { current, previous, pct: Math.abs(Math.round(change)), up: change >= 0 };
   };
 
+  // Display label for a { pct, isNew, up } trend — "New this month" when there
+  // was no prior-month baseline, otherwise the real percentage.
+  const monthTrendText = (t) =>
+    t?.isNew ? "New this month" : ((t?.pct ?? 0) === 0 ? "No change" : `${t.pct}% this month`);
+
   const overviewKpis = useMemo(() => {
     const wonDeals = deals.filter((d) => d.status === "Won");
     const paidInvoices = invoices.filter((inv) => inv.status?.toLowerCase() === "paid" || inv.status?.toLowerCase() === "accepted");
@@ -2432,7 +2437,7 @@ function Dashboard() {
                           <TrendingDown size={12} style={{ color: colour }} />
                         )}
                         <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: colour }}>
-                          {Math.abs(m.delta)}%
+                          {m.delta.isNew ? "New" : (m.delta.pct === 0 ? "No change" : `${Math.abs(m.delta.pct)}%`)}
                         </span>
                       </div>
                     </div>

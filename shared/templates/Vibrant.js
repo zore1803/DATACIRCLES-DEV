@@ -93,7 +93,7 @@ export function html(ctx) {
     <div class="vb-head">
       <div>
         <div class="vb-org">${esc(org.companyName || "Your Company")}</div>
-        <div class="vb-org-sub">${esc(org.address || "")}</div>
+        <div class="vb-org-sub">${esc((typeof org.address === "string" ? org.address : formatPostalAddress(org.address).replace(/\n/g, ", ")) || "")}</div>
         <div class="vb-org-sub">GSTIN ${esc(org.gstin || "—")}${org.email ? "  &middot;  " + esc(org.email) : ""}</div>
       </div>
       <div>

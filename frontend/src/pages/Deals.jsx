@@ -648,7 +648,7 @@ const ModernKanbanColumn = React.memo(({
                 marginLeft: "auto",
               }}
             >
-              {trendPct >= 0 ? "+" : ""}{trendPct}%
+              {trendPct.isNew ? "New" : (trendPct.pct === 0 ? "No change" : `${trendPct.pct >= 0 ? "+" : ""}${trendPct.pct}%`)}
             </span>
           )}
         </div>
@@ -2644,7 +2644,7 @@ function Deals() {
               rounded week-over-week change. */}
           <div className="grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:items-center lg:gap-6 self-stretch">
             {(() => {
-              const fmtTrend = (t) => (t.isNew ? "New this week" : `${Math.abs(t.pct)}% this week`);
+              const fmtTrend = (t) => (t.isNew ? "New this week" : (t.pct === 0 ? "No change" : `${Math.abs(t.pct)}% this week`));
               return [
               { label: "Pipeline Summary", value: `₹${formatNumberToIndian(dealStatistics.totalPipeline)}`, icon: PipelineSummaryIcon, trend: fmtTrend(dealStatistics.trends.pipeline), trendUp: dealStatistics.trends.pipeline.up },
               { label: "Deals Won", value: dealStatistics.wonCount, icon: WonDealIcon, trend: fmtTrend(dealStatistics.trends.won), trendUp: dealStatistics.trends.won.up },

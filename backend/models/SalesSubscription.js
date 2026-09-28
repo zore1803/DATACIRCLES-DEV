@@ -71,8 +71,13 @@ const salesSubscriptionSchema = new mongoose.Schema(
     },
 
     startDate: { type: Date, required: true },
-    // null = runs indefinitely until Cancelled.
-    endDate: { type: Date, default: null },
+    // Required — every subscription must have a defined end, enforced in the
+    // controller too (missing/blank rejected, must be after startDate). Rows
+    // saved before this rule existed may still carry endDate: null; the
+    // controller's status-update/generate-invoice saves use
+    // validateModifiedOnly so those legacy rows keep billing/pausing rather
+    // than failing validation on a field they never touched.
+    endDate: { type: Date, required: true },
     // The next date an invoice is due to be generated — shown as "Upcoming"
     // in the list. Advances by billingInterval each time
     // generateInvoiceForSubscription runs. Null once the subscription has

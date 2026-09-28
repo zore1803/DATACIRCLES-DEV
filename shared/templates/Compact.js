@@ -85,10 +85,13 @@ export function html(ctx) {
 
   return `
   <div class="cx-top">
-    <div>
-      <div class="cx-org">${esc(org.companyName || "Your Company")}</div>
-      <div class="cx-org-sub">${esc(org.address || "")}</div>
-      <div class="cx-org-sub">GSTIN ${esc(org.gstin || "—")}${org.mobile ? " | " + esc(org.mobile) : ""}${org.email ? " | " + esc(org.email) : ""}</div>
+    <div style="display:flex;gap:8px;align-items:flex-start;">
+      ${org.logoUrl ? `<img src="${esc(org.logoUrl)}" style="width:42px;height:42px;object-fit:contain;flex-shrink:0;" />` : ""}
+      <div style="min-width:0;">
+        <div class="cx-org">${esc(org.companyName || "Your Company")}</div>
+        <div class="cx-org-sub">${esc((typeof org.address === "string" ? org.address : formatPostalAddress(org.address).replace(/\n/g, ", ")) || "")}</div>
+        <div class="cx-org-sub">GSTIN ${esc(org.gstin || "—")}${org.mobile ? " | " + esc(org.mobile) : ""}${org.email ? " | " + esc(org.email) : ""}</div>
+      </div>
     </div>
     <div class="cx-doc">
       <div class="cx-doc-t">${t.isTax ? "Tax " : ""}${esc(docLabel)}</div>

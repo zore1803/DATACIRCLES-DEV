@@ -123,10 +123,13 @@ export function html(ctx) {
 
   return `
   <div class="cp-band">
-    <div>
-      <div class="cp-org">${esc(org.companyName || "Your Company")}</div>
-      <div class="cp-org-sub">${esc(org.address || "")}</div>
-      <div class="cp-org-sub">GSTIN ${esc(org.gstin || "—")}${org.mobile ? "  |  " + esc(org.mobile) : ""}${org.email ? "  |  " + esc(org.email) : ""}</div>
+    <div style="display:flex;gap:8px;align-items:flex-start;">
+      ${org.logoUrl ? `<img src="${esc(org.logoUrl)}" style="width:44px;height:44px;object-fit:contain;flex-shrink:0;" />` : ""}
+      <div style="min-width:0;">
+        <div class="cp-org">${esc(org.companyName || "Your Company")}</div>
+        <div class="cp-org-sub">${esc((typeof org.address === "string" ? org.address : formatPostalAddress(org.address).replace(/\n/g, ", ")) || "")}</div>
+        <div class="cp-org-sub">GSTIN ${esc(org.gstin || "—")}${org.mobile ? "  |  " + esc(org.mobile) : ""}${org.email ? "  |  " + esc(org.email) : ""}</div>
+      </div>
     </div>
     <div class="cp-doc">
       <div class="cp-doc-title">${t.isTax ? "Tax " : ""}${esc(docLabel)}</div>

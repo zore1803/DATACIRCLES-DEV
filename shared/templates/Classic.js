@@ -108,10 +108,13 @@ export function html(ctx) {
     <div class="cl-band">${t.isTax ? "TAX " : ""}${esc(docLabel)}<span class="cl-copy">${esc(copySubtitle)}</span></div>
 
     <div class="cl-head">
-      <div class="cl-head-l">
-        <div class="cl-org">${esc(org.companyName || "Your Company")}</div>
-        <div class="cl-sub">${esc(org.address || "")}</div>
-        <div class="cl-sub">GSTIN: ${esc(org.gstin || "—")}${org.mobile ? "  |  Mobile: " + esc(org.mobile) : ""}${org.email ? "  |  " + esc(org.email) : ""}</div>
+      <div class="cl-head-l" style="display:flex;gap:10px;align-items:flex-start;">
+        ${org.logoUrl ? `<img src="${esc(org.logoUrl)}" style="width:46px;height:46px;object-fit:contain;flex-shrink:0;" />` : ""}
+        <div style="min-width:0;flex:1;">
+          <div class="cl-org">${esc(org.companyName || "Your Company")}</div>
+          <div class="cl-sub">${esc((typeof org.address === "string" ? org.address : formatPostalAddress(org.address).replace(/\n/g, ", ")) || "")}</div>
+          <div class="cl-sub">GSTIN: ${esc(org.gstin || "—")}${org.mobile ? "  |  Mobile: " + esc(org.mobile) : ""}${org.email ? "  |  " + esc(org.email) : ""}</div>
+        </div>
       </div>
       <div class="cl-head-r">
         <div class="cl-kv"><span>${esc(docLabel)} No.</span><b>${esc(docNumber || "—")}</b></div>

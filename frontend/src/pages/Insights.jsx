@@ -1037,6 +1037,15 @@ const Insights = () => {
     const IconAdapter = () =>
       icon ? React.cloneElement(icon, { className: "w-5 h-5" }) : null;
 
+    // `change` may be a plain number (legacy) or a { pct, isNew } object. isNew
+    // means there was no prior-period baseline, so the card shows "New" instead
+    // of a fabricated 100%.
+    const c = change === undefined || change === null
+      ? null
+      : (typeof change === "object" ? change : { pct: change, isNew: false });
+    const up = c ? (c.isNew || c.pct >= 0) : true;
+    const noChange = c && !c.isNew && c.pct === 0;
+
     return (
       <StatTile
         tile={{
@@ -1046,9 +1055,9 @@ const Insights = () => {
           iconClass: color,
           ...(change !== undefined
             ? {
-                subtitle: `${change >= 0 ? "+" : ""}${change}% ${changeLabel}`,
-                subtitleIcon: change >= 0 ? TrendingUp : TrendingDown,
-                subtitleColor: change >= 0 ? "#00C950" : "#E82222",
+                subtitle: c.isNew ? `New ${changeLabel}` : (noChange ? "No change" : `${c.pct >= 0 ? "+" : ""}${c.pct}% ${changeLabel}`),
+                subtitleIcon: up ? TrendingUp : TrendingDown,
+                subtitleColor: noChange ? "#6B7280" : (up ? "#00C950" : "#E82222"),
               }
             : {}),
         }}
@@ -1944,10 +1953,8 @@ const Insights = () => {
     ).length;
     const totalContactsChange =
       contactsBeforeThisMonth > 0
-        ? Math.round((contactsThisMonth / contactsBeforeThisMonth) * 100)
-        : totalContacts > 0
-        ? 100
-        : 0;
+        ? { pct: Math.round((contactsThisMonth / contactsBeforeThisMonth) * 100), isNew: false }
+        : { pct: 0, isNew: totalContacts > 0 };
     // New Contacts card's trend: this month's new contacts vs last month's.
     const lastMonthDate = new Date(currentYear, currentMonth - 1, 1);
     const lastMonth = lastMonthDate.getMonth();
@@ -1961,10 +1968,8 @@ const Insights = () => {
     }).length;
     const newContactsChange =
       contactsLastMonth > 0
-        ? Math.round(((contactsThisMonth - contactsLastMonth) / contactsLastMonth) * 100)
-        : contactsThisMonth > 0
-        ? 100
-        : 0;
+        ? { pct: Math.round(((contactsThisMonth - contactsLastMonth) / contactsLastMonth) * 100), isNew: false }
+        : { pct: 0, isNew: contactsThisMonth > 0 };
     // Contacts with Deals card's trend: deals opened (linked to a contact)
     // this month vs last month.
     const dealsWithContactThisMonth = filteredData.filteredDeals.filter((d) => {
@@ -1985,12 +1990,8 @@ const Insights = () => {
     }).length;
     const contactsWithDealsChange =
       dealsWithContactLastMonth > 0
-        ? Math.round(
-            ((dealsWithContactThisMonth - dealsWithContactLastMonth) / dealsWithContactLastMonth) * 100
-          )
-        : dealsWithContactThisMonth > 0
-        ? 100
-        : 0;
+        ? { pct: Math.round(((dealsWithContactThisMonth - dealsWithContactLastMonth) / dealsWithContactLastMonth) * 100), isNew: false }
+        : { pct: 0, isNew: dealsWithContactThisMonth > 0 };
     // Won/Lost Contacts cards' trend: contacts of that status created this
     // month vs last month.
     const wonContactsThisMonth = filteredData.filteredContacts.filter((c) => {
@@ -2005,10 +2006,8 @@ const Insights = () => {
     }).length;
     const wonContactsChange =
       wonContactsLastMonth > 0
-        ? Math.round(((wonContactsThisMonth - wonContactsLastMonth) / wonContactsLastMonth) * 100)
-        : wonContactsThisMonth > 0
-        ? 100
-        : 0;
+        ? { pct: Math.round(((wonContactsThisMonth - wonContactsLastMonth) / wonContactsLastMonth) * 100), isNew: false }
+        : { pct: 0, isNew: wonContactsThisMonth > 0 };
 
     const lostContactsThisMonth = filteredData.filteredContacts.filter((c) => {
       if (c.stageStatus !== "Lost") return false;
@@ -2022,10 +2021,8 @@ const Insights = () => {
     }).length;
     const lostContactsChange =
       lostContactsLastMonth > 0
-        ? Math.round(((lostContactsThisMonth - lostContactsLastMonth) / lostContactsLastMonth) * 100)
-        : lostContactsThisMonth > 0
-        ? 100
-        : 0;
+        ? { pct: Math.round(((lostContactsThisMonth - lostContactsLastMonth) / lostContactsLastMonth) * 100), isNew: false }
+        : { pct: 0, isNew: lostContactsThisMonth > 0 };
 
 
     return (
@@ -2846,10 +2843,8 @@ const Insights = () => {
     ).length;
     const totalCompaniesChange =
       companiesBeforeThisMonth > 0
-        ? Math.round((companiesThisMonth / companiesBeforeThisMonth) * 100)
-        : totalCompanies > 0
-        ? 100
-        : 0;
+        ? { pct: Math.round((companiesThisMonth / companiesBeforeThisMonth) * 100), isNew: false }
+        : { pct: 0, isNew: totalCompanies > 0 };
 
     const dealsWithCompanyThisMonth = dealsWithCompany.filter((d) => {
       const created = new Date(d.createdAt);
@@ -2861,14 +2856,8 @@ const Insights = () => {
     });
     const activeCompaniesChange =
       dealsWithCompanyLastMonth.length > 0
-        ? Math.round(
-            ((dealsWithCompanyThisMonth.length - dealsWithCompanyLastMonth.length) /
-              dealsWithCompanyLastMonth.length) *
-              100,
-          )
-        : dealsWithCompanyThisMonth.length > 0
-        ? 100
-        : 0;
+        ? { pct: Math.round(((dealsWithCompanyThisMonth.length - dealsWithCompanyLastMonth.length) / dealsWithCompanyLastMonth.length) * 100), isNew: false }
+        : { pct: 0, isNew: dealsWithCompanyThisMonth.length > 0 };
 
     const companiesLastMonth = filteredData.filteredCompanies.filter((c) => {
       const created = new Date(c.createdAt);
@@ -2876,10 +2865,8 @@ const Insights = () => {
     }).length;
     const newCompaniesChange =
       companiesLastMonth > 0
-        ? Math.round(((companiesThisMonth - companiesLastMonth) / companiesLastMonth) * 100)
-        : companiesThisMonth > 0
-        ? 100
-        : 0;
+        ? { pct: Math.round(((companiesThisMonth - companiesLastMonth) / companiesLastMonth) * 100), isNew: false }
+        : { pct: 0, isNew: companiesThisMonth > 0 };
 
     const avgDealSizeThisMonth =
       dealsWithCompanyThisMonth.length > 0
@@ -2893,10 +2880,8 @@ const Insights = () => {
         : 0;
     const avgDealSizeChange =
       avgDealSizeLastMonth > 0
-        ? Math.round(((avgDealSizeThisMonth - avgDealSizeLastMonth) / avgDealSizeLastMonth) * 100)
-        : avgDealSizeThisMonth > 0
-        ? 100
-        : 0;
+        ? { pct: Math.round(((avgDealSizeThisMonth - avgDealSizeLastMonth) / avgDealSizeLastMonth) * 100), isNew: false }
+        : { pct: 0, isNew: avgDealSizeThisMonth > 0 };
 
     const wonThisMonth = wonDealsWithCompany.filter((d) => {
       const closed = new Date(d.updatedAt || d.createdAt);
@@ -2919,8 +2904,8 @@ const Insights = () => {
     // Shorter sales cycle is an improvement, so invert the sign.
     const salesCycleChange =
       cycleLastMonth > 0
-        ? Math.round(((cycleLastMonth - cycleThisMonth) / cycleLastMonth) * 100)
-        : 0;
+        ? { pct: Math.round(((cycleLastMonth - cycleThisMonth) / cycleLastMonth) * 100), isNew: false }
+        : { pct: 0, isNew: cycleThisMonth > 0 };
 
     const companySourceColors = ["#0085FF", "#34C759", "#8E62EF", "#2A2726", "#D97706", "#EC4899"];
     const companySourceData = topIndustries.map(([industry, count], idx) => ({
@@ -4217,11 +4202,11 @@ const Insights = () => {
     const spendThisMonth = purchasesThisMonth.reduce((sum, p) => sum + (p.grandTotal || 0), 0);
     const spendLastMonth = purchasesLastMonth.reduce((sum, p) => sum + (p.grandTotal || 0), 0);
     const vendorSpendChange =
-      spendLastMonth > 0 ? Math.round(((spendThisMonth - spendLastMonth) / spendLastMonth) * 100) : spendThisMonth > 0 ? 100 : 0;
+      spendLastMonth > 0 ? { pct: Math.round(((spendThisMonth - spendLastMonth) / spendLastMonth) * 100), isNew: false } : { pct: 0, isNew: spendThisMonth > 0 };
     const activeThisMonth = new Set(purchasesThisMonth.map((p) => p.vendor?._id || p.vendor)).size;
     const activeLastMonth = new Set(purchasesLastMonth.map((p) => p.vendor?._id || p.vendor)).size;
     const activeVendorsChange =
-      activeLastMonth > 0 ? Math.round(((activeThisMonth - activeLastMonth) / activeLastMonth) * 100) : activeThisMonth > 0 ? 100 : 0;
+      activeLastMonth > 0 ? { pct: Math.round(((activeThisMonth - activeLastMonth) / activeLastMonth) * 100), isNew: false } : { pct: 0, isNew: activeThisMonth > 0 };
 
     // Payment Distribution — real breakdown of purchase statuses (proxy for payment state)
     const paymentStatusColors = {

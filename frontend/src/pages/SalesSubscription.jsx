@@ -403,15 +403,26 @@ const SalesSubscription = () => {
 
   const handleGenerateInvoice = async (row) => {
     setGeneratingId(row._id);
+    setOpenRowActionsId(null);
+    // The row menu closes the instant you click it, so the "Generating…" label
+    // swap on the menu item itself is never actually seen — a loading toast is
+    // the only feedback the user gets while the invoice/stock-sync work runs.
+    const loadingToast = toast.loading(`Generating invoice for ${row.subscriptionNumber}…`);
     try {
       const res = await API.post(`/sales-subscriptions/${row._id}/generate-invoice`);
-      toast.success(`Invoice ${res.data.invoice?.invoiceNumber || ""} generated`);
+      const invoiceNumber = res.data.invoice?.invoiceNumber;
+      toast.success(
+        invoiceNumber ? `Invoice ${invoiceNumber} generated` : "Invoice generated",
+        { id: loadingToast }
+      );
       fetchRows();
     } catch (err) {
-      toast.error(err.response?.data?.message || err.response?.data?.error || "Failed to generate invoice");
+      toast.error(
+        err.response?.data?.message || err.response?.data?.error || "Failed to generate invoice",
+        { id: loadingToast }
+      );
     } finally {
       setGeneratingId(null);
-      setOpenRowActionsId(null);
     }
   };
 

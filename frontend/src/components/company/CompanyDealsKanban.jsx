@@ -527,7 +527,7 @@ const KanbanColumn = React.memo(({ status, deals, amountDeals, totalDealsCount, 
                 marginLeft: "auto",
               }}
             >
-              {trendPct >= 0 ? "+" : ""}{trendPct}%
+              {trendPct.isNew ? "New" : (trendPct.pct === 0 ? "No change" : `${trendPct.pct >= 0 ? "+" : ""}${trendPct.pct}%`)}
             </span>
           )}
         </div>

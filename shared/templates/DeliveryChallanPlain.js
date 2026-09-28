@@ -44,7 +44,7 @@ export function html(ctx) {
       ${org.logoUrl ? `<img class="dc-logo" src="${esc(org.logoUrl)}" />` : ""}
       <div>
         <div class="dc-company">${esc(org.companyName || "Your Company")}</div>
-        <div class="dc-addr">${esc(org.address || "")}</div>
+        <div class="dc-addr">${esc((typeof org.address === "string" ? org.address : formatPostalAddress(org.address).replace(/\n/g, ", ")) || "")}</div>
         <div class="dc-gstin">GSTIN: ${esc(org.gstin || "—")}</div>
         <div class="dc-contact">Mobile: ${esc(org.mobile || "—")}&nbsp;&nbsp;&nbsp;Email: ${esc(org.email || "—")}</div>
       </div>
@@ -70,7 +70,7 @@ export function html(ctx) {
       <div class="dc-mcell"><span>Place of Supply:</span><b>${esc(doc.placeOfSupply || "—")}</b></div>
       <div class="dc-mcell"><span>Eway Bill #:</span><b>&nbsp;</b></div>
       <div class="dc-mcell"><span>Vehicle Number:</span><b>&nbsp;</b></div>
-      <div class="dc-mcell dc-span2"><span class="dc-label">Dispatch From:</span><div class="dc-addr">${esc(org.address || "")}</div></div>
+      <div class="dc-mcell dc-span2"><span class="dc-label">Dispatch From:</span><div class="dc-addr">${esc((typeof org.address === "string" ? org.address : formatPostalAddress(org.address).replace(/\n/g, ", ")) || "")}</div></div>
     </div>
   </div>
 

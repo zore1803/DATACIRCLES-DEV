@@ -97,7 +97,7 @@ export function html(ctx) {
   <div class="eg-mast">
     ${org.logoUrl ? `<img class="eg-logo" src="${esc(org.logoUrl)}" />` : ""}
     <div class="eg-org">${esc(org.companyName || "Your Company")}</div>
-    <div class="eg-org-sub">${esc(org.address || "")}</div>
+    <div class="eg-org-sub">${esc((typeof org.address === "string" ? org.address : formatPostalAddress(org.address).replace(/\n/g, ", ")) || "")}</div>
     <div class="eg-org-sub">GSTIN ${esc(org.gstin || "—")}${org.mobile ? " &nbsp;&middot;&nbsp; " + esc(org.mobile) : ""}${org.email ? " &nbsp;&middot;&nbsp; " + esc(org.email) : ""}</div>
   </div>
 

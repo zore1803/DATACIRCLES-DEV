@@ -99,11 +99,14 @@ export function html(ctx) {
       <div class="mn-doc">${t.isTax ? "Tax " : ""}${esc(docLabel)}</div>
       <div class="mn-copy">${esc(copySubtitle)}</div>
     </div>
-    <div class="mn-org">
-      <b>${esc(org.companyName || "Your Company")}</b>
-      <div class="mn-addr">${esc(org.address || "")}</div>
-      <div>GSTIN ${esc(org.gstin || "—")}</div>
-      ${org.email ? `<div>${esc(org.email)}</div>` : ""}
+    <div class="mn-org" style="display:flex;gap:10px;align-items:flex-start;">
+      ${org.logoUrl ? `<img src="${esc(org.logoUrl)}" style="width:44px;height:44px;object-fit:contain;flex-shrink:0;" />` : ""}
+      <div style="min-width:0;">
+        <b>${esc(org.companyName || "Your Company")}</b>
+        <div class="mn-addr">${esc((typeof org.address === "string" ? org.address : formatPostalAddress(org.address).replace(/\n/g, ", ")) || "")}</div>
+        <div>GSTIN ${esc(org.gstin || "—")}</div>
+        ${org.email ? `<div>${esc(org.email)}</div>` : ""}
+      </div>
     </div>
   </div>
 

@@ -163,16 +163,16 @@ module.exports = async function generatePdf(invoice, bankDetails, OrgDetails) {
       // Logo (Left), Company (Left/Center), Title (Right)
       const headerH = 90;
 
-      // Logo area
+      // Logo area. `fit` caps BOTH width and height (50x50) so a tall/portrait
+      // logo scales down to fit the header instead of overflowing into the grid
+      // below. A logo that fails to load is simply skipped — never an error
+      // string drawn onto the customer-facing invoice.
       let logoWidth = 0;
       if (logoBuffer) {
         try {
-          doc.image(logoBuffer, startX, cursorY, { width: 50 });
+          doc.image(logoBuffer, startX, cursorY, { fit: [50, 50] });
           logoWidth = 60;
         } catch (e) { console.error("Error drawing logo", e); }
-      } else if (OrgDetails?.logoUrl) {
-        // Debug: Print logo path if buffer failed
-        doc.fillColor("red").fontSize(6).text(`Logo Err: ${OrgDetails.logoUrl}`, startX, cursorY);
       }
 
       // Company Details

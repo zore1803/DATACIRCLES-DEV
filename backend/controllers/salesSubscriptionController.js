@@ -109,6 +109,10 @@ exports.createSalesSubscription = async (req, res) => {
 
     if (!items || items.length === 0) return res.status(400).json({ message: "At least one item is required" });
     if (!startDate) return res.status(400).json({ message: "A start date is required" });
+    if (!endDate) return res.status(400).json({ message: "An end date is required" });
+    if (new Date(endDate) <= new Date(startDate)) {
+      return res.status(400).json({ message: "End date must be after the start date" });
+    }
 
     const finalDiscount = discount && ["fixed", "percentage"].includes(discount.type)
       ? discount
@@ -134,7 +138,7 @@ exports.createSalesSubscription = async (req, res) => {
         unit: ["day", "week", "month", "year"].includes(billingInterval?.unit) ? billingInterval.unit : "month",
       },
       startDate,
-      endDate: endDate || null,
+      endDate,
       nextInvoiceDate: startDate,
       status: status || "Draft",
       notes: notes || "",
@@ -367,7 +371,19 @@ exports.updateSalesSubscription = async (req, res) => {
       // invoice for.
       if (subscription.invoiceCount === 0) subscription.nextInvoiceDate = startDate;
     }
-    if (endDate !== undefined) subscription.endDate = endDate || null;
+    if (endDate !== undefined) {
+      if (!endDate) return res.status(400).json({ message: "An end date is required" });
+      subscription.endDate = endDate;
+    }
+    // Only re-check the start/end ordering when this request actually touched
+    // one of them — a legacy row saved with endDate: null (grandfathered, see
+    // the schema comment) must stay editable for unrelated fields like notes
+    // without being forced through this new rule.
+    if ((startDate !== undefined || endDate !== undefined) && subscription.endDate) {
+      if (new Date(subscription.endDate) <= new Date(subscription.startDate)) {
+        return res.status(400).json({ message: "End date must be after the start date" });
+      }
+    }
     if (notes !== undefined) subscription.notes = notes;
     if (terms !== undefined) subscription.terms = terms;
     if (status !== undefined) subscription.status = status;
@@ -408,7 +424,10 @@ exports.updateSalesSubscriptionStatus = async (req, res) => {
     if (status === "Cancelled") {
       subscription.nextInvoiceDate = null;
     }
-    await subscription.save();
+    // validateModifiedOnly: this endpoint never touches endDate — a legacy
+    // row grandfathered with endDate: null must still be pausable/cancellable
+    // without tripping the new required-endDate rule on an untouched field.
+    await subscription.save({ validateModifiedOnly: true });
     await subscription.populate(POPULATE);
     res.json(subscription);
   } catch (err) {
@@ -523,7 +542,10 @@ async function generateInvoiceForSubscription(subscription, userId, organization
     // adjust quantities/stock before the next cycle.
     subscription.status = "Error";
     subscription.lastError = stockErr.message;
-    await subscription.save();
+    // validateModifiedOnly: this save never touches endDate — a legacy
+    // grandfathered null-endDate row must still be able to record a billing
+    // error rather than fail validation on a field it never touched.
+    await subscription.save({ validateModifiedOnly: true });
     throw stockErr;
   }
 
@@ -545,7 +567,11 @@ async function generateInvoiceForSubscription(subscription, userId, organization
   }
   subscription.lastError = "";
 
-  await subscription.save();
+  // validateModifiedOnly: this is the cron/manual generate path, which never
+  // touches endDate — a legacy grandfathered null-endDate row must keep
+  // billing on schedule rather than fail validation on a field it never
+  // touched (see the schema comment on endDate).
+  await subscription.save({ validateModifiedOnly: true });
   return invoice;
 }
 exports.generateInvoiceForSubscription = generateInvoiceForSubscription;

@@ -159,13 +159,15 @@ module.exports = async function generatePdf(invoice, bankDetails, OrgDetails) {
     cursorY += (addrH + 5);
     doc.text(`Mobile ${OrgDetails?.mobile || "N/A"}   Email ${OrgDetails?.email || "N/A"}`, startX, cursorY);
 
-    // Logo Right
+    // Logo Right. `fit` caps width AND height so a tall logo can't grow past
+    // the header band; it's right-aligned within the 100-wide slot.
     const logoWidth = 100;
+    const logoHeight = 50;
     const logoY = 30;
     const logoX = pageRight - logoWidth;
 
     if (logoBuffer) {
-      doc.image(logoBuffer, logoX, logoY, { width: logoWidth });
+      doc.image(logoBuffer, logoX, logoY, { fit: [logoWidth, logoHeight], align: "right" });
     }
     // Move text ABOVE logo
     doc.fontSize(8).fillColor("gray").text("ORIGINAL FOR RECIPIENT", startX, logoY - 10, { align: "right", width: pageWidth });
