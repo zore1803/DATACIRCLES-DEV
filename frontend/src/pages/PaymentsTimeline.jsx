@@ -52,6 +52,7 @@ const DEFAULT_COL_WIDTHS = {
   party: 220,
   amount: 140,
   direction: 120,
+  category: 140,
   type: 140,
   date: 180,
 };
@@ -72,6 +73,7 @@ const ALL_COLUMNS = [
   { id: "party",      key: "party",      label: "Party / Entity"  },
   { id: "amount",     key: "amount",     label: "Amount"           },
   { id: "direction",  key: "direction",  label: "Direction"        },
+  { id: "category",   key: "category",   label: "Category"         },
   { id: "type",       key: "type",       label: "Type"             },
   { id: "date",       key: "date",       label: "Date"             },
 ];
@@ -95,6 +97,7 @@ const cellTextFor = (colId, doc) => {
     case "party":      return doc.party || "";
     case "amount":     return doc.amount != null ? `₹${Number(doc.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "";
     case "direction":  return doc.direction === "IN" ? "Credit" : "Debit";
+    case "category":   return doc.category || "Payment";
     case "type":       return doc.type || "";
     case "date":       return doc.date ? new Date(doc.date).toLocaleString() : "";
     default:           return "";
@@ -662,6 +665,7 @@ export default function PaymentsTimeline() {
       "Party / Entity": item.party || "N/A",
       "Amount (₹)": item.amount !== undefined ? item.amount : 0,
       "Direction": item.direction === "IN" ? "Credit (IN)" : "Debit (OUT)",
+      "Category": item.category || "Payment",
       "Type": item.type || item.paymentType || item.source || "N/A",
       "Date": item.date ? new Date(item.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "N/A",
       "Bank Account": item.bank || "N/A",
@@ -678,6 +682,7 @@ export default function PaymentsTimeline() {
       { wch: 26 }, // Party
       { wch: 15 }, // Amount
       { wch: 15 }, // Direction
+      { wch: 16 }, // Category
       { wch: 16 }, // Type
       { wch: 18 }, // Date
       { wch: 22 }, // Bank
@@ -1201,6 +1206,24 @@ export default function PaymentsTimeline() {
         content = (
           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${isCredit ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
             {isCredit ? "Credit" : "Debit"}
+          </span>
+        );
+        break;
+      }
+      case "category": {
+        const cat = doc.category || "Payment";
+        // Kind of movement (distinct from Type = method). Colour per category.
+        const catClass = {
+          "Payment": "bg-blue-50 text-blue-700",
+          "Self Transfer": "bg-indigo-50 text-indigo-700",
+          "Wallet": "bg-amber-50 text-amber-700",
+          "Refund": "bg-orange-50 text-orange-700",
+          "Expense": "bg-red-50 text-red-700",
+          "Income": "bg-green-50 text-green-700",
+        }[cat] || "bg-gray-100 text-gray-700";
+        content = (
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${catClass}`}>
+            {cat}
           </span>
         );
         break;

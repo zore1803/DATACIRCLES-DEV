@@ -47,7 +47,7 @@ exports.getPaymentsTimeline = async (req, res) => {
       SubscriptionPayment.find({ organization: orgId }),
       BankDetails.find({ organization: orgId }),
       Wallet.findOne({ organization: orgId }),
-      PaymentAllocation.find({ organization: orgId }).select("documentPaymentId").lean(),
+      PaymentAllocation.find({ organization: orgId }).select("documentPaymentId payment documentType").lean(),
       // Only settled entries — a Pending expense is a record of something
       // owed, not money that has moved, and the timeline is strictly actual
       // cash (same rule the invoice/purchase rows follow).
@@ -62,6 +62,14 @@ exports.getPaymentsTimeline = async (req, res) => {
     // The Payment row is canonical — it carries the party and the full split.
     const allocatedSubdocIds = new Set(
       allocations.filter((a) => a.documentPaymentId).map((a) => String(a.documentPaymentId))
+    );
+
+    // A payment that settles a PurchaseReturn/SalesReturn is a refund. Used to
+    // tag its row's Category below.
+    const refundPaymentIds = new Set(
+      allocations
+        .filter((a) => a.payment && (a.documentType === "PurchaseReturn" || a.documentType === "SalesReturn"))
+        .map((a) => String(a.payment))
     );
 
     // Buckets a payment method onto an account card. Bank cards match by bank
@@ -251,6 +259,20 @@ exports.getPaymentsTimeline = async (req, res) => {
       ...formattedSubs,
       ...formattedExpenses
     ];
+
+    // Category = what KIND of movement a row is (distinct from `type`, which is
+    // the payment method like UPI/Cash). Derived, not stored. Precedence:
+    // Self Transfer > Wallet > Refund > Expense/Income > Payment.
+    const isWalletRow = (bank) => (bank || "").toLowerCase().includes("wallet");
+    allTransactions = allTransactions.map((t) => {
+      let category = "Payment";
+      if (t.isInternalTransfer) category = "Self Transfer";
+      else if (isWalletRow(t.bank)) category = "Wallet";
+      else if (t.source === "Payment" && refundPaymentIds.has(String(t._id))) category = "Refund";
+      else if (t.source === "Expense") category = "Expense";
+      else if (t.source === "Indirect Income") category = "Income";
+      return { ...t, category };
+    });
 
     if (partyFilter) {
       allTransactions = allTransactions.filter(t => (t.party || "").toLowerCase().includes(partyFilter));

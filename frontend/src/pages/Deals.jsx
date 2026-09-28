@@ -23,6 +23,7 @@ import {
   DndContext,
   DragOverlay,
   MeasuringStrategy,
+  MeasuringFrequency,
   pointerWithin,
   rectIntersection,
   KeyboardSensor,
@@ -550,6 +551,11 @@ const ModernKanbanColumn = React.memo(({
 
   return (
     <div
+      // The whole column is the drop zone, not just the card list below the
+      // header — otherwise an empty column (e.g. a custom stage with no deals)
+      // only accepted drops on the short strip beneath its header, so cards
+      // aimed at the header/total area landed nowhere and snapped back.
+      ref={setNodeRef}
       className="flex flex-col items-start flex-shrink-0 bg-white"
       style={{ width: "340px", border: "1px solid #E7E7E9", borderRadius: "12px", overflow: "hidden" }}
     >
@@ -651,14 +657,9 @@ const ModernKanbanColumn = React.memo(({
       {/* Scrollable Deals Area — fills remaining column height, any
           additional cards scroll internally instead of growing the page. */}
       <div
-        ref={setNodeRef}
-        // flex-1 + min-h-0: columns are flex items in a row, so every column
-        // box stretches to the tallest one's height — but this droppable only
-        // wrapped its own cards, so in a SHORT column all that empty space
-        // below the last card looked droppable while dnd-kit saw nothing
-        // there. Dropping into it produced over === null and the card
-        // reverted. Growing this to fill the column makes the whole visible
-        // column area a real drop target.
+        // Scrollable card list. The droppable ref now lives on the outer
+        // column (above) so the header/total area accepts drops too; this div
+        // still fills the column height and tints while a card is over it.
         className={`overflow-y-auto dc-card-scroll w-full flex-1 min-h-0 px-[18px] pb-[18px] pt-3 transition-colors ${isOver ? "bg-blue-50/40" : ""}`}
         style={{ maxHeight: "1030px" }}
       >
@@ -1187,7 +1188,11 @@ function Deals() {
     ],
   };
 
-  const DND_MEASURING = { droppable: { strategy: MeasuringStrategy.BeforeDragging } };
+  // Re-measure droppables during the drag, throttled. BeforeDragging cached
+  // rects once, so after the board reflowed or the user scrolled to an
+  // off-screen column (e.g. a custom stage on the far right) the drop target no
+  // longer matched and the card snapped back. Optimized frequency keeps it fast.
+  const DND_MEASURING = { droppable: { strategy: MeasuringStrategy.Always, frequency: MeasuringFrequency.Optimized } };
 
   // dnd-kit sensors configuration
   const sensors = useSensors(
@@ -2031,42 +2036,55 @@ function Deals() {
         ? Math.round(totalPipeline / dealsToCalculate.length)
         : 0;
 
-    // Real week-over-week trend, based on deal.createdAt (only real timestamp available)
+    // Real week-over-week trends. Two windows: last 7 days vs the 7 before.
     const now = Date.now();
     const oneDay = 24 * 60 * 60 * 1000;
     const thisWeekStart = now - 7 * oneDay;
     const lastWeekStart = now - 14 * oneDay;
 
-    const inRange = (deal, start, end) => {
-      const t = new Date(deal.createdAt).getTime();
+    // Deals CREATED in a window (drives Pipeline = new pipeline added, and Avg).
+    const createdInRange = (d, start, end) => {
+      const t = new Date(d.createdAt).getTime();
+      return t >= start && t < end;
+    };
+    // Deals CLOSED in a window — updatedAt is the closest real "when it changed"
+    // timestamp available, so a deal counts toward Won/Lost this week by when it
+    // was actually won/lost, not when it was first created.
+    const closedInRange = (d, start, end) => {
+      const t = new Date(d.updatedAt || d.createdAt).getTime();
       return t >= start && t < end;
     };
 
-    const thisWeekDeals = dealsToCalculate.filter((d) => inRange(d, thisWeekStart, now));
-    const lastWeekDeals = dealsToCalculate.filter((d) => inRange(d, lastWeekStart, thisWeekStart));
+    const sumAmount = (list) =>
+      list.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
 
-    const sumAmount = (deals) =>
-      deals.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
+    const thisWeekCreated = dealsToCalculate.filter((d) => createdInRange(d, thisWeekStart, now));
+    const lastWeekCreated = dealsToCalculate.filter((d) => createdInRange(d, lastWeekStart, thisWeekStart));
 
-    const pctChange = (current, previous) => {
-      if (previous === 0) return current === 0 ? 0 : 100;
-      const pct = Math.round(((current - previous) / previous) * 100);
-      return Math.max(-999, Math.min(999, pct));
+    // { pct, up, isNew } — isNew means there was no prior-week baseline but there
+    // is activity now, so we show "New" instead of a fabricated 100%/999%.
+    const trend = (current, previous) => {
+      if (previous === 0) {
+        return current > 0 ? { pct: 0, up: true, isNew: true } : { pct: 0, up: true, isNew: false };
+      }
+      const pct = Math.max(-999, Math.min(999, Math.round(((current - previous) / previous) * 100)));
+      return { pct, up: pct >= 0, isNew: false };
     };
 
-    const thisWeekWon = thisWeekDeals.filter((d) => d.status === "Won");
-    const lastWeekWon = lastWeekDeals.filter((d) => d.status === "Won");
-    const thisWeekLost = thisWeekDeals.filter((d) => d.status === "Lost");
-    const lastWeekLost = lastWeekDeals.filter((d) => d.status === "Lost");
+    // Won/Lost trends are COUNT-based, matching the count shown on those cards.
+    const wonThisWeek = wonDeals.filter((d) => closedInRange(d, thisWeekStart, now)).length;
+    const wonLastWeek = wonDeals.filter((d) => closedInRange(d, lastWeekStart, thisWeekStart)).length;
+    const lostThisWeek = lostDeals.filter((d) => closedInRange(d, thisWeekStart, now)).length;
+    const lostLastWeek = lostDeals.filter((d) => closedInRange(d, lastWeekStart, thisWeekStart)).length;
 
-    const thisWeekAvg = thisWeekDeals.length > 0 ? sumAmount(thisWeekDeals) / thisWeekDeals.length : 0;
-    const lastWeekAvg = lastWeekDeals.length > 0 ? sumAmount(lastWeekDeals) / lastWeekDeals.length : 0;
+    const thisWeekAvg = thisWeekCreated.length > 0 ? sumAmount(thisWeekCreated) / thisWeekCreated.length : 0;
+    const lastWeekAvg = lastWeekCreated.length > 0 ? sumAmount(lastWeekCreated) / lastWeekCreated.length : 0;
 
     const trends = {
-      pipeline: pctChange(sumAmount(thisWeekDeals), sumAmount(lastWeekDeals)),
-      won: pctChange(sumAmount(thisWeekWon), sumAmount(lastWeekWon)),
-      avgSize: pctChange(thisWeekAvg, lastWeekAvg),
-      lost: pctChange(sumAmount(thisWeekLost), sumAmount(lastWeekLost)),
+      pipeline: trend(sumAmount(thisWeekCreated), sumAmount(lastWeekCreated)),
+      won: trend(wonThisWeek, wonLastWeek),
+      avgSize: trend(thisWeekAvg, lastWeekAvg),
+      lost: trend(lostThisWeek, lostLastWeek),
     };
 
     const closingDurations = wonDeals
@@ -2621,14 +2639,18 @@ function Deals() {
             boxSizing: "border-box",
           }}
         >
-          {/* KPI Strip */}
+          {/* KPI Strip. Trend text is "New this week" when there's no prior-week
+              baseline (real activity, no fabricated %), otherwise the real
+              rounded week-over-week change. */}
           <div className="grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:items-center lg:gap-6 self-stretch">
-            {[
-              { label: "Pipeline Summary", value: `₹${formatNumberToIndian(dealStatistics.totalPipeline)}`, icon: PipelineSummaryIcon, trend: `${Math.abs(dealStatistics.trends.pipeline)}% this week`, trendUp: dealStatistics.trends.pipeline >= 0 },
-              { label: "Deals Won", value: dealStatistics.wonCount, icon: WonDealIcon, trend: `${Math.abs(dealStatistics.trends.won)}% this week`, trendUp: dealStatistics.trends.won >= 0 },
-              { label: "Avg. Deal Size", value: `₹${formatNumberToIndian(dealStatistics.averageDealSize)}`, icon: AvgDealSizeIcon, trend: `${Math.abs(dealStatistics.trends.avgSize)}% this week`, trendUp: dealStatistics.trends.avgSize >= 0 },
-              { label: "Deals Lost", value: dealStatistics.lostCount, icon: LostDealIcon, trend: `${Math.abs(dealStatistics.trends.lost)}% this week`, trendUp: dealStatistics.trends.lost >= 0 },
-            ].map((kpi) => (
+            {(() => {
+              const fmtTrend = (t) => (t.isNew ? "New this week" : `${Math.abs(t.pct)}% this week`);
+              return [
+              { label: "Pipeline Summary", value: `₹${formatNumberToIndian(dealStatistics.totalPipeline)}`, icon: PipelineSummaryIcon, trend: fmtTrend(dealStatistics.trends.pipeline), trendUp: dealStatistics.trends.pipeline.up },
+              { label: "Deals Won", value: dealStatistics.wonCount, icon: WonDealIcon, trend: fmtTrend(dealStatistics.trends.won), trendUp: dealStatistics.trends.won.up },
+              { label: "Avg. Deal Size", value: `₹${formatNumberToIndian(dealStatistics.averageDealSize)}`, icon: AvgDealSizeIcon, trend: fmtTrend(dealStatistics.trends.avgSize), trendUp: dealStatistics.trends.avgSize.up },
+              { label: "Deals Lost", value: dealStatistics.lostCount, icon: LostDealIcon, trend: fmtTrend(dealStatistics.trends.lost), trendUp: dealStatistics.trends.lost.up },
+            ]; })().map((kpi) => (
               <StatTile
                 key={kpi.label}
                 tile={{

@@ -15,10 +15,10 @@ const additionalFieldSchema = new mongoose.Schema({
 }, { _id: false });
 
 const taskSchema = new mongoose.Schema({
-  title: String,
+  title: { type: String, required: true },
   description: String,
-  dueDate: Date,
-  selectedDate: Date,
+  dueDate: { type: Date, required: true },
+  selectedDate: { type: Date, required: true },
   status: { type: String, default: 'Pending' },
   priority: { type: String, enum: ['low', 'medium', 'high'], default: 'medium' },
 

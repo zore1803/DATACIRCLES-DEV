@@ -1596,17 +1596,22 @@ const CreateInvoicePanel = ({
           </div>
           {/* The template is an organization-wide setting, so this opens the
               same Template drawer the Accounting toolbar uses rather than
-              pinning a style onto this one document. */}
-          <div className="flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowTemplates(true)}
-              className="h-8 px-4 flex items-center gap-1.5 rounded-full bg-[#0085FF] hover:bg-blue-600 text-white text-sm font-medium transition-colors"
-            >
-              <EditIcon className="w-3.5 h-3.5" />
-              Change Template
-            </button>
-          </div>
+              pinning a style onto this one document. Delivery Challan has no
+              style choice — it always renders its one dedicated, non-priced
+              layout — so the button is hidden rather than opening a picker
+              with nothing to pick. */}
+          {type !== "deliveryChallan" && (
+            <div className="flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowTemplates(true)}
+                className="h-8 px-4 flex items-center gap-1.5 rounded-full bg-[#0085FF] hover:bg-blue-600 text-white text-sm font-medium transition-colors"
+              >
+                <EditIcon className="w-3.5 h-3.5" />
+                Change Template
+              </button>
+            </div>
+          )}
           </div>
         </div>
       </div>

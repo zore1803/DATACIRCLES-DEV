@@ -106,7 +106,12 @@ exports.list = async (req, res) => {
       ];
     }
 
-    const [rows, totalCount, totals] = await Promise.all([
+    // Current-month window for the "This Month" KPI.
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const [rows, totalCount, totals, monthAgg] = await Promise.all([
       Expense.find(query)
         .populate("vendor", "name companyName email phone gstin")
         .populate("bankAccount", "bank accountNumber")
@@ -121,10 +126,15 @@ exports.list = async (req, res) => {
         { $match: { organization: orgId, kind } },
         { $group: { _id: "$status", total: { $sum: "$amount" }, count: { $sum: 1 } } },
       ]),
+      Expense.aggregate([
+        { $match: { organization: orgId, kind, date: { $gte: monthStart, $lt: monthEnd } } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
     ]);
 
     const paid = totals.find((t) => t._id === "Paid") || { total: 0, count: 0 };
     const pending = totals.find((t) => t._id === "Pending") || { total: 0, count: 0 };
+    const thisMonthTotal = monthAgg[0]?.total || 0;
 
     res.json({
       documents: rows,
@@ -143,6 +153,7 @@ exports.list = async (req, res) => {
         paidCount: paid.count,
         pendingCount: pending.count,
         count: paid.count + pending.count,
+        thisMonthTotal,
       },
     });
   } catch (err) {

@@ -136,6 +136,9 @@ const StaticCard = ({ status }) => {
 export default function KanbanSettings({ embedded = false }) {
   const [statuses, setStatuses] = useState([]);
   const [newStatus, setNewStatus] = useState("");
+  // Where a newly added stage is inserted: "" = end, "__start__" = beginning,
+  // otherwise "after this existing stage".
+  const [insertAfter, setInsertAfter] = useState("");
   const [editIndex, setEditIndex] = useState(null);
   const [editValue, setEditValue] = useState("");
   const [name, setName] = useState("");
@@ -222,17 +225,28 @@ export default function KanbanSettings({ embedded = false }) {
   };
 
   const handleAdd = () => {
-    if (!newStatus.trim()) {
+    const name = newStatus.trim();
+    if (!name) {
       toast.error("Status name cannot be empty");
       return;
     }
-    if (statuses.includes(newStatus.trim())) {
+    if (statuses.includes(name)) {
       toast.error("Status already exists");
       return;
     }
-    const updated = [...statuses, newStatus.trim()];
+    // Insert at the chosen position instead of always appending.
+    let updated;
+    if (insertAfter === "__start__") {
+      updated = [name, ...statuses];
+    } else if (insertAfter && statuses.includes(insertAfter)) {
+      const idx = statuses.indexOf(insertAfter);
+      updated = [...statuses.slice(0, idx + 1), name, ...statuses.slice(idx + 1)];
+    } else {
+      updated = [...statuses, name];
+    }
     saveBoard(updated);
     setNewStatus("");
+    setInsertAfter("");
   };
 
   const handleEdit = (index) => {
@@ -304,15 +318,31 @@ export default function KanbanSettings({ embedded = false }) {
             a pill Add button, then the #F5F7FA-headed table below it. */}
         <form
           onSubmit={(e) => { e.preventDefault(); handleAdd(); }}
-          className="flex gap-2 mb-5"
+          className="flex flex-wrap gap-2 mb-5"
         >
           <input
             type="text"
             value={newStatus}
             onChange={(e) => setNewStatus(e.target.value)}
             placeholder="Add pipeline stage (e.g. Qualified, Proposal Sent)"
-            className="flex-1 min-w-0 px-4 h-10 text-[13px] rounded-full border border-[#E1E4EA] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            className="flex-1 min-w-[180px] px-4 h-10 text-[13px] rounded-full border border-[#E1E4EA] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
           />
+          {/* Insert position — lets the user place a new stage where it belongs
+              in the pipeline instead of always at the end. */}
+          {statuses.length > 0 && (
+            <select
+              value={insertAfter}
+              onChange={(e) => setInsertAfter(e.target.value)}
+              title="Where to add the new stage"
+              className="flex-shrink-0 h-10 px-3 pr-8 text-[13px] rounded-full border border-[#E1E4EA] bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 max-w-[190px]"
+            >
+              <option value="">At the end</option>
+              <option value="__start__">At the beginning</option>
+              {statuses.map((s) => (
+                <option key={s} value={s}>After “{s}”</option>
+              ))}
+            </select>
+          )}
           <button
             type="submit"
             disabled={!newStatus.trim()}

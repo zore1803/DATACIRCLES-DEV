@@ -10,6 +10,7 @@ import {
   Search as SearchIcon, X, ChevronDown,
   Pin, PinOff, ArrowUp, ArrowDown, EyeOff, ChevronLeft, ChevronRight,
   Share2, Repeat, Copy, MessageCircle, Mail, MessageSquare,
+  TrendingUp, TrendingDown, CalendarDays, Calculator, ListChecks,
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import API from "../../services/api";
@@ -147,6 +148,17 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
   const [pinnedCols, setPinnedCols] = useState({});
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  // Show/hide the KPI band, remembered per page (per viewer).
+  const STATS_KEY = `expenseLedger:showStats:${kind}`;
+  const [showStats, setShowStats] = useState(() => {
+    try { return localStorage.getItem(STATS_KEY) !== "false"; } catch { return true; }
+  });
+  const toggleStats = () =>
+    setShowStats((v) => {
+      const next = !v;
+      try { localStorage.setItem(STATS_KEY, String(next)); } catch { /* ignore */ }
+      return next;
+    });
   const [openColumnMenuKey, setOpenColumnMenuKey] = useState(null);
   const [columnMenuPos, setColumnMenuPos] = useState(null);
   const [draggedColKey, setDraggedColKey] = useState(null);
@@ -701,23 +713,8 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
           )}
         </div>
 
-        {/* Totals live in the strip rather than a band of their own — they're
-            three short numbers, and giving them a full row pushed the table
-            down while leaving the strip half empty. Hidden below lg, where
-            the strip has no room to spare. */}
-        <div className="hidden lg:flex items-center gap-6 flex-1 justify-center min-w-0">
-          {/* Just the one figure: every entry is recorded as Paid now, so a
-              Paid column would repeat the total and Pending would always read
-              zero. */}
-          <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wide text-[#78788D] leading-tight truncate">
-              Total {title}
-            </p>
-            <p className="text-[15px] font-semibold leading-tight text-[#0E121B]">
-              {money(summary?.total)}
-            </p>
-          </div>
-        </div>
+        {/* Spacer — the totals moved to the KPI band below the strip. */}
+        <div className="flex-1 min-w-0" />
 
         <div className="flex items-center gap-2 lg:gap-4 flex-shrink-0">
           <div
@@ -772,6 +769,17 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => { toggleStats(); setMoreMenuOpen(false); }}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-[13px] text-[#161618] hover:bg-gray-50 transition-colors"
+                >
+                  {showStats
+                    ? <EyeOff className="w-4 h-4 text-gray-400" />
+                    : <EyeIcon className="w-4 h-4 text-gray-400" />}
+                  {showStats ? "Hide KPIs" : "Show KPIs"}
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => { setShowColumnSettings(true); setMoreMenuOpen(false); }}
                   className="w-full flex items-center gap-2 px-4 py-2.5 text-[13px] text-[#161618] hover:bg-gray-50 transition-colors"
                 >
@@ -805,6 +813,39 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
         )}
       </div>
 
+      {/* KPI band — Total / This Month / Avg / Entries, matching the Payments
+          Timeline's stat cards. Desktop only; hidden while the bulk strip owns
+          the header row. */}
+      {!stripVisible && showStats && (
+        <div
+          className="hidden lg:flex fixed right-0 items-center gap-4 bg-white border-b border-[#E1E4EA] px-6"
+          style={{
+            left: "var(--sidebar-width, 0px)",
+            top: "calc(128px + var(--dc-offline-offset,0px))",
+            height: 92,
+            zIndex: 38,
+            boxSizing: "border-box",
+          }}
+        >
+          {[
+            { label: `Total ${title}`, value: money(summary?.total), TileIcon: isIncome ? TrendingUp : TrendingDown, iconClass: isIncome ? "text-green-600" : "text-red-600" },
+            { label: "This Month", value: money(summary?.thisMonthTotal), TileIcon: CalendarDays, iconClass: "text-[#0085FF]" },
+            { label: "Avg / Entry", value: money(summary?.count ? summary.total / summary.count : 0), TileIcon: Calculator, iconClass: "text-[#78788D]" },
+            { label: "Entries", value: summary?.count ?? 0, TileIcon: ListChecks, iconClass: "text-[#0085FF]" },
+          ].map(({ label, value, TileIcon, iconClass }) => (
+            <div key={label} className="flex items-center gap-3 flex-1 rounded-xl border border-[#E1E4EA] bg-white px-4 py-3 min-w-0">
+              <div className="w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
+                {React.createElement(TileIcon, { className: `w-4 h-4 ${iconClass}` })}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-wide text-[#78788D] leading-tight truncate">{label}</p>
+                <p className="text-[15px] font-semibold text-[#0E121B] leading-tight truncate">{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* overflow-x-auto: the columns have fixed widths that total more than a
           narrow viewport, so the table scrolls sideways inside this container
           rather than pushing the page itself wide. */}
@@ -819,7 +860,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
       <div
         // The breakpoint lives in CSS, not in a `window.innerWidth` read -
         // that is evaluated once at render and would not follow a resize.
-        className="overflow-x-auto overflow-y-auto bg-white top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+        className={`overflow-x-auto overflow-y-auto bg-white top-[calc(118px+var(--dc-offline-offset,0px))] ${stripVisible || !showStats ? "lg:top-[calc(128px+var(--dc-offline-offset,0px))]" : "lg:top-[calc(220px+var(--dc-offline-offset,0px))]"}`}
         style={{
           position: "fixed",
           left: "var(--sidebar-width, 0px)",

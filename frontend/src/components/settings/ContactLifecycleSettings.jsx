@@ -22,6 +22,9 @@ export default function ContactLifecycleSettings({ embedded = false }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newStageName, setNewStageName] = useState("");
+  // Where a newly added stage goes: "" = end, "__start__" = beginning,
+  // otherwise "after this existing stage".
+  const [insertAfter, setInsertAfter] = useState("");
   const [editingStageIndex, setEditingStageIndex] = useState(null);
   const [editingStageName, setEditingStageName] = useState("");
   const [newStatusInputs, setNewStatusInputs] = useState({}); // { [stageIndex]: text }
@@ -89,12 +92,27 @@ export default function ContactLifecycleSettings({ embedded = false }) {
       toast.error("Stage already exists");
       return;
     }
-    const updated = [...stages, { name, statuses: [firstFreeStatus(name)] }];
+    // Insert at the chosen position instead of always appending.
+    const newStage = { name, statuses: [firstFreeStatus(name)] };
+    let updated;
+    let newIndex;
+    if (insertAfter === "__start__") {
+      updated = [newStage, ...stages];
+      newIndex = 0;
+    } else if (insertAfter && stages.some((s) => s.name === insertAfter)) {
+      const idx = stages.findIndex((s) => s.name === insertAfter);
+      updated = [...stages.slice(0, idx + 1), newStage, ...stages.slice(idx + 1)];
+      newIndex = idx + 1;
+    } else {
+      updated = [...stages, newStage];
+      newIndex = updated.length - 1;
+    }
     if (await save(updated)) {
       setNewStageName("");
+      setInsertAfter("");
       // Open the stage that was just added so its seeded status is visible and
       // can be renamed straight away.
-      setExpandedStageIndex(updated.length - 1);
+      setExpandedStageIndex(newIndex);
     }
   };
 
@@ -181,7 +199,7 @@ export default function ContactLifecycleSettings({ embedded = false }) {
       <div className={embedded ? "" : "bg-white rounded-2xl border border-gray-200 shadow-sm p-6"}>
         <form
           onSubmit={(e) => { e.preventDefault(); handleAddStage(); }}
-          className="flex gap-2 mb-5"
+          className="flex flex-wrap gap-2 mb-5"
         >
           <input
             type="text"
@@ -189,8 +207,25 @@ export default function ContactLifecycleSettings({ embedded = false }) {
             onChange={(e) => setNewStageName(e.target.value)}
             placeholder="Add lifecycle stage"
             disabled={saving}
-            className="flex-1 min-w-0 px-4 h-10 text-[13px] rounded-full border border-[#E1E4EA] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            className="flex-1 min-w-[180px] px-4 h-10 text-[13px] rounded-full border border-[#E1E4EA] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
           />
+          {/* Insert position — place a new stage where it belongs in the
+              lifecycle instead of always at the end. */}
+          {stages.length > 0 && (
+            <select
+              value={insertAfter}
+              onChange={(e) => setInsertAfter(e.target.value)}
+              disabled={saving}
+              title="Where to add the new stage"
+              className="flex-shrink-0 h-10 px-3 pr-8 text-[13px] rounded-full border border-[#E1E4EA] bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 max-w-[190px]"
+            >
+              <option value="">At the end</option>
+              <option value="__start__">At the beginning</option>
+              {stages.map((s) => (
+                <option key={s.name} value={s.name}>After “{s.name}”</option>
+              ))}
+            </select>
+          )}
           <button
             type="submit"
             disabled={!newStageName.trim() || saving}

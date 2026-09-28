@@ -426,22 +426,49 @@ const PurchaseForm = ({
     setTimeout(onRequestClose, 300);
   };
 
+  // A row still at its blank defaults — nothing picked or typed yet.
+  const isRowEmpty = (it) =>
+    !!it &&
+    !(it.name || "").trim() &&
+    (it.unitPrice === "" || it.unitPrice == null) &&
+    !it._id;
+
   const addItem = (mode = "product") => {
-    setItems([
-      ...items,
-      {
-        _id: null,
-        variantId: null,
-        name: "",
-        description: "",
-        quantity: 1,
-        unitPrice: "",
-        sku: null,
-        gstRate: 0,
-        taxInclusive: false,
-        mode,
-      },
-    ]);
+    setItems((prev) => {
+      const lastIndex = prev.length - 1;
+      const last = prev[lastIndex];
+      // If the trailing row is still empty (e.g. the initial default row, or a
+      // freshly added row not yet filled), switch its mode in place instead of
+      // appending a duplicate. Quantity is kept; product-only fields cleared.
+      if (last && isRowEmpty(last)) {
+        const next = [...prev];
+        next[lastIndex] = {
+          ...last,
+          mode,
+          _id: null,
+          variantId: null,
+          name: "",
+          description: "",
+          sku: null,
+        };
+        return next;
+      }
+      return [
+        ...prev,
+        {
+          _id: null,
+          variantId: null,
+          name: "",
+          description: "",
+          quantity: 1,
+          unitPrice: "",
+          sku: null,
+          gstRate: 0,
+          taxInclusive: false,
+          mode,
+        },
+      ];
+    });
     setShowAddMenu(false);
   };
 

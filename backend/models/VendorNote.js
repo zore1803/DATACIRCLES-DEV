@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const vendorNoteSchema = new mongoose.Schema({
   title: {
     type: String,
+    required: true,
     trim: true,
   },
   note: {

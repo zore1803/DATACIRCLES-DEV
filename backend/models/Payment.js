@@ -42,7 +42,7 @@ const paymentSchema = new mongoose.Schema(
       type: String,
       enum: [
         "Card", "Cash", "Cheque", "EMI", "Net Banking", "UPI",
-        "NEFT", "RTGS", "IMPS", "TDS", "Other",
+        "NEFT", "RTGS", "IMPS", "TDS", "Wallet", "Other",
       ],
       required: true,
     },

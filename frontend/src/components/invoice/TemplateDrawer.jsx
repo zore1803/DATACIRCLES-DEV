@@ -150,7 +150,10 @@ const TemplatePreviewCard = ({
 
 const TemplateDrawer = ({ isOpen, onClose, type = "tax", docLabel = "Invoice", initialTab = "template" }) => {
   useBodyScrollLock(isOpen);
-  const [tab, setTab] = useState(initialTab);
+  // Delivery Challan has no selectable style — it always renders its one
+  // dedicated, non-priced layout — so it has no "Template" tab to land on.
+  const isDeliveryChallan = type === "deliveryChallan";
+  const [tab, setTab] = useState(isDeliveryChallan && initialTab === "template" ? "numbering" : initialTab);
   const [templates, setTemplates] = useState(null);
   const [orgDetails, setOrgDetails] = useState(null);
   const [bankDetails, setBankDetails] = useState(null);
@@ -352,7 +355,7 @@ const TemplateDrawer = ({ isOpen, onClose, type = "tax", docLabel = "Invoice", i
   ].join("");
 
   const TABS = [
-    { key: "template", label: "Template", Icon: LayoutTemplate },
+    ...(isDeliveryChallan ? [] : [{ key: "template", label: "Template", Icon: LayoutTemplate }]),
     { key: "numbering", label: "Numbering", Icon: Hash },
     { key: "signatures", label: "Signatures", Icon: PenLine },
   ];

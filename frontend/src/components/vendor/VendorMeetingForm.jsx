@@ -264,6 +264,7 @@ const VendorMeetingForm = ({
     const newErrors = {};
     if (!form.title?.trim()) newErrors.title = "Please enter a meeting title.";
     if (!form.date && !calendarDate) newErrors.date = "Please choose a date for the meeting.";
+    if (!form.time) newErrors.time = "Please select a meeting time.";
 
     setErrors(newErrors);
     return newErrors;
@@ -483,13 +484,13 @@ const VendorMeetingForm = ({
                     </FormField>
                   )}
 
-                  <FormField label="Time">
+                  <FormField label="Time" required error={errors.time}>
                     <input
                       type="time"
                       value={form.time}
                       onChange={(e) => handleChange("time", e.target.value)}
                       className={`w-full h-[38px] px-3 rounded-full border text-[13px] text-[#1F2937] transition-all focus:outline-none focus:ring-1 ${
-                        timeConflict
+                        errors.time || timeConflict
                           ? "border-red-500 bg-red-50 focus:ring-red-500"
                           : "border-[#1F2937]/10 bg-white focus:ring-blue-500"
                       }`}

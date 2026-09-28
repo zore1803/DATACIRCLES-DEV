@@ -320,11 +320,7 @@ const VendorTaskForm = ({
                     label="Selected Date"
                     required={!calendarDate}
                     error={errors.selectedDate}
-                    description={
-                      calendarDate
-                        ? "Date selected from calendar"
-                        : "Choose when to work on this task"
-                    }
+                    description={calendarDate ? "Date selected from calendar" : undefined}
                   >
                     {calendarDate ? (
                       <div className="flex items-center gap-2 h-[38px] px-3 bg-[#158FFF]/10 text-[#158FFF] rounded-full border border-[#158FFF]/20">

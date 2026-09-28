@@ -19,46 +19,41 @@ const InsufficientStockDialog = ({ isOpen, message, onClose }) => {
   const itemName = parseItemName(message);
 
   return (
-    <div className="fixed inset-0 bg-[#0e121b]/60 backdrop-blur-sm z-[100030] flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100030] flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-start justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
-              <PackageX className="w-4 h-4 text-red-600" />
+            <div className="bg-red-100 p-2 rounded-lg flex-shrink-0">
+              <PackageX className="w-5 h-5 text-red-600" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 font-sf">
+            <h2 className="text-lg font-semibold font-sf text-gray-900">
               Insufficient Stock
-            </h3>
+            </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+            className="p-1 -m-1 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
           >
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6">
-          <p className="text-sm text-gray-600 font-inter leading-relaxed">
-            {itemName ? (
-              <>
-                <span className="font-semibold text-gray-900">{itemName}</span> doesn't have
-                enough stock to cover the quantity on this document.
-              </>
-            ) : (
-              message || "One or more items don't have enough stock to cover the quantity on this document."
-            )}
-            <br className="hidden sm:block" /> Reduce the quantity or restock the item, then try again.
-          </p>
-        </div>
+        <p className="text-sm text-gray-600 font-inter leading-relaxed mb-6">
+          {itemName ? (
+            <>
+              <span className="font-semibold text-gray-900">{itemName}</span> doesn't have
+              enough stock to cover the quantity on this document.
+            </>
+          ) : (
+            message || "One or more items don't have enough stock to cover the quantity on this document."
+          )}
+          <br className="hidden sm:block" /> Reduce the quantity or restock the item, then try again.
+        </p>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end items-center bg-gray-50/50">
+        <div className="flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
           >
             Got it
           </button>

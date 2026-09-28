@@ -58,6 +58,9 @@ import * as Professional from "./templates/Professional.js";
 import * as Landscape    from "./templates/Landscape.js";
 import * as Service      from "./templates/Service.js";
 import * as Detailed     from "./templates/Detailed.js";
+// Not part of REGISTRY / the Change Template picker — a Delivery Challan
+// always uses this one dedicated, non-priced layout (see buildDocumentHtml).
+import * as DeliveryChallanPlain from "./templates/DeliveryChallanPlain.js";
 
 // â”€â”€ Registry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //   Key order here determines the order in the template picker.
@@ -277,6 +280,12 @@ export function computeDocument(doc, type = "tax") {
       name:         it.name || it.itemId?.name || "",
       description:  it.description || "",
       hsn:          it.hsn || "",
+      // Not on the DeliveryChallan item schema itself. While drafting, the
+      // frontend attaches it from the selected product (it.primaryUnit).
+      // Once saved, deliveryChallanController's PDF/email routes populate
+      // items.itemId, so it.itemId.primaryUnit carries it instead. Unused by
+      // every other doc type.
+      unit:         it.primaryUnit || it.unit || it.itemId?.primaryUnit || "",
       rate,
       qty,
       gstRate,
@@ -553,8 +562,14 @@ export function buildDocumentHtml(doc, options = {}) {
   };
   const copySubtitle = COPY_TYPE_LABEL[copyType] || COPY_TYPE_LABEL.original;
 
-  const tplName  = DOCUMENT_TEMPLATES.includes(template) ? template : DEFAULT_TEMPLATE;
-  const tpl      = REGISTRY[tplName];
+  // Delivery Challan never goes through the 13-template registry — it's a
+  // dispatch record, not a bill, so it always gets the one dedicated,
+  // non-priced layout regardless of the org's stored `template` setting.
+  const isDeliveryChallan = type === "deliveryChallan";
+  const tplName  = isDeliveryChallan
+    ? "DeliveryChallanPlain"
+    : DOCUMENT_TEMPLATES.includes(template) ? template : DEFAULT_TEMPLATE;
+  const tpl      = isDeliveryChallan ? DeliveryChallanPlain : REGISTRY[tplName];
   const org      = orgDetails  || {};
   const bank     = bankDetails || {};
   const docLabel = DOC_LABEL[type]  || DOC_LABEL.tax;

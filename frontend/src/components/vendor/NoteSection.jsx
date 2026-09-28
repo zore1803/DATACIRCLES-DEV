@@ -464,7 +464,7 @@ const NoteEditor = ({
           <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6 space-y-6">
               <div>
                 <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                  Title
+                  Title <span className="text-[#FF4935]">*</span>
                 </label>
                 <input
                   type="text"
@@ -509,7 +509,7 @@ const NoteEditor = ({
             <button
               type="button"
               onClick={onSave}
-              disabled={loading || !noteContent.trim()}
+              disabled={loading || !noteTitle.trim() || !noteContent.trim()}
               className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
             >
               {loading ? (
@@ -582,6 +582,10 @@ const NoteSection = ({ showKPIs = true, autoOpenCreate = false, onAutoOpenCreate
   }, [fetchNotes, fetchVendor]);
 
   const handleAddOrUpdateNote = async () => {
+    if (!noteTitle.trim()) {
+      toast.error('Note title required');
+      return;
+    }
     if (!noteContent.trim() || noteContent === '<p><br></p>') {
       toast.error('Note content required');
       return;

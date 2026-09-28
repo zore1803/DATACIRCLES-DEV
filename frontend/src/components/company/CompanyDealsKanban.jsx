@@ -26,6 +26,7 @@ import {
   PointerSensor,
   KeyboardSensor,
   MeasuringStrategy,
+  MeasuringFrequency,
 } from "@dnd-kit/core";
 import {
   useSortable,
@@ -118,14 +119,12 @@ const getDealFieldValue = (deal, key) => {
 
 const TERMINAL_STATUSES = ["won", "lost"];
 
-// dnd-kit's default measures every droppable's rect continuously while a
-// drag is in progress (MeasuringStrategy.Always), which means every card
-// and every column body gets a fresh getBoundingClientRect() on essentially
-// every pointer move — the more cards on the board, the more that costs,
-// and it's the main source of the drag feeling laggy here. Measuring once
-// up front is enough: column layout doesn't reflow during a drag (only
-// membership does, which dnd-kit already tracks via its own sortable state).
-const DND_MEASURING = { droppable: { strategy: MeasuringStrategy.BeforeDragging } };
+// Re-measure droppables during the drag, throttled. Measuring once up front
+// (BeforeDragging) assumed the layout never reflows mid-drag, but it does:
+// scrolling to an off-screen column (e.g. a custom stage on the far right) or
+// columns changing height left the cached rects stale, so drops there missed
+// and the card snapped back. Optimized frequency limits the re-measure cost.
+const DND_MEASURING = { droppable: { strategy: MeasuringStrategy.Always, frequency: MeasuringFrequency.Optimized } };
 
 // The app scales its desktop layout via a dynamic CSS `zoom` on <html> (App.jsx).
 // getBoundingClientRect() returns UNSCALED layout coordinates while portal overlays on
@@ -432,6 +431,10 @@ const KanbanColumn = React.memo(({ status, deals, amountDeals, totalDealsCount, 
 
   return (
     <div
+      // Whole column is the drop zone (header + body), so an empty column such
+      // as a custom stage with no deals still accepts a drop aimed anywhere on
+      // it — not just the short strip under the header.
+      ref={setNodeRef}
       className="flex flex-col items-start flex-shrink-0 bg-white"
       style={{ width: "340px", border: "1px solid #E7E7E9", borderRadius: "12px", overflow: "hidden" }}
     >
@@ -530,9 +533,9 @@ const KanbanColumn = React.memo(({ status, deals, amountDeals, totalDealsCount, 
         </div>
       </div>
 
-      {/* Cards — capped to ~7 tall, then scrolls internally. */}
+      {/* Cards — capped to ~7 tall, then scrolls internally. The droppable ref
+          moved to the outer column so the whole column accepts drops. */}
       <div
-        ref={setNodeRef}
         className={`overflow-y-auto dc-card-scroll w-full px-[18px] pb-[18px] pt-3 transition-colors ${isOver ? "bg-blue-50/40" : ""}`}
         style={{ maxHeight: "1030px" }}
       >
