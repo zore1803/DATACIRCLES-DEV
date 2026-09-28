@@ -193,8 +193,8 @@ export function html(ctx) {
         ${discountRow ? `<div class="ls-trow">${discountRow}</div>` : ""}
         <div class="ls-trow grand"><span>Total</span><span>&#8377;${fmt(t.grandTotal)}</span></div>
         ${t.isPartiallyPaid
-          ? `<div class="ls-trow"><span>Amount Paid</span><span>&#8377;${fmt(t.amountPaid)}</span></div>`
-          : ""}
+      ? `<div class="ls-trow"><span>Amount Paid</span><span>&#8377;${fmt(t.amountPaid)}</span></div>`
+      : ""}
         <div class="ls-trow"><span>Amount Payable</span><span>&#8377;${fmt(t.isPartiallyPaid ? t.balanceDue : t.grandTotal)}</span></div>
       </div>
     </div>

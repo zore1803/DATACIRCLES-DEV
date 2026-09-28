@@ -62,7 +62,7 @@ export function html(ctx) {
 
   const taxHead = !t.isTax ? ""
     : t.isInterState ? `<th class="r" style="width:80px;">IGST</th>`
-    : `<th class="r" style="width:72px;">CGST</th><th class="r" style="width:72px;">SGST</th>`;
+      : `<th class="r" style="width:72px;">CGST</th><th class="r" style="width:72px;">SGST</th>`;
 
   const rows = t.rows.length ? t.rows.map((r, i) => `
     <tr>
@@ -72,8 +72,8 @@ export function html(ctx) {
       <td class="r nowrap">${r.qty}${r.unit ? " " + esc(r.unit) : ""}</td>
       <td class="r">${fmt(r.taxable)}</td>
       ${!t.isTax ? "" : t.isInterState
-        ? `<td class="r">${fmt(r.igst)}<div class="mn-tax-sub">${r.igstRate || 0}%</div></td>`
-        : `<td class="r">${fmt(r.cgst)}<div class="mn-tax-sub">${r.cgstRate || 0}%</div></td>
+      ? `<td class="r">${fmt(r.igst)}<div class="mn-tax-sub">${r.igstRate || 0}%</div></td>`
+      : `<td class="r">${fmt(r.cgst)}<div class="mn-tax-sub">${r.cgstRate || 0}%</div></td>
            <td class="r">${fmt(r.sgst)}<div class="mn-tax-sub">${r.sgstRate || 0}%</div></td>`}
       <td class="r" style="font-weight:600;">${fmt(r.amount)}</td>
     </tr>`).join("") : `<tr><td colspan="9" class="c" style="padding:20px;color:#8a8a8a;">No items</td></tr>`;
@@ -87,8 +87,8 @@ export function html(ctx) {
     </tr></thead>
     <tbody>
       ${t.hsnRows.map((r) => t.isInterState
-        ? `<tr><td>${esc(r.hsn || "N/A")} &middot; ${r.rate}%</td><td class="r">${fmt(r.taxable)}</td><td class="r">${fmt(r.igst)}</td><td class="r">${fmt(r.igst)}</td></tr>`
-        : `<tr><td>${esc(r.hsn || "N/A")} &middot; ${r.rate}%</td><td class="r">${fmt(r.taxable)}</td><td class="r">${fmt(r.cgst)}</td><td class="r">${fmt(r.sgst)}</td><td class="r">${fmt(r.cgst + r.sgst)}</td></tr>`).join("")}
+    ? `<tr><td>${esc(r.hsn || "N/A")} &middot; ${r.rate}%</td><td class="r">${fmt(r.taxable)}</td><td class="r">${fmt(r.igst)}</td><td class="r">${fmt(r.igst)}</td></tr>`
+    : `<tr><td>${esc(r.hsn || "N/A")} &middot; ${r.rate}%</td><td class="r">${fmt(r.taxable)}</td><td class="r">${fmt(r.cgst)}</td><td class="r">${fmt(r.sgst)}</td><td class="r">${fmt(r.cgst + r.sgst)}</td></tr>`).join("")}
       <tr class="mn-hsn-tot"><td>Total</td><td class="r">${fmt(t.totalTaxable)}</td>${t.isInterState ? `<td class="r">${fmt(t.totalIGST)}</td>` : `<td class="r">${fmt(t.totalCGST)}</td><td class="r">${fmt(t.totalSGST)}</td>`}<td class="r">${fmt(t.isInterState ? t.totalIGST : t.totalCGST + t.totalSGST)}</td></tr>
     </tbody>
   </table>`;
@@ -146,8 +146,8 @@ export function html(ctx) {
       <div class="mn-srow"><span>Taxable amount</span><span>${rupee}${fmt(t.grossTaxable)}</span></div>
       ${t.documentDiscount > 0 ? `<div class="mn-srow"><span>Discount${t.discountType === "percentage" ? ` (${t.discountValue}%)` : ""}</span><span>- ${rupee}${fmt(t.documentDiscount)}</span></div>` : ""}
       ${!t.isTax ? "" : t.isInterState
-        ? `<div class="mn-srow"><span>IGST</span><span>${rupee}${fmt(t.totalIGST)}</span></div>`
-        : `<div class="mn-srow"><span>CGST</span><span>${rupee}${fmt(t.totalCGST)}</span></div><div class="mn-srow"><span>SGST</span><span>${rupee}${fmt(t.totalSGST)}</span></div>`}
+      ? `<div class="mn-srow"><span>IGST</span><span>${rupee}${fmt(t.totalIGST)}</span></div>`
+      : `<div class="mn-srow"><span>CGST</span><span>${rupee}${fmt(t.totalCGST)}</span></div><div class="mn-srow"><span>SGST</span><span>${rupee}${fmt(t.totalSGST)}</span></div>`}
       <div class="mn-grand"><span>Total</span><span>${rupee}${fmt(t.grandTotal)}</span></div>
       ${t.isPartiallyPaid ? `
         <div class="mn-srow"><span>Amount paid</span><span>${rupee}${fmt(t.amountPaid)}</span></div>

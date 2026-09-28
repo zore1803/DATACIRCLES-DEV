@@ -236,9 +236,9 @@ export function html(ctx) {
       ${taxTotalRow}
       <div class="dc-grand"><span>Total</span><span>&#8377;${fmt(t.grandTotal)}</span></div>
       ${t.isPartiallyPaid
-        ? `<div class="dc-trow"><span>Amount Paid</span><span>&#8377;${fmt(t.amountPaid)}</span></div>
+      ? `<div class="dc-trow"><span>Amount Paid</span><span>&#8377;${fmt(t.amountPaid)}</span></div>
       <div class="dc-grand"><span>Balance Due</span><span>&#8377;${fmt(t.balanceDue)}</span></div>`
-        : ""}
+      : ""}
     </div>
   </div>
   ${!t.isTax ? "" : `<table class="dc-hsn">

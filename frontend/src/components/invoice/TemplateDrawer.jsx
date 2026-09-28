@@ -103,11 +103,10 @@ const TemplatePreviewCard = ({
     <button
       type="button"
       onClick={() => onSelect(template)}
-      className={`group w-full text-left rounded-xl border-2 transition-colors overflow-hidden ${
-        selected
+      className={`group w-full text-left rounded-xl border-2 transition-colors overflow-hidden ${selected
           ? "border-[#0085FF] bg-[#F5FAFF]"
           : "border-[#E1E4EA] hover:border-[#C9CFD8] bg-white"
-      }`}
+        }`}
     >
       <div className="flex items-start justify-between gap-2 px-3 pt-2.5 pb-2">
         <div className="min-w-0">
@@ -407,11 +406,10 @@ const TemplateDrawer = ({ isOpen, onClose, type = "tax", docLabel = "Invoice", i
               key={key}
               type="button"
               onClick={() => setTab(key)}
-              className={`inline-flex items-center gap-1 lg:gap-1.5 px-2 lg:px-3.5 py-2 text-xs lg:text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors whitespace-nowrap ${
-                tab === key
+              className={`inline-flex items-center gap-1 lg:gap-1.5 px-2 lg:px-3.5 py-2 text-xs lg:text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors whitespace-nowrap ${tab === key
                   ? "border-[#0085FF] text-[#0085FF]"
                   : "border-transparent text-[#525866] hover:text-[#1F2937]"
-              }`}
+                }`}
             >
               <Icon className="w-3.5 h-3.5 lg:w-4 lg:h-4 flex-shrink-0" />
               {label}
@@ -425,23 +423,23 @@ const TemplateDrawer = ({ isOpen, onClose, type = "tax", docLabel = "Invoice", i
             <div className="p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 content-start">
               {loading || !templates
                 ? DOCUMENT_TEMPLATES.map((t) => (
-                    <div
-                      key={t}
-                      className="aspect-[1/1.55] rounded-xl bg-gray-100 animate-pulse"
-                    />
-                  ))
+                  <div
+                    key={t}
+                    className="aspect-[1/1.55] rounded-xl bg-gray-100 animate-pulse"
+                  />
+                ))
                 : DOCUMENT_TEMPLATES.map((t) => (
-                    <TemplatePreviewCard
-                      key={t}
-                      template={t}
-                      type={type}
-                      selected={selected === t}
-                      onSelect={handleSelectTemplate}
-                      orgDetails={orgDetails}
-                      bankDetails={bankDetails}
-                      defaultSigUrl={signatures.find((s) => s.isDefault)?.dataUrl || signatures[0]?.dataUrl}
-                    />
-                  ))}
+                  <TemplatePreviewCard
+                    key={t}
+                    template={t}
+                    type={type}
+                    selected={selected === t}
+                    onSelect={handleSelectTemplate}
+                    orgDetails={orgDetails}
+                    bankDetails={bankDetails}
+                    defaultSigUrl={signatures.find((s) => s.isDefault)?.dataUrl || signatures[0]?.dataUrl}
+                  />
+                ))}
             </div>
           )}
 
@@ -608,11 +606,10 @@ const TemplateDrawer = ({ isOpen, onClose, type = "tax", docLabel = "Invoice", i
                   {signatures.map((sig) => (
                     <div
                       key={sig.id}
-                      className={`relative flex flex-col justify-between rounded-xl border-2 p-4 transition-colors ${
-                        sig.isDefault
+                      className={`relative flex flex-col justify-between rounded-xl border-2 p-4 transition-colors ${sig.isDefault
                           ? "border-[#0085FF] bg-[#F5FAFF]"
                           : "border-[#E1E4EA] bg-white hover:border-[#C9CFD8]"
-                      }`}
+                        }`}
                     >
                       {sig.isDefault && (
                         <span className="absolute top-3 right-3 inline-flex items-center gap-1 rounded-full bg-[#0085FF] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">

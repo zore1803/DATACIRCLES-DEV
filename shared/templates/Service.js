@@ -92,9 +92,9 @@ export function html(ctx) {
         ${discountRow}
         <div class="srv-trow srv-grand"><span>Total</span><span>&#8377;${fmt(t.grandTotal)}</span></div>
         ${t.isPartiallyPaid
-          ? `<div class="srv-trow"><span>Amount Paid</span><span>&#8377;${fmt(t.amountPaid)}</span></div>
+      ? `<div class="srv-trow"><span>Amount Paid</span><span>&#8377;${fmt(t.amountPaid)}</span></div>
         <div class="srv-trow srv-grand"><span>Balance Due</span><span>&#8377;${fmt(t.balanceDue)}</span></div>`
-          : ""}
+      : ""}
         ${doc.status === "Paid" ? `<div style="display:flex;justify-content:flex-end;align-items:center;gap:4px;color:green;font-size:10px;font-weight:bold;margin-top:6px;"><span style="font-size:14px;">&#10003;</span> Amount Paid</div>` : ""}
       </div>
     </div>

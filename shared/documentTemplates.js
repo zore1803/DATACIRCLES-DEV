@@ -45,19 +45,19 @@
  */
 
 // â”€â”€ Template imports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-import * as Classic      from "./templates/Classic.js";
-import * as Modern       from "./templates/Modern.js";
-import * as Minimal      from "./templates/Minimal.js";
-import * as Elegant      from "./templates/Elegant.js";
-import * as Compact      from "./templates/Compact.js";
-import * as Corporate    from "./templates/Corporate.js";
-import * as Vibrant      from "./templates/Vibrant.js";
-import * as Mono         from "./templates/Mono.js";
-import * as Vintage      from "./templates/Vintage.js";
+import * as Classic from "./templates/Classic.js";
+import * as Modern from "./templates/Modern.js";
+import * as Minimal from "./templates/Minimal.js";
+import * as Elegant from "./templates/Elegant.js";
+import * as Compact from "./templates/Compact.js";
+import * as Corporate from "./templates/Corporate.js";
+import * as Vibrant from "./templates/Vibrant.js";
+import * as Mono from "./templates/Mono.js";
+import * as Vintage from "./templates/Vintage.js";
 import * as Professional from "./templates/Professional.js";
-import * as Landscape    from "./templates/Landscape.js";
-import * as Service      from "./templates/Service.js";
-import * as Detailed     from "./templates/Detailed.js";
+import * as Landscape from "./templates/Landscape.js";
+import * as Service from "./templates/Service.js";
+import * as Detailed from "./templates/Detailed.js";
 // Not part of REGISTRY / the Change Template picker — a Delivery Challan
 // always uses this one dedicated, non-priced layout (see buildDocumentHtml).
 import * as DeliveryChallanPlain from "./templates/DeliveryChallanPlain.js";
@@ -81,24 +81,24 @@ export const REGISTRY = {
 };
 
 export const DOCUMENT_TEMPLATES = Object.keys(REGISTRY);
-export const DEFAULT_TEMPLATE   = "Classic";
+export const DEFAULT_TEMPLATE = "Classic";
 
 // â”€â”€ Internal lookup maps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const NUMBER_KEY = {
-  tax:             "invoiceNumber",
-  performa:        "performaInvoiceNumber",
-  quotation:       "quotationNumber",
+  tax: "invoiceNumber",
+  performa: "performaInvoiceNumber",
+  quotation: "quotationNumber",
   deliveryChallan: "deliveryChallanNumber",
-  salesReturn:     "returnNumber",
+  salesReturn: "returnNumber",
 };
 
 const DOC_LABEL = {
-  tax:             "Invoice",
-  performa:        "Pro Forma Invoice",
-  quotation:       "Quotation",
+  tax: "Invoice",
+  performa: "Pro Forma Invoice",
+  quotation: "Quotation",
   deliveryChallan: "Delivery Challan",
-  salesReturn:     "Sales Return",
+  salesReturn: "Sales Return",
 };
 
 /* ------------------------------------------------------------------ utils */
@@ -183,7 +183,7 @@ function formatDate(d) {
   if (!d) return "";
   const date = new Date(d);
   if (isNaN(date)) return "";
-  const day   = String(date.getDate()).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
   const month = date.toLocaleString("default", { month: "short" });
   return `${day} ${month} ${date.getFullYear()}`;
 }
@@ -224,8 +224,8 @@ export function numberToWords(num) {
       );
     let result = "";
     if (n >= 10000000) { result += toWords(Math.floor(n / 10000000)) + " Crore "; n %= 10000000; }
-    if (n >= 100000)   { result += toWords(Math.floor(n / 100000))   + " Lakh ";  n %= 100000;   }
-    if (n >= 1000)     { result += toWords(Math.floor(n / 1000))     + " Thousand "; n %= 1000;  }
+    if (n >= 100000) { result += toWords(Math.floor(n / 100000)) + " Lakh "; n %= 100000; }
+    if (n >= 1000) { result += toWords(Math.floor(n / 1000)) + " Thousand "; n %= 1000; }
     if (n > 0) result += toWords(n);
     return result.trim();
   }
@@ -244,18 +244,18 @@ export const GST_RATES = [0, 5, 12, 18, 28, 40];
 export const DEFAULT_UPI_ID = "rzore430@oksbi";
 
 export function splitGst(taxableAmount, gstRate, transactionType = "intra") {
-  const rate      = Number(gstRate) || 0;
-  const amount    = Number(taxableAmount) || 0;
+  const rate = Number(gstRate) || 0;
+  const amount = Number(taxableAmount) || 0;
   const isInterState = transactionType === "inter";
-  const halfRate  = rate / 2;
+  const halfRate = rate / 2;
   return {
     isInterState,
     cgstRate: isInterState ? 0 : halfRate,
     sgstRate: isInterState ? 0 : halfRate,
     igstRate: isInterState ? rate : 0,
-    cgst:     isInterState ? 0 : (amount * halfRate) / 100,
-    sgst:     isInterState ? 0 : (amount * halfRate) / 100,
-    igst:     isInterState ? (amount * rate) / 100 : 0,
+    cgst: isInterState ? 0 : (amount * halfRate) / 100,
+    sgst: isInterState ? 0 : (amount * halfRate) / 100,
+    igst: isInterState ? (amount * rate) / 100 : 0,
   };
 }
 
@@ -266,40 +266,40 @@ export function computeDocument(doc, type = "tax") {
   const transactionType = doc.transactionType === "inter" ? "inter" : "intra";
 
   const baseRows = (doc.items || []).map((it) => {
-    const rate     = parseFloat(it.rate) || 0;
-    const qty      = parseFloat(it.quantity) || 0;
+    const rate = parseFloat(it.rate) || 0;
+    const qty = parseFloat(it.quantity) || 0;
     // The line's own rate, and nothing else: 0% stays 0%, and a line with no
     // usable rate is untaxed rather than silently charged a default 18%.
-    const gstRate  = GST_RATES.includes(Number(it.gstRate)) ? Number(it.gstRate) : 0;
+    const gstRate = GST_RATES.includes(Number(it.gstRate)) ? Number(it.gstRate) : 0;
     const unitTaxable = it.taxInclusive ? rate / (1 + gstRate / 100) : rate;
-    const sub  = unitTaxable * qty;
+    const sub = unitTaxable * qty;
     const disc = it.discountType === "percentage"
       ? (sub * (parseFloat(it.discount) || 0)) / 100
       : parseFloat(it.discount) || 0;
     return {
-      name:         it.name || it.itemId?.name || "",
-      description:  it.description || "",
-      hsn:          it.hsn || "",
+      name: it.name || it.itemId?.name || "",
+      description: it.description || "",
+      hsn: it.hsn || "",
       // Not on the DeliveryChallan item schema itself. While drafting, the
       // frontend attaches it from the selected product (it.primaryUnit).
       // Once saved, deliveryChallanController's PDF/email routes populate
       // items.itemId, so it.itemId.primaryUnit carries it instead. Unused by
       // every other doc type.
-      unit:         it.primaryUnit || it.unit || it.itemId?.primaryUnit || "",
+      unit: it.primaryUnit || it.unit || it.itemId?.primaryUnit || "",
       rate,
       qty,
       gstRate,
-      taxable:      sub - disc,
+      taxable: sub - disc,
       discountAmount: disc,
-      discountPct:  it.discountType === "percentage"
+      discountPct: it.discountType === "percentage"
         ? parseFloat(it.discount) || 0
         : (sub > 0 ? (disc / sub) * 100 : 0),
     };
   });
 
-  const grossTaxable    = baseRows.reduce((s, r) => s + r.taxable, 0);
-  const docDiscount     = doc.discount || {};
-  const discountValue   = parseFloat(docDiscount.value) || 0;
+  const grossTaxable = baseRows.reduce((s, r) => s + r.taxable, 0);
+  const docDiscount = doc.discount || {};
+  const discountValue = parseFloat(docDiscount.value) || 0;
   const documentDiscount = discountValue > 0
     ? docDiscount.type === "percentage"
       ? (grossTaxable * discountValue) / 100
@@ -322,9 +322,9 @@ export function computeDocument(doc, type = "tax") {
     if (!hsnMap[key])
       hsnMap[key] = { taxable: 0, cgst: 0, sgst: 0, igst: 0, hsn: r.hsn, rate: r.gstRate };
     hsnMap[key].taxable += r.taxable;
-    hsnMap[key].cgst    += r.cgst;
-    hsnMap[key].sgst    += r.sgst;
-    hsnMap[key].igst    += r.igst;
+    hsnMap[key].cgst += r.cgst;
+    hsnMap[key].sgst += r.sgst;
+    hsnMap[key].igst += r.igst;
   });
 
   const grandTotal = rows.reduce((s, r) => s + r.amount, 0);
@@ -355,14 +355,14 @@ export function computeDocument(doc, type = "tax") {
     grossTaxable,
     documentDiscount,
     discountValue,
-    discountType:  docDiscount.type,
-    totalQty:      rows.reduce((s, r) => s + r.qty, 0),
-    totalTaxable:  rows.reduce((s, r) => s + r.taxable, 0),
-    totalCGST:     rows.reduce((s, r) => s + r.cgst, 0),
-    totalSGST:     rows.reduce((s, r) => s + r.sgst, 0),
-    totalIGST:     rows.reduce((s, r) => s + r.igst, 0),
+    discountType: docDiscount.type,
+    totalQty: rows.reduce((s, r) => s + r.qty, 0),
+    totalTaxable: rows.reduce((s, r) => s + r.taxable, 0),
+    totalCGST: rows.reduce((s, r) => s + r.cgst, 0),
+    totalSGST: rows.reduce((s, r) => s + r.sgst, 0),
+    totalIGST: rows.reduce((s, r) => s + r.igst, 0),
     grandTotal,
-    hsnRows:       Object.keys(hsnMap).map((k) => hsnMap[k]),
+    hsnRows: Object.keys(hsnMap).map((k) => hsnMap[k]),
     amountInWords: numberToWords(grandTotal),
   };
 }
@@ -398,7 +398,7 @@ export function buildUpiUri(doc, options = {}) {
   if (!(total > 0)) return "";
 
   const numberKey = NUMBER_KEY[type] || NUMBER_KEY.tax;
-  const params    = new URLSearchParams({
+  const params = new URLSearchParams({
     pa: vpa,
     pn: (orgDetails?.companyName || "Payee").trim(),
     am: total.toFixed(2),
@@ -543,21 +543,21 @@ const BASE_CSS = `
  */
 export function buildDocumentHtml(doc, options = {}) {
   const {
-    type          = "tax",
-    template      = DEFAULT_TEMPLATE,
+    type = "tax",
+    template = DEFAULT_TEMPLATE,
     orgDetails,
     bankDetails,
-    dealName:     dealNameOverride,
+    dealName: dealNameOverride,
     documentNumber,
     upiQrSvg,
     eInvoiceQrSvg,
     upiId,
-    copyType      = "original",
+    copyType = "original",
   } = options;
 
   const COPY_TYPE_LABEL = {
-    original:   "ORIGINAL FOR RECIPIENT",
-    duplicate:  "DUPLICATE FOR TRANSPORTER",
+    original: "ORIGINAL FOR RECIPIENT",
+    duplicate: "DUPLICATE FOR TRANSPORTER",
     triplicate: "TRIPLICATE FOR SUPPLIER",
   };
   const copySubtitle = COPY_TYPE_LABEL[copyType] || COPY_TYPE_LABEL.original;
@@ -566,13 +566,13 @@ export function buildDocumentHtml(doc, options = {}) {
   // dispatch record, not a bill, so it always gets the one dedicated,
   // non-priced layout regardless of the org's stored `template` setting.
   const isDeliveryChallan = type === "deliveryChallan";
-  const tplName  = isDeliveryChallan
+  const tplName = isDeliveryChallan
     ? "DeliveryChallanPlain"
     : DOCUMENT_TEMPLATES.includes(template) ? template : DEFAULT_TEMPLATE;
-  const tpl      = isDeliveryChallan ? DeliveryChallanPlain : REGISTRY[tplName];
-  const org      = orgDetails  || {};
-  const bank     = bankDetails || {};
-  const docLabel = DOC_LABEL[type]  || DOC_LABEL.tax;
+  const tpl = isDeliveryChallan ? DeliveryChallanPlain : REGISTRY[tplName];
+  const org = orgDetails || {};
+  const bank = bankDetails || {};
+  const docLabel = DOC_LABEL[type] || DOC_LABEL.tax;
   const numberKey = NUMBER_KEY[type] || NUMBER_KEY.tax;
 
   const t = computeDocument(doc, type);
@@ -605,15 +605,14 @@ export function buildDocumentHtml(doc, options = {}) {
     "Customer Name";
 
   const docNumber = documentNumber ?? doc[numberKey];
-  const notes     = formatRichText(doc.notes);
-  const terms     = formatRichText(doc.terms);
+  const notes = formatRichText(doc.notes);
+  const terms = formatRichText(doc.terms);
 
   // â”€â”€ Pre-built snippets passed into ctx â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const discountRow = t.documentDiscount > 0
-    ? `<div class="dc-trow"><span class="dc-label">Discount${
-        t.discountType === "percentage" ? ` (${t.discountValue}%)` : ""
-      }</span><span>- &#8377;${fmt(t.documentDiscount)}</span></div>`
+    ? `<div class="dc-trow"><span class="dc-label">Discount${t.discountType === "percentage" ? ` (${t.discountValue}%)` : ""
+    }</span><span>- &#8377;${fmt(t.documentDiscount)}</span></div>`
     : "";
 
   // Real UPI QR when we can build one, otherwise the decorative placeholder —
@@ -631,9 +630,8 @@ export function buildDocumentHtml(doc, options = {}) {
     ? t.rows.map((r, i) => `
       <tr>
         <td class="c">${i + 1}</td>
-        <td class="dc-item-name">${esc(r.name) || "&mdash;"}${
-          r.description ? `<div class="dc-item-desc">${esc(r.description)}</div>` : ""
-        }</td>
+        <td class="dc-item-name">${esc(r.name) || "&mdash;"}${r.description ? `<div class="dc-item-desc">${esc(r.description)}</div>` : ""
+      }</td>
         <td class="c">${esc(r.hsn)}</td>
         <td class="r">${fmt(r.rate)}</td>
         <td class="r nowrap">${r.qty} BOX</td>
