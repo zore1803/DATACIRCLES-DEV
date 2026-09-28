@@ -1,5 +1,6 @@
 import React from "react";
 import { PackageX, X } from "lucide-react";
+import { createPortal } from "react-dom";
 
 // Parses backend inventorySync.js's thrown message — either
 // "Insufficient stock for product: <name>" or
@@ -18,7 +19,7 @@ const InsufficientStockDialog = ({ isOpen, message, onClose }) => {
 
   const itemName = parseItemName(message);
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100030] flex items-center justify-center p-4">
       <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
         <div className="flex items-start justify-between gap-3 mb-4">
@@ -59,7 +60,8 @@ const InsufficientStockDialog = ({ isOpen, message, onClose }) => {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
