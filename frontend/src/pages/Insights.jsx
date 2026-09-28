@@ -1558,7 +1558,7 @@ const Insights = () => {
             <h3 className="text-base font-bold text-gray-900 mb-4">
               Business Activity
             </h3>
-            <div className="flex flex-row items-center gap-2 mb-4 overflow-x-auto max-w-full">
+            <div className="flex flex-row flex-wrap items-center gap-2 mb-4 overflow-x-hidden">
               {[
                 { id: "all", label: "All" },
                 { id: "deals", label: "Deals" },

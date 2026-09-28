@@ -29,6 +29,9 @@ import useSearchOverlayOpen from "../../hooks/useSearchOverlayOpen";
 import * as XLSX from "xlsx";
 import EyeIcon from "../common/EyeIcon";
 import EditIcon from "../common/EditIcon";
+import TableSkeletonRows from "../common/TableSkeletonRows";
+import Skeleton from "../common/Skeleton";
+import { useTopLoadingSignal } from "../common/TopLoadingBar";
 
 /*
  * Ledger page for Expenses and Indirect Income.
@@ -94,6 +97,9 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+
+  // Drives the app-wide top loading bar the same way Companies/Contacts/Inventory do.
+  useTopLoadingSignal(loading);
   const searchInputRef = useRef(null);
 
   const [panelOpen, setPanelOpen] = useState(false);
@@ -827,22 +833,36 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
             boxSizing: "border-box",
           }}
         >
-          {[
-            { label: `Total ${title}`, value: money(summary?.total), TileIcon: isIncome ? TrendingUp : TrendingDown, iconClass: isIncome ? "text-green-600" : "text-red-600" },
-            { label: "This Month", value: money(summary?.thisMonthTotal), TileIcon: CalendarDays, iconClass: "text-[#0085FF]" },
-            { label: "Avg / Entry", value: money(summary?.count ? summary.total / summary.count : 0), TileIcon: Calculator, iconClass: "text-[#78788D]" },
-            { label: "Entries", value: summary?.count ?? 0, TileIcon: ListChecks, iconClass: "text-[#0085FF]" },
-          ].map(({ label, value, TileIcon, iconClass }) => (
-            <div key={label} className="flex items-center gap-3 flex-1 rounded-xl border border-[#E1E4EA] bg-white px-4 py-3 min-w-0">
-              <div className="w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
-                {React.createElement(TileIcon, { className: `w-4 h-4 ${iconClass}` })}
+          {loading ? (
+            // Skeleton KPI cards — same count and layout as the real ones so
+            // the page doesn't jump when data arrives.
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 flex-1 rounded-xl border border-[#E1E4EA] bg-white px-4 py-3 min-w-0">
+                <Skeleton shape="rounded" width={36} height={36} />
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <Skeleton width="55%" height={10} />
+                  <Skeleton width="70%" height={14} />
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-wide text-[#78788D] leading-tight truncate">{label}</p>
-                <p className="text-[15px] font-semibold text-[#0E121B] leading-tight truncate">{value}</p>
+            ))
+          ) : (
+            [
+              { label: `Total ${title}`, value: money(summary?.total), TileIcon: isIncome ? TrendingUp : TrendingDown, iconClass: isIncome ? "text-green-600" : "text-red-600" },
+              { label: "This Month", value: money(summary?.thisMonthTotal), TileIcon: CalendarDays, iconClass: "text-[#0085FF]" },
+              { label: "Avg / Entry", value: money(summary?.count ? summary.total / summary.count : 0), TileIcon: Calculator, iconClass: "text-[#78788D]" },
+              { label: "Entries", value: summary?.count ?? 0, TileIcon: ListChecks, iconClass: "text-[#0085FF]" },
+            ].map(({ label, value, TileIcon, iconClass }) => (
+              <div key={label} className="flex items-center gap-3 flex-1 rounded-xl border border-[#E1E4EA] bg-white px-4 py-3 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
+                  {React.createElement(TileIcon, { className: `w-4 h-4 ${iconClass}` })}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] uppercase tracking-wide text-[#78788D] leading-tight truncate">{label}</p>
+                  <p className="text-[15px] font-semibold text-[#0E121B] leading-tight truncate">{value}</p>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       )}
 
@@ -872,11 +892,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
           paddingLeft: "var(--content-inset, 16px)",
         }}
       >
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="w-6 h-6 border-2 border-[#158FFF] border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : rows.length === 0 ? (
+        {!loading && rows.length === 0 ? (
           <EmptyState
             icon={Icon}
             noun={noun}
@@ -890,12 +906,9 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
           />
         ) : (
           /*
-           * Same table treatment as PaymentsTimeline.jsx: sticky #F5F7FA
-           * header with per-column chevrons, a sticky selection column, 37px
-           * rows with the blue hover, and inset box-shadow cell borders
-           * (rather than real borders, which double up against the sticky
-           * column). The chevron sorts - the timeline's opens a pin/resize
-           * menu this list has no need for.
+           * Table stays mounted during loading so the header is always
+           * visible — only the tbody swaps to TableSkeletonRows.
+           * Same treatment as Companies / Contacts / Inventory.
            */
           <table className="min-w-full divide-y divide-gray-200 table-fixed">
             <thead className="bg-[#F5F7FA] sticky top-0 z-20">
@@ -966,7 +979,18 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
             </thead>
 
             <tbody className="bg-white">
-              {sortedRows.map((r) => {
+              {loading ? (
+                // Skeleton rows — one per expected result, column widths
+                // mirror the live orderedColumns so nothing shifts when data
+                // arrives. checkboxWidth matches SELECTION_WIDTH.
+                <TableSkeletonRows
+                  numRows={12}
+                  columns={orderedColumns.map((c) => colWidths[c.key] ?? c.width)}
+                  hasCheckbox
+                  rowHeight={37}
+                  checkboxWidth={SELECTION_WIDTH}
+                />
+              ) : sortedRows.map((r) => {
                 const selected = selectedIds.includes(r._id);
                 const vendorName = r.vendor?.companyName || r.vendor?.name || "";
                 return (

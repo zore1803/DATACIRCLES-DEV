@@ -6,7 +6,7 @@
 // keeping its own copy.
 import { useEffect, useState } from "react";
 import API from "../../services/api";
-import { Plus, X, Check, Layers, ChevronUp, ChevronDown as ChevronDownIcon } from "lucide-react";
+import { Plus, X, Check, Layers, ChevronUp, ChevronDown as ChevronDownIcon, Trash2, AlertTriangle } from "lucide-react";
 import toast from "react-hot-toast";
 import AppToaster from "../AppToaster";
 import EditIcon from "../common/EditIcon";
@@ -29,6 +29,9 @@ export default function ContactLifecycleSettings({ embedded = false }) {
   const [editingStageName, setEditingStageName] = useState("");
   const [newStatusInputs, setNewStatusInputs] = useState({}); // { [stageIndex]: text }
   const [expandedStageIndex, setExpandedStageIndex] = useState(null);
+
+  // Delete confirmation modal: null = closed, otherwise { index, name, isFirst, isLast, statusCount }
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const setStoreStages = useContactLifecycleStore((s) => s.setStages);
 
@@ -116,12 +119,26 @@ export default function ContactLifecycleSettings({ embedded = false }) {
     }
   };
 
-  const handleDeleteStage = async (index) => {
+  // Opens the contextual confirmation modal instead of window.confirm.
+  // First and last stages are treated as "defaults" with tailored copy.
+  const requestDeleteStage = (index) => {
     if (stages.length <= 1) {
       toast.error("At least one lifecycle stage is required");
       return;
     }
-    if (!window.confirm(`Delete stage "${stages[index].name}" and all its statuses?`)) return;
+    setDeleteConfirm({
+      index,
+      name: stages[index].name,
+      isFirst: index === 0,
+      isLast: index === stages.length - 1,
+      statusCount: stages[index].statuses?.length ?? 0,
+    });
+  };
+
+  const confirmDeleteStage = async () => {
+    if (!deleteConfirm) return;
+    const { index } = deleteConfirm;
+    setDeleteConfirm(null);
     const updated = stages.filter((_, i) => i !== index);
     await save(updated);
   };
@@ -195,6 +212,69 @@ export default function ContactLifecycleSettings({ embedded = false }) {
   return (
     <div className={embedded ? "space-y-4" : "space-y-6"}>
       <AppToaster />
+
+      {/* ── Delete confirmation modal ──────────────────────────────────────── */}
+      {deleteConfirm && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.35)", backdropFilter: "blur(2px)" }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-start gap-3 mb-3">
+              <div className="flex-shrink-0 w-9 h-9 rounded-full bg-red-50 flex items-center justify-center">
+                <AlertTriangle className="w-[18px] h-[18px] text-red-500" />
+              </div>
+              <h3 className="text-[15px] font-bold text-gray-900 leading-snug pt-1">
+                {deleteConfirm.isFirst || deleteConfirm.isLast
+                  ? `Remove "${deleteConfirm.name}" as a default stage?`
+                  : `Delete "${deleteConfirm.name}" stage?`}
+              </h3>
+            </div>
+
+            <p className="text-[13px] text-gray-500 leading-relaxed mb-1 pl-12">
+              {deleteConfirm.isFirst || deleteConfirm.isLast ? (
+                <>
+                  <strong className="text-gray-700">"{deleteConfirm.name}"</strong> is a default
+                  lifecycle stage. Removing it will delete all its internal statuses
+                  {deleteConfirm.statusCount > 0 && (
+                    <> ({deleteConfirm.statusCount} status{deleteConfirm.statusCount !== 1 ? "es" : ""})</>
+                  )}.
+                </>
+              ) : (
+                <>
+                  This will permanently delete the{" "}
+                  <strong className="text-gray-700">"{deleteConfirm.name}"</strong> stage and
+                  all its internal statuses
+                  {deleteConfirm.statusCount > 0 && (
+                    <> ({deleteConfirm.statusCount} status{deleteConfirm.statusCount !== 1 ? "es" : ""})</>
+                  )}
+                  . Contacts in this stage will need to be reassigned.
+                </>
+              )}
+            </p>
+            <p className="text-[12px] text-gray-400 pl-12 mb-5">This action cannot be undone.</p>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(null)}
+                className="px-4 h-9 text-[13px] font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteStage}
+                disabled={saving}
+                className="px-4 h-9 text-[13px] font-semibold text-white bg-red-500 hover:bg-red-600 disabled:opacity-50 rounded-full transition-colors flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {deleteConfirm.isFirst || deleteConfirm.isLast ? "Remove Stage" : "Delete Stage"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className={embedded ? "" : "bg-white rounded-2xl border border-gray-200 shadow-sm p-6"}>
         <form
@@ -339,7 +419,7 @@ export default function ContactLifecycleSettings({ embedded = false }) {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleDeleteStage(stageIndex)}
+                              onClick={() => requestDeleteStage(stageIndex)}
                               className="flex items-center justify-center w-7 h-7 rounded-full text-red-600 hover:bg-red-50 transition-colors"
                               title="Delete stage"
                             >
@@ -347,9 +427,28 @@ export default function ContactLifecycleSettings({ embedded = false }) {
                             </button>
                           </>
                         ) : (
-                          <ChevronDownIcon 
-                            className={`w-4 h-4 text-gray-400 transition-transform ${expandedStageIndex === stageIndex ? 'rotate-180' : ''}`} 
-                          />
+                          /* Embedded (drawer) mode: trash icon + chevron */
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              disabled={saving || stages.length <= 1}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                requestDeleteStage(stageIndex);
+                              }}
+                              className="flex items-center justify-center w-7 h-7 rounded-full text-[#99A0AE] hover:text-red-500 hover:bg-red-50 disabled:opacity-30 transition-colors"
+                              title={
+                                stageIndex === 0 || stageIndex === stages.length - 1
+                                  ? `Remove "${stage.name}" as default stage`
+                                  : `Delete "${stage.name}" stage`
+                              }
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                            <ChevronDownIcon
+                              className={`w-4 h-4 text-gray-400 transition-transform ${expandedStageIndex === stageIndex ? 'rotate-180' : ''}`}
+                            />
+                          </div>
                         )}
                       </div>
                     </>
