@@ -142,7 +142,6 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
       setIsOpen(false);
       setProfilePicture(null);
       setProfilePreview(null);
-      setGstinData(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
