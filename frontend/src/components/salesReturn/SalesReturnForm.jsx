@@ -4,7 +4,7 @@ import API from "../../services/api";
 import toast from "react-hot-toast";
 import SearchableDropdown from "../contact/SearchableDropdown";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
-import { LABEL_CLS, inputCls, textareaCls } from "../common/form";
+import { FormLabel, STATIC_FIELD_CLS, inputCls, textareaCls } from "../common/form";
 
 const MODES = ["Cash", "UPI", "Bank Transfer", "Cheque", "Card", "Credit Note", "Other"];
 // Partial/Paid/Refunded absent on purpose — they come from recorded refunds,
@@ -238,7 +238,6 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
   };
 
   const fieldClass = `${inputCls()} bg-white`;
-  const labelClass = LABEL_CLS;
 
   return (
     <>
@@ -248,7 +247,7 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
         onClick={handleClose}
       />
       <div
-        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
+        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out font-inter ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
@@ -266,9 +265,9 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
           </button>
         </div>
 
-        <form id="sr-form" onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto px-6 py-6 space-y-6">
+        <form id="sr-form" onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto px-8 py-6 space-y-6">
           <div>
-            <label className={labelClass}>Against Invoice <span className="text-[#FF4935]">*</span></label>
+            <FormLabel required>Against Invoice</FormLabel>
             <SearchableDropdown
               options={invoiceOptions}
               value={invoiceId}
@@ -281,39 +280,39 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
               className={isEditing ? "pointer-events-none opacity-60" : ""}
             />
             {isEditing && (
-              <p className="text-[11px] text-gray-400 mt-1.5">The Invoice a return is against can't be changed after it's created.</p>
+              <p className="text-[13px] font-inter text-[#A0A0A0] mt-1.5">The Invoice a return is against can't be changed after it's created.</p>
             )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}>Customer</label>
-              <div className={`${fieldClass} flex items-center bg-gray-50 text-gray-500`}>
+              <FormLabel>Customer</FormLabel>
+              <div className={`${STATIC_FIELD_CLS} w-full bg-[#F9F9FB] text-[#1F2937] truncate`}>
                 {customerName || "—"}
               </div>
             </div>
             <div>
-              <label className={labelClass}>Return Date</label>
+              <FormLabel>Return Date</FormLabel>
               <input type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} className={fieldClass} />
             </div>
           </div>
 
           <div>
-            <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2 block">
-              Items {invoiceNumber && <span className="text-gray-400 font-normal">— {invoiceNumber}</span>}
-            </label>
+            <FormLabel>
+              Items {invoiceNumber && <span className="text-[#A0A0A0] font-normal">— {invoiceNumber}</span>}
+            </FormLabel>
 
             {!invoiceId ? (
-              <p className="text-[12px] text-gray-400 py-4 text-center border border-dashed border-gray-200 rounded-xl">
+              <p className="text-[13px] text-[#A0A0A0] py-6 text-center border border-dashed border-[#1F2937]/15 rounded-2xl">
                 Select an Invoice above to see its items.
               </p>
             ) : loadingItems ? (
-              <p className="text-[12px] text-gray-400 py-4 text-center">Loading items…</p>
+              <p className="text-[13px] text-[#A0A0A0] py-6 text-center">Loading items…</p>
             ) : availableItems.length === 0 ? (
-              <p className="text-[12px] text-gray-400 py-4 text-center">This Invoice has no items.</p>
+              <p className="text-[13px] text-[#A0A0A0] py-6 text-center">This Invoice has no items.</p>
             ) : (
               // Stacked cards, not a table — the drawer is only ~440px wide.
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {availableItems.map((item) => {
                   const key = lineKey(item.itemId, item.variantId);
                   const line = lines[key] || { returnQty: "", reason: "" };
@@ -327,24 +326,24 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
                   const overLimit = qty > ceiling;
                   const fullyReturned = ceiling <= 0;
                   return (
-                    <div key={key} className="border border-gray-100 rounded-xl px-3 py-2.5">
-                      <div className="flex items-start justify-between gap-2 mb-2">
+                    <div key={key} className="border border-[#E7E4E3] rounded-2xl bg-white p-4">
+                      <div className="flex items-start justify-between gap-3 mb-2">
                         <div className="min-w-0">
-                          <div className="text-[12px] font-medium text-gray-800 truncate">{item.name}</div>
-                          {item.variantName && <div className="text-[10px] text-gray-400 truncate">{item.variantName}</div>}
+                          <div className="text-[14px] font-semibold text-[#0E121B] truncate">{item.name}</div>
+                          {item.variantName && <div className="text-xs text-gray-500 truncate">{item.variantName}</div>}
                         </div>
-                        <span className="text-[12px] font-semibold text-gray-700 flex-shrink-0">
+                        <span className="text-[14px] font-semibold text-[#0E121B] flex-shrink-0">
                           {money(qty * (item.unitPrice || 0))}
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-3 text-[10px] text-gray-400 mb-2">
+                      <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
                         <span>Sold <b className="text-gray-600 font-medium">{item.originalQuantity ?? item.purchasedQuantity ?? 0}</b></span>
                         <span>Returned <b className="text-gray-600 font-medium">{displayReturned}</b></span>
                         <span>Returnable <b className="text-gray-700 font-semibold">{displayReturnable}</b></span>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-3">
                         <input
                           type="number"
                           min="0"
@@ -354,25 +353,25 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
                           onChange={(e) => setLine(key, { returnQty: e.target.value })}
                           placeholder="Return Qty"
                           title={fullyReturned ? "Fully returned already" : `Up to ${ceiling}`}
-                          className={`${fieldClass.replace('w-full', 'w-24')} flex-shrink-0 disabled:bg-gray-50 disabled:cursor-not-allowed ${overLimit ? "border-red-400 ring-1 ring-red-400" : ""}`}
+                          className={`${inputCls({ error: overLimit }).replace('w-full', 'w-28')} flex-shrink-0 disabled:cursor-not-allowed`}
                         />
                         <div className="relative flex-1 min-w-0">
                           <select
                             value={line.reason}
                             disabled={fullyReturned || qty <= 0}
                             onChange={(e) => setLine(key, { reason: e.target.value })}
-                            className={`${fieldClass} appearance-none bg-white cursor-pointer pr-6 disabled:bg-gray-50 disabled:cursor-not-allowed`}
+                            className={`${fieldClass} appearance-none cursor-pointer pr-8 disabled:cursor-not-allowed`}
                           >
                             <option value="">Reason…</option>
                             {REASON_OPTIONS.map((r) => (
                               <option key={r} value={r}>{r}</option>
                             ))}
                           </select>
-                          <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+                          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#1F2937] opacity-50" />
                         </div>
                       </div>
                       {overLimit && (
-                        <p className="text-[10px] text-red-500 mt-1.5">
+                        <p className="text-xs text-red-500 font-inter mt-1.5">
                           Maximum returnable quantity is {ceiling}
                         </p>
                       )}
@@ -382,22 +381,22 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
               </div>
             )}
 
-            <div className="flex justify-end mt-2 text-sm">
-              <span className="text-gray-500 mr-2">Subtotal</span>
-              <span className="font-bold text-gray-900">{money(subtotal)}</span>
+            <div className="mt-3 flex items-center justify-between border border-[#E7E4E3] rounded-2xl bg-gray-50/60 px-4 py-3 text-[13px]">
+              <span className="text-gray-500">Subtotal</span>
+              <span className="text-[15px] font-bold text-[#0E121B]">{money(subtotal)}</span>
             </div>
           </div>
 
           <div>
-            <label className={labelClass}>Refund Mode</label>
+            <FormLabel>Refund Mode</FormLabel>
             <div className="flex flex-wrap gap-2">
               {MODES.map((m) => (
                 <button
                   key={m}
                   type="button"
                   onClick={() => setRefundMode((prev) => (prev === m ? "" : m))}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                    refundMode === m ? "bg-blue-600 border-blue-600 text-white" : "bg-white border-gray-300 text-gray-600 hover:border-gray-400"
+                  className={`h-[38px] px-4 rounded-full text-[13px] font-medium border transition-colors ${
+                    refundMode === m ? "bg-[#158FFF] border-[#158FFF] text-white" : "bg-white border-[#1F2937]/10 text-[#1F2937] hover:bg-gray-50"
                   }`}
                 >
                   {m}
@@ -408,7 +407,7 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}>Overall Reason</label>
+              <FormLabel>Overall Reason</FormLabel>
               <div className="relative">
                 <select
                   value={overallReason}
@@ -420,13 +419,13 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
                     <option key={r} value={r}>{r}</option>
                   ))}
                 </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#1F2937] opacity-50" />
               </div>
             </div>
           </div>
 
           <div>
-            <label className={labelClass}>Status</label>
+            <FormLabel>Status</FormLabel>
             <div className="relative w-1/2">
               <select
                 value={status}
@@ -437,10 +436,10 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#1F2937] opacity-50" />
             </div>
             {isLocked && (
-              <p className="text-[11px] text-gray-400 mt-1.5">
+              <p className="text-[13px] font-inter text-[#A0A0A0] mt-1.5">
                 Goods have already come back in stock — this return can only stay as it is or be Cancelled. Refunds move
                 it to Partial / Paid on their own. Return Qty can still be corrected; only the difference in stock will move.
               </p>
@@ -448,7 +447,7 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
           </div>
 
           <div>
-            <label className={labelClass}>Notes</label>
+            <FormLabel>Notes</FormLabel>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -463,7 +462,7 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
           <button
             type="button"
             onClick={handleClose}
-            className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors"
+            className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors font-inter"
           >
             Cancel
           </button>
@@ -471,7 +470,7 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
             type="submit"
             form="sr-form"
             disabled={saving}
-            className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-inter"
           >
             {saving ? "Saving..." : isEditing ? "Save Changes" : "Create Return"}
           </button>
