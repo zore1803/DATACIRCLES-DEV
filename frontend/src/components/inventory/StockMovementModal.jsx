@@ -6,6 +6,7 @@ import API from "../../services/api";
 import toast from "react-hot-toast";
 import { getAncestorZoom } from "../../utils/domUtils";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { LABEL_CLS } from "../common/form";
 
 /*
  * Records a single stock-in or stock-out against one item. The direction is fixed by the caller
@@ -316,7 +317,7 @@ export default function StockMovementModal({ isOpen, onClose, item, direction, o
   // themselves were still the older h-11/rounded-lg style).
   const fieldClass =
     "w-full h-8 px-3 border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50";
-  const labelClass = "block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2";
+  const labelClass = LABEL_CLS;
   const helpClass = "mt-1.5 text-xs text-gray-500 leading-relaxed";
 
   return (

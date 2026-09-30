@@ -4,6 +4,7 @@ import { X, Check, ChevronDown, Paperclip } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { LABEL_CLS, inputCls as fieldInputCls, textareaCls } from "../common/form";
 
 /*
  * Create/edit panel for an Expense or an Indirect Income entry.
@@ -334,11 +335,8 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
     }
   };
 
-  // Copied verbatim from QuickCompanyForm.jsx so the two forms read as the
-  // same app - pill radius, 38px tall, 13px text.
-  const inputCls =
-    "w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-inter placeholder:text-[#1F2937] placeholder:opacity-50";
-  const labelCls = "block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5";
+  const inputCls = fieldInputCls();
+  const labelCls = LABEL_CLS;
 
   return (
     <>
@@ -632,7 +630,7 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
                 value={form.notes}
                 onChange={(e) => set("notes", e.target.value)}
                 placeholder="Notes"
-                className="w-full px-4 py-2.5 rounded-[19px] border border-[#1F2937]/10 text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-inter placeholder:text-[#1F2937] placeholder:opacity-50 resize-y"
+                className={textareaCls()}
               />
             </div>
 

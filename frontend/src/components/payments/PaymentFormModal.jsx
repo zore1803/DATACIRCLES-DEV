@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import BankLogo from "../BankLogo";
 import PaymentAllocationPanel from "./PaymentAllocationPanel";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { FormLabel, inputCls } from "../common/form";
 
 export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
   useBodyScrollLock(isOpen);
@@ -335,7 +336,7 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
                 next field asks for a customer or a vendor, and which
                 documents can be settled. */}
             <div ref={amountInputRef}>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Amount <span className="text-red-500">*</span></label>
+              <FormLabel required>Amount</FormLabel>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#1F2937] opacity-50 text-[12px]">₹</span>
                 <input
@@ -347,7 +348,7 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
                     setFormData(p => ({ ...p, amount: e.target.value }));
                     if (validationErrors.amount) setValidationErrors((p) => ({ ...p, amount: undefined }));
                   }}
-                  className={`w-full border rounded-full pl-7 pr-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all ${validationErrors.amount ? "border-red-500" : "border-[#1F2937]/10"}`}
+                  className={`${inputCls({ error: !!(validationErrors.amount) })} pl-7`}
                 />
               </div>
               {validationErrors.amount && (
@@ -356,11 +357,11 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Direction <span className="text-red-500">*</span></label>
+              <FormLabel required>Direction</FormLabel>
               <select
                 value={formData.direction}
                 onChange={e => setFormData(p => ({ ...p, direction: e.target.value }))}
-                className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all bg-white cursor-pointer"
+                className={`${inputCls()} bg-white`}
               >
                 <option value="OUT">Debit (Out) — paid to a vendor</option>
                 <option value="IN">Credit (In) — received from a customer</option>
@@ -368,9 +369,7 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
             </div>
 
             <div ref={partyInputRef}>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                {partyLabel} <span className="text-red-500">*</span>
-              </label>
+              <FormLabel required>{partyLabel}</FormLabel>
               <div className="relative">
                 <input
                   type="text"
@@ -384,7 +383,7 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
                     if (validationErrors.party) setValidationErrors((p) => ({ ...p, party: undefined }));
                   }}
                   placeholder={isCredit ? "Search customers..." : "Search or enter new vendor name"}
-                  className={`w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 ${validationErrors.party ? "border-red-500" : "border-[#1F2937]/10"}`}
+                  className={inputCls({ error: !!(validationErrors.party) })}
                 />
                 {validationErrors.party && (
                   <p className="mt-1 text-xs text-red-600">{validationErrors.party}</p>
@@ -438,7 +437,7 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
             />
 
             <div ref={paymentDateInputRef}>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Payment Date <span className="text-red-500">*</span></label>
+              <FormLabel required>Payment Date</FormLabel>
               <input
                 type="date"
                 value={formData.paymentDate}
@@ -446,7 +445,7 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
                   setFormData(p => ({ ...p, paymentDate: e.target.value }));
                   if (validationErrors.paymentDate) setValidationErrors((p) => ({ ...p, paymentDate: undefined }));
                 }}
-                className={`w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all ${validationErrors.paymentDate ? "border-red-500" : "border-[#1F2937]/10"}`}
+                className={inputCls({ error: !!(validationErrors.paymentDate) })}
               />
               {validationErrors.paymentDate && (
                 <p className="mt-1 text-xs text-red-600">{validationErrors.paymentDate}</p>
@@ -454,11 +453,11 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Type <span className="text-red-500">*</span></label>
+              <FormLabel required>Type</FormLabel>
               <select
                 value={formData.paymentType}
                 onChange={e => setFormData(p => ({ ...p, paymentType: e.target.value }))}
-                className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all bg-white cursor-pointer"
+                className={`${inputCls()} bg-white`}
               >
                 <option value="UPI">UPI</option>
                 <option value="Net Banking">Net Banking</option>
@@ -470,18 +469,18 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Reference</label>
+              <FormLabel>Reference</FormLabel>
               <input
                 type="text"
                 value={formData.reference}
                 onChange={e => setFormData(p => ({ ...p, reference: e.target.value }))}
                 placeholder="UTR / cheque no. / txn id"
-                className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
+                className={`${inputCls()} bg-white`}
               />
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Select Bank Account</label>
+              <FormLabel>Select Bank Account</FormLabel>
               <div className="relative w-full">
                 <button
                   type="button"
@@ -531,7 +530,7 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Notes</label>
+              <FormLabel>Notes</FormLabel>
               <div className="flex items-center gap-0.5 border border-[#1F2937]/10 border-b-0 rounded-t-2xl bg-gray-50 px-1.5 py-1">
                 {notesToolbarButtons.map(({ icon, title, onClick }) => (
                   <button

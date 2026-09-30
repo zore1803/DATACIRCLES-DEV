@@ -6,6 +6,7 @@ import SearchableDropdown from "../contact/SearchableDropdown";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 import { useNavigate } from "react-router-dom";
 import DocumentNumberHeader from "../common/DocumentNumberHeader";
+import { LABEL_CLS, inputCls, textareaCls } from "../common/form";
 
 const MODES = ["Cash", "UPI", "Bank Transfer", "Cheque", "Card", "Other"];
 // Partial/Paid are deliberately absent: they're refund-driven (§11), set only
@@ -292,9 +293,11 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
     }
   };
 
-  const fieldClass =
+  const fieldClass = `${inputCls()} bg-white`;
+  // Compact variant for the per-item rows.
+  const lineFieldClass =
     "w-full border border-[#1F2937]/10 rounded-full px-3 h-8 bg-white text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all";
-  const labelClass = "block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2";
+  const labelClass = LABEL_CLS;
 
   return (
     <>
@@ -383,7 +386,7 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
           )}
 
           <div>
-            <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2 block">
+            <label className={labelClass}>
               Items {purchaseNumber && <span className="text-gray-400 font-normal">— {purchaseNumber}</span>}
             </label>
 
@@ -464,14 +467,14 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
                           onChange={(e) => setLine(key, { returnQty: e.target.value })}
                           placeholder="Return Qty"
                           title={fullyReturned ? "Fully returned already" : `Up to ${item.remaining}`}
-                          className={`${fieldClass.replace('w-full', 'w-24')} flex-shrink-0 disabled:bg-gray-50 disabled:cursor-not-allowed ${overLimit ? "border-red-400 ring-1 ring-red-400" : ""}`}
+                          className={`${lineFieldClass.replace('w-full', 'w-24')} flex-shrink-0 disabled:bg-gray-50 disabled:cursor-not-allowed ${overLimit ? "border-red-400 ring-1 ring-red-400" : ""}`}
                         />
                         <div className="relative flex-1 min-w-0">
                           <select
                             value={line.reason}
                             disabled={fullyReturned || qty <= 0}
                             onChange={(e) => setLine(key, { reason: e.target.value })}
-                            className={`${fieldClass} appearance-none bg-white cursor-pointer pr-6 disabled:bg-gray-50 disabled:cursor-not-allowed`}
+                            className={`${lineFieldClass} appearance-none bg-white cursor-pointer pr-6 disabled:bg-gray-50 disabled:cursor-not-allowed`}
                           >
                             <option value="">Reason…</option>
                             {REASON_OPTIONS.map((r) => (
@@ -590,7 +593,7 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
               onChange={(e) => setNotes(e.target.value)}
               rows={3}
               placeholder="Internal notes about this return..."
-              className="w-full px-3 py-2 border border-[#1F2937]/10 rounded-2xl text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-none"
+              className={textareaCls()}
             />
           </div>
         </form>

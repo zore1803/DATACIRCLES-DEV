@@ -18,6 +18,7 @@ import { resolveTransactionType } from "../../utils/placeOfSupply";
 
 import SearchIcon from "../common/SearchIcon";
 import FilterIcon from "../common/FilterIcon";
+import { FormLabel, STATIC_FIELD_CLS, inputCls, textareaCls } from "../common/form";
 const API_BASE = `${import.meta.env.VITE_APP_API_URL}/api`;
 // Same fixed slab set as ItemForm.jsx/QuickItemDrawer.jsx, so a purchase's
 // per-item GST% can only be one of the rates products are actually defined
@@ -692,9 +693,7 @@ const PurchaseForm = ({
           {/* Vendor & PO Link */}
           <div className="space-y-4">
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Select Vendor <span className="text-red-500">*</span>
-              </label>
+              <FormLabel required>Select Vendor</FormLabel>
               <div className="flex items-center gap-2">
                 <SearchableDropdown
                   options={localVendors}
@@ -720,16 +719,14 @@ const PurchaseForm = ({
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Link to Purchase Order (Optional)
-              </label>
+              <FormLabel>Link to Purchase Order (Optional)</FormLabel>
               {vendorId && vendorPOs.length === 0 ? (
                 // Vendor picked but it has no linkable PO — say so, and offer a
                 // "+" that opens the Purchase Order quick drawer pre-filled with
                 // this vendor. Once created, fetchPOs (in onSuccess) refreshes
                 // the list and the dropdown reappears.
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 px-3 h-8 flex items-center bg-gray-50 border border-[#1F2937]/10 rounded-full text-[12px] text-gray-400">
+                  <div className={`${STATIC_FIELD_CLS} flex-1 bg-gray-50 text-gray-400`}>
                     No purchase order created
                   </div>
                   <button
@@ -746,7 +743,7 @@ const PurchaseForm = ({
                   <select
                     value={selectedPO}
                     onChange={handlePOChange}
-                    className="w-full appearance-none px-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all cursor-pointer"
+                    className={`${inputCls()} appearance-none bg-white cursor-pointer`}
                   >
                     <option value="">Select Purchase Order</option>
                     {/* Only the selected vendor's POs are linkable — showing
@@ -963,23 +960,19 @@ const PurchaseForm = ({
 
           {/* Notes */}
           <div>
-            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Additional Notes
-            </label>
+            <FormLabel>Additional Notes</FormLabel>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Add Additional Notes"
-              className="w-full px-3 py-2 bg-white border border-[#1F2937]/10 rounded-2xl text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all min-h-[90px] resize-none"
+              className={`${textareaCls()} min-h-[90px]`}
             />
           </div>
 
           {/* Status */}
           <div className="space-y-4">
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Status
-              </label>
+              <FormLabel>Status</FormLabel>
               <div className="relative">
                 <select
                   value={status}
@@ -992,7 +985,7 @@ const PurchaseForm = ({
                       ? "A Purchase created from a Purchase Order always starts as Pending"
                       : undefined
                   }
-                  className="w-full appearance-none px-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                  className={`${inputCls()} appearance-none bg-white cursor-pointer`}
                 >
                   {/* Draft -> Pending -> Confirmed (stock-in happens here) ->
                       Partial/Paid, or Cancelled. Once Confirmed, can't go

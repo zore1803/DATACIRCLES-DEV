@@ -9,6 +9,7 @@ import API from "../../services/api";
 import toast from "react-hot-toast";
 import { formatNumberToIndian } from "../../utils/numberFormatter";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { LABEL_CLS, inputCls } from "./form";
 
 const PAYMENT_TYPES = ["UPI", "Cash", "Card", "Net Banking", "Cheque", "EMI", "TDS"];
 
@@ -244,9 +245,8 @@ const RecordPaymentModal = ({ isOpen, onClose, invoice, onSuccess }) => {
     }
   };
 
-  const fieldClass =
-    "w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 disabled:bg-gray-50 disabled:text-gray-400 font-inter";
-  const labelClass = "block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2 font-inter";
+  const fieldClass = inputCls();
+  const labelClass = LABEL_CLS;
 
   return (
     <>

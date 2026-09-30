@@ -17,6 +17,7 @@ import API from "../../services/api";
 import CustomDropdown from "../common/CustomDropdown";
 import EditIcon from "../common/EditIcon";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { LABEL_CLS, inputCls, textareaCls } from "../common/form";
 
 
 // onSaved(item) fires after the item is actually created in the backend —
@@ -301,8 +302,8 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
   if (!shouldRender) return null;
 
   /* shared input/label style matching the QuickDealForm quick-drawer pattern */
-  const inp = "w-full border border-[#1F2937]/10 rounded-full px-4 h-11 text-sm text-[#1F2937] bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter";
-  const lbl = "block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2 font-inter";
+  const inp = `${inputCls()} bg-white`;
+  const lbl = LABEL_CLS;
   const hasVariants = variants.length > 0 || showVariantForm;
 
   // Portaled to <body> — this drawer is opened from inside CreateInvoicePanel
@@ -397,7 +398,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={lbl}>Selling Price</label>
-                  <div className="flex h-11 border border-[#1F2937]/10 rounded-full overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 font-inter">
+                  <div className="flex h-[38px] border border-[#1F2937]/10 rounded-full overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 font-inter">
                     <span className="flex items-center px-2 bg-gray-50 border-r border-[#1F2937]/10 text-gray-500 text-sm flex-shrink-0">₹</span>
                     <input
                       type="number"
@@ -445,7 +446,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                 {!hasVariants && (
                 <div>
                   <label className={lbl}>Purchase Price</label>
-                  <div className="flex h-11 border border-[#1F2937]/10 rounded-full overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 font-inter">
+                  <div className="flex h-[38px] border border-[#1F2937]/10 rounded-full overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 font-inter">
                     <span className="flex items-center px-3 bg-gray-50 border-r border-[#1F2937]/10 text-gray-500 text-sm">₹</span>
                     <input
                       type="number"
@@ -519,7 +520,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                         <label className={lbl}>SKU</label>
                         <div className="flex gap-2">
                           <input type="text" name="sku" autoComplete="off" value={currentVariant.sku} onChange={handleVariantChange} placeholder="Enter or Generate SKU" className={inp} />
-                          <button type="button" onClick={generateVariantSku} className="flex-shrink-0 bg-[#158FFF] hover:opacity-90 text-white text-xs font-bold px-5 h-11 rounded-full transition-colors whitespace-nowrap font-inter">Generate</button>
+                          <button type="button" onClick={generateVariantSku} className="flex-shrink-0 bg-[#158FFF] hover:opacity-90 text-white text-xs font-bold px-5 h-[38px] rounded-full transition-colors whitespace-nowrap font-inter">Generate</button>
                         </div>
                       </div>
                       <div>
@@ -533,8 +534,8 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                           <div className="space-y-2">
                             {Object.entries(currentVariant.attributes).map(([key, val], idx) => (
                               <div key={idx} className="flex gap-2 items-center">
-                                <input type="text" value={key} onChange={(e) => { const nk = e.target.value; setCurrentVariant((p) => { const a = { ...p.attributes }; const v = a[key]; delete a[key]; a[nk] = v; return { ...p, attributes: a }; }); }} placeholder="Name (e.g. color)" className="flex-1 border border-[#1F2937]/10 rounded-full px-3 h-11 text-sm text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 font-inter" />
-                                <input type="text" value={val} onChange={(e) => setCurrentVariant((p) => ({ ...p, attributes: { ...p.attributes, [key]: e.target.value } }))} placeholder="Value (e.g. Red)" className="flex-1 border border-[#1F2937]/10 rounded-full px-3 h-11 text-sm text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 font-inter" />
+                                <input type="text" value={key} onChange={(e) => { const nk = e.target.value; setCurrentVariant((p) => { const a = { ...p.attributes }; const v = a[key]; delete a[key]; a[nk] = v; return { ...p, attributes: a }; }); }} placeholder="Name (e.g. color)" className={inputCls({ grow: true })} />
+                                <input type="text" value={val} onChange={(e) => setCurrentVariant((p) => ({ ...p, attributes: { ...p.attributes, [key]: e.target.value } }))} placeholder="Value (e.g. Red)" className={inputCls({ grow: true })} />
                                 <button type="button" onClick={() => setCurrentVariant((p) => { const a = { ...p.attributes }; delete a[key]; return { ...p, attributes: a }; })} className="text-red-500 hover:text-red-600 p-1"><DeleteIcon className="w-4 h-4" /></button>
                               </div>
                             ))}
@@ -584,7 +585,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                           </div>
                           <div>
                             <label className={lbl}>Discount</label>
-                            <div className="flex h-11 border border-[#1F2937]/10 rounded-full overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 bg-white font-inter">
+                            <div className="flex h-[38px] border border-[#1F2937]/10 rounded-full overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 bg-white font-inter">
                               <input
                                 type="number"
                                 min="0"
@@ -611,7 +612,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                         </div>
                         <div className="mt-3">
                           <label className={lbl}>Description</label>
-                          <textarea name="description" rows={2} value={currentVariant.description ?? ""} onChange={handleVariantChange} placeholder="Item description" className="w-full border border-[#1F2937]/10 rounded-2xl px-4 py-2.5 text-sm text-[#1F2937] bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none font-inter placeholder:text-[#1F2937] placeholder:opacity-50" />
+                          <textarea name="description" rows={2} value={currentVariant.description ?? ""} onChange={handleVariantChange} placeholder="Item description" className={textareaCls()} />
                         </div>
                         <div className="mt-3">
                           <label className={lbl}>Images</label>
@@ -707,7 +708,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                 <label className={lbl}>Barcode</label>
                 <div className="flex gap-2">
                   <input type="text" value={form.barcode} onChange={(e) => handleChange("barcode", e.target.value)} placeholder="Enter or Generate Barcode" className={inp} />
-                  <button type="button" onClick={generateBarcode} className="flex-shrink-0 bg-[#158FFF] hover:opacity-90 text-white text-xs font-bold px-5 h-11 rounded-full transition-colors whitespace-nowrap font-inter">Generate</button>
+                  <button type="button" onClick={generateBarcode} className="flex-shrink-0 bg-[#158FFF] hover:opacity-90 text-white text-xs font-bold px-5 h-[38px] rounded-full transition-colors whitespace-nowrap font-inter">Generate</button>
                 </div>
               </div>
               <div>
@@ -802,7 +803,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
               <div className="grid grid-cols-2 gap-6 pt-2">
                 <div>
                   <label className={lbl}>Discount</label>
-                  <div className="flex h-11 border border-[#1F2937]/10 rounded-full overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 bg-white font-inter">
+                  <div className="flex h-[38px] border border-[#1F2937]/10 rounded-full overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 bg-white font-inter">
                     <input type="number" min="0" value={form.discountValue} onChange={(e) => handleChange("discountValue", e.target.value)} className="flex-1 px-3 text-sm text-[#1F2937] focus:outline-none" />
                     <select value={form.discountType} onChange={(e) => handleChange("discountType", e.target.value)} className="px-2 bg-gray-50 border-l border-[#1F2937]/10 text-xs text-gray-600 focus:outline-none">
                       <option value="percentage">% Percentage</option>

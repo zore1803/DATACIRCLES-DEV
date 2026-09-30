@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { FormLabel, inputCls, textareaCls } from "../common/form";
 
 // Matches the quick-drawer style shared by CompanyTaskForm / CompanyForm:
 // a right-anchored slide-in panel (dc-panel-card + dc-panel-w) with a
@@ -124,44 +125,38 @@ const CallLogForm = ({ companyId, contactId, editLog, isOpen, onClose, onSuccess
           {/* Scrollable body */}
           <div className="flex-1 min-h-0 overflow-y-auto px-8 pt-6 pb-6 space-y-6">
             <div>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Purpose / Title <span className="text-[#FF4935]">*</span>
-              </label>
+              <FormLabel required>Purpose / Title</FormLabel>
               <input
                 type="text"
                 name="purpose"
                 value={formData.purpose}
                 onChange={handleChange}
                 required
-                className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
+                className={`${inputCls()} bg-white`}
                 placeholder="E.g., Discovery Call, Follow up"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                  Type
-                </label>
+                <FormLabel>Type</FormLabel>
                 <select
                   name="callType"
                   value={formData.callType}
                   onChange={handleChange}
-                  className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                  className={`${inputCls()} bg-white`}
                 >
                   <option value="Outbound">Outbound</option>
                   <option value="Inbound">Inbound</option>
                 </select>
               </div>
               <div>
-                <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                  Status
-                </label>
+                <FormLabel>Status</FormLabel>
                 <select
                   name="status"
                   value={formData.status}
                   onChange={handleChange}
-                  className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                  className={`${inputCls()} bg-white`}
                 >
                   <option value="Connected">Connected</option>
                   <option value="Missed">Missed</option>
@@ -173,31 +168,27 @@ const CallLogForm = ({ companyId, contactId, editLog, isOpen, onClose, onSuccess
 
             {(formData.status === "Connected" || formData.status === "Voicemail") && (
               <div>
-                <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                  Duration (minutes)
-                </label>
+                <FormLabel>Duration (minutes)</FormLabel>
                 <input
                   type="number"
                   name="duration"
                   value={formData.duration}
                   onChange={handleChange}
                   min="0"
-                  className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
+                  className={`${inputCls()} bg-white`}
                   placeholder="e.g., 15"
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Notes
-              </label>
+              <FormLabel>Notes</FormLabel>
               <textarea
                 name="notes"
                 value={formData.notes}
                 onChange={handleChange}
                 rows="4"
-                className="w-full border border-[#1F2937]/10 rounded-2xl px-3 py-2 text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-inter resize-vertical placeholder:text-[#1F2937] placeholder:opacity-50"
+                className={textareaCls()}
                 placeholder="What was discussed?"
               ></textarea>
             </div>

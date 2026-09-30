@@ -13,7 +13,7 @@ import {
   Briefcase,
   Check,
   Menu,
-  ArrowLeft,
+  ChevronLeft,
   LayoutGrid,
   Folder as LucideFolder,
 } from "lucide-react";
@@ -21,6 +21,12 @@ import ListIcon from "../common/ListIcon";
 import ExpandableSearch from "../common/ExpandableSearch";
 import InlineNewFolder from "../common/InlineNewFolder";
 import EditIcon from "../common/EditIcon";
+import ConfirmDialog from "../common/ConfirmDialog";
+import { FormField, FormLabel, TextInput } from "../common/form";
+
+// Set right before opening a company from a folder, so Back returns to that
+// folder instead of the plain Companies list. Read once by Companies.jsx.
+export const HOTLIST_RETURN_KEY = "dc_company_hotlist_return";
 
 
 const FolderIcon = ({ className = "h-8 w-8" }) => (
@@ -170,7 +176,17 @@ const Hotlist = () => {
   // looked up fresh from `folders` on every render, so it stays in sync if
   // the folder is edited (companies added/removed) while it's open.
   const navigate = useNavigate();
-  const [openFolderId, setOpenFolderId] = useState(null);
+  const [openFolderId, setOpenFolderId] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(HOTLIST_RETURN_KEY))?.folderId || null;
+    } catch {
+      return null;
+    }
+  });
+  const [foldersLoading, setFoldersLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [confirmState, setConfirmState] = useState(null);
+  const [editFocus, setEditFocus] = useState("name");
   const [folderViewMode, setFolderViewMode] = useState("card"); // "card" | "list"
   const [foldersViewMode, setFoldersViewMode] = useState("folder"); // top-level hotlist: "folder" | "list"
   // Search scoped to the companies inside whichever folder is currently open —
@@ -245,6 +261,8 @@ const Hotlist = () => {
       setFolders(res.data);
     } catch (error) {
       toast.error("Failed to fetch folders");
+    } finally {
+      setFoldersLoading(false);
     }
   };
 
@@ -277,39 +295,59 @@ const Hotlist = () => {
     }
   };
 
-  const startEdit = (folder) => {
+  // `focus` picks what the dialog focuses: "search" when opened from an
+  // "Add Companies" button, "name" when opened to rename.
+  const startEdit = (folder, focus = "name") => {
     setEditingFolder(folder);
     setEditingName(folder.name);
     setSelectedCompanies(folder?.companies || []);
     setSearchTerm("");
     setFilteredCompanies([]);
+    setEditFocus(focus);
+    setIsDropdownOpen(focus === "search");
   };
 
+  const closeEdit = () => {
+    setEditingFolder(null);
+    setSelectedCompanies([]);
+    setSearchTerm("");
+    setIsDropdownOpen(false);
+  };
+
+  // Save only makes sense once something actually changed.
+  const editChanged =
+    !!editingFolder &&
+    (editingName.trim() !== (editingFolder.name || "") ||
+      selectedCompanies.length !== (editingFolder.companies || []).length ||
+      selectedCompanies.some(
+        (c) => !(editingFolder.companies || []).some((f) => f._id === c._id),
+      ));
+
   const saveEdit = async () => {
+    if (saving) return;
+    setSaving(true);
     const loadingToast = toast.loading("Updating folder...");
 
     try {
       await API.put(`/company-folders/${editingFolder._id}`, {
-        name: editingName,
+        name: editingName.trim(),
         companies: selectedCompanies.map((c) => c._id),
       });
-      setEditingFolder(null);
-      setSelectedCompanies([]);
-      setSearchTerm("");
+      closeEdit();
       toast.success("Folder updated successfully", { id: loadingToast });
-      fetchFolders();
+      await fetchFolders();
     } catch (error) {
       if (error.response?.status === 402) {
         toast.error(error.response?.data?.message || "An active subscription is required to make changes.", { id: loadingToast });
       } else {
         toast.error(error.response?.data?.error || "Failed to update folder", { id: loadingToast });
       }
+    } finally {
+      setSaving(false);
     }
   };
 
   const deleteFolder = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this folder?")) return;
-
     const loadingToast = toast.loading("Deleting folder...");
 
     try {
@@ -333,13 +371,6 @@ const Hotlist = () => {
   // surprising and destructive default, so that is deliberately not what this
   // does. Uses the existing PUT /company-folders/:id/remove-company endpoint.
   const removeCompanyFromFolder = async (folderId, company) => {
-    if (
-      !window.confirm(
-        `Remove "${company.name || "this company"}" from this hotlist?\n\nThis only takes it off the list — the company itself is not deleted.`,
-      )
-    )
-      return;
-
     const loadingToast = toast.loading("Removing from hotlist...");
 
     try {
@@ -355,6 +386,28 @@ const Hotlist = () => {
         toast.error(error.response?.data?.error || "Failed to remove from hotlist", { id: loadingToast });
       }
     }
+  };
+
+  const askDeleteFolder = (folder) => setConfirmState({ kind: "folder", folder });
+  const askRemoveCompany = (folderId, company) =>
+    setConfirmState({ kind: "company", folderId, company });
+
+  const runConfirm = () => {
+    const c = confirmState;
+    setConfirmState(null);
+    if (!c) return;
+    if (c.kind === "folder") deleteFolder(c.folder._id);
+    else removeCompanyFromFolder(c.folderId, c.company);
+  };
+
+  // Opening a company leaves the page, so remember the folder for the way back.
+  const openCompany = (id) => {
+    try {
+      sessionStorage.setItem(HOTLIST_RETURN_KEY, JSON.stringify({ folderId: openFolderId }));
+    } catch {
+      // storage unavailable: Back just lands on the Companies list
+    }
+    navigate(`/companies/${id}`);
   };
 
   const toggleCompany = (companyObj) => {
@@ -393,6 +446,38 @@ const Hotlist = () => {
   // `folders` refetches while this one happens to be open.
   const openFolder = folders?.find((f) => f._id === openFolderId) || null;
 
+  // A folder deleted elsewhere must not leave the page pointing at nothing.
+  useEffect(() => {
+    if (!foldersLoading && openFolderId && !openFolder) setOpenFolderId(null);
+  }, [foldersLoading, openFolderId, openFolder]);
+
+  // Escape: close the dialog first, otherwise step back out of the folder.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (confirmState) return;
+      if (editingFolder) closeEdit();
+      else if (openFolderId) setOpenFolderId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [confirmState, editingFolder, openFolderId]);
+
+  const confirmDialog = (
+    <ConfirmDialog
+      isOpen={!!confirmState}
+      title={confirmState?.kind === "folder" ? "Delete folder?" : "Remove from hotlist?"}
+      message={
+        confirmState?.kind === "folder"
+          ? `"${confirmState.folder.name}" will be deleted. The companies inside it are not deleted.`
+          : `Remove "${confirmState?.company?.name || "this company"}" from this hotlist?\n\nThis only takes it off the list. The company itself is not deleted.`
+      }
+      confirmLabel={confirmState?.kind === "folder" ? "Delete" : "Remove"}
+      onConfirm={runConfirm}
+      onCancel={() => setConfirmState(null)}
+    />
+  );
+
   // Computed once, rendered from BOTH the drill-down view and the folder
   // grid below — this used to live only inside the grid's own JSX, so it was
   // completely unreachable from the drill-down view (an early return that
@@ -402,69 +487,54 @@ const Hotlist = () => {
       className="fixed inset-0 z-[100002] bg-black/30 flex items-center justify-center sm:p-6 p-2"
       role="dialog"
       aria-modal="true"
-      tabIndex="-1"
-      onKeyDown={(e) => {
-        if (e.key === "Escape") setEditingFolder(null);
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) closeEdit();
       }}
     >
       <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full h-full sm:h-[90vh] flex flex-col outline-none">
-        {/* Modal Header */}
-        <div className="px-6 py-5 border-b border-gray-200 flex-shrink-0 flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 truncate">{`Edit: ${editingFolder.name}`}</h3>
-            <p className="text-xs text-gray-500 mt-1">
-              Modify folder name and select companies
-            </p>
+        <div className="px-8 py-4 border-b border-[#D9D9D9] flex-shrink-0 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide truncate">
+              {`Edit: ${editingFolder.name}`}
+            </h3>
+            <p className="text-xs text-gray-500">Rename the folder or choose which companies it holds</p>
           </div>
           <button
-            onClick={() => {
-              setEditingFolder(null);
-              setSelectedCompanies([]);
-              setSearchTerm("");
-            }}
-            className="p-2 hover:bg-gray-100 rounded-lg"
-            aria-label="Close modal"
+            type="button"
+            onClick={closeEdit}
+            className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity flex-shrink-0"
+            aria-label="Close"
           >
-            <X className="h-5 w-5 text-gray-500" />
+            <X className="w-[18px] h-[18px]" strokeWidth={2} />
           </button>
         </div>
 
-        {/* Modal Content with own scroll */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
-          {/* Folder Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Folder Name
-            </label>
-            <input
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+        <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6 space-y-6">
+          <FormField label="Folder Name">
+            <TextInput
               value={editingName}
               onChange={(e) => setEditingName(e.target.value)}
-              autoFocus
+              autoFocus={editFocus === "name"}
               maxLength={50}
               aria-label="Folder name"
             />
-          </div>
+          </FormField>
 
-          {/* Selected Companies */}
           {selectedCompanies.length > 0 && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Selected Companies ({selectedCompanies.length})
-              </label>
+              <FormLabel>Selected Companies ({selectedCompanies.length})</FormLabel>
               <div className="flex flex-wrap gap-2">
                 {selectedCompanies.map((company) => (
                   <span
                     key={company._id}
-                    className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs"
+                    className="inline-flex items-center gap-1 pl-3 pr-1.5 h-7 bg-[#158FFF]/10 text-[#158FFF] rounded-full text-[13px] font-medium"
                   >
-                    <span className="truncate max-w-[120px]">
-                      {company.name || "Unknown"}
-                    </span>
+                    <span className="truncate max-w-[160px]">{company.name || "Unknown"}</span>
                     <button
+                      type="button"
                       onClick={() => removeSelectedCompany(company._id)}
-                      className="hover:bg-blue-200 rounded-full p-0.5"
-                      aria-label="Remove company"
+                      className="hover:bg-[#158FFF]/20 rounded-full p-0.5"
+                      aria-label={`Remove ${company.name || "company"}`}
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -474,57 +544,46 @@ const Hotlist = () => {
             </div>
           )}
 
-          {/* Search & Add Companies */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Add Companies
-            </label>
+            <FormLabel>Add Companies</FormLabel>
             <div className="relative" ref={dropdownRef}>
-              <input
+              <TextInput
                 ref={searchInputRef}
-                className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="pl-9"
                 placeholder="Search across all companies..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onFocus={() => setIsDropdownOpen(true)}
+                autoFocus={editFocus === "search"}
                 aria-label="Search companies"
               />
-              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#525866]" />
+              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#525866] pointer-events-none" />
 
               {isDropdownOpen && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                <div className="absolute z-10 w-full mt-1 bg-white border border-[#E1E4EA] rounded-2xl shadow-lg max-h-56 overflow-y-auto">
                   {filteredCompanies.length ? (
                     filteredCompanies.map((company) => {
-                      const isSelected = selectedCompanies.some(
-                        (c) => c._id === company._id,
-                      );
-
+                      const isSelected = selectedCompanies.some((c) => c._id === company._id);
                       return (
                         <button
                           key={company._id}
                           onClick={() => toggleCompany(company)}
-                          className={`w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0 ${
-                            isSelected ? "bg-blue-50" : ""
+                          className={`w-full text-left px-4 py-2.5 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0 ${
+                            isSelected ? "bg-[#158FFF]/5" : ""
                           }`}
                           type="button"
                         >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <div className="font-medium text-gray-900 text-sm truncate">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-medium text-[#1F2937] text-[13px] truncate">
                                 {company.name || "Unnamed Company"}
                               </div>
-                              <div className="text-xs text-gray-600 mt-1 flex flex-col">
-                                {company.industry && (
-                                  <span>Industry: {company.industry}</span>
-                                )}
-                                {company.address && (
-                                  <span>Location: {company.address}</span>
-                                )}
+                              <div className="text-xs text-gray-500 mt-0.5 flex flex-col">
+                                {company.industry && <span className="truncate">Industry: {company.industry}</span>}
+                                {company.address && <span className="truncate">Location: {company.address}</span>}
                               </div>
                             </div>
-                            {isSelected && (
-                              <Check className="h-4 w-4 text-blue-600" />
-                            )}
+                            {isSelected && <Check className="h-4 w-4 text-[#158FFF] flex-shrink-0" />}
                           </div>
                         </button>
                       );
@@ -543,29 +602,27 @@ const Hotlist = () => {
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="px-6 py-4 border-t border-gray-200 flex gap-3 justify-end flex-wrap">
-          <button
-            onClick={() => {
-              setEditingFolder(null);
-              setSelectedCompanies([]);
-              setSearchTerm("");
-            }}
-            className="px-6 py-2.5 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium"
-            type="button"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={saveEdit}
-            className={`px-6 py-2.5 rounded-lg font-medium text-white bg-blue-600 hover:bg-blue-700 ${
-              !editingName?.trim() ? "opacity-60 cursor-not-allowed" : ""
-            }`}
-            type="button"
-            disabled={!editingName?.trim()}
-          >
-            Save Changes
-          </button>
+        <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-between gap-3">
+          <span className="text-xs text-gray-500">
+            {editChanged ? "You have unsaved changes" : "Changes are saved when you click Save"}
+          </span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={closeEdit}
+              className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors font-inter"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={saveEdit}
+              disabled={!editingName?.trim() || !editChanged || saving}
+              className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-inter"
+            >
+              {saving ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -587,41 +644,39 @@ const Hotlist = () => {
       );
     });
 
+    const total = openFolder.companies?.length || 0;
+    const companyWord = total === 1 ? "company" : "companies";
+
     return (
       <>
-      <div className="p-6 space-y-4 bg-white min-h-full">
-        {/* Workspace navbar: Back + folder name, search, List/Card toggle,
-            Add Companies — wraps to a second line on narrow widths rather
-            than ever scrolling sideways. */}
-        <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-3 min-w-0 flex-shrink-0">
-              <button
-                onClick={() => setOpenFolderId(null)}
-                className="flex items-center gap-1.5 h-9 px-3 rounded-full border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex-shrink-0"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </button>
-              <div className="min-w-0">
-                <h2 className="text-base font-semibold text-gray-900 truncate">{openFolder.name}</h2>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {q
-                    ? `${visibleCompanies.length} of ${openFolder.companies?.length || 0} compan${(openFolder.companies?.length || 0) === 1 ? "y" : "ies"}`
-                    : `${openFolder.companies?.length || 0} compan${(openFolder.companies?.length || 0) === 1 ? "y" : "ies"}`}
-                </p>
-              </div>
+      <div className="bg-white overflow-hidden h-full min-h-full flex flex-col">
+        {/* Same header strip as the folder grid: Back + name, search, view toggle, Add Companies. */}
+        <div className="sm:h-16 px-4 sm:px-6 lg:px-8 py-2 border-b border-[#E1E4EA] flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 bg-white flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setOpenFolderId(null)}
+              title="Back to folders"
+              aria-label="Back to folders"
+              className="inline-flex items-center justify-center h-10 w-10 rounded-full bg-[#F1F1F5] text-[#525866] hover:bg-gray-200 transition-colors flex-shrink-0"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div className="min-w-0 flex flex-col justify-center gap-1.5">
+              <h2 className="m-0 leading-tight font-bold text-base sm:text-lg text-gray-900 truncate">{openFolder.name}</h2>
+              <p className="m-0 leading-tight text-[10px] sm:text-xs text-gray-500 font-inter truncate">
+                {q ? `${visibleCompanies.length} of ${total} ${companyWord}` : `${total} ${companyWord}`}
+              </p>
             </div>
+          </div>
 
-            <div className="relative flex-1 min-w-[200px] flex justify-end">
-              <ExpandableSearch
-                value={companySearchTerm}
-                onChange={setCompanySearchTerm}
-                placeholder="Search this folder by name, industry, or location..."
-              />
-            </div>
+          <div className="flex items-center gap-3 flex-nowrap min-w-0">
+            <ExpandableSearch
+              value={companySearchTerm}
+              onChange={setCompanySearchTerm}
+              placeholder="Search this folder by name, industry, or location..."
+            />
 
-            {/* List / Card Toggle — same pill pattern as Deals' List/Kanban toggle */}
             <div className="relative flex items-center bg-[#F1F1F5] gap-1.5 rounded-full p-1 flex-shrink-0 overflow-hidden">
               <span
                 className="absolute top-1 w-8 h-8 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
@@ -644,8 +699,9 @@ const Hotlist = () => {
             </div>
 
             <button
-              onClick={() => startEdit(openFolder)}
-              className="flex items-center gap-1.5 h-10 px-4 rounded-full bg-[#0085FF] text-white text-sm font-medium hover:bg-blue-600 transition-colors flex-shrink-0"
+              type="button"
+              onClick={() => startEdit(openFolder, "search")}
+              className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-[#0085FF] text-white text-sm font-medium rounded-full hover:bg-blue-600 transition-colors flex-shrink-0"
             >
               <PlusIcon className="w-4 h-4" />
               Add Companies
@@ -653,62 +709,60 @@ const Hotlist = () => {
           </div>
         </div>
 
-        {!openFolder.companies || openFolder.companies.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 text-center py-10 sm:py-14 px-6 text-gray-500">
-            <Building2 className="h-12 w-12 sm:h-16 sm:w-16 mx-auto text-gray-300 mb-4" />
-            <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">No companies in this folder</h3>
-            <p className="text-sm mb-4">Add companies to this folder to get started.</p>
-            <button
-              onClick={() => startEdit(openFolder)}
-              className="inline-flex items-center gap-1.5 h-10 px-4 rounded-full bg-[#0085FF] text-white text-sm font-medium hover:bg-blue-600 transition-colors"
-            >
-              <PlusIcon className="w-4 h-4" />
-              Add Companies
-            </button>
-          </div>
-        ) : visibleCompanies.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 text-center py-10 sm:py-14 px-6 text-gray-500">
-            <SearchIcon className="h-10 w-10 sm:h-12 sm:w-12 mx-auto text-gray-300 mb-3" />
-            <p className="text-sm">No companies in this folder match "{companySearchTerm}".</p>
-          </div>
-        ) : folderViewMode === "card" ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {visibleCompanies.map((company) => (
-              <FolderCompanyCard
-                key={company._id}
-                company={company}
-                query={query}
-                onOpen={(id) => navigate(`/companies/${id}`)}
-                onEdit={(id) => navigate(`/companies/${id}`)}
-                onRemove={(c) => removeCompanyFromFolder(openFolder._id, c)}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            <div className="hidden sm:grid grid-cols-[auto_1fr_1fr_1fr_auto] items-stretch bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              <span className="px-4 py-2.5 border-r border-gray-200 w-[26px] box-content" />
-              <span className="px-4 py-2.5 border-r border-gray-200">Company</span>
-              <span className="px-4 py-2.5 border-r border-gray-200">Industry</span>
-              <span className="px-4 py-2.5 border-r border-gray-200">Location</span>
-              <span className="px-3 py-2.5">Actions</span>
+        <div className="px-4 sm:px-6 lg:px-8 py-6 flex-1 min-h-0 overflow-y-auto">
+          {total === 0 ? (
+            <div className="text-center py-20">
+              <div className="bg-gray-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Building2 className="w-10 h-10 text-gray-300" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900">No companies in this folder</h3>
+              <p className="text-gray-500 mt-2 max-w-sm mx-auto">Add companies to this folder to get started.</p>
             </div>
-            <div className="divide-y divide-gray-100">
+          ) : visibleCompanies.length === 0 ? (
+            <div className="text-center py-20">
+              <SearchIcon className="h-10 w-10 mx-auto text-gray-300 mb-3" />
+              <p className="text-sm text-gray-500">No companies in this folder match "{companySearchTerm}".</p>
+            </div>
+          ) : folderViewMode === "card" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {visibleCompanies.map((company) => (
-                <FolderCompanyRow
+                <FolderCompanyCard
                   key={company._id}
                   company={company}
                   query={query}
-                  onOpen={(id) => navigate(`/companies/${id}`)}
-                  onEdit={(id) => navigate(`/companies/${id}`)}
-                  onRemove={(c) => removeCompanyFromFolder(openFolder._id, c)}
+                  onOpen={openCompany}
+                  onEdit={openCompany}
+                  onRemove={(c) => askRemoveCompany(openFolder._id, c)}
                 />
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="bg-white border border-[#E1E4EA] rounded-xl overflow-hidden">
+              <div className="hidden sm:grid grid-cols-[auto_1fr_1fr_1fr_auto] items-stretch bg-gray-50 border-b border-[#E1E4EA] text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                <span className="px-4 py-2.5 border-r border-[#E1E4EA] w-[26px] box-content" />
+                <span className="px-4 py-2.5 border-r border-[#E1E4EA]">Company</span>
+                <span className="px-4 py-2.5 border-r border-[#E1E4EA]">Industry</span>
+                <span className="px-4 py-2.5 border-r border-[#E1E4EA]">Location</span>
+                <span className="px-3 py-2.5">Actions</span>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {visibleCompanies.map((company) => (
+                  <FolderCompanyRow
+                    key={company._id}
+                    company={company}
+                    query={query}
+                    onOpen={openCompany}
+                    onEdit={openCompany}
+                    onRemove={(c) => askRemoveCompany(openFolder._id, c)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
       {editFolderModal}
+      {confirmDialog}
       </>
     );
   }
@@ -717,10 +771,10 @@ const Hotlist = () => {
     <>
     <div className="bg-white overflow-hidden h-full min-h-full flex flex-col">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white">
-        <div>
-          <h2 className="text-lg font-bold text-gray-900">Company Hotlists</h2>
-          <p className="text-sm text-gray-500">
+      <div className="sm:h-16 px-4 sm:px-6 lg:px-8 py-2 border-b border-[#E1E4EA] flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 bg-white flex-shrink-0">
+        <div className="flex flex-col justify-center gap-1.5 min-w-0">
+          <h2 className="m-0 leading-tight font-bold text-base sm:text-lg text-gray-900 truncate">Company Hotlists</h2>
+          <p className="m-0 leading-tight text-[10px] sm:text-xs text-gray-500 font-inter truncate">
             Organise your companies into custom folders
           </p>
         </div>
@@ -769,7 +823,7 @@ const Hotlist = () => {
         </div>
       </div>
 
-      <div className="p-6 flex-1 min-h-0 overflow-y-auto">
+      <div className="px-4 sm:px-6 lg:px-8 py-6 flex-1 min-h-0 overflow-y-auto">
         {visibleFolders?.length > 0 && foldersViewMode === "folder" && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {visibleFolders.map((folder) => (
@@ -784,7 +838,7 @@ const Hotlist = () => {
                     <EditIcon className="w-3 h-3" />
                   </button>
                   <button
-                    onClick={() => deleteFolder(folder._id)}
+                    onClick={() => askDeleteFolder(folder)}
                     className="p-1.5 bg-white rounded-full shadow-sm text-gray-400 hover:text-red-600 hover:scale-110 transition-all"
                   >
                     <DeleteIcon className="w-4 h-4" />
@@ -843,7 +897,7 @@ const Hotlist = () => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        deleteFolder(folder._id);
+                        askDeleteFolder(folder);
                       }}
                       className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
                     >
@@ -856,7 +910,13 @@ const Hotlist = () => {
           </div>
         )}
 
-        {visibleFolders?.length === 0 && (
+        {foldersLoading && (
+          <div className="flex justify-center py-20" role="status" aria-label="Loading folders">
+            <span className="w-8 h-8 border-2 border-[#0085FF] border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+
+        {!foldersLoading && visibleFolders?.length === 0 && (
           <div className="text-center py-20">
             <div className="bg-gray-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
               <Building2 className="w-10 h-10 text-gray-300" />
@@ -882,6 +942,7 @@ const Hotlist = () => {
       </div>
     </div>
     {editFolderModal}
+    {confirmDialog}
     </>
   );
 };

@@ -40,7 +40,7 @@ import {
   User, ArrowUp, ArrowDown, Database } from "lucide-react";
 import StarIcon from "../components/common/StarIcon";
 import ImportClients from "../components/company/ImportClients";
-import Hotlist from "../components/company/Hotlist";
+import Hotlist, { HOTLIST_RETURN_KEY } from "../components/company/Hotlist";
 import BulkActions from "../components/BulkActions";
 import QuickCompanyForm from "../components/company/QuickCompanyForm";
 import ProfilePicture from "../components/contact/ProfilePicture";
@@ -171,7 +171,21 @@ function Companies() {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [editCompany, setEditCompany] = useState(null);
   const [showImport, setShowImport] = useState(false);
-  const [showHotlist, setShowHotlist] = useState(false);
+  // Coming back from a company opened out of a hotlist folder: reopen the hotlist.
+  const [showHotlist, setShowHotlist] = useState(() => {
+    try {
+      return !!sessionStorage.getItem(HOTLIST_RETURN_KEY);
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem(HOTLIST_RETURN_KEY);
+    } catch {
+      // ignore
+    }
+  }, []);
   const [permission, setPermission] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAddToHotlistModal, setShowAddToHotlistModal] = useState(false);

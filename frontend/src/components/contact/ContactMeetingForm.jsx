@@ -14,6 +14,7 @@ import {
   Building, Lightbulb, Timer, Flag } from "lucide-react";
 import EditIcon from "../common/EditIcon";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { FormLabel, FormError, inputCls, textareaCls } from "../common/form";
 
 const initialState = {
   title: "",
@@ -43,21 +44,12 @@ const PriorityChip = ({ priority }) => {
   );
 };
 
-const FormField = ({ label, required, children, error, description, icon: Icon }) => (
-  <div className="space-y-2">
-    <label className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-      {Icon && <Icon className="w-4 h-4 text-gray-500" />}
-      {label}
-      {required && <span className="text-red-500">*</span>}
-    </label>
+const FormField = ({ label, required, children, error, description }) => (
+  <div>
+    <FormLabel required={required}>{label}</FormLabel>
     {children}
-    {description && <p className="text-xs text-gray-500">{description}</p>}
-    {error && (
-      <div className="flex items-center gap-2 p-2 bg-red-50 border border-red-200 rounded-lg">
-        <AlertTriangle className="w-4 h-4 text-red-500" />
-        <p className="text-xs text-red-600">{error}</p>
-      </div>
-    )}
+    {description && <p className="text-[13px] font-inter text-[#A0A0A0] mt-1.5">{description}</p>}
+    <FormError>{error}</FormError>
   </div>
 );
 
@@ -525,22 +517,20 @@ const ContactMeetingForm = ({ open, mode, meetingData, calendarDate, contactId, 
             ) : (
               /* EDIT/CREATE MODE - Form */
               <form onSubmit={handleSubmit} noValidate className="p-6 space-y-6">
-                <FormField label="Meeting Title" required error={errors.title} icon={PdfIcon}>
+                <FormField label="Meeting Title" required error={errors.title}>
                   <input
                     ref={titleInputRef}
                     type="text"
                     value={form.title}
                     onChange={(e) => handleChange("title", e.target.value)}
-                    className={`w-full px-4 py-3 rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.title ? "border-red-300 bg-red-50" : "border-gray-300 bg-white"
-                    }`}
+                    className={inputCls({ error: !!(errors.title) })}
                     placeholder="Enter meeting subject or agenda"
                   />
                 </FormField>
 
                 <div className="grid grid-cols-2 gap-4">
                   {!calendarDate ? (
-                    <FormField label="Date" required error={errors.date} icon={CalendarIcon}>
+                    <FormField label="Date" required error={errors.date}>
                       <input
                         ref={dateInputRef}
                         type="date"
@@ -548,38 +538,32 @@ const ContactMeetingForm = ({ open, mode, meetingData, calendarDate, contactId, 
                         min={new Date().toISOString().split("T")[0]}
                         max="2099-12-31"
                         onChange={(e) => handleChange("date", e.target.value)}
-                        className={`w-full px-4 py-3 rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                          errors.date ? "border-red-300 bg-red-50" : "border-gray-300 bg-white"
-                        }`}
+                        className={inputCls({ error: !!(errors.date) })}
                       />
                     </FormField>
                   ) : (
-                    <FormField label="Date" icon={CalendarIcon} description="Selected from calendar">
-                      <div className="flex items-center gap-2 py-3 px-4 bg-blue-50 text-blue-800 rounded-xl border border-blue-200">
+                    <FormField label="Date" description="Selected from calendar">
+                      <div className="flex items-center gap-2 h-[38px] px-3 bg-[#158FFF]/10 text-[#158FFF] rounded-full border border-[#158FFF]/20 text-[13px]">
                         <CalendarIcon className="w-4 h-4" />
                         <span className="font-medium">{calendarDate}</span>
                       </div>
                     </FormField>
                   )}
 
-                  <FormField label="Time" icon={Clock}>
+                  <FormField label="Time">
                     <input
                       type="time"
                       value={form.time}
                       onChange={(e) => handleChange("time", e.target.value)}
-                      className={`w-full px-4 py-3 rounded-xl border transition-all focus:outline-none focus:ring-2 ${
-                        timeConflict
-                          ? "border-red-500 bg-red-50 focus:ring-red-500"
-                          : "border-gray-300 bg-white focus:ring-blue-500"
-                      }`}
+                      className={inputCls({ error: !!(timeConflict) })}
                     />
                   </FormField>
 
-                  <FormField label="Duration" icon={Timer}>
+                  <FormField label="Duration">
                     <select
                       value={form.duration}
                       onChange={(e) => handleChange("duration", parseInt(e.target.value))}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={`${inputCls()} bg-white`}
                     >
                       <option value={15}>15 minutes</option>
                       <option value={30}>30 minutes</option>
@@ -590,11 +574,11 @@ const ContactMeetingForm = ({ open, mode, meetingData, calendarDate, contactId, 
                   </FormField>
                 </div>
 
-                <FormField label="Priority" icon={Flag}>
+                <FormField label="Priority">
                   <select
                     value={form.priority}
                     onChange={(e) => handleChange("priority", e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={`${inputCls()} bg-white`}
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -611,11 +595,11 @@ const ContactMeetingForm = ({ open, mode, meetingData, calendarDate, contactId, 
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField label="Meeting Type" icon={VideoIcon}>
+                  <FormField label="Meeting Type">
                     <select
                       value={form.meetingType}
                       onChange={(e) => handleChange("meetingType", e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={`${inputCls()} bg-white`}
                     >
                       <option value="in-person">In-person</option>
                       <option value="video-call">Video call</option>
@@ -623,11 +607,11 @@ const ContactMeetingForm = ({ open, mode, meetingData, calendarDate, contactId, 
                     </select>
                   </FormField>
 
-                  <FormField label="Meeting Category" icon={PdfIcon}>
+                  <FormField label="Meeting Category">
                     <select
                       value={form.meetingCategory}
                       onChange={(e) => handleChange("meetingCategory", e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={`${inputCls()} bg-white`}
                     >
                       <option value="">— Select category —</option>
                       {meetingTypes.map(t => (
@@ -637,15 +621,14 @@ const ContactMeetingForm = ({ open, mode, meetingData, calendarDate, contactId, 
                   </FormField>
 
                   <FormField 
-                    label="Location" 
-                    icon={MapPin}
+                    label="Location"
                     description="Meeting room, address, or link"
                   >
                     <input
                       type="text"
                       value={form.location}
                       onChange={(e) => handleChange("location", e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={`${inputCls()} bg-white`}
                       placeholder={
                         form.meetingType === "video-call"
                           ? "Meeting link or platform"
@@ -659,14 +642,13 @@ const ContactMeetingForm = ({ open, mode, meetingData, calendarDate, contactId, 
 
                 <FormField
                   label="Description"
-                  icon={PdfIcon}
                   description="Meeting agenda, topics, or notes"
                 >
                   <textarea
                     value={form.description}
                     onChange={(e) => handleChange("description", e.target.value)}
                     rows={4}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    className={textareaCls()}
                     placeholder="Add meeting agenda, discussion topics, or preparation notes..."
                   />
                 </FormField>

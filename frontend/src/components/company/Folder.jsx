@@ -1622,21 +1622,12 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
 
         {openFolderId && openFolder ? (
           <div className="min-h-[400px]">
-            <div
-              className="flex items-center justify-between w-full flex-shrink-0"
-              style={{ height: 32, margin: "0 auto 18px 0" }}
-            >
-              <div className="flex items-center flex-shrink-0" style={{ gap: 10, width: 160, height: 20 }}>
+            {/* Same row as the folder list's search bar: breadcrumb, search, actions. */}
+            <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
+              <div className="flex items-center gap-2.5 flex-shrink-0 min-w-0 max-w-[40%]">
                 <button
                   onClick={() => setOpenFolderId("")}
-                  style={{
-                    fontFamily: "Inter",
-                    fontWeight: 500,
-                    fontSize: 14,
-                    lineHeight: "150%",
-                    letterSpacing: "-0.04em",
-                    color: "#000000",
-                  }}
+                  style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, letterSpacing: "-0.04em", color: "#000000" }}
                   className="hover:opacity-70 flex-shrink-0"
                 >
                   Folders
@@ -1644,71 +1635,60 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
                 <ChevronRight size={14} className="text-gray-400 flex-shrink-0" />
                 <span
                   className="truncate"
-                  style={{
-                    fontFamily: "Inter",
-                    fontWeight: 500,
-                    fontSize: 14,
-                    lineHeight: "150%",
-                    letterSpacing: "-0.04em",
-                    color: "#404040",
-                  }}
+                  style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, letterSpacing: "-0.04em", color: "#404040" }}
                 >
                   {openFolder.name}
                 </span>
               </div>
 
-              <div className="flex items-center flex-shrink-0" style={{ gap: 12, width: 329, height: 32 }}>
-                <div
-                  className="relative flex items-center flex-shrink-0"
-                  style={{
-                    boxSizing: "border-box",
-                    padding: "0 14px",
-                    gap: 10,
-                    width: 233,
-                    height: 32,
-                    border: "1px solid rgba(31, 41, 55, 0.1)",
-                    borderRadius: 95,
-                  }}
+              <div className="relative flex-1 min-w-[180px] h-[44px]">
+                <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
+                <input
+                  type="text"
+                  placeholder="Search file by name..."
+                  value={fileSearchTerm}
+                  onChange={(e) => setFileSearchTerm(e.target.value)}
+                  className="w-full h-full pl-11 pr-10 border border-[rgba(31,41,55,0.1)] rounded-full text-sm focus:outline-none focus:border-[#0085FF]"
+                />
+                {fileSearchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setFileSearchTerm("")}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-900 focus:outline-none"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={() => deleteFolder(openFolder._id)}
+                  className="flex items-center justify-center w-[44px] h-[44px] bg-white border border-[#E1E4EA] rounded-full hover:bg-gray-50 transition-colors"
+                  title="Delete folder"
                 >
-                  <SearchIcon className="flex-shrink-0 w-4 h-4 text-[#525866]" />
-                  <input
-                    type="text"
-                    placeholder="Search file by name..."
-                    value={fileSearchTerm}
-                    onChange={(e) => setFileSearchTerm(e.target.value)}
-                    className="w-full h-full bg-transparent border-none outline-none text-xs leading-normal"
-                    style={{ color: "#1F2937", opacity: 0.9 }}
-                  />
-                </div>
-                <div className="flex items-center flex-shrink-0" style={{ gap: 12, width: 84, height: 20 }}>
-                  <button
-                    onClick={() => deleteFolder(openFolder._id)}
-                    className="hover:opacity-70 transition-opacity"
-                    title="Delete"
-                  >
-                    <RowDeleteIcon size={20} style={{ color: "#CD3636" }} />
-                  </button>
-                  <button
-                    onClick={() =>
-                      setModalState({
-                        isOpen: true,
-                        editingId: openFolder._id,
-                        initialName: openFolder.name,
-                      })
-                    }
-                    className="hover:opacity-70 transition-opacity"
-                    title="Rename"
-                  >
-                    <RowEditIcon size={20} style={{ color: "#404040" }} />
-                  </button>
-                  <button
-                    onClick={() => setSelectedFolderId(openFolder._id)}
-                    className="hover:opacity-70 transition-opacity"
-                    title="Add files/links"
-                  >
-                    <RowAddToDriveIcon size={20} style={{ color: "#404040" }} />
-                  </button>
-                </div>
+                  <RowDeleteIcon size={20} style={{ color: "#CD3636" }} />
+                </button>
+                <button
+                  onClick={() =>
+                    setModalState({
+                      isOpen: true,
+                      editingId: openFolder._id,
+                      initialName: openFolder.name,
+                    })
+                  }
+                  className="flex items-center justify-center w-[44px] h-[44px] bg-white border border-[#E1E4EA] rounded-full hover:bg-gray-50 transition-colors"
+                  title="Rename folder"
+                >
+                  <RowEditIcon size={20} style={{ color: "#404040" }} />
+                </button>
+                <button
+                  onClick={() => setSelectedFolderId(openFolder._id)}
+                  className="flex items-center justify-center w-[44px] h-[44px] bg-white border border-[#E1E4EA] rounded-full hover:bg-gray-50 transition-colors"
+                  title="Add files/links"
+                >
+                  <RowAddToDriveIcon size={20} style={{ color: "#404040" }} />
+                </button>
               </div>
             </div>
 
@@ -1781,7 +1761,23 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
                         );
                       }}
                     />
-                    <img src={pdfIconImg} alt="" width={82} height={82} style={{ objectFit: "contain", marginTop: -16 }} />
+                    {file.isLink ? (
+                      <div
+                        className="flex items-center justify-center flex-shrink-0"
+                        style={{
+                          width: 82,
+                          height: 82,
+                          marginTop: -16,
+                          borderRadius: 16,
+                          background: "linear-gradient(135deg, #E8F4FF 0%, #CCE4FF 100%)",
+                          border: "1.5px solid #B3D4FF",
+                        }}
+                      >
+                        <LinkIcon className="text-blue-500" style={{ width: 38, height: 38 }} />
+                      </div>
+                    ) : (
+                      <img src={pdfIconImg} alt="" width={82} height={82} style={{ objectFit: "contain", marginTop: -16 }} />
+                    )}
                     <span
                       className="absolute left-0 w-full text-center truncate px-3"
                       style={{
@@ -1801,9 +1797,9 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
                       style={{
                         bottom: 8,
                         fontFamily: "Inter",
-                        fontWeight: 400,
+                        fontWeight: file.isLink ? 500 : 400,
                         fontSize: 11,
-                        color: "#5B5A64",
+                        color: file.isLink ? "#0085FF" : "#5B5A64",
                       }}
                     >
                       {file.isLink ? "Link" : formatFileSize(file.fileSize)}

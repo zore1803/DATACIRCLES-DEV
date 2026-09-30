@@ -15,6 +15,7 @@ import {
 import toast from "react-hot-toast";
 import ReactQuill from "react-quill-new";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { FormLabel, inputCls } from "../common/form";
 
 // Standard Indian GST slabs, matching the per-item select used on
 // document forms (e.g. InvoiceForm.jsx).
@@ -185,8 +186,7 @@ const ItemForm = ({
     else if (typeStr.includes("multi-select") || typeStr.includes("checkbox") || typeStr === "multiselect")
       normalizedType = "multiselect";
 
-    const baseInputClass = `w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] font-inter placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 transition-all ${hasError ? "border-red-500 focus:ring-red-500" : "border-[#1F2937]/10 focus:ring-blue-500"
-      }`;
+    const baseInputClass = inputCls({ error: !!hasError });
 
     const errorText = hasError ? <p className="text-red-500 text-xs mt-1">{hasError}</p> : null;
 
@@ -613,9 +613,7 @@ const ItemForm = ({
         <div className="flex-1 overflow-y-auto p-8 space-y-6 font-inter custom-scrollbar">
           {/* Item/Service Name — label and placeholder follow the Type field below */}
           <div>
-            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              {form.type === "service" ? "Service Name" : "Item Name"} <span className="text-red-500">*</span>
-            </label>
+            <FormLabel required>{form.type === "service" ? "Service Name" : "Item Name"}</FormLabel>
             <input
               type="text"
               value={form.name}
@@ -630,9 +628,7 @@ const ItemForm = ({
 
           {/* Type */}
           <div>
-            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Type <span className="text-red-500">*</span>
-            </label>
+            <FormLabel required>Type</FormLabel>
             <select
               value={form.type}
               onChange={(e) => {
@@ -660,7 +656,7 @@ const ItemForm = ({
                   setVariantIndex(null);
                 }
               }}
-              className="w-full px-3 h-[38px] bg-white border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer"
+              className={`${inputCls()} bg-white`}
             >
               <option value="product">Product</option>
               <option value="service">Service</option>
@@ -704,23 +700,19 @@ const ItemForm = ({
                 </div>
                 <div className="p-4 space-y-4">
                   <div>
-                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                      Variant Name <span className="text-red-500">*</span>
-                    </label>
+                    <FormLabel required>Variant Name</FormLabel>
                     <input
                       type="text"
                       name="name"
                       value={currentVariant.name}
                       onChange={handleVariantChange}
-                      className="w-full px-3 h-[38px] border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className={`${inputCls()} bg-white`}
                       placeholder="Enter Variant Name"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                      SKU
-                    </label>
+                    <FormLabel>SKU</FormLabel>
                     <div className="flex gap-2">
                       <input
                         type="text"
@@ -728,7 +720,7 @@ const ItemForm = ({
                         autoComplete="off"
                         value={currentVariant.sku}
                         onChange={handleVariantChange}
-                        className="flex-1 px-3 h-[38px] border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className={inputCls({ grow: true })}
                         placeholder="Enter or Generate SKU"
                       />
                       <button
@@ -778,7 +770,7 @@ const ItemForm = ({
                                   return { ...prev, attributes: newAttrs };
                                 });
                               }}
-                              className="flex-1 px-3 h-[38px] border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              className={inputCls({ grow: true })}
                               placeholder="Attribute Name (e.g. color)"
                             />
                             <input
@@ -791,7 +783,7 @@ const ItemForm = ({
                                   attributes: { ...prev.attributes, [key]: newVal },
                                 }));
                               }}
-                              className="flex-1 px-3 h-[38px] border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              className={inputCls({ grow: true })}
                               placeholder="Attribute Value (e.g. Red)"
                             />
                             <button
@@ -815,37 +807,31 @@ const ItemForm = ({
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                        Purchase Price <span className="text-red-500">*</span>
-                      </label>
+                      <FormLabel required>Purchase Price</FormLabel>
                       <input
                         type="number"
                         name="purchasePrice"
                         value={currentVariant.purchasePrice}
                         onChange={handleVariantChange}
-                        className="w-full px-3 h-[38px] border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className={`${inputCls()} bg-white`}
                         placeholder="Enter Purchase Price"
                       />
                     </div>
                     <div>
-                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                        Selling Price <span className="text-red-500">*</span>
-                      </label>
+                      <FormLabel required>Selling Price</FormLabel>
                       <input
                         type="number"
                         name="sellingPrice"
                         value={currentVariant.sellingPrice}
                         onChange={handleVariantChange}
-                        className="w-full px-3 h-[38px] border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className={`${inputCls()} bg-white`}
                         placeholder="Enter Selling Price"
                       />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                        {form._id && variantIndex !== null ? "Current Stock" : "Opening Stock"}
-                      </label>
+                      <FormLabel>{form._id && variantIndex !== null ? "Current Stock" : "Opening Stock"}</FormLabel>
                       <input
                         type="number"
                         name="stock"
@@ -858,7 +844,7 @@ const ItemForm = ({
                         disabled={!!(form._id && variantIndex !== null)}
                         value={currentVariant.stock}
                         onChange={handleVariantChange}
-                        className="w-full px-3 h-[38px] border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                        className={`${inputCls()} bg-white`}
                       />
                       {form._id && variantIndex !== null && (
                         <p className="mt-1 text-[11px] text-gray-400">
@@ -867,9 +853,7 @@ const ItemForm = ({
                       )}
                     </div>
                     <div>
-                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                        GST Rate
-                      </label>
+                      <FormLabel>GST Rate</FormLabel>
                       <select
                         value={currentVariant.gstRate ?? 0}
                         onChange={(e) =>
@@ -878,7 +862,7 @@ const ItemForm = ({
                             gstRate: parseFloat(e.target.value) || 0,
                           }))
                         }
-                        className="w-full px-3 h-[38px] bg-white border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                        className={`${inputCls()} bg-white`}
                       >
                         {GST_RATES.map((rate) => (
                           <option key={rate} value={rate}>{rate}%</option>
@@ -898,20 +882,20 @@ const ItemForm = ({
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Barcode</label>
+                        <FormLabel>Barcode</FormLabel>
                         <input
                           type="text"
                           name="barcode"
                           autoComplete="off"
                           value={currentVariant.barcode ?? ""}
                           onChange={handleVariantChange}
-                          className="w-full px-3 h-[38px] border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className={`${inputCls()} bg-white`}
                           placeholder="Scan or enter barcode"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Low Stock Alert at</label>
+                        <FormLabel>Low Stock Alert at</FormLabel>
                         <input
                           type="number"
                           min="0"
@@ -919,13 +903,13 @@ const ItemForm = ({
                           value={currentVariant.lowStockThreshold ?? ""}
                           onChange={handleVariantChange}
                           onWheel={(e) => e.target.blur()}
-                          className="w-full px-3 h-[38px] border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className={`${inputCls()} bg-white`}
                           placeholder="Item default"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Discount</label>
+                        <FormLabel>Discount</FormLabel>
                         <div className="flex gap-2">
                           <input
                             type="number"
@@ -938,7 +922,7 @@ const ItemForm = ({
                               }))
                             }
                             onWheel={(e) => e.target.blur()}
-                            className="flex-1 min-w-0 px-3 h-[38px] border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className={inputCls({ grow: true })}
                             placeholder="Item default"
                           />
                           <select
@@ -958,7 +942,7 @@ const ItemForm = ({
                       </div>
 
                       <div>
-                        <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Max Discount %</label>
+                        <FormLabel>Max Discount %</FormLabel>
                         <input
                           type="number"
                           min="0"
@@ -968,26 +952,26 @@ const ItemForm = ({
                           value={currentVariant.maxDiscountPercent ?? ""}
                           onChange={handleVariantChange}
                           onWheel={(e) => e.target.blur()}
-                          className="w-full px-3 h-[38px] border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className={`${inputCls()} bg-white`}
                           placeholder="Item default"
                         />
                       </div>
                     </div>
 
                     <div className="mt-3">
-                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Description</label>
+                      <FormLabel>Description</FormLabel>
                       <textarea
                         name="description"
                         rows={2}
                         value={currentVariant.description ?? ""}
                         onChange={handleVariantChange}
-                        className="w-full px-3 h-[38px] border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                        className={`${inputCls()} bg-white`}
                         placeholder="Item description"
                       />
                     </div>
 
                     <div className="mt-3">
-                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Images</label>
+                      <FormLabel>Images</FormLabel>
                       <VariantImagePicker
                         variant={currentVariant}
                         onChange={(next) => setCurrentVariant((prev) => ({ ...prev, ...next }))}
@@ -1068,9 +1052,7 @@ const ItemForm = ({
               editable parent copy would leave the user unsure which one actually applies. */}
           {!hasVariants && (
           <div>
-            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Description
-            </label>
+            <FormLabel>Description</FormLabel>
             <div className="bg-white border border-[#1F2937]/10 rounded-2xl">
               <ReactQuill
                 theme="snow"
@@ -1089,9 +1071,7 @@ const ItemForm = ({
           {!hasVariants && (
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Purchase Price <span className="text-red-500">*</span>
-              </label>
+              <FormLabel required>Purchase Price</FormLabel>
               {/* Each price carries its own With/Without Tax, same as the Add form. */}
               <div className="flex border border-[#1F2937]/10 rounded-full overflow-hidden bg-white focus-within:ring-1 focus-within:ring-blue-500">
                 <input
@@ -1115,9 +1095,7 @@ const ItemForm = ({
               </div>
             </div>
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Selling Price <span className="text-red-500">*</span>
-              </label>
+              <FormLabel required>Selling Price</FormLabel>
               <div className="flex border border-[#1F2937]/10 rounded-full overflow-hidden bg-white focus-within:ring-1 focus-within:ring-blue-500">
                 <input
                   type="number"
@@ -1168,9 +1146,7 @@ const ItemForm = ({
           {!hasVariants && (
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Discount
-              </label>
+              <FormLabel>Discount</FormLabel>
               <div className="flex border border-[#1F2937]/10 rounded-full overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 bg-white">
                 <input
                   type="number"
@@ -1195,9 +1171,7 @@ const ItemForm = ({
               <p className="mt-1 text-[11px] text-gray-400">Default discount applied when added to a document.</p>
             </div>
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Max Discount %
-              </label>
+              <FormLabel>Max Discount %</FormLabel>
               <input
                 type="number"
                 min="0"
@@ -1206,7 +1180,7 @@ const ItemForm = ({
                 placeholder="e.g. 10"
                 value={form.maxDiscountPercent ?? ""}
                 onChange={(e) => handleFormChange("maxDiscountPercent", e.target.value)}
-                className="w-full px-3 h-[38px] bg-white border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className={`${inputCls()} bg-white`}
               />
               <p className="mt-1 text-[11px] text-gray-400">Leave blank for no limit.</p>
             </div>
@@ -1215,14 +1189,12 @@ const ItemForm = ({
 
           {/* HSN/SAC */}
           <div>
-            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              HSN/SAC Code
-            </label>
+            <FormLabel>HSN/SAC Code</FormLabel>
             <input
               type="text"
               value={form.hsnSac}
               onChange={(e) => handleFormChange("hsnSac", e.target.value)}
-              className="w-full px-3 h-[38px] bg-white border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className={`${inputCls()} bg-white`}
               placeholder="Enter HSN/SAC Code"
             />
           </div>
@@ -1231,15 +1203,13 @@ const ItemForm = ({
               editable parent copy would leave the user unsure which one actually applies. */}
           {!hasVariants && (
           <div>
-            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Barcode
-            </label>
+            <FormLabel>Barcode</FormLabel>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={form.barcode}
                 onChange={(e) => handleFormChange("barcode", e.target.value)}
-                className="flex-1 min-w-0 px-3 h-[38px] bg-white border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className={inputCls({ grow: true })}
                 placeholder="Enter or Generate Barcode"
               />
               <button
@@ -1255,14 +1225,12 @@ const ItemForm = ({
 
           {/* Category */}
           <div>
-            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Category
-            </label>
+            <FormLabel>Category</FormLabel>
             <input
               type="text"
               value={form.category}
               onChange={(e) => handleFormChange("category", e.target.value)}
-              className="w-full px-3 h-[38px] bg-white border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className={`${inputCls()} bg-white`}
               placeholder="Enter Item Category"
             />
           </div>
@@ -1271,9 +1239,7 @@ const ItemForm = ({
               editable parent copy would leave the user unsure which one actually applies. */}
           {!hasVariants && (
           <div>
-            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              {form.type === "service" ? "Service Images" : "Product Images"}
-            </label>
+            <FormLabel>{form.type === "service" ? "Service Images" : "Product Images"}</FormLabel>
             <div className="flex flex-wrap gap-3">
               {existingImages.map((url) => (
                 <div key={url} className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200 group">
@@ -1322,13 +1288,11 @@ const ItemForm = ({
 
           {/* Primary Unit */}
           <div>
-            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Primary Unit <span className="text-red-500">*</span>
-            </label>
+            <FormLabel required>Primary Unit</FormLabel>
             <select
               value={form.primaryUnit}
               onChange={(e) => handleFormChange("primaryUnit", e.target.value)}
-              className="w-full px-3 h-[38px] bg-white border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer"
+              className={`${inputCls()} bg-white`}
             >
               {/* Same units and saved format as the Add form (unitOptions.js). Previously only 4
                   hyphenated values ("PCS-PIECES"), so an item created via Add ("PCS PIECES", or
@@ -1354,9 +1318,7 @@ const ItemForm = ({
               <h3 className="text-[16px] font-bold text-[#111216]">Inventory</h3>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    {form._id ? "Current Stock" : "Opening Quantity"}
-                  </label>
+                  <FormLabel>{form._id ? "Current Stock" : "Opening Quantity"}</FormLabel>
                   <input
                     type="number"
                     step="any"
@@ -1374,7 +1336,7 @@ const ItemForm = ({
                         openingStock: e.target.value,
                       })
                     }
-                    className="w-full px-3 h-[38px] bg-white border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                    className={`${inputCls()} bg-white`}
                   />
                   <p className="mt-1 text-[11px] text-gray-400">
                     {hasVariants
@@ -1385,9 +1347,7 @@ const ItemForm = ({
                   </p>
                 </div>
                 <div>
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    Low Stock Alert At
-                  </label>
+                  <FormLabel>Low Stock Alert At</FormLabel>
                   <input
                     type="number"
                     step="any"
@@ -1405,7 +1365,7 @@ const ItemForm = ({
                         lowStockThreshold: e.target.value,
                       })
                     }
-                    className="w-full px-3 h-[38px] bg-white border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 font-inter focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                    className={`${inputCls()} bg-white`}
                   />
                   {hasVariants && (
                     <p className="mt-1 text-[11px] text-gray-400">

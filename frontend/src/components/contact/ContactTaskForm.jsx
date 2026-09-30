@@ -19,6 +19,7 @@ import {
 import TeamIcon from "../common/TeamIcon";
 import EditIcon from "../common/EditIcon";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { FormLabel, inputCls, textareaCls } from "../common/form";
 
 const initialState = {
   title: "",
@@ -68,11 +69,8 @@ const UserChip = ({ user, onRemove, isRemovable = false }) => (
 );
 
 const FormField = ({ label, required, children, error, description }) => (
-  <div className="space-y-2">
-    <label className="block text-sm font-semibold text-gray-900">
-      {label}
-      {required && <span className="text-red-500 ml-1">*</span>}
-    </label>
+  <div>
+    <FormLabel required={required}>{label}</FormLabel>
     {children}
     {description && <p className="text-xs text-gray-500">{description}</p>}
     {error && <p className="text-xs text-red-600 flex items-center gap-1">
@@ -293,9 +291,7 @@ const handleSubmit = async (e) => {
                     type="text"
                     value={form.title}
                     onChange={(e) => handleChange("title", e.target.value)}
-                    className={`w-full px-4 py-3 rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.title ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-                    }`}
+                    className={inputCls({ error: !!(errors.title) })}
                     placeholder="Enter a descriptive task title"
                   />
                 </FormField>
@@ -307,7 +303,7 @@ const handleSubmit = async (e) => {
                     description={calendarDate ? "Date selected from calendar" : "Choose when to work on this task"}
                   >
                     {calendarDate ? (
-                      <div className="flex items-center gap-2 py-3 px-4 bg-blue-50 text-blue-800 rounded-xl border border-blue-200">
+                      <div className="flex items-center gap-2 h-[38px] px-3 bg-[#158FFF]/10 text-[#158FFF] rounded-full border border-[#158FFF]/20 text-[13px]">
                         <CalendarIcon className="w-4 h-4" />
                         <span className="font-medium">{calendarDate}</span>
                       </div>
@@ -318,9 +314,7 @@ const handleSubmit = async (e) => {
                           type="date"
                           value={form.selectedDate}
                           onChange={(e) => handleChange("selectedDate", e.target.value)}
-                          className={`w-full pl-10 pr-4 py-3 rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                            errors.selectedDate ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-                          }`}
+                          className={`${inputCls({ error: !!(errors.selectedDate) })} pl-10`}
                         />
                       </div>
                     )}
@@ -334,9 +328,7 @@ const handleSubmit = async (e) => {
                         min={form.selectedDate || "2000-01-01"}
                         max="2099-12-31"
                         onChange={(e) => handleChange("dueDate", e.target.value)}
-                        className={`w-full pl-10 pr-4 py-3 rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                          errors.dueDate ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-                        }`}
+                        className={`${inputCls({ error: !!(errors.dueDate) })} pl-10`}
                       />
                     </div>
                   </FormField>
@@ -346,7 +338,7 @@ const handleSubmit = async (e) => {
                     value={form.description}
                     onChange={(e) => handleChange("description", e.target.value)}
                     rows={4}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    className={textareaCls()}
                     placeholder="Describe the task objectives, requirements, and any important details..."
                   />
                 </FormField>
@@ -354,7 +346,7 @@ const handleSubmit = async (e) => {
                   <select
                     value={form.status}
                     onChange={(e) => handleChange("status", e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={`${inputCls()} bg-white`}
                   >
                     {taskStatuses.map(s => (
                       <option key={s} value={s}>{s}</option>

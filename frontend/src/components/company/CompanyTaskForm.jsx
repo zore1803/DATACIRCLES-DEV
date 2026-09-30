@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import EditIcon from "../common/EditIcon";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { FormLabel, STATIC_FIELD_CLS, inputCls, textareaCls } from "../common/form";
 
 // Compact searchable picker for Contact/Deal — a plain <select> with 15+
 // options has no search and pops open as a tall, unstyled native list (see
@@ -283,11 +284,8 @@ const UserChip = ({ user, onRemove, isRemovable = false }) => (
 );
 
 const FormField = ({ label, required, children, error, description }) => (
-  <div className="space-y-2">
-    <label className="block text-sm font-semibold text-gray-900">
-      {label}
-      {required && <span className="text-red-500 ml-1">*</span>}
-    </label>
+  <div>
+    <FormLabel required={required}>{label}</FormLabel>
     {children}
     {description && <p className="text-xs text-gray-500">{description}</p>}
     {error && (
@@ -657,14 +655,12 @@ const CompanyTaskForm = ({
             }`}
           >
             <div>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Task Title <span className="text-[#FF4935]">*</span>
-              </label>
+              <FormLabel required>Task Title</FormLabel>
               <input
                 type="text"
                 value={form.title}
                 onChange={(e) => handleChange("title", e.target.value)}
-                className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 disabled:bg-gray-50 disabled:text-gray-400"
+                className={`${inputCls()} bg-white`}
                 placeholder="Enter Task Title"
                 disabled={!isEditMode && mode === "view"}
               />
@@ -672,24 +668,20 @@ const CompanyTaskForm = ({
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Description
-              </label>
+              <FormLabel>Description</FormLabel>
               <textarea
                 value={form.description}
                 onChange={(e) => handleChange("description", e.target.value)}
                 rows={4}
-                className="w-full border border-[#1F2937]/10 rounded-2xl px-3 py-2 text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-inter resize-vertical disabled:bg-gray-50 disabled:text-gray-400 placeholder:text-[#1F2937] placeholder:opacity-50"
+                className={textareaCls()}
                 placeholder="Describe the task objectives, requirements and important details"
                 disabled={!isEditMode && mode === "view"}
               />
             </div>
 
             <div>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Related to
-              </label>
-              <div className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] flex items-center gap-2 bg-gray-50 text-[12px] text-[#1F2937]">
+              <FormLabel>Related to</FormLabel>
+              <div className={`${STATIC_FIELD_CLS} w-full gap-2 bg-gray-50`}>
                 <Building className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                 <span className="truncate">{company?.name || "Company Name"}</span>
               </div>
@@ -697,12 +689,10 @@ const CompanyTaskForm = ({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                  Contact
-                </label>
+                <FormLabel>Contact</FormLabel>
                 {dealId ? (
                   // Deal page: contact is fixed to the deal's contact (or none).
-                  <div className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] flex items-center bg-gray-50 text-[13px] text-[#1F2937]">
+                  <div className={`${STATIC_FIELD_CLS} w-full bg-gray-50`}>
                     <span className="truncate">
                       {(selectedDealContactId &&
                         contacts.find((c) => String(c._id) === selectedDealContactId)?.name) ||
@@ -733,12 +723,10 @@ const CompanyTaskForm = ({
               </div>
 
               <div>
-                <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                  Deal
-                </label>
+                <FormLabel>Deal</FormLabel>
                 {dealId ? (
                   // Deal page: the deal is fixed to this page's deal.
-                  <div className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] flex items-center bg-gray-50 text-[13px] text-[#1F2937]">
+                  <div className={`${STATIC_FIELD_CLS} w-full bg-gray-50`}>
                     <span className="truncate">
                       {deals.find((d) => String(d._id) === String(dealId))?.title ||
                         deals.find((d) => String(d._id) === String(dealId))?.name ||
@@ -766,29 +754,25 @@ const CompanyTaskForm = ({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                  Selected Date <span className="text-[#FF4935]">*</span>
-                </label>
+                <FormLabel required>Selected Date</FormLabel>
                 <input
                   type="date"
                   value={form.selectedDate || calendarDate || ""}
                   onChange={(e) => handleChange("selectedDate", e.target.value)}
                   disabled={!isEditMode && mode === "view"}
-                  className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all disabled:bg-gray-50 disabled:text-gray-400"
+                  className={`${inputCls()} bg-white`}
                 />
               </div>
 
               <div>
-                <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                  Due Date <span className="text-[#FF4935]">*</span>
-                </label>
+                <FormLabel required>Due Date</FormLabel>
                 <input
                   type="date"
                   value={form.dueDate}
                   min={form.selectedDate || calendarDate || ""}
                   onChange={(e) => handleChange("dueDate", e.target.value)}
                   disabled={!isEditMode && mode === "view"}
-                  className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all disabled:bg-gray-50 disabled:text-gray-400"
+                  className={`${inputCls()} bg-white`}
                 />
                 {errors.dueDate && <p className="text-[12px] text-[#FF4935] font-medium mt-1.5">{errors.dueDate}</p>}
               </div>
@@ -796,10 +780,7 @@ const CompanyTaskForm = ({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="flex items-center gap-1.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                  <Timer className="w-3.5 h-3.5" />
-                  Status
-                </label>
+                <FormLabel icon={<Timer className="w-3.5 h-3.5" />}>Status</FormLabel>
                 <SingleSelectDropdown
                   options={statusOptions}
                   value={form.status}
@@ -810,10 +791,7 @@ const CompanyTaskForm = ({
               </div>
 
               <div>
-                <label className="flex items-center gap-1.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                  <Flag className="w-3.5 h-3.5" />
-                  Priority
-                </label>
+                <FormLabel icon={<Flag className="w-3.5 h-3.5" />}>Priority</FormLabel>
                 <SingleSelectDropdown
                   options={priorityOptions}
                   value={form.priority}
@@ -825,9 +803,7 @@ const CompanyTaskForm = ({
             </div>
 
             <div ref={assigneesFieldRef}>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Assignees
-              </label>
+              <FormLabel>Assignees</FormLabel>
               <div className="space-y-2 relative">
                 {assignedUsers.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mb-2">

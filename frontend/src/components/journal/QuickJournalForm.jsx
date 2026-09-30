@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import CustomDropdown from "../common/CustomDropdown";
 import API from "../../services/api";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { inputCls, textareaCls } from "../common/form";
 
 const MAX_FILES = 3;
 
@@ -179,9 +180,7 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
                 type="text"
                 value={form.name}
                 onChange={(e) => handleFormChange("name", e.target.value)}
-                className={`w-full border rounded-full px-3 h-[38px] text-sm text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 ${
-                  nameError ? "border-red-500" : "border-[#1F2937]/10"
-                }`}
+                className={inputCls({ error: !!(nameError) })}
                 placeholder="e.g. Petty Cash Journal"
               />
               {nameError && (
@@ -198,7 +197,7 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
                   type="date"
                   value={form.date}
                   onChange={(e) => handleFormChange("date", e.target.value)}
-                  className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-sm text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                  className={`${inputCls()} bg-white`}
                 />
               </div>
               <div>
@@ -209,7 +208,7 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
                   type="time"
                   value={form.time}
                   onChange={(e) => handleFormChange("time", e.target.value)}
-                  className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-sm text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                  className={`${inputCls()} bg-white`}
                 />
               </div>
             </div>
@@ -271,7 +270,7 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
                 value={form.notes}
                 onChange={(e) => handleFormChange("notes", e.target.value)}
                 rows={4}
-                className="w-full border border-[#1F2937]/10 rounded-2xl px-3 py-2 text-sm text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 resize-none"
+                className={textareaCls()}
                 placeholder="Optional notes for this journal entry"
               />
             </div>

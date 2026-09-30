@@ -19,6 +19,7 @@ import {
 import TeamIcon from "../common/TeamIcon";
 import EditIcon from "../common/EditIcon";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { FormLabel, inputCls, textareaCls } from "../common/form";
 
 const initialState = {
   title: "",
@@ -74,10 +75,7 @@ const UserChip = ({ user, onRemove, isRemovable = false }) => (
 
 const FormField = ({ label, required, children, error, description }) => (
   <div>
-    <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-      {label}
-      {required && <span className="text-[#FF4935]">*</span>}
-    </label>
+    <FormLabel required={required}>{label}</FormLabel>
     {children}
     {description && <p className="text-[13px] font-inter text-[#A0A0A0] mt-1.5">{description}</p>}
     {error && (
@@ -307,11 +305,7 @@ const VendorTaskForm = ({
                     type="text"
                     value={form.title}
                     onChange={(e) => handleChange("title", e.target.value)}
-                    className={`w-full h-[38px] px-3 rounded-full border text-[13px] text-[#1F2937] transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                      errors.title
-                        ? "border-red-300 bg-red-50"
-                        : "border-[#1F2937]/10 bg-white"
-                    }`}
+                    className={inputCls({ error: !!(errors.title) })}
                     placeholder="Enter a descriptive task title"
                   />
                 </FormField>
@@ -336,11 +330,7 @@ const VendorTaskForm = ({
                           onChange={(e) =>
                             handleChange("selectedDate", e.target.value)
                           }
-                          className={`w-full h-[38px] pl-10 pr-3 rounded-full border text-[13px] text-[#1F2937] transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                            errors.selectedDate
-                              ? "border-red-300 bg-red-50"
-                              : "border-[#1F2937]/10 bg-white"
-                          }`}
+                          className={`${inputCls({ error: !!(errors.selectedDate) })} pl-10`}
                         />
                       </div>
                     )}
@@ -356,11 +346,7 @@ const VendorTaskForm = ({
                         onChange={(e) =>
                           handleChange("dueDate", e.target.value)
                         }
-                        className={`w-full h-[38px] pl-10 pr-3 rounded-full border text-[13px] text-[#1F2937] transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                          errors.dueDate
-                            ? "border-red-300 bg-red-50"
-                            : "border-[#1F2937]/10 bg-white"
-                        }`}
+                        className={`${inputCls({ error: !!(errors.dueDate) })} pl-10`}
                       />
                     </div>
                   </FormField>
@@ -375,7 +361,7 @@ const VendorTaskForm = ({
                       handleChange("description", e.target.value)
                     }
                     rows={4}
-                    className="w-full px-3 py-2 rounded-2xl border border-[#1F2937]/10 bg-white text-[12px] text-[#1F2937] transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 resize-vertical"
+                    className={textareaCls()}
                     placeholder="Describe the task objectives, requirements, and any important details..."
                   />
                 </FormField>
@@ -383,7 +369,7 @@ const VendorTaskForm = ({
                   <select
                     value={form.status}
                     onChange={(e) => handleChange("status", e.target.value)}
-                    className="w-full h-[38px] px-3 rounded-full border border-[#1F2937]/10 bg-white text-[13px] text-[#1F2937] transition-all focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className={`${inputCls()} bg-white`}
                   >
                     {taskStatuses.map(s => (
                       <option key={s} value={s}>{s}</option>

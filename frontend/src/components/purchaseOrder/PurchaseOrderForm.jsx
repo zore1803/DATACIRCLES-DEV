@@ -22,6 +22,7 @@ import FilterIcon from "../common/FilterIcon";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 import { useNavigate } from "react-router-dom";
 import DocumentNumberHeader from "../common/DocumentNumberHeader";
+import { FormLabel, inputCls } from "../common/form";
 const API_BASE = `${import.meta.env.VITE_APP_API_URL}/api`;
 // The product's description is rich text ("<p>...</p>" etc, same as
 // PurchaseForm.jsx/InvoiceForm.jsx's own stripHtml) — strip the markup
@@ -535,9 +536,7 @@ const PurchaseOrderForm = ({
         <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
           {/* Vendor Section */}
           <div>
-            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Select Vendor <span className="text-red-500">*</span>
-            </label>
+            <FormLabel required>Select Vendor</FormLabel>
             <div className="flex items-center gap-2">
               <SearchableDropdown
                 options={localVendors}
@@ -717,21 +716,17 @@ const PurchaseOrderForm = ({
           {/* Terms and Notes */}
           <div className="space-y-6">
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Payment Terms <span className="text-red-500">*</span>
-              </label>
+              <FormLabel required>Payment Terms</FormLabel>
               <input
                 type="text"
                 value={paymentTerms}
                 onChange={(e) => setPaymentTerms(e.target.value)}
-                className="w-full px-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                className={inputCls()}
               />
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Notes
-              </label>
+              <FormLabel>Notes</FormLabel>
               <div className="border border-[#1F2937]/10 rounded-xl bg-white">
                 <ReactQuill
                   theme="snow"
@@ -746,15 +741,13 @@ const PurchaseOrderForm = ({
 
           {/* Status */}
           <div>
-            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Status
-            </label>
+            <FormLabel>Status</FormLabel>
             <div className="relative">
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
                 disabled={editingPO?.status === "Delivered"}
-                className="w-full appearance-none px-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`${inputCls()} appearance-none bg-white cursor-pointer`}
               >
                 {statusOptions.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>

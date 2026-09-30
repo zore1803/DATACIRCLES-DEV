@@ -11,6 +11,7 @@ import API from "../../services/api";
 import CustomFieldsSection, { getMissingRequiredFields } from "../common/CustomFieldsSection";
 import toast from "react-hot-toast";
 import SearchIcon from "../common/SearchIcon";
+import { FormLabel, FormError, SectionDivider, inputCls } from "../common/form";
 import { useSystemSettings } from "../../hooks/useSystemSettings";
 import QuickDealForm from "../deal/QuickDealForm";
 import QuickContactForm from "../contact/QuickContactForm";
@@ -1254,24 +1255,21 @@ const AdminMeetingForm = ({
                   room immediately, otherwise the panel stays clipped. */}
               <div className={`px-8 pt-6 space-y-6 ${openDropdown ? "pb-72" : "pb-6"}`}>
                 <div ref={titleInputRef}>
-                  <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    Meeting Title <span className="text-[#FF4935]">*</span>
-                  </label>
+                  <FormLabel required>Meeting Title</FormLabel>
                   <input
                     type="text"
                     value={form.title}
                     onChange={(e) => handleChange("title", e.target.value)}
-                    className={`w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter disabled:opacity-50 ${errors.title ? "border-red-500 focus:ring-red-500" : "border-[#1F2937]/10 focus:ring-blue-500"
-                      }`}
+                    className={inputCls({ error: !!errors.title })}
                     placeholder="Enter Meeting Title"
                     disabled={readOnly}
                   />
-                  {errors.title && <p className="text-red-500 text-xs mt-1 font-inter">{errors.title}</p>}
+                  <FormError>{errors.title}</FormError>
                 </div>
 
                 {/* Meeting Type */}
                 <div>
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Meeting Type</label>
+                  <FormLabel>Meeting Type</FormLabel>
                   <SingleSelectDropdown
                     options={meetingTypeOptions}
                     value={form.meetingType}
@@ -1282,13 +1280,7 @@ const AdminMeetingForm = ({
                   />
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <span className="flex-1 h-px bg-[#D9D9D9]" />
-                  <h3 className="flex-shrink-0 text-[14px] font-medium leading-[120%] text-[#1F2937]">
-                    Meeting Information
-                  </h3>
-                  <span className="flex-1 h-px bg-[#D9D9D9]" />
-                </div>
+                <SectionDivider>Meeting Information</SectionDivider>
 
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -1364,7 +1356,7 @@ const AdminMeetingForm = ({
                     type="text"
                     value={form.location}
                     onChange={(e) => handleChange("location", e.target.value)}
-                    className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 disabled:opacity-50"
+                    className={inputCls()}
                     placeholder="Meeting Room Address or video call link"
                     disabled={readOnly}
                   />
@@ -1375,7 +1367,7 @@ const AdminMeetingForm = ({
                     single company. */}
                 {initialCompanyId && companyName && (
                   <div>
-                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Company</label>
+                    <FormLabel>Company</FormLabel>
                     <div className="w-full flex items-center gap-1.5 px-3 h-[38px] rounded-full border border-[#1F2937]/10 bg-[#F9F9FB] text-[13px] text-[#1F2937]">
                       <Building2 className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
                       <span className="truncate">{companyName}</span>
@@ -1385,7 +1377,7 @@ const AdminMeetingForm = ({
 
                 {initialDealId && dealName && (
                   <div>
-                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Deal</label>
+                    <FormLabel>Deal</FormLabel>
                     <div className="w-full flex items-center gap-1.5 px-3 h-[38px] rounded-full border border-[#1F2937]/10 bg-[#F9F9FB] text-[13px] text-[#1F2937]">
                       <Building className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
                       <span className="truncate">{dealName}</span>
@@ -1396,7 +1388,7 @@ const AdminMeetingForm = ({
                 {/* Same, for a contact-scoped meeting. */}
                 {initialContactId && contactName && (
                   <div>
-                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Contact</label>
+                    <FormLabel>Contact</FormLabel>
                     <div className="w-full flex items-center gap-1.5 px-3 h-[38px] rounded-full border border-[#1F2937]/10 bg-[#F9F9FB] text-[13px] text-[#1F2937]">
                       <User className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
                       <span className="truncate">{contactName}</span>
@@ -1411,13 +1403,13 @@ const AdminMeetingForm = ({
                 {!initialCompanyId && !initialContactId && !initialDealId && (
                   <div className="grid grid-cols-2 gap-4">
                     <div ref={linkedToRef}>
-                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Entity Type</label>
+                      <FormLabel>Entity Type</FormLabel>
                       <div className="relative">
                         <select
                           value={form.linkedTo}
                           onChange={(e) => handleChange("linkedTo", e.target.value)}
                           disabled={readOnly}
-                          className="w-full appearance-none border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                          className={`${inputCls()} appearance-none bg-white`}
                         >
                           {entityTypeOptions.map((o) => (
                             <option key={o.value} value={o.value}>{o.label}</option>
@@ -1425,13 +1417,13 @@ const AdminMeetingForm = ({
                         </select>
                         <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#1F2937] opacity-50" />
                       </div>
-                      {errors.linkedTo && <p className="text-red-500 text-xs mt-1 font-inter">{errors.linkedTo}</p>}
+                      <FormError>{errors.linkedTo}</FormError>
                     </div>
 
                     <div ref={entityRef}>
-                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2 capitalize">
+                      <FormLabel className="capitalize">
                         {form.linkedTo || "Record"}
-                      </label>
+                      </FormLabel>
                       <EntityPickerDropdown
                         entities={entityList}
                         value={getSelectedEntityId() || ""}
@@ -1450,7 +1442,7 @@ const AdminMeetingForm = ({
                         isOpen={openDropdown === "entity"}
                         onOpenChange={(open) => setOpenDropdown(open ? "entity" : null)}
                       />
-                      {errors.entity && <p className="text-red-500 text-xs mt-1 font-inter">{errors.entity}</p>}
+                      <FormError>{errors.entity}</FormError>
                     </div>
                   </div>
                 )}
@@ -1458,13 +1450,13 @@ const AdminMeetingForm = ({
                 <div className="grid grid-cols-2 gap-4">
                   {/* Meeting Category */}
                   <div>
-                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Category</label>
+                    <FormLabel>Category</FormLabel>
                     <div className="relative">
                       <select
                         value={form.meetingCategory}
                         onChange={(e) => handleChange("meetingCategory", e.target.value)}
                         disabled={readOnly}
-                        className="w-full appearance-none border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                        className={`${inputCls()} appearance-none bg-white`}
                       >
                         <option value="">— Select —</option>
                         {meetingTypes.map(t => (
@@ -1477,7 +1469,7 @@ const AdminMeetingForm = ({
 
                   {/* Priority */}
                   <div>
-                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Priority</label>
+                    <FormLabel>Priority</FormLabel>
                     {/* Plain pill select, matching Category — no icon chips
                         or check marks. */}
                     <div className="relative">
@@ -1485,7 +1477,7 @@ const AdminMeetingForm = ({
                         value={form.priority}
                         onChange={(e) => handleChange("priority", e.target.value)}
                         disabled={readOnly}
-                        className="w-full appearance-none border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                        className={`${inputCls()} appearance-none bg-white`}
                       >
                         {priorityOptions.map((opt) => (
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -1499,33 +1491,33 @@ const AdminMeetingForm = ({
                 <div className="grid grid-cols-3 gap-4">
                   {/* Date */}
                   <div ref={dateInputRef}>
-                    <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Date <span className="text-[#FF4935]">*</span></label>
+                    <FormLabel required>Date</FormLabel>
                     <input
                       type="date"
                       value={form.date || calendarDate || ""}
                       min={new Date().toISOString().split("T")[0]}
                       onChange={(e) => handleChange("date", e.target.value)}
                       disabled={readOnly}
-                      className={`w-full border rounded-full px-3 h-[38px] text-[13px] focus:outline-none focus:ring-1 transition-all cursor-pointer disabled:opacity-50 ${errors.date ? "border-red-500 focus:ring-red-500 text-red-600" : "border-[#1F2937]/10 focus:ring-blue-500 text-[#1F2937]"}`}
+                      className={`${inputCls({ error: !!errors.date })} cursor-pointer`}
                     />
-                    {errors.date && <p className="text-red-500 text-xs mt-1 font-inter">{errors.date}</p>}
+                    <FormError>{errors.date}</FormError>
                   </div>
 
                   {/* Time */}
                   <div>
-                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Time</label>
+                    <FormLabel>Time</FormLabel>
                     <input
                       type="time"
                       value={form.time}
                       onChange={(e) => handleChange("time", e.target.value)}
                       disabled={readOnly}
-                      className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all cursor-pointer disabled:opacity-50"
+                      className={`${inputCls()} cursor-pointer`}
                     />
                   </div>
 
                   {/* Duration */}
                   <div>
-                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Duration</label>
+                    <FormLabel>Duration</FormLabel>
                     <SingleSelectDropdown
                       options={durationOptions}
                       value={form.duration}
@@ -1550,7 +1542,7 @@ const AdminMeetingForm = ({
                     Details can actually tell the two apart instead of
                     lumping everyone under one bucket. */}
                 <div>
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Internal Team</label>
+                  <FormLabel>Internal Team</FormLabel>
                   <MultiSelectDropdown
                     users={users}
                     selectedUsers={form.internalParticipants}
@@ -1566,7 +1558,7 @@ const AdminMeetingForm = ({
                     and vendors have no contacts in this model. */}
                 {form.linkedTo === "company" && (
                   <div ref={participantsRef}>
-                    <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Client Contacts <span className="text-[#FF4935]">*</span></label>
+                    <FormLabel required>Client Contacts</FormLabel>
                     <div className="flex items-center gap-3">
                       <div className="flex-1 min-w-0">
                         <MultiSelectDropdown
@@ -1589,7 +1581,7 @@ const AdminMeetingForm = ({
                         </button>
                       )}
                     </div>
-                    {errors.participants && <p className="text-red-500 text-xs mt-1 font-inter">{errors.participants}</p>}
+                    <FormError>{errors.participants}</FormError>
                   </div>
                 )}
 
@@ -1602,7 +1594,7 @@ const AdminMeetingForm = ({
                 </div>
 
                 <div>
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Description</label>
+                  <FormLabel>Description</FormLabel>
                   <MeetingEditorStyles />
                   <div className="dc-meeting-editor quill-wrap">
                     <MeetingQuillToolbar />
@@ -1627,7 +1619,7 @@ const AdminMeetingForm = ({
                 </div>
 
                 <div>
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Link Contact</label>
+                  <FormLabel>Link Contact</FormLabel>
                   {/* Read-only on a contact page and on a deal page — there it's
                       fixed to the deal's contact (or "—" when the deal has none). */}
                   {initialContactId || initialDealId ? (
@@ -1663,7 +1655,7 @@ const AdminMeetingForm = ({
                 </div>
 
                 <div>
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Link Deal</label>
+                  <FormLabel>Link Deal</FormLabel>
                   {initialDealId ? (
                     // On a deal's own page the meeting always belongs to that deal.
                     <div className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] flex items-center bg-[#F5F7FA] text-[#1F2937] cursor-not-allowed">
@@ -1702,7 +1694,7 @@ const AdminMeetingForm = ({
                 </div>
 
                 <div>
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">Link Invoice</label>
+                  <FormLabel>Link Invoice</FormLabel>
                   <div className="flex items-center gap-3">
                     <div className="flex-1 min-w-0">
                       {!hasLinkedDeal ? (

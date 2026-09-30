@@ -4,6 +4,7 @@ import API from "../../services/api";
 import toast from "react-hot-toast";
 import SearchableDropdown from "../contact/SearchableDropdown";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { LABEL_CLS, inputCls, textareaCls } from "../common/form";
 
 const MODES = ["Cash", "UPI", "Bank Transfer", "Cheque", "Card", "Credit Note", "Other"];
 // Partial/Paid/Refunded absent on purpose — they come from recorded refunds,
@@ -236,9 +237,8 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
     }
   };
 
-  const fieldClass =
-    "w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all";
-  const labelClass = "block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2";
+  const fieldClass = `${inputCls()} bg-white`;
+  const labelClass = LABEL_CLS;
 
   return (
     <>
@@ -454,7 +454,7 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
               onChange={(e) => setNotes(e.target.value)}
               rows={3}
               placeholder="Internal notes about this return..."
-              className="w-full px-3 py-2 border border-[#1F2937]/10 rounded-2xl text-[12px] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-none"
+              className={textareaCls()}
             />
           </div>
         </form>

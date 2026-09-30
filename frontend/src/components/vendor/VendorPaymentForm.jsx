@@ -5,6 +5,7 @@ import SearchableDropdown from "../contact/SearchableDropdown";
 import QuickVendorForm from "./QuickVendorForm";
 import toast from "react-hot-toast";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { FormLabel, inputCls, textareaCls } from "../common/form";
 
 // Module-level so the fallback keeps the same reference across renders. An
 // inline `vendors = []` default made the [vendors] effect below re-fire every
@@ -181,9 +182,7 @@ const VendorPaymentForm = ({
           {/* Vendor Selection - Only if not pre-selected */}
           {!vendorId && (
             <div>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Vendor <span className="text-[#FF4935]">*</span>
-              </label>
+              <FormLabel required>Vendor</FormLabel>
               <SearchableDropdown
                 options={localVendors}
                 value={form.vendorId}
@@ -198,38 +197,32 @@ const VendorPaymentForm = ({
           )}
 
           <div>
-            <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Amount <span className="text-[#FF4935]">*</span>
-            </label>
+            <FormLabel required>Amount</FormLabel>
             <input
               type="number"
               value={form.amount}
               onChange={(e) => handleChange("amount", e.target.value)}
               placeholder="Enter Amount"
-              className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
+              className={`${inputCls()} bg-white`}
             />
           </div>
 
           <div>
-            <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Payment Date <span className="text-[#FF4935]">*</span>
-            </label>
+            <FormLabel required>Payment Date</FormLabel>
             <input
               type="date"
               value={form.paymentDate}
               onChange={(e) => handleChange("paymentDate", e.target.value)}
-              className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+              className={`${inputCls()} bg-white`}
             />
           </div>
 
           <div>
-            <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Direction <span className="text-[#FF4935]">*</span>
-            </label>
+            <FormLabel required>Direction</FormLabel>
             <select
               value={form.direction}
               onChange={(e) => handleChange("direction", e.target.value)}
-              className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+              className={`${inputCls()} bg-white`}
             >
               <option value="">Select Direction</option>
               <option value="IN">You Got ( Incoming )</option>
@@ -238,13 +231,11 @@ const VendorPaymentForm = ({
           </div>
 
           <div>
-            <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Payment Type <span className="text-[#FF4935]">*</span>
-            </label>
+            <FormLabel required>Payment Type</FormLabel>
             <select
               value={form.paymentType}
               onChange={(e) => handleChange("paymentType", e.target.value)}
-              className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+              className={`${inputCls()} bg-white`}
             >
               <option value="Card">Card</option>
               <option value="Cash">Cash</option>
@@ -255,40 +246,34 @@ const VendorPaymentForm = ({
           </div>
 
           <div>
-            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Bank
-            </label>
+            <FormLabel>Bank</FormLabel>
             <input
               type="text"
               value={form.bank}
               onChange={(e) => handleChange("bank", e.target.value)}
               placeholder="Enter Bank Name"
-              className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
+              className={`${inputCls()} bg-white`}
             />
           </div>
 
           <div>
-            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Reference
-            </label>
+            <FormLabel>Reference</FormLabel>
             <input
               type="text"
               value={form.reference}
               onChange={(e) => handleChange("reference", e.target.value)}
               placeholder="UTR / Cheque no. / Txn ID"
-              className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
+              className={`${inputCls()} bg-white`}
             />
           </div>
 
           <div>
-            <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-              Notes
-            </label>
+            <FormLabel>Notes</FormLabel>
             <textarea
               value={form.notes}
               onChange={(e) => handleChange("notes", e.target.value)}
               placeholder="Add Notes"
-              className="w-full border border-[#1F2937]/10 rounded-2xl px-3 py-2 text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-vertical"
+              className={textareaCls()}
               rows={3}
             />
           </div>

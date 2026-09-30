@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import EditIcon from "../common/EditIcon";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { FormLabel, FormError, inputCls, textareaCls } from "../common/form";
 
 const initialState = {
   title: "",
@@ -44,18 +45,10 @@ const PriorityChip = ({ priority }) => {
 
 const FormField = ({ label, required, children, error, description }) => (
   <div>
-    <label className="flex items-center gap-1.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-      {label}
-      {required && <span className="text-[#FF4935]">*</span>}
-    </label>
+    <FormLabel required={required}>{label}</FormLabel>
     {children}
     {description && <p className="text-[13px] font-inter text-[#A0A0A0] mt-1.5">{description}</p>}
-    {error && (
-      <div className="flex items-center gap-2 p-2 mt-1 bg-red-50 border border-red-200 rounded-lg">
-        <AlertTriangle className="w-4 h-4 text-red-500" />
-        <p className="text-xs text-red-600">{error}</p>
-      </div>
-    )}
+    <FormError>{error}</FormError>
   </div>
 );
 
@@ -454,9 +447,7 @@ const VendorMeetingForm = ({
                     type="text"
                     value={form.title}
                     onChange={(e) => handleChange("title", e.target.value)}
-                    className={`w-full h-[38px] px-3 rounded-full border text-[13px] text-[#1F2937] transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                      errors.title ? "border-red-300 bg-red-50" : "border-[#1F2937]/10 bg-white"
-                    }`}
+                    className={inputCls({ error: !!(errors.title) })}
                     placeholder="Enter meeting subject or agenda"
                   />
                 </FormField>
@@ -470,9 +461,7 @@ const VendorMeetingForm = ({
                         min={new Date().toISOString().split("T")[0]}
                         max="2099-12-31"
                         onChange={(e) => handleChange("date", e.target.value)}
-                        className={`w-full h-[38px] px-3 rounded-full border text-[13px] text-[#1F2937] transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                          errors.date ? "border-red-300 bg-red-50" : "border-[#1F2937]/10 bg-white"
-                        }`}
+                        className={inputCls({ error: !!(errors.date) })}
                       />
                     </FormField>
                   ) : (
@@ -489,11 +478,7 @@ const VendorMeetingForm = ({
                       type="time"
                       value={form.time}
                       onChange={(e) => handleChange("time", e.target.value)}
-                      className={`w-full h-[38px] px-3 rounded-full border text-[13px] text-[#1F2937] transition-all focus:outline-none focus:ring-1 ${
-                        errors.time || timeConflict
-                          ? "border-red-500 bg-red-50 focus:ring-red-500"
-                          : "border-[#1F2937]/10 bg-white focus:ring-blue-500"
-                      }`}
+                      className={inputCls({ error: !!(errors.time || timeConflict) })}
                     />
                   </FormField>
 
@@ -501,7 +486,7 @@ const VendorMeetingForm = ({
                     <select
                       value={form.duration}
                       onChange={(e) => handleChange("duration", parseInt(e.target.value))}
-                      className="w-full h-[38px] px-3 rounded-full border border-[#1F2937]/10 bg-white text-[13px] text-[#1F2937] transition-all focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className={`${inputCls()} bg-white`}
                     >
                       <option value={15}>15 minutes</option>
                       <option value={30}>30 minutes</option>
@@ -516,7 +501,7 @@ const VendorMeetingForm = ({
                   <select
                     value={form.priority}
                     onChange={(e) => handleChange("priority", e.target.value)}
-                    className="w-full h-[38px] px-3 rounded-full border border-[#1F2937]/10 bg-white text-[13px] text-[#1F2937] transition-all focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className={`${inputCls()} bg-white`}
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -537,7 +522,7 @@ const VendorMeetingForm = ({
                     <select
                       value={form.meetingType}
                       onChange={(e) => handleChange("meetingType", e.target.value)}
-                      className="w-full h-[38px] px-3 rounded-full border border-[#1F2937]/10 bg-white text-[13px] text-[#1F2937] transition-all focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className={`${inputCls()} bg-white`}
                     >
                       <option value="in-person">In-person</option>
                       <option value="video-call">Video call</option>
@@ -553,7 +538,7 @@ const VendorMeetingForm = ({
                       type="text"
                       value={form.location}
                       onChange={(e) => handleChange("location", e.target.value)}
-                      className="w-full h-[38px] px-3 rounded-full border border-[#1F2937]/10 bg-white text-[13px] text-[#1F2937] transition-all focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className={`${inputCls()} bg-white`}
                       placeholder={
                         form.meetingType === "video-call"
                           ? "Meeting link or platform"
@@ -573,7 +558,7 @@ const VendorMeetingForm = ({
                     value={form.description}
                     onChange={(e) => handleChange("description", e.target.value)}
                     rows={4}
-                    className="w-full px-3 py-2 rounded-2xl border border-[#1F2937]/10 bg-white text-[12px] text-[#1F2937] transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 resize-vertical"
+                    className={textareaCls()}
                     placeholder="Add meeting agenda, discussion topics, or preparation notes..."
                   />
                 </FormField>
