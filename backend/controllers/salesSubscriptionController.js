@@ -1,10 +1,13 @@
+const mongoose = require("mongoose");
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
+const Counter = require("../models/Counter");
+const { nextBillingDate } = require("../utils/billingDates");
 const SalesSubscription = require("../models/SalesSubscription");
 const Invoice = require("../models/Invoice");
 const Deal = require("../models/Deal");
 const Contact = require("../models/Contact");
 const Company = require("../models/Company");
-const { getDocumentSettingsForOrganization, resolveDocumentNumber, invoiceSeries, releaseInvoiceNumber } = require("../utils/documentNumbering");
+const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
 const { syncDocumentStock } = require("../utils/inventorySync");
 
 // GST is decided PER LINE ITEM, never by one flat rate over the whole
@@ -69,10 +72,21 @@ function isWonDeal(dealDoc) {
   return String(dealDoc?.status || "").trim().toLowerCase() === WON_STATUS;
 }
 
-// Count-based "SUB-00001" — mirrors SalesReturn/PurchaseReturn's own scheme.
+// "SUB-00001" from a per-organization counter, so a deleted subscription's
+// number is never handed out again. The counter is seeded once from the highest
+// number already in use, so orgs with existing subscriptions carry on from there.
 async function generateSubscriptionNumber(organizationId) {
-  const count = await SalesSubscription.countDocuments({ organization: organizationId });
-  return `SUB-${(count + 1).toString().padStart(5, "0")}`;
+  const counterId = `${organizationId}_sales_subscription`;
+  if (!(await Counter.exists({ _id: counterId }))) {
+    const rows = await SalesSubscription.find({ organization: organizationId }).select("subscriptionNumber").lean();
+    const highest = rows.reduce((max, r) => {
+      const n = parseInt(String(r.subscriptionNumber || "").replace(/\D/g, ""), 10);
+      return Number.isFinite(n) && n > max ? n : max;
+    }, 0);
+    await Counter.updateOne({ _id: counterId }, { $max: { seq: Math.max(highest, rows.length) } }, { upsert: true });
+  }
+  const { seq } = await Counter.findOneAndUpdate({ _id: counterId }, { $inc: { seq: 1 } }, { new: true, upsert: true });
+  return `SUB-${String(seq).padStart(5, "0")}`;
 }
 
 const POPULATE = [
@@ -81,17 +95,39 @@ const POPULATE = [
   { path: "generatedInvoices.invoice", select: "invoiceNumber status amount date" },
 ];
 
-// Advances a date by the subscription's own billing interval — shared by
-// create (seeding the first nextInvoiceDate) and generateInvoiceForSubscription
-// (advancing past the cycle that was just billed).
-function addInterval(date, { value, unit }) {
-  const next = new Date(date);
-  const n = parseInt(value, 10) || 1;
-  if (unit === "day") next.setDate(next.getDate() + n);
-  else if (unit === "week") next.setDate(next.getDate() + n * 7);
-  else if (unit === "year") next.setFullYear(next.getFullYear() + n);
-  else next.setMonth(next.getMonth() + n); // "month" default
-  return next;
+// Status lifecycle. Draft -> Active -> Expired, or Draft/Active -> Cancelled.
+// Expired and Cancelled are terminal (a new billing period = a new
+// subscription). Error is set by the system on a failed generation and can only
+// be recovered to Active or abandoned to Cancelled. Expired/Error are never set
+// by hand. Both PUT /:id and PUT /:id/status go through this one table.
+const ALLOWED_TRANSITIONS = {
+  Draft: ["Active", "Cancelled"],
+  Active: ["Draft", "Cancelled"], // Active -> Draft is a pause
+  Error: ["Active", "Cancelled"],
+  Expired: [],
+  Cancelled: [],
+};
+
+// Applies a status change to a loaded document (not saved). Returns an error
+// message string if the change isn't allowed, otherwise null.
+function applyStatusTransition(subscription, to) {
+  const from = subscription.status;
+  if (to === from) return null;
+  if (!ALLOWED_TRANSITIONS[from]?.includes(to)) {
+    if (from === "Cancelled") return "A Cancelled subscription can't be changed — create a new one instead.";
+    if (from === "Expired") return "An Expired subscription can't be reactivated — create a new one for another billing period.";
+    return `A ${from} subscription can't be set to ${to}.`;
+  }
+  if (to === "Active") {
+    const next = subscription.nextInvoiceDate || new Date();
+    if (subscription.endDate && next > new Date(subscription.endDate)) {
+      return "This subscription has no billing cycle left before its end date.";
+    }
+    if (!subscription.nextInvoiceDate) subscription.nextInvoiceDate = next;
+  }
+  if (to === "Cancelled") subscription.nextInvoiceDate = null;
+  subscription.status = to;
+  return null;
 }
 
 exports.createSalesSubscription = async (req, res) => {
@@ -140,7 +176,7 @@ exports.createSalesSubscription = async (req, res) => {
       startDate,
       endDate,
       nextInvoiceDate: startDate,
-      status: status || "Draft",
+      status: status === "Active" ? "Active" : "Draft",
       notes: notes || "",
       terms: terms || "",
       user: req.user.id,
@@ -346,6 +382,9 @@ exports.updateSalesSubscription = async (req, res) => {
     if (subscription.status === "Cancelled") {
       return res.status(400).json({ message: "A Cancelled subscription can't be edited — create a new one instead." });
     }
+    if (subscription.status === "Expired") {
+      return res.status(400).json({ message: "An Expired subscription can't be edited — create a new one for another billing period." });
+    }
 
     const { items, discount, transactionType, gstRate, billingInterval, startDate, endDate, status, notes, terms } = req.body;
 
@@ -386,14 +425,21 @@ exports.updateSalesSubscription = async (req, res) => {
     }
     if (notes !== undefined) subscription.notes = notes;
     if (terms !== undefined) subscription.terms = terms;
-    if (status !== undefined) subscription.status = status;
+    // Status goes through the same transition rules as PUT /:id/status; an
+    // unchanged value (the edit form always sends it) is a no-op.
+    if (status !== undefined) {
+      const statusError = applyStatusTransition(subscription, status);
+      if (statusError) return res.status(400).json({ message: statusError });
+    }
 
     // Amount always recomputed from the current items (each taxed at its own
     // GST rate) + document-level discount — never trusted from the client,
     // so it can't drift from what a generated invoice would actually total.
     subscription.amount = calculateAmountFromItems(subscription.items, subscription.discount);
 
-    await subscription.save();
+    // validateModifiedOnly so a grandfathered null-endDate row can still be
+    // edited without tripping the required-endDate rule on an untouched field.
+    await subscription.save({ validateModifiedOnly: true });
     await subscription.populate(POPULATE);
     res.json(subscription);
   } catch (err) {
@@ -407,26 +453,19 @@ exports.updateSalesSubscriptionStatus = async (req, res) => {
     const { status } = req.body;
     const valid = ["Draft", "Active", "Expired", "Error", "Cancelled"];
     if (!valid.includes(status)) return res.status(400).json({ message: "Invalid status" });
+    if (status === "Expired" || status === "Error") {
+      return res.status(400).json({ message: `${status} is set automatically and can't be chosen manually.` });
+    }
 
     const subscription = await SalesSubscription.findOne({ _id: req.params.id, organization: req.user.organization });
     if (!subscription) return res.status(404).json({ message: "Subscription not found" });
 
-    if (subscription.status === "Cancelled") {
-      return res.status(400).json({ message: "A Cancelled subscription can't be reactivated — create a new one instead." });
-    }
+    const statusError = applyStatusTransition(subscription, status);
+    if (statusError) return res.status(400).json({ message: statusError });
+    if (status === "Active") subscription.lastError = "";
 
-    subscription.status = status;
-    // Reactivating out of a paused/errored state needs a real next-billing
-    // date to resume from — reseed it if it was cleared.
-    if (status === "Active" && !subscription.nextInvoiceDate) {
-      subscription.nextInvoiceDate = new Date();
-    }
-    if (status === "Cancelled") {
-      subscription.nextInvoiceDate = null;
-    }
     // validateModifiedOnly: this endpoint never touches endDate — a legacy
-    // row grandfathered with endDate: null must still be pausable/cancellable
-    // without tripping the new required-endDate rule on an untouched field.
+    // row grandfathered with endDate: null must still be pausable/cancellable.
     await subscription.save({ validateModifiedOnly: true });
     await subscription.populate(POPULATE);
     res.json(subscription);
@@ -436,12 +475,44 @@ exports.updateSalesSubscriptionStatus = async (req, res) => {
   }
 };
 
-// POST /sales-subscriptions/:id/generate-invoice — manually generate the next
-// Invoice from this subscription right now (the "Generate Invoice Now" row
-// action). A scheduled job for automatic on-schedule generation would call
-// this same function per subscription whose nextInvoiceDate has arrived —
-// deliberately factored out so that automation is a thin wrapper around this,
-// not a second implementation to keep in sync.
+// Shared by POST /:id/generate-invoice ("Generate Invoice Now") and the
+// scheduled billing job, so both paths bill identically.
+// Thrown when another run (cron tick, other server, manual click) already
+// billed this cycle. Not a failure of the subscription — nothing is marked Error.
+class CycleAlreadyBilledError extends Error {
+  constructor() {
+    super("This billing cycle has already been invoiced.");
+    this.code = "CYCLE_ALREADY_BILLED";
+  }
+}
+
+// Marks a subscription Error without full-document validation (a legacy
+// null-endDate row must still be able to record its failure).
+//
+// Only touches the subscription if it's still on the cycle that failed, so a
+// stale run that lost a race can't flag a subscription another run just billed.
+async function markSubscriptionError(subscription, message) {
+  await SalesSubscription.updateOne(
+    {
+      _id: subscription._id,
+      status: { $nin: ["Cancelled", "Expired"] },
+      nextInvoiceDate: subscription.nextInvoiceDate ? new Date(subscription.nextInvoiceDate) : null,
+      invoiceCount: subscription.invoiceCount,
+    },
+    { $set: { status: "Error", lastError: message } }
+  );
+}
+
+// Returns { invoice, subscription } where `subscription` is the fresh
+// post-generation document — callers must use it, not the one passed in.
+//
+// Invoice creation, stock-out and the subscription's cycle advance commit in ONE
+// transaction, so a failure leaves no orphan invoice and no half-advanced
+// cycle. The cycle is "claimed" by a conditional update on (nextInvoiceDate,
+// invoiceCount, status): a concurrent run finds it already moved and gets
+// CycleAlreadyBilledError; the unique (salesSubscription, subscriptionCycleDate)
+// index on Invoice is the hard backstop. Stock goes out exactly once, here, the
+// same way a manually created Invoice does; later edits only apply the delta.
 async function generateInvoiceForSubscription(subscription, userId, organizationId) {
   const dealDoc = await Deal.findById(subscription.deal).populate("company");
   if (!dealDoc) throw new Error("Deal for this subscription no longer exists");
@@ -451,18 +522,23 @@ async function generateInvoiceForSubscription(subscription, userId, organization
   // validation error landing in the subscription's lastError.
   if (!userId) throw new Error("This subscription has no owner to bill under — reassign it and try again");
 
+  // The cycle this invoice covers.
+  const cycleDate = new Date(subscription.nextInvoiceDate || subscription.startDate);
+  if (subscription.endDate && cycleDate > new Date(subscription.endDate)) {
+    await SalesSubscription.updateOne(
+      { _id: subscription._id, status: { $nin: ["Cancelled", "Expired"] } },
+      { $set: { status: "Expired", nextInvoiceDate: null } }
+    );
+    throw new Error("This subscription has passed its end date.");
+  }
+  // The invoice is dated the cycle it covers (so a catch-up run after downtime
+  // doesn't re-date it). A manual "generate now" ahead of schedule is dated
+  // today rather than in the future; the cycle date is still what's recorded.
+  const invoiceDate = cycleDate > new Date() ? new Date() : cycleDate;
+
   const documentSettings = await getDocumentSettingsForOrganization(organizationId);
   const effectivePrefix = documentSettings.documentTypeSettings?.invoice?.prefix || documentSettings.invoicePrefix || "INV-";
   const effectiveSuffix = documentSettings.documentTypeSettings?.invoice?.suffix || documentSettings.invoiceSuffix || "";
-
-  const invoiceNumber = await resolveDocumentNumber({
-    Model: Invoice,
-    numberField: "invoiceNumber",
-    organization: organizationId,
-    documentTypeKey: "invoice",
-    prefix: effectivePrefix,
-    suffix: effectiveSuffix,
-  });
 
   let billingAddress = {};
   let shippingAddress = {};
@@ -475,52 +551,82 @@ async function generateInvoiceForSubscription(subscription, userId, organization
 
   // The invoice recalculates its own total from the item lines rather than
   // trusting the subscription's stored `amount` — a stale/hand-edited stored
-  // total must never become what a customer is actually billed. Same
-  // function the subscription itself uses, so in the normal case they agree.
+  // total must never become what a customer is actually billed.
   const invoiceAmount = calculateAmountFromItems(subscription.items, subscription.discount);
   // A tax invoice is one that actually charges GST — decided by whether any
-  // line carries a rate, NOT by the document-level `gstRate` field (which is
-  // informational only now that GST is per line item; see
-  // calculateAmountFromItems). Reading it from the old field made every
-  // subscription a non-tax invoice as soon as the form stopped sending it.
+  // line carries a rate, NOT by the informational document-level `gstRate`.
   const chargesGst = (subscription.items || []).some((it) => (parseFloat(it.gstRate) || 0) > 0);
 
-  const invoice = new Invoice({
-    deal: subscription.deal,
-    invoiceNumber,
-    date: new Date(),
-    amount: invoiceAmount,
-    discount: subscription.discount,
-    status: "Draft",
-    items: subscription.items,
-    notes: `Generated from Subscription ${subscription.subscriptionNumber}${subscription.notes ? `\n${subscription.notes}` : ""}`,
-    terms: subscription.terms || "",
-    isTaxInvoice: chargesGst,
-    receiverGSTIN,
-    billingAddress,
-    shippingAddress,
-    // intra/inter only decides the CGST+SGST vs IGST split the printed
-    // invoice reports under — the total is identical either way, so it's
-    // copied straight through and never multiplied into the math above.
-    transactionType: subscription.transactionType,
-    gstRate: subscription.gstRate,
-    user: userId,
-    organization: organizationId,
-  });
+  const advanced = nextBillingDate(subscription.startDate, subscription.billingInterval, cycleDate);
+  const pastEnd = subscription.endDate && advanced > new Date(subscription.endDate);
 
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
-    await invoice.save();
-  } catch (saveErr) {
-    // No invoice was created, so its number must not be used up: hand it back to the series.
-    const series = invoiceSeries({ organization: organizationId, prefix: effectivePrefix, suffix: effectiveSuffix, date: invoice.date });
-    const match = String(invoiceNumber).match(series.pattern);
-    if (match) await releaseInvoiceNumber(series, parseInt(match[1], 10));
-    throw saveErr;
-  }
+    // resolveDocumentNumber hooks session.abortTransaction to give an unused
+    // auto-number back, so a rolled-back run doesn't burn an invoice number.
+    const invoiceNumber = await resolveDocumentNumber({
+      Model: Invoice,
+      numberField: "invoiceNumber",
+      organization: organizationId,
+      documentTypeKey: "invoice",
+      prefix: effectivePrefix,
+      suffix: effectiveSuffix,
+      date: invoiceDate,
+      session,
+    });
 
-  // Stock OUT for any product lines — same call every other Invoice creation
-  // path uses; services are filtered out inside syncDocumentStock itself.
-  try {
+    const invoiceId = new mongoose.Types.ObjectId();
+
+    const claimed = await SalesSubscription.findOneAndUpdate(
+      {
+        _id: subscription._id,
+        organization: organizationId,
+        status: { $in: ["Draft", "Active", "Error"] },
+        nextInvoiceDate: subscription.nextInvoiceDate ? new Date(subscription.nextInvoiceDate) : null,
+        invoiceCount: subscription.invoiceCount,
+      },
+      {
+        $inc: { invoiceCount: 1 },
+        $push: { generatedInvoices: { invoice: invoiceId, invoiceNumber, date: invoiceDate, amount: invoiceAmount } },
+        $set: {
+          nextInvoiceDate: pastEnd ? null : advanced,
+          status: pastEnd ? "Expired" : "Active",
+          lastError: "",
+        },
+      },
+      { new: true, session }
+    );
+    if (!claimed) throw new CycleAlreadyBilledError();
+
+    const invoice = new Invoice({
+      _id: invoiceId,
+      deal: subscription.deal,
+      invoiceNumber,
+      date: invoiceDate,
+      amount: invoiceAmount,
+      discount: subscription.discount,
+      status: "Draft",
+      items: subscription.items,
+      notes: `Generated from Subscription ${subscription.subscriptionNumber}${subscription.notes ? `\n${subscription.notes}` : ""}`,
+      terms: subscription.terms || "",
+      isTaxInvoice: chargesGst,
+      receiverGSTIN,
+      billingAddress,
+      shippingAddress,
+      // intra/inter only decides the CGST+SGST vs IGST split the printed
+      // invoice reports under — the total is identical either way.
+      transactionType: subscription.transactionType,
+      gstRate: subscription.gstRate,
+      salesSubscription: subscription._id,
+      subscriptionCycleDate: cycleDate,
+      user: userId,
+      organization: organizationId,
+    });
+    await invoice.save({ session });
+
+    // Stock OUT for product lines, once — same call every other Invoice
+    // creation path uses; services are filtered out inside syncDocumentStock.
     await syncDocumentStock({
       organization: organizationId,
       documentId: invoice._id,
@@ -532,66 +638,56 @@ async function generateInvoiceForSubscription(subscription, userId, organization
       userId,
       reason: "sale",
       isReversal: false,
+      session,
     });
     invoice.stockMovementStatus = "applied";
-    await invoice.save({ validateModifiedOnly: true });
-  } catch (stockErr) {
-    // A subscription generating an invoice that oversells stock shouldn't
-    // silently vanish — the Invoice still exists (Draft), but the
-    // subscription itself flips to Error so the user notices and can
-    // adjust quantities/stock before the next cycle.
-    subscription.status = "Error";
-    subscription.lastError = stockErr.message;
-    // validateModifiedOnly: this save never touches endDate — a legacy
-    // grandfathered null-endDate row must still be able to record a billing
-    // error rather than fail validation on a field it never touched.
-    await subscription.save({ validateModifiedOnly: true });
-    throw stockErr;
+    await invoice.save({ session, validateModifiedOnly: true });
+
+    await session.commitTransaction();
+    return { invoice, subscription: claimed };
+  } catch (err) {
+    await session.abortTransaction();
+    // Another run won the race: either it hit our duplicate-cycle index, or two
+    // transactions wrote the same subscription at once and this one was rolled
+    // back as a write conflict (Mongo labels that TransientTransactionError).
+    const isWriteConflict = err?.code === 112 || err?.hasErrorLabel?.("TransientTransactionError");
+    const isDuplicateCycle = err?.code === 11000 && /subscriptionCycleDate|salesSubscription/.test(err.message || "");
+    if (isWriteConflict || isDuplicateCycle) throw new CycleAlreadyBilledError();
+    // Nothing was committed, so the subscription is untouched: flag it so the
+    // user notices (a stock shortage, a bad deal, ...) and can fix it and set it
+    // back to Active. The cycle date hasn't moved, so retrying bills it once.
+    if (!(err instanceof CycleAlreadyBilledError)) {
+      try {
+        await markSubscriptionError(subscription, err.message);
+      } catch (markErr) {
+        console.error("Could not record subscription error state:", markErr.message);
+      }
+    }
+    throw err;
+  } finally {
+    session.endSession();
   }
-
-  subscription.invoiceCount += 1;
-  subscription.generatedInvoices.push({
-    invoice: invoice._id,
-    invoiceNumber: invoice.invoiceNumber,
-    date: invoice.date,
-    amount: invoice.amount,
-  });
-
-  const advanced = addInterval(subscription.nextInvoiceDate || subscription.startDate, subscription.billingInterval);
-  if (subscription.endDate && advanced > new Date(subscription.endDate)) {
-    subscription.nextInvoiceDate = null;
-    subscription.status = "Expired";
-  } else {
-    subscription.nextInvoiceDate = advanced;
-    if (subscription.status === "Draft") subscription.status = "Active";
-  }
-  subscription.lastError = "";
-
-  // validateModifiedOnly: this is the cron/manual generate path, which never
-  // touches endDate — a legacy grandfathered null-endDate row must keep
-  // billing on schedule rather than fail validation on a field it never
-  // touched (see the schema comment on endDate).
-  await subscription.save({ validateModifiedOnly: true });
-  return invoice;
 }
 exports.generateInvoiceForSubscription = generateInvoiceForSubscription;
+exports.CycleAlreadyBilledError = CycleAlreadyBilledError;
 
 exports.generateInvoiceNow = async (req, res) => {
   try {
-    const subscription = await SalesSubscription.findOne({ _id: req.params.id, organization: req.user.organization });
-    if (!subscription) return res.status(404).json({ message: "Subscription not found" });
-    if (subscription.status === "Cancelled") {
+    const found = await SalesSubscription.findOne({ _id: req.params.id, organization: req.user.organization });
+    if (!found) return res.status(404).json({ message: "Subscription not found" });
+    if (found.status === "Cancelled") {
       return res.status(400).json({ message: "A Cancelled subscription can't generate invoices." });
     }
-    if (subscription.status === "Expired") {
+    if (found.status === "Expired") {
       return res.status(400).json({ message: "This subscription has passed its end date." });
     }
 
-    const invoice = await generateInvoiceForSubscription(subscription, req.user.id, req.user.organization);
+    const { invoice, subscription } = await generateInvoiceForSubscription(found, req.user.id, req.user.organization);
     await subscription.populate(POPULATE);
     res.json({ subscription, invoice });
   } catch (err) {
     console.error("Generate invoice from subscription error:", err);
+    if (err.code === "CYCLE_ALREADY_BILLED") return res.status(409).json({ message: err.message });
     res.status(400).json({ error: err.message });
   }
 };

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import ListIcon from "../common/ListIcon";
 import EditIcon from "../common/EditIcon";
+import ExpandableSearch from "../common/ExpandableSearch";
 
 const ContactFolder = () => {
   const [folders, setFolders] = useState([]);
@@ -29,8 +30,10 @@ const ContactFolder = () => {
   const [viewMode, setViewMode] = useState("folder");
   const [selectedFolderId, setSelectedFolderId] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [creatingFolder, setCreatingFolder] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState(null);
 
+  const [folderSearchTerm, setFolderSearchTerm] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [filteredContacts, setFilteredContacts] = useState([]);
@@ -93,14 +96,20 @@ const ContactFolder = () => {
   };
 
   const createFolder = async () => {
+    if (creatingFolder) return;
     if (!newFolderName.trim()) {
       toast.error("Folder name is required");
       return;
     }
+    setCreatingFolder(true);
     const loadingToast = toast.loading("Creating contact folder...");
     try {
-      await API.post("/contact-folders", { name: newFolderName });
+      const res = await API.post("/contact-folders", { name: newFolderName.trim() });
+      // Show the new folder and close the form straight away; the refetch after
+      // only reconciles with the server.
+      setFolders((prev) => [...prev, { contacts: [], ...res.data }]);
       setNewFolderName("");
+      setShowCreateForm(false);
       toast.success("Contact folder created successfully", {
         id: loadingToast,
       });
@@ -111,6 +120,8 @@ const ContactFolder = () => {
       } else {
         toast.error(error.response?.data?.error || "Failed to create contact folder", { id: loadingToast });
       }
+    } finally {
+      setCreatingFolder(false);
     }
   };
 
@@ -188,8 +199,19 @@ const ContactFolder = () => {
     fetchFolders();
   }, []);
 
+  const folderQuery = folderSearchTerm.trim().toLowerCase();
+  const visibleFolders = folders.filter((folder) => {
+    if (!folderQuery) return true;
+    if (folder.name?.toLowerCase().includes(folderQuery)) return true;
+    return (folder.contacts || []).some((c) =>
+      [c.name, c.email, c.phone, c.company?.name].some((f) =>
+        f?.toLowerCase().includes(folderQuery),
+      ),
+    );
+  });
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden h-full flex flex-col">
+    <div className="bg-white overflow-hidden h-full min-h-full flex flex-col">
       {/* Header */}
       <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white">
         <div>
@@ -199,44 +221,46 @@ const ContactFolder = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* View Toggles */}
-          <div className="flex items-center bg-gray-100 p-1 rounded-lg">
+        <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+          <ExpandableSearch
+            value={folderSearchTerm}
+            onChange={setFolderSearchTerm}
+            placeholder="Search by folder, contact name, email, or company..."
+          />
+
+          {/* Folder / List toggle — same pill as the Deals List/Kanban toggle */}
+          <div className="relative flex items-center bg-[#F1F1F5] gap-1.5 rounded-full p-1 flex-shrink-0 overflow-hidden">
+            <span
+              className="absolute top-1 w-8 h-8 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
+              style={{ left: viewMode === "list" ? 36 : 4 }}
+            />
             <button
               onClick={() => setViewMode("folder")}
-              className={`p-1.5 rounded-md flex items-center gap-2 text-xs font-medium transition-all ${
-                viewMode === "folder"
-                  ? "bg-white text-blue-600 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
+              className={`relative z-10 flex items-center justify-center w-8 h-8 rounded-full transition-colors ${viewMode === "folder" ? "text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+              title="Folder View"
             >
               <LayoutGrid className="w-4 h-4" />
-              <span className="hidden sm:inline">Folder View</span>
             </button>
             <button
               onClick={() => setViewMode("list")}
-              className={`p-1.5 rounded-md flex items-center gap-2 text-xs font-medium transition-all ${
-                viewMode === "list"
-                  ? "bg-white text-blue-600 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
+              className={`relative z-10 flex items-center justify-center w-8 h-8 rounded-full transition-colors ${viewMode === "list" ? "text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+              title="List View"
             >
               <ListIcon className="w-4 h-4" />
-              <span className="hidden sm:inline">List View</span>
             </button>
           </div>
 
           <button
             onClick={() => setShowCreateForm(!showCreateForm)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-medium"
+            className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-[#0085FF] text-white text-sm font-medium rounded-full hover:bg-blue-600 focus:outline-none transition-colors flex-shrink-0"
           >
             <PlusIcon className="w-4 h-4" />
-            Create New Folder
+            New Folder
           </button>
         </div>
       </div>
 
-      <div className="p-6 flex-1 overflow-y-auto">
+      <div className="p-6 flex-1 min-h-0 overflow-y-auto">
         {/* Create Folder Form */}
         {showCreateForm && (
           <div className="bg-blue-50/50 rounded-xl p-4 mb-6 border border-blue-100 animate-in fade-in slide-in-from-top-2">
@@ -262,9 +286,11 @@ const ContactFolder = () => {
               />
               <button
                 onClick={createFolder}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                disabled={creatingFolder}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Create
+                <PlusIcon className="w-4 h-4" />
+                {creatingFolder ? "Creating..." : "Create"}
               </button>
             </div>
           </div>
@@ -275,7 +301,7 @@ const ContactFolder = () => {
           <div className="space-y-6">
             {/* Folder Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-              {folders.map((folder) => (
+              {visibleFolders.map((folder) => (
                 <div
                   key={folder._id}
                   onClick={() =>
@@ -284,7 +310,7 @@ const ContactFolder = () => {
                     )
                   }
                   className={`
-                    group relative p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center text-center gap-3
+                    group relative p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center text-center gap-3 animate-in fade-in zoom-in-95 duration-300
                     ${
                       selectedFolderId === folder._id
                         ? "border-blue-500 bg-blue-50/30"
@@ -360,9 +386,10 @@ const ContactFolder = () => {
                   }
                   openDropdownId={openDropdownId}
                   setOpenDropdownId={setOpenDropdownId}
-                  onStatusUpdate={async (contactId, status) => {
+                  onStatusUpdate={async (contactId, lifecycleStage, status) => {
                     try {
                       await API.put(`/contacts/${contactId}`, {
+                        lifecycleStage,
                         stageStatus: status,
                       });
                       toast.success("Status updated");
@@ -379,7 +406,7 @@ const ContactFolder = () => {
               </div>
             )}
 
-            {!selectedFolderId && folders.length > 0 && (
+            {!selectedFolderId && visibleFolders.length > 0 && (
               <div className="text-center py-12 border-t border-gray-100 mt-8">
                 <p className="text-gray-400 text-sm">
                   Select a folder to view its contacts
@@ -390,7 +417,7 @@ const ContactFolder = () => {
         ) : (
           /* List View */
           <div className="space-y-4">
-            {folders.map((folder) => (
+            {visibleFolders.map((folder) => (
               <div
                 key={folder._id}
                 className="border border-gray-200 rounded-lg overflow-hidden bg-white"
@@ -440,9 +467,10 @@ const ContactFolder = () => {
                       contacts={folder.contacts || []}
                       openDropdownId={openDropdownId}
                       setOpenDropdownId={setOpenDropdownId}
-                      onStatusUpdate={async (contactId, status) => {
+                      onStatusUpdate={async (contactId, lifecycleStage, status) => {
                         try {
                           await API.put(`/contacts/${contactId}`, {
+                            lifecycleStage,
                             stageStatus: status,
                           });
                           toast.success("Status updated");
@@ -456,6 +484,12 @@ const ContactFolder = () => {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {folders.length > 0 && visibleFolders.length === 0 && (
+          <div className="text-center py-20 text-gray-500 text-sm">
+            No folders match your search
           </div>
         )}
 

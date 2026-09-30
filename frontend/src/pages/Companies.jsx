@@ -2144,7 +2144,9 @@ function Companies() {
         }}
       >
         {showHotlist ? (
-          <Hotlist />
+          <div className="h-full bg-white">
+            <Hotlist />
+          </div>
         ) : (
           // No `loading ? "opacity-60 pointer-events-none"` on this container any
           // more. Paging is server-side, so that fired on every page change and

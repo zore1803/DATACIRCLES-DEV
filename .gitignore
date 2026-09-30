@@ -49,3 +49,17 @@ backend/scripts/scratch/*
 backend/scripts/email-previews/
 .email-preview/
 backend/scripts/template-previews/
+
+# ── GSD (Get Shit Done) AI-agent framework — dev tooling, not app code ──
+# Installed by the AI workflow tool; the tool reads these from fixed paths,
+# so they stay in place but are kept out of the app repo's version control.
+.gsd/
+.agent/
+.agents/
+.gemini/
+adapters/
+scripts/
+GSD-STYLE.md
+PROJECT_RULES.md
+model_capabilities.yaml
+VERSION

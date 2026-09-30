@@ -27,8 +27,9 @@
 //   Cancelled - stopped by the user, terminal -> never resumed, and already
 //               has nextInvoiceDate cleared by the controller.
 //   Error     - the last generation attempt failed (lastError holds why).
-//               Skipped until a human puts it back to Active, so a broken
-//               subscription can't spam failures every hour.
+//               Its transaction rolled back, so no invoice or stock movement
+//               exists for that cycle. Skipped until a human puts it back to
+//               Active, so a broken subscription can't spam failures every hour.
 //
 // Already-generated invoices and their payments are never touched by any
 // branch here — expiring or erroring a subscription only stops FUTURE
@@ -71,8 +72,9 @@ async function runSalesSubscriptionBilling(now = new Date()) {
     nextInvoiceDate: { $ne: null, $lte: now },
   });
 
-  for (const subscription of due) {
+  for (const found of due) {
     summary.subscriptions += 1;
+    let subscription = found;
     try {
       let generated = 0;
       while (
@@ -81,30 +83,34 @@ async function runSalesSubscriptionBilling(now = new Date()) {
         new Date(subscription.nextInvoiceDate) <= now &&
         generated < MAX_CATCHUP_PER_TICK
       ) {
-        // Advances nextInvoiceDate, appends to generatedInvoices, bumps
-        // invoiceCount and flips to Expired on the last cycle — all inside.
-        await generateInvoiceForSubscription(subscription, subscription.user, subscription.organization);
+        // Creates the invoice (dated the cycle it covers), moves its stock out and
+        // advances the cycle in one transaction. Returns the fresh subscription —
+        // the loop must continue from that, not from the stale document.
+        const result = await generateInvoiceForSubscription(subscription, subscription.user, subscription.organization);
+        subscription = result.subscription;
         generated += 1;
         summary.generated += 1;
       }
     } catch (err) {
-      // generateInvoiceForSubscription already persists status: "Error" and
-      // lastError for the stock-sync failure case; this catch covers
-      // everything else (deleted Deal, numbering collision, validation) so a
-      // single bad row can't abort the whole run.
+      // Another run (other server, manual click) already billed this cycle:
+      // not a failure, the subscription is fine — move on.
+      if (err.code === 'CYCLE_ALREADY_BILLED') continue;
+      // generateInvoiceForSubscription already flags the subscription Error when
+      // its transaction fails; this write covers failures before that point
+      // (deleted Deal, missing owner) and skips validation so a grandfathered
+      // null-endDate row can still record its error.
       summary.errored += 1;
       console.error(
-        `[salesSubscriptionBillingJob] ${subscription.subscriptionNumber} failed:`,
+        `[salesSubscriptionBillingJob] ${found.subscriptionNumber} failed:`,
         err.message
       );
-      if (subscription.status !== 'Error') {
-        try {
-          subscription.status = 'Error';
-          subscription.lastError = err.message;
-          await subscription.save();
-        } catch (saveErr) {
-          console.error('[salesSubscriptionBillingJob] Could not record error state:', saveErr.message);
-        }
+      try {
+        await SalesSubscription.updateOne(
+          { _id: found._id, status: { $nin: ['Cancelled', 'Expired'] } },
+          { $set: { status: 'Error', lastError: err.message } }
+        );
+      } catch (saveErr) {
+        console.error('[salesSubscriptionBillingJob] Could not record error state:', saveErr.message);
       }
     }
   }

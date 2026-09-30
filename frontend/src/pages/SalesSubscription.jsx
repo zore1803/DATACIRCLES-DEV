@@ -78,6 +78,17 @@ const STATUS_STYLES = {
   Cancelled: "bg-[#FCEAEA] text-[#EA4B4B]",
 };
 const STATUS_OPTIONS = ["Draft", "Active", "Expired", "Error", "Cancelled"];
+// Statuses a person may set by hand, and the moves the server allows from each
+// (mirrors ALLOWED_TRANSITIONS in salesSubscriptionController). Expired/Error
+// are set by the system; Expired and Cancelled are terminal.
+const SETTABLE_STATUSES = ["Draft", "Active", "Cancelled"];
+const NEXT_STATUSES = {
+  Draft: ["Active", "Cancelled"],
+  Active: ["Draft", "Cancelled"],
+  Error: ["Active", "Cancelled"],
+  Expired: [],
+  Cancelled: [],
+};
 
 const customerOf = (s) =>
   s.deal?.contact?.name || s.deal?.company?.name || s.deal?.contactPerson || s.deal?.title || "—";
@@ -400,7 +411,7 @@ const SalesSubscription = () => {
   };
 
   const subFieldConfig = {
-    fields: [{ key: "status", label: "Status", type: "select", options: STATUS_OPTIONS }],
+    fields: [{ key: "status", label: "Status", type: "select", options: SETTABLE_STATUSES }],
   };
 
   const handleGenerateInvoice = async (row) => {
@@ -673,7 +684,7 @@ const SalesSubscription = () => {
               className="w-48 z-[9999] bg-white border border-gray-100 rounded-lg shadow-lg p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150"
               style={{ position: "fixed", left: statusMenuState.x, top: statusMenuState.y }}
             >
-              {STATUS_OPTIONS.map((status) => (
+              {[statusMenuState.doc.status, ...(NEXT_STATUSES[statusMenuState.doc.status] || [])].map((status) => (
                 <button
                   key={status}
                   onClick={() => {

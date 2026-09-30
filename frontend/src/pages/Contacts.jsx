@@ -2539,7 +2539,7 @@ function Contacts() {
               })}
             </div>
           ) : activeTab === "Hotlist" ? (
-            <div className="px-6 pt-6">
+            <div className="h-full">
               <ContactFolder />
             </div>
           ) : (

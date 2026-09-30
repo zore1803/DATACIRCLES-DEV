@@ -279,12 +279,12 @@ export default function DataTable({
                           zIndex: isSticky ? 20 : 1,
                           opacity: isDragging ? 0.35 : 1,
                         }}
-                        className={`px-4 py-3 text-sm font-bold text-[#525866] transition-colors bg-[#F5F7FA] border-r border-[#E1E4EA] last:border-r-0 ${isDraggable ? "cursor-grab active:cursor-grabbing" : ""} ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
+                        className={`${colId === selectionColId ? "px-0" : "px-4"} py-3 text-sm font-bold text-[#525866] transition-colors bg-[#F5F7FA] border-r border-[#E1E4EA] last:border-r-0 ${isDraggable ? "cursor-grab active:cursor-grabbing" : ""} ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
                       >
-                        <div className={`flex items-center justify-between w-full min-w-0 ${loading ? "[&_button]:invisible" : ""}`}>
-                          <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-hidden cursor-grab active:cursor-grabbing">
+                        <div className={`flex items-center ${colId === selectionColId ? "justify-center" : "justify-between"} w-full min-w-0 ${loading ? "[&_button]:invisible" : ""}`}>
+                          <div className={`flex items-center gap-1.5 min-w-0 overflow-hidden ${colId !== selectionColId ? "flex-1 cursor-grab active:cursor-grabbing" : ""}`}>
                             {flexRender(header.column.columnDef.header, header.getContext())}
-                            {sortConfig.key === colId && (sortConfig.direction === "asc"
+                            {colId !== selectionColId && sortConfig.key === colId && (sortConfig.direction === "asc"
                               ? <ArrowUp className="w-3 h-3 text-[#0085FF] flex-shrink-0" />
                               : <ArrowDown className="w-3 h-3 text-[#0085FF] flex-shrink-0" />)}
                           </div>
@@ -468,7 +468,7 @@ export default function DataTable({
                             zIndex: isSticky ? 10 : 1,
                             opacity: isColDragging ? 0.35 : 1,
                           }}
-                          className="px-4 py-2 align-middle text-sm text-[#1C1B1F] bg-inherit border-r border-b border-[#E1E4EA] last:border-r-0"
+                          className={`${colId === selectionColId ? "px-0" : "px-4"} py-2 align-middle text-sm text-[#1C1B1F] bg-inherit border-r border-b border-[#E1E4EA] last:border-r-0`}
                         >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           {isLeftBoundary && <div style={getPinnedBoundaryOverlayStyle("left")} />}

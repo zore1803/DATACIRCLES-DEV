@@ -79,8 +79,8 @@ const salesSubscriptionSchema = new mongoose.Schema(
     // than failing validation on a field they never touched.
     endDate: { type: Date, required: true },
     // The next date an invoice is due to be generated — shown as "Upcoming"
-    // in the list. Advances by billingInterval each time
-    // generateInvoiceForSubscription runs. Null once the subscription has
+    // in the list. Advances along the startDate-anchored
+    // schedule (utils/billingDates.js) each time generateInvoiceForSubscription runs. Null once the subscription has
     // reached its endDate or is Cancelled.
     nextInvoiceDate: { type: Date, default: null },
 
@@ -88,9 +88,11 @@ const salesSubscriptionSchema = new mongoose.Schema(
     generatedInvoices: [generatedInvoiceSchema],
 
     // Draft: created but not yet started billing. Active: generating on
-    // schedule. Expired: passed endDate with nothing left to generate.
-    // Error: last generation attempt failed (see lastError). Cancelled:
-    // stopped by the user — terminal, never auto-resumes.
+    // schedule. Expired: passed endDate with nothing left to generate —
+    // terminal. Error: last generation attempt failed (see lastError), can
+    // only go back to Active or to Cancelled. Cancelled: stopped by the user —
+    // terminal. Allowed moves live in salesSubscriptionController's
+    // ALLOWED_TRANSITIONS.
     status: {
       type: String,
       enum: ["Draft", "Active", "Expired", "Error", "Cancelled"],
@@ -111,5 +113,7 @@ salesSubscriptionSchema.index({ organization: 1, createdAt: -1 });
 salesSubscriptionSchema.index({ organization: 1, status: 1 });
 salesSubscriptionSchema.index({ organization: 1, nextInvoiceDate: 1 });
 salesSubscriptionSchema.index({ deal: 1, organization: 1 });
+// Numbers come from a per-organization counter and are never reused.
+salesSubscriptionSchema.index({ organization: 1, subscriptionNumber: 1 }, { unique: true });
 
 module.exports = mongoose.model("SalesSubscription", salesSubscriptionSchema);

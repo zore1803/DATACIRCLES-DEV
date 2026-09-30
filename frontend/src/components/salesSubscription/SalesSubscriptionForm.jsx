@@ -16,7 +16,6 @@ const UNITS = [
   { value: "month", label: "Month(s)" },
   { value: "year", label: "Year(s)" },
 ];
-const STATUS_OPTIONS = ["Draft", "Active", "Expired", "Error", "Cancelled"];
 
 const money = (n) =>
   `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -115,8 +114,13 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
   // null when closed; otherwise which section ("notes" | "terms") to focus.
   const [notesDrawer, setNotesDrawer] = useState(null);
 
-  const isCancelled = editingSubscription?.status === "Cancelled";
-  const availableStatusOptions = STATUS_OPTIONS.filter((s) => s !== "Cancelled" || isEditing);
+  const isCancelled = ["Cancelled", "Expired"].includes(editingSubscription?.status);
+  // Mirrors the server's allowed moves: a new subscription starts Draft or
+  // Active; an existing one can stay as it is or take a permitted next status
+  // (Expired/Cancelled are terminal, Error/Expired are system-set).
+  const availableStatusOptions = !isEditing
+    ? ["Draft", "Active"]
+    : [editingSubscription.status, ...({ Draft: ["Active", "Cancelled"], Active: ["Draft", "Cancelled"], Error: ["Active", "Cancelled"] }[editingSubscription.status] || [])];
 
   useEffect(() => {
     setTimeout(() => setIsSliding(true), 10);
@@ -351,7 +355,7 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
           {isCancelled ? (
             <div className="flex-1 min-h-0 overflow-y-auto p-6">
               <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-700">
-                This subscription is Cancelled and can no longer be edited. Create a new one instead.
+                This subscription is {editingSubscription?.status} and can no longer be edited. Create a new one instead.
               </div>
             </div>
           ) : (

@@ -15,28 +15,15 @@ import {
   Menu,
   ArrowLeft,
   LayoutGrid,
+  Folder as LucideFolder,
 } from "lucide-react";
 import ListIcon from "../common/ListIcon";
+import ExpandableSearch from "../common/ExpandableSearch";
 import EditIcon from "../common/EditIcon";
 
+
 const FolderIcon = ({ className = "h-8 w-8" }) => (
-  <svg viewBox="0 0 40 34" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-    <defs>
-      <linearGradient id="folderBack" x1="20" y1="2" x2="20" y2="34" gradientUnits="userSpaceOnUse">
-        <stop stopColor="#5BB1E0" />
-        <stop offset="0.35" stopColor="#0591DE" />
-      </linearGradient>
-      <linearGradient id="folderFront" x1="20" y1="10" x2="20" y2="32" gradientUnits="userSpaceOnUse">
-        <stop stopColor="#73D7FF" />
-        <stop offset="1" stopColor="#6BCBF3" />
-      </linearGradient>
-    </defs>
-    <path
-      d="M4 6C4 4.34315 5.34315 3 7 3H14.5C15.5 3 16.4 3.4 17.2 4.1L19 5.7C19.8 6.4 20.7 6.8 21.7 6.8H33C34.6569 6.8 36 8.14315 36 9.8V28C36 29.6569 34.6569 31 33 31H7C5.34315 31 4 29.6569 4 28V6Z"
-      fill="url(#folderBack)"
-    />
-    <rect x="4" y="12" width="32" height="19" rx="4" fill="url(#folderFront)" />
-  </svg>
+  <LucideFolder className={`${className} fill-blue-300/50 text-blue-400`} strokeWidth={1.5} />
 );
 
 /**
@@ -173,6 +160,7 @@ const Hotlist = () => {
   const [folderSearchTerm, setFolderSearchTerm] = useState("");
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
   const [editingFolder, setEditingFolder] = useState(null);
   const [editingName, setEditingName] = useState("");
   const [selectedCompanies, setSelectedCompanies] = useState([]);
@@ -183,6 +171,7 @@ const Hotlist = () => {
   const navigate = useNavigate();
   const [openFolderId, setOpenFolderId] = useState(null);
   const [folderViewMode, setFolderViewMode] = useState("card"); // "card" | "list"
+  const [foldersViewMode, setFoldersViewMode] = useState("folder"); // top-level hotlist: "folder" | "list"
   // Search scoped to the companies inside whichever folder is currently open —
   // separate from folderSearchTerm, which searches the folder GRID. Reset
   // whenever a different folder opens so a stale query doesn't silently
@@ -259,15 +248,19 @@ const Hotlist = () => {
   };
 
   const createFolder = async () => {
+    if (creatingFolder) return;
     if (!newFolderName.trim()) {
       toast.error("Folder name is required");
       return;
     }
 
+    setCreatingFolder(true);
     const loadingToast = toast.loading("Creating folder...");
 
     try {
-      await API.post("/company-folders", { name: newFolderName });
+      const res = await API.post("/company-folders", { name: newFolderName.trim() });
+      // Show the new folder straight away; the refetch after only reconciles.
+      setFolders((prev) => [...prev, { companies: [], ...res.data }]);
       setNewFolderName("");
       setShowCreateFolder(false);
       toast.success("Folder created successfully", { id: loadingToast });
@@ -278,6 +271,8 @@ const Hotlist = () => {
       } else {
         toast.error(error.response?.data?.error || "Failed to create folder", { id: loadingToast });
       }
+    } finally {
+      setCreatingFolder(false);
     }
   };
 
@@ -593,7 +588,7 @@ const Hotlist = () => {
 
     return (
       <>
-      <div className="mx-4 mt-6 space-y-4">
+      <div className="p-6 space-y-4 bg-white min-h-full">
         {/* Workspace navbar: Back + folder name, search, List/Card toggle,
             Add Companies — wraps to a second line on narrow widths rather
             than ever scrolling sideways. */}
@@ -617,13 +612,11 @@ const Hotlist = () => {
               </div>
             </div>
 
-            <div className="relative flex-1 min-w-[200px]">
-              <SearchIcon className="absolute left-3 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
-              <input
-                className="w-full h-10 pl-11 pr-4 border border-gray-200 rounded-full text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                placeholder="Search this folder by name, industry, or location..."
+            <div className="relative flex-1 min-w-[200px] flex justify-end">
+              <ExpandableSearch
                 value={companySearchTerm}
-                onChange={(e) => setCompanySearchTerm(e.target.value)}
+                onChange={setCompanySearchTerm}
+                placeholder="Search this folder by name, industry, or location..."
               />
             </div>
 
@@ -649,11 +642,6 @@ const Hotlist = () => {
               </button>
             </div>
 
-            {/* Was only reachable via the pencil icon back on the folder grid
-                — this drill-down view had no way to add companies to the
-                folder you're actually looking at. Reuses the exact same
-                edit/add flow (startEdit -> editFolderModal), just triggered
-                from here too. */}
             <button
               onClick={() => startEdit(openFolder)}
               className="flex items-center gap-1.5 h-10 px-4 rounded-full bg-[#0085FF] text-white text-sm font-medium hover:bg-blue-600 transition-colors flex-shrink-0"
@@ -664,13 +652,6 @@ const Hotlist = () => {
           </div>
         </div>
 
-        {/* No outer white card wrapper here any more. The list/grid used to sit
-            inside `bg-white rounded-xl border p-6`, which put a bordered box
-            inside another bordered box — a visible double frame with dead
-            padding between them, and it stretched full-height regardless of
-            content. Now each view supplies its own single surface, so the
-            content reads as sitting on the page background rather than in a
-            nested panel. */}
         {!openFolder.companies || openFolder.companies.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 text-center py-10 sm:py-14 px-6 text-gray-500">
             <Building2 className="h-12 w-12 sm:h-16 sm:w-16 mx-auto text-gray-300 mb-4" />
@@ -690,11 +671,6 @@ const Hotlist = () => {
             <p className="text-sm">No companies in this folder match "{companySearchTerm}".</p>
           </div>
         ) : folderViewMode === "card" ? (
-          // Wrapping grid — reads left-to-right, top-to-bottom, wraps to a new
-          // row instead of scrolling sideways. 1/2/3/4 columns as the viewport
-          // widens, so a 100+ company folder is just a taller page (normal
-          // vertical scroll), never a wider one. Cards are their own surfaces,
-          // so there's no wrapper panel behind them.
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {visibleCompanies.map((company) => (
               <FolderCompanyCard
@@ -708,14 +684,7 @@ const Hotlist = () => {
             ))}
           </div>
         ) : (
-          // Clean vertical list with a proper header row. Div-based, not a
-          // literal <table> — see FolderCompanyRow's comment for why. This
-          // bordered container IS the single surface now.
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            {/* Header cell structure mirrors FolderCompanyRow exactly — same
-                column template, same per-cell padding, same right borders — so
-                the vertical dividers line up continuously from header through
-                every row. */}
             <div className="hidden sm:grid grid-cols-[auto_1fr_1fr_1fr_auto] items-stretch bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide">
               <span className="px-4 py-2.5 border-r border-gray-200 w-[26px] box-content" />
               <span className="px-4 py-2.5 border-r border-gray-200">Company</span>
@@ -745,115 +714,198 @@ const Hotlist = () => {
 
   return (
     <>
-    <div className="mx-4 mt-6 space-y-4">
-      {/* Header Card */}
-      <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <h2 className="text-base font-semibold text-gray-900">Company Hotlists</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Organise your companies into custom folders
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="relative w-[320px] max-w-full">
-              <SearchIcon className="absolute left-3 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
-              <input
-                className="w-full h-10 pl-11 pr-4 border border-gray-200 rounded-full text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                placeholder="Search by companies by name, industry, or location..."
-                value={folderSearchTerm}
-                onChange={(e) => setFolderSearchTerm(e.target.value)}
-              />
-            </div>
-            <button
-              onClick={() => setShowCreateFolder((prev) => !prev)}
-              className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-[#0085FF] text-white text-sm font-medium rounded-full hover:bg-blue-600 transition-colors flex-shrink-0"
-            >
-              <PlusIcon className="w-4 h-4" />
-              New Folder
-            </button>
-          </div>
+    <div className="bg-white overflow-hidden h-full min-h-full flex flex-col">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">Company Hotlists</h2>
+          <p className="text-sm text-gray-500">
+            Organise your companies into custom folders
+          </p>
         </div>
 
-        {showCreateFolder && (
-          <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
-            <input
-              className="flex-1 px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm sm:text-base"
-              placeholder="Enter folder name..."
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && createFolder()}
-              autoFocus
+        <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+          <ExpandableSearch
+            value={folderSearchTerm}
+            onChange={setFolderSearchTerm}
+            placeholder="Search by company name, industry, or location..."
+          />
+
+          {/* Folder / List toggle — same pill as the Deals List/Kanban toggle */}
+          <div className="relative flex items-center bg-[#F1F1F5] gap-1.5 rounded-full p-1 flex-shrink-0 overflow-hidden">
+            <span
+              className="absolute top-1 w-8 h-8 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
+              style={{ left: foldersViewMode === "list" ? 36 : 4 }}
             />
             <button
-              onClick={createFolder}
-              className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 font-medium flex items-center justify-center gap-2 text-sm sm:text-base"
+              onClick={() => setFoldersViewMode("folder")}
+              className={`relative z-10 flex items-center justify-center w-8 h-8 rounded-full transition-colors ${foldersViewMode === "folder" ? "text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+              title="Folder View"
             >
-              <PlusIcon className="w-4 h-4" />
-              Create
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setFoldersViewMode("list")}
+              className={`relative z-10 flex items-center justify-center w-8 h-8 rounded-full transition-colors ${foldersViewMode === "list" ? "text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+              title="List View"
+            >
+              <ListIcon className="w-4 h-4" />
             </button>
           </div>
-        )}
+
+          <button
+            onClick={() => setShowCreateFolder((prev) => !prev)}
+            className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-[#0085FF] text-white text-sm font-medium rounded-full hover:bg-blue-600 focus:outline-none transition-colors flex-shrink-0"
+          >
+            <PlusIcon className="w-4 h-4" />
+            New Folder
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
-        {/* Folders List - Mobile Responsive */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-          {visibleFolders?.map((folder) => (
-            <div key={folder._id} className="relative group">
-              {/* Folder Tile — clicking it drills into the full-page view above,
-                  it no longer expands inline here. */}
-              <div className="absolute -top-1 right-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => startEdit(folder)}
-                  className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
-                >
-                  <EditIcon className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => deleteFolder(folder._id)}
-                  className="p-1 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition-all"
-                >
-                  <DeleteIcon className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Was `hover:opacity-80` only — a much weaker cue than the
-                  card-style hover (border + shadow) already used one level
-                  down for the companies inside a folder (line ~278). Matched
-                  it here: border/shadow/bg lift on hover, plus the icon gets
-                  a subtle scale so the tile reads as clickable, not just
-                  dimming like a disabled control. */}
+      <div className="p-6 flex-1 min-h-0 overflow-y-auto">
+        {/* Create Folder Form */}
+        {showCreateFolder && (
+          <div className="bg-blue-50/50 rounded-xl p-4 mb-6 border border-blue-100 animate-in fade-in slide-in-from-top-2">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-blue-900 text-sm">New Folder</h3>
               <button
-                onClick={() => setOpenFolderId(folder._id)}
-                className="flex flex-col items-center text-center w-full pt-3 pb-2 px-2 rounded-xl border border-transparent hover:border-blue-200 hover:bg-blue-50/40 hover:shadow-sm transition-all"
+                onClick={() => setShowCreateFolder(false)}
+                className="text-blue-400 hover:text-blue-600"
               >
-                <FolderIcon className="h-14 w-14 transition-transform group-hover:scale-105" />
-                <h4 className="mt-2 font-semibold text-gray-900 text-sm truncate max-w-full">
-                  <HighlightText text={folder.name} query={folderSearchTerm} />
-                </h4>
-                <p className="text-xs text-gray-500">
-                  {folder.companies?.length || 0} companies
-                </p>
+                <X className="w-4 h-4" />
               </button>
             </div>
-          ))}
-
-          {visibleFolders?.length === 0 && (
-            <div className="text-center py-8 sm:py-12 text-gray-500">
-              <Building2 className="h-12 w-12 sm:h-16 sm:w-16 mx-auto text-gray-300 mb-4" />
-              <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">
-                {folders?.length === 0 ? "No folders yet" : "No folders match your search"}
-              </h3>
-              <p className="text-sm">
-                {folders?.length === 0
-                  ? "Create your first folder to start organizing companies"
-                  : "Try a different search term"}
-              </p>
+            <div className="flex gap-2">
+              <input
+                className="flex-1 px-3 py-2 border border-blue-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+                placeholder="Enter folder name..."
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && createFolder()}
+                autoFocus
+              />
+              <button
+                onClick={createFolder}
+                disabled={creatingFolder}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <PlusIcon className="w-4 h-4" />
+                {creatingFolder ? "Creating..." : "Create"}
+              </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {visibleFolders?.length > 0 && foldersViewMode === "folder" && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            {visibleFolders.map((folder) => (
+              <div key={folder._id} className="relative group animate-in fade-in zoom-in-95 duration-300">
+                {/* Hover actions — clicking the tile drills into the full-page
+                    folder view above. */}
+                <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => startEdit(folder)}
+                    className="p-1.5 bg-white rounded-full shadow-sm text-gray-400 hover:text-blue-600 hover:scale-110 transition-all"
+                  >
+                    <EditIcon className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => deleteFolder(folder._id)}
+                    className="p-1.5 bg-white rounded-full shadow-sm text-gray-400 hover:text-red-600 hover:scale-110 transition-all"
+                  >
+                    <DeleteIcon className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setOpenFolderId(folder._id)}
+                  className="flex flex-col items-center text-center gap-3 w-full p-4 rounded-xl border-2 border-transparent hover:bg-gray-50 transition-all"
+                >
+                  <FolderIcon className="h-16 w-16 transition-transform group-hover:scale-105" />
+                  <div className="w-full">
+                    <h4 className="font-semibold text-gray-700 text-sm truncate px-2">
+                      <HighlightText text={folder.name} query={folderSearchTerm} />
+                    </h4>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {folder.companies?.length || 0} Companies
+                    </p>
+                  </div>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {visibleFolders?.length > 0 && foldersViewMode === "list" && (
+          <div className="space-y-4">
+            {visibleFolders.map((folder) => (
+              <div
+                key={folder._id}
+                className="border border-gray-200 rounded-lg overflow-hidden bg-white"
+              >
+                <div
+                  className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => setOpenFolderId(folder._id)}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <FolderIcon className="w-6 h-6 flex-shrink-0" />
+                    <span className="font-semibold text-gray-700 truncate">
+                      <HighlightText text={folder.name} query={folderSearchTerm} />
+                    </span>
+                    <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-full">
+                      {folder.companies?.length || 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startEdit(folder);
+                      }}
+                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                    >
+                      <EditIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteFolder(folder._id);
+                      }}
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                    >
+                      <DeleteIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {visibleFolders?.length === 0 && (
+          <div className="text-center py-20">
+            <div className="bg-gray-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Building2 className="w-10 h-10 text-gray-300" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900">
+              {folders?.length === 0 ? "No folders yet" : "No folders match your search"}
+            </h3>
+            <p className="text-gray-500 mt-2 max-w-sm mx-auto">
+              {folders?.length === 0
+                ? "Create a folder to start organizing your companies into lists."
+                : "Try a different search term"}
+            </p>
+            {folders?.length === 0 && (
+              <button
+                onClick={() => setShowCreateFolder(true)}
+                className="mt-6 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                Create Folder
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
     {editFolderModal}
