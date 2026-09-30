@@ -139,6 +139,7 @@ const QuickTaskForm = ({
   onRequestClose,
   editTask = null,
   initialDueDate = "",
+  initialContactId = null,
 }) => {
   const isEditing = !!editTask;
   const [form, setForm] = useState({
@@ -148,8 +149,9 @@ const QuickTaskForm = ({
     description: "",
     status: "Pending",
     priority: "medium",
-    relationModel: "Company",
-    relatedTo: "",
+    // Pre-select Contact relation when launched from a contact page.
+    relationModel: initialContactId ? "Contact" : "Company",
+    relatedTo: initialContactId || "",
     users: [],
     additionalFields: [],
   });
@@ -212,6 +214,8 @@ const QuickTaskForm = ({
     setLocalContacts(
       contacts.map((contact) => ({
         ...contact,
+        // Include "No Company" in displayName so contacts without a company
+        // still appear when the user searches by name alone.
         displayName: `${contact.name} (${contact.company?.name || "No Company"})`,
       }))
     );
@@ -219,6 +223,17 @@ const QuickTaskForm = ({
       setIsOpen(false);
     };
   }, [companies, contacts]);
+
+  // When opened from a contact page, keep the Contact relation pre-filled
+  // even if contacts list updates later — only when not editing an existing task.
+  useEffect(() => {
+    if (!initialContactId || isEditing) return;
+    setForm((prev) => ({
+      ...prev,
+      relationModel: "Contact",
+      relatedTo: initialContactId,
+    }));
+  }, [initialContactId, isEditing]);
 
   // Pre-fill when editing so edit and create share one form.
   useEffect(() => {
@@ -708,7 +723,7 @@ const QuickTaskForm = ({
 
                 {/* Assignees */}
                 <div ref={usersRef}>
-                  <FormLabel>Assignees</FormLabel>
+                  <FormLabel required>Assignees</FormLabel>
 
                   <div className="space-y-2 relative">
                     {assignedUsers.length > 0 && (

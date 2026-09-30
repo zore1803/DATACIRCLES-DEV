@@ -21,7 +21,9 @@ import {
   Pin,
   PinOff,
   CheckSquare,
-  Check,
+  Ban,
+  Pause,
+  Play,
   Repeat,
   Zap,
   ArrowUp, ArrowDown } from "lucide-react";
@@ -82,10 +84,12 @@ const STATUS_OPTIONS = ["Draft", "Active", "Expired", "Error", "Cancelled"];
 // (mirrors ALLOWED_TRANSITIONS in salesSubscriptionController). Expired/Error
 // are set by the system; Expired and Cancelled are terminal.
 const SETTABLE_STATUSES = ["Draft", "Active", "Cancelled"];
-const NEXT_STATUSES = {
-  Draft: ["Active", "Cancelled"],
-  Active: ["Draft", "Cancelled"],
-  Error: ["Active", "Cancelled"],
+// Row-menu status actions per current status. Expired/Cancelled have none.
+const CANCEL_ACTION = { label: "Cancel Subscription", to: "Cancelled", icon: Ban, danger: true };
+const STATUS_ACTIONS = {
+  Draft: [{ label: "Activate", to: "Active", icon: Play }, CANCEL_ACTION],
+  Active: [{ label: "Pause", to: "Draft", icon: Pause }, CANCEL_ACTION],
+  Error: [{ label: "Resume", to: "Active", icon: Play }, CANCEL_ACTION],
   Expired: [],
   Cancelled: [],
 };
@@ -157,7 +161,6 @@ const SalesSubscription = () => {
 
   const [openRowActionsId, setOpenRowActionsId] = useState(null);
   const [rowActionsPos, setRowActionsPos] = useState(null);
-  const [statusMenuState, setStatusMenuState] = useState(null);
   const rowActionsRef = useRef(null);
   const [openColumnMenuKey, setOpenColumnMenuKey] = useState(null);
   const [columnMenuPos, setColumnMenuPos] = useState(null);
@@ -446,7 +449,10 @@ const SalesSubscription = () => {
       toast.success("Status updated", { id: loadingToast });
       fetchRows();
     } catch (err) {
-      toast.error(err.response?.data?.error || "Failed to update status", { id: loadingToast });
+      toast.error(
+        err.response?.data?.message || err.response?.data?.error || "Failed to update status",
+        { id: loadingToast }
+      );
     }
   };
 
@@ -584,6 +590,12 @@ const SalesSubscription = () => {
     const isOpen = openRowActionsId === row._id;
     const close = () => { setOpenRowActionsId(null); setRowActionsPos(null); };
     const canGenerate = row.status !== "Cancelled" && row.status !== "Expired";
+    const statusActions = STATUS_ACTIONS[row.status] || [];
+    const runStatusAction = (action) => {
+      close();
+      if (action.to === "Cancelled" && !window.confirm("Cancel this subscription? This can't be undone.")) return;
+      handleStatusChange(row._id, action.to);
+    };
     return (
       <div
         className="relative flex-shrink-0"
@@ -635,28 +647,20 @@ const SalesSubscription = () => {
                 </button>
               )}
               {canGenerate && <div className="w-full border-t border-[#F1F1F5] my-0.5" />}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const GAP = 4;
-                  const DROPDOWN_W = 192; // w-48
-                  const zMenu = getAncestorZoom(e.currentTarget);
-                  setStatusMenuState({
-                    doc: row,
-                    x: Math.max(4, rect.left / zMenu - DROPDOWN_W - GAP),
-                    y: rect.top / zMenu,
-                  });
-                }}
-                className="w-full flex items-center justify-between px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
-              >
-                <span className="flex items-center gap-2">
-                  <Repeat className="w-3.5 h-3.5 text-orange-600" />
-                  Change Status
-                </span>
-                <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
-              </button>
-              <div className="w-full border-t border-[#F1F1F5] my-0.5" />
+              {statusActions.map((action) => (
+                <React.Fragment key={action.to}>
+                  <button
+                    onClick={() => runStatusAction(action)}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap ${
+                      action.danger ? "text-[#CD3636] hover:bg-red-50" : "text-[#161618] hover:bg-gray-50"
+                    }`}
+                  >
+                    <action.icon className={`w-3.5 h-3.5 ${action.danger ? "text-[#CD3636]" : "text-orange-600"}`} />
+                    {action.label}
+                  </button>
+                  <div className="w-full border-t border-[#F1F1F5] my-0.5" />
+                </React.Fragment>
+              ))}
               <button
                 onClick={() => { close(); openEdit(row); }}
                 className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
@@ -672,38 +676,6 @@ const SalesSubscription = () => {
                 <DeleteIcon className="w-4 h-4 text-[#CD3636]" />
                 Delete
               </button>
-            </div>
-          </>,
-          document.body
-        )}
-
-        {statusMenuState && createPortal(
-          <>
-            <div className="fixed inset-0 z-[9998]" onClick={() => setStatusMenuState(null)} />
-            <div
-              className="w-48 z-[9999] bg-white border border-gray-100 rounded-lg shadow-lg p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150"
-              style={{ position: "fixed", left: statusMenuState.x, top: statusMenuState.y }}
-            >
-              {[statusMenuState.doc.status, ...(NEXT_STATUSES[statusMenuState.doc.status] || [])].map((status) => (
-                <button
-                  key={status}
-                  onClick={() => {
-                    handleStatusChange(statusMenuState.doc._id, status);
-                    setStatusMenuState(null);
-                    setOpenRowActionsId(null);
-                  }}
-                  className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium text-left ${
-                    statusMenuState.doc.status === status
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  {statusMenuState.doc.status === status && <Check className="w-4 h-4 shrink-0 text-blue-600" />}
-                  <span className={statusMenuState.doc.status === status ? "ml-0" : "ml-6"}>
-                    {status}
-                  </span>
-                </button>
-              ))}
             </div>
           </>,
           document.body

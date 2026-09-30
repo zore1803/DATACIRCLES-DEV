@@ -207,7 +207,7 @@ export const NoteEditor = ({
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Note
+                Note <span className="text-red-500">*</span>
               </label>
               <div className="border border-gray-300 rounded-lg overflow-hidden">
                 <ReactQuill
@@ -320,11 +320,6 @@ const NoteSection = ({ contactId: propContactId, isQuickView }) => {
       return;
     }
 
-    if (!contact?.company?._id) {
-      toast.error("This contact isn't linked to a company yet — add one first.");
-      return;
-    }
-
     try {
       setLoading(true);
       if (editingNoteId) {
@@ -336,7 +331,7 @@ const NoteSection = ({ contactId: propContactId, isQuickView }) => {
       } else {
         await API.post("/notes", {
           note: noteContent,
-          company: contact.company._id,
+          ...(contact?.company?._id ? { company: contact.company._id } : {}),
           taggedContacts: [contactId],
         });
         toast.success("Note added");

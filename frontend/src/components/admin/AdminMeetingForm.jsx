@@ -1131,14 +1131,13 @@ const AdminMeetingForm = ({
     ? contactPickList.filter((c) => String(c._id) === linkedDealContactId)
     : contactPickList;
 
-  // An invoice always belongs to a deal, so Link Invoice is gated entirely on
-  // the chosen deal: no deal -> nothing to pick; a deal with no invoices ->
-  // "No invoice found"; a deal with invoices -> only that deal's invoices.
+  // When a deal is selected: show only that deal's invoices.
+  // When no deal is selected: show all invoices (contact-only meeting).
   const invoiceDealId = (inv) => String(inv.deal?._id || inv.deal || "");
   const hasLinkedDeal = !!form.linkedDealId;
   const scopedInvoices = hasLinkedDeal
     ? linkableInvoices.filter((inv) => invoiceDealId(inv) === String(form.linkedDealId))
-    : [];
+    : linkableInvoices;
   const noInvoicesForDeal = hasLinkedDeal && scopedInvoices.length === 0;
   // Prefer the meeting's own linked contact (an older meeting may point
   // elsewhere), falling back to the contact whose page we're on.
@@ -1704,15 +1703,8 @@ const AdminMeetingForm = ({
                   <FormLabel>Link Invoice</FormLabel>
                   <div className="flex items-center gap-3">
                     <div className="flex-1 min-w-0">
-                      {!hasLinkedDeal ? (
-                        // No deal chosen yet — an invoice can't exist without a
-                        // deal, so show an uneditable hint instead of a picker.
-                        <div className="w-full border border-dashed border-[#1F2937]/15 rounded-full px-3 h-[38px] text-[13px] flex items-center bg-[#F5F7FA] text-[#525866]">
-                          <span className="truncate">Select a deal first</span>
-                        </div>
-                      ) : noInvoicesForDeal ? (
-                        // Deal chosen but it has no invoices — uneditable message;
-                        // the "+" creates one on the full invoice page.
+                      {noInvoicesForDeal ? (
+                        // Deal chosen but it has no invoices.
                         <div className="w-full border border-dashed border-[#1F2937]/15 rounded-full px-3 h-[38px] text-[13px] flex items-center bg-[#F5F7FA] text-[#525866]">
                           <span className="truncate">No invoice found</span>
                         </div>
@@ -1729,20 +1721,19 @@ const AdminMeetingForm = ({
                         />
                       )}
                     </div>
-                    {/* An invoice always belongs to a deal, so this is only
-                        usable once one is linked. */}
+                    {/* The "+" creates a new invoice scoped to the linked deal.
+                        Kept disabled when no deal is chosen since invoices
+                        require a deal to be created. */}
                     {!readOnly && (
                       <button
                         type="button"
                         onClick={() => {
-                          // Open the full Invoice creation page with the linked
-                          // deal preselected, instead of a floating panel.
                           if (!form.linkedDealId) return;
                           navigate(`/accounting?tab=tax&newInvoice=1&dealId=${form.linkedDealId}`);
                         }}
                         disabled={!form.linkedDealId}
                         className={`flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] flex items-center justify-center transition-opacity ${form.linkedDealId ? "hover:opacity-90" : "opacity-40 cursor-not-allowed"}`}
-                        title={form.linkedDealId ? "Create a new invoice" : "Select or create a deal first"}
+                        title={form.linkedDealId ? "Create a new invoice" : "Select a deal first to create an invoice"}
                       >
                         <PlusIcon className="w-4 h-4 text-white" />
                       </button>

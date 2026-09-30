@@ -23,7 +23,7 @@ const noteSchema = new mongoose.Schema({
   company: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Company',
-    required: true,
+    default: null,
   },
   // Optional deal the note belongs to. When set, the note is scoped to that one
   // deal (its company is still recorded above so company-level views keep working).
