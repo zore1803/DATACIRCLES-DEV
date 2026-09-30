@@ -172,7 +172,7 @@ const VendorMeetingForm = ({
   useEffect(() => {
     if (open) {
       setShouldRender(true);
-      setTimeout(() => setIsSliding(true), 10);
+      requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
 
       if (meetingData && mode === "view") {
         const initialFormData = {

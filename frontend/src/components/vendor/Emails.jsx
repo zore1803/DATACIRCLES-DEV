@@ -49,7 +49,7 @@ const Emails = ({ vendorId, vendorEmail }) => {
   useEffect(() => {
     if (showCompose) {
       setShouldRender(true);
-      setTimeout(() => setIsSliding(true), 10);
+      requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
       // Seed a house-style scaffold so every message opens with a
       // consistent greeting and sign-off. Only when the body is still empty
       // so we never overwrite a draft.
@@ -201,12 +201,12 @@ const Emails = ({ vendorId, vendorEmail }) => {
           {shouldRender && (
             <>
               <div
-                className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
+                className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-out"
                 style={{ opacity: isSliding ? 1 : 0 }}
                 onClick={() => setShowCompose(false)}
               />
               <div
-                className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl overflow-y-auto transform transition-transform duration-300 ease-in-out ${
+                className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl overflow-y-auto transform transition-transform duration-300 ease-out ${
                   isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
                 }`}
               >

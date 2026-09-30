@@ -174,7 +174,7 @@ const SubsidiaryModal = ({ companyId, isOpen, onClose, onSuccess }) => {
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-out"
         style={{ opacity: panelOpen ? 1 : 0 }}
         onClick={onClose}
       />
@@ -183,7 +183,7 @@ const SubsidiaryModal = ({ companyId, isOpen, onClose, onSuccess }) => {
         className={`
           fixed dc-panel-card dc-panel-w z-[10003]
           bg-white shadow-2xl flex flex-col overflow-hidden
-          transform transition-transform duration-300 ease-in-out font-inter
+          transform transition-transform duration-300 ease-out font-inter
           ${panelOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}
         `}
       >

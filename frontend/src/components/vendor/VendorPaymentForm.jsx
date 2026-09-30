@@ -157,7 +157,7 @@ const VendorPaymentForm = ({
         className={`
           fixed dc-panel-card z-[10001]
           dc-panel-w bg-white shadow-2xl flex flex-col overflow-hidden
-          transform transition-transform duration-300 ease-in-out font-inter
+          transform transition-transform duration-300 ease-out font-inter
           ${open ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}
         `}
       >

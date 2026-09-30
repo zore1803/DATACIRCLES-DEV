@@ -140,7 +140,7 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
 
   useEffect(() => {
     setShouldRender(true);
-    setTimeout(() => setIsOpen(true), 10);
+    requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
     fetchFieldDefinitions();
     return () => {
       setIsOpen(false);
@@ -702,13 +702,13 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
       )}
 
       <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-out"
         style={{ opacity: isOpen ? 1 : 0 }}
         onClick={handleClose}
       />
 
       <div
-        className={`fixed dc-panel-card dc-panel-w z-[10002] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-in-out font-inter ${isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
+        className={`fixed dc-panel-card dc-panel-w z-[10002] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out font-inter ${isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
           }`}
       >
         <form onSubmit={handleSubmit} noValidate className="flex flex-col h-full min-h-0">

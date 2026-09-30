@@ -456,7 +456,7 @@ const CompanyMeetingForm = ({
   useEffect(() => {
     if (open) {
       setShouldRender(true);
-      setTimeout(() => setIsSliding(true), 10);
+      requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
       fetchCompanyDetails();
       API.get("/auth/google/status")
         .then((res) => setGoogleStatus(res.data))

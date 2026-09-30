@@ -29,7 +29,7 @@ function ImportItems({ isOpen: propIsOpen, onClose, onImportSuccess }) {
   useEffect(() => {
     if (propIsOpen) {
       setShouldRender(true);
-      setTimeout(() => setIsOpen(true), 10);
+      requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
     } else {
       setIsOpen(false);
       setTimeout(() => {
@@ -305,7 +305,7 @@ function ImportItems({ isOpen: propIsOpen, onClose, onImportSuccess }) {
             ImportDeals.jsx and ImportVendors.jsx, instead of the old
             centered modal this file used to open with. */}
         <div
-          className="fixed dc-panel-card dc-panel-w bg-white shadow-2xl z-[10001] overflow-hidden flex flex-col transition-transform duration-300"
+          className="fixed dc-panel-card dc-panel-w bg-white shadow-2xl z-[10001] overflow-hidden flex flex-col transition-transform duration-300 ease-out"
           style={{ transform: isOpen ? "translateX(0)" : "translateX(calc(100% + 2rem))" }}
           onClick={(e) => e.stopPropagation()}
         >

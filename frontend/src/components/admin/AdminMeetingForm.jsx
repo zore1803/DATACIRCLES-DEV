@@ -764,7 +764,7 @@ const AdminMeetingForm = ({
   useEffect(() => {
     if (open) {
       setShouldRender(true);
-      setTimeout(() => setIsSliding(true), 10);
+      requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
       API.get("/auth/google/status")
         .then((res) => setGoogleStatus(res.data))
         .catch(() => setGoogleStatus(null));
@@ -1226,11 +1226,11 @@ const AdminMeetingForm = ({
         onClick={onClose}
       />
       <div
-        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl transform transition-transform duration-300 ease-out ${
+        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out font-inter ${
           isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
         }`}
       >
-        <div className="h-full flex flex-col">
+        <div className="h-full min-h-0 flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
             <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
@@ -1247,7 +1247,7 @@ const AdminMeetingForm = ({
           </div>
 
           {/* Form Body */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto">
             <form onSubmit={handleSubmit} noValidate className="flex flex-col h-full">
               {/* Extra bottom padding while a dropdown is open so the last
                   fields' panels can scroll clear of the sticky footer. Applied

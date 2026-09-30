@@ -34,11 +34,28 @@ export default function InvoiceQuickView({ invoice, mode = "view", onClose, onUp
   const [editing, setEditing] = useState(mode === "edit");
   const [status, setStatus] = useState(invoice?.status || "Pending");
   const [saving, setSaving] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
-  // Lock background scroll while the panel is open. This component is
-  // mounted/unmounted by its parent (no internal open/close animation), so
-  // it's open for its entire mounted lifetime.
+  // Lock background scroll for the whole time the panel is mounted.
   useBodyScrollLock(true);
+
+  // Slide in on mount (two frames later so the closed position paints first).
+  useEffect(() => {
+    let r2;
+    const r1 = requestAnimationFrame(() => {
+      r2 = requestAnimationFrame(() => setIsOpen(true));
+    });
+    return () => {
+      cancelAnimationFrame(r1);
+      cancelAnimationFrame(r2);
+    };
+  }, []);
+
+  // Slide out first, then let the parent unmount it.
+  const handleClose = () => {
+    setIsOpen(false);
+    setTimeout(onClose, 300);
+  };
 
   useEffect(() => {
     setEditing(mode === "edit");
@@ -65,14 +82,15 @@ export default function InvoiceQuickView({ invoice, mode = "view", onClose, onUp
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[9998]" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[9998]" onClick={handleClose} />
 
-      {/* dc-panel-card matches the rounded, inset card look used by the other
-          QuickView panels. No open/close toggle here (this component is
-          mounted/unmounted by its parent rather than translated off-screen),
-          so translate-x-0 stays fixed — no translate-x-full/calc gotcha to
-          worry about, unlike the other QuickViews. */}
-      <div className="fixed dc-panel-card dc-panel-w bg-white shadow-2xl z-[9999] flex flex-col transform transition-transform duration-300 translate-x-0">
+      {/* Closed state is translate-x-[calc(100%+2rem)], not translate-x-full,
+          because dc-panel-card sits 1.5rem in from the edge. */}
+      <div
+        className={`fixed dc-panel-card dc-panel-w bg-white shadow-2xl z-[9999] flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${
+          isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
+        }`}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-5 h-16 border-b border-[#E1E4EA] flex-shrink-0">
           <div className="flex flex-col min-w-0">
@@ -103,7 +121,7 @@ export default function InvoiceQuickView({ invoice, mode = "view", onClose, onUp
               </button>
             )}
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
               title="Close"
             >

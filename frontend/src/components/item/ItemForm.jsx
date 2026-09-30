@@ -300,7 +300,7 @@ const ItemForm = ({
   };
 
   useEffect(() => {
-    setTimeout(() => setIsOpen(true), 10);
+    requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
     setVariants(form.variants || []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form._id]);

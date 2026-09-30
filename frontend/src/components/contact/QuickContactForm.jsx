@@ -81,7 +81,7 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
 
   useEffect(() => {
     setShouldRender(true);
-    setTimeout(() => setIsOpen(true), 10);
+    requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
     fetchFieldDefinitions();
     setLocalCompanies(companies);
     // Callers that don't already hold a company list (e.g. the contact quick
@@ -544,7 +544,7 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
       )}
 
       <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-out"
         style={{ opacity: isOpen ? 1 : 0 }}
         onClick={handleClose}
       />
@@ -553,7 +553,7 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
         className={`
           fixed dc-panel-card dc-panel-w z-[10002]
           max-w-full bg-white shadow-2xl flex flex-col overflow-hidden
-          transform transition-transform duration-300 ease-in-out font-inter
+          transform transition-transform duration-300 ease-out font-inter
           ${isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}
         `}
       >

@@ -34,7 +34,7 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
   const nameInputRef = useRef(null);
 
   useEffect(() => {
-    setTimeout(() => setIsOpen(true), 10);
+    requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
     if (editJournal) {
       const jd = editJournal.date ? new Date(editJournal.date) : null;
       const pad = (n) => String(n).padStart(2, "0");
@@ -139,7 +139,7 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-out"
         style={{ opacity: isOpen ? 1 : 0 }}
         onClick={handleClose}
       />
@@ -148,7 +148,7 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
         className={`
           fixed dc-panel-card dc-panel-w z-[10003]
           bg-white shadow-2xl flex flex-col overflow-hidden
-          transform transition-transform duration-300 ease-in-out font-inter
+          transform transition-transform duration-300 ease-out font-inter
           ${isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}
         `}
       >

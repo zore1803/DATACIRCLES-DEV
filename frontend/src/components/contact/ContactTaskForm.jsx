@@ -108,7 +108,7 @@ const ContactTaskForm = ({
   useEffect(() => {
     if (open) {
       setShouldRender(true);
-      setTimeout(() => setIsSliding(true), 10);
+      requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
       
       if (taskData && mode === "view") {
         setForm({
@@ -257,7 +257,7 @@ const handleSubmit = async (e) => {
         onClick={onClose}
       />
       <div
-        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl transform transition-transform duration-300 ease-out ${
+        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl overflow-hidden transform transition-transform duration-300 ease-out ${
           isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
         }`}
       >

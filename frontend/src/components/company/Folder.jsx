@@ -601,6 +601,7 @@ const FolderCard = ({ folder, expanded, onToggle, onEdit, onDelete, onSelect, on
           )}
           <p className="text-xs text-gray-500">
             {folder.files?.length || 0} {folder.files?.length === 1 ? 'item' : 'items'}
+            {folder.deal?.title ? ` · ${folder.deal.title}` : ""}
           </p>
         </div>
       </div>
@@ -708,7 +709,7 @@ const CreateFolderModal = ({ isOpen, onClose, onSubmit, onDelete, initialName = 
       setShouldRender(true);
       setName(initialName);
       setError("");
-      setTimeout(() => setIsSliding(true), 10);
+      requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
     } else {
       setIsSliding(false);
       setTimeout(() => setShouldRender(false), 300);
@@ -1112,7 +1113,9 @@ const RenameFileModal = ({ isOpen, onClose, onSubmit, initialName }) => {
 // old calc()-based height offset. useFillToBottom measures the container's real
 // position instead, so a KPI-row toggle is handled automatically. CompanyFolderTab
 // still passes it harmlessly.
-const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, autoOpenCreate = false, onAutoOpenCreateConsumed }) => {
+// With `dealId` it shows only that deal's folders; otherwise a company's own
+// folders plus the folders of its deals.
+const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading = false, autoOpenCreate = false, onAutoOpenCreateConsumed }) => {
   const { id: paramCompanyId } = useParams();
   const {
     containerRef: fillContainerRef,
@@ -1157,7 +1160,7 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
 
   useEffect(() => {
     fetchFolders();
-  }, [companyId, refresh]);
+  }, [companyId, dealId, refresh]);
 
   useEffect(() => {
     if (autoOpenCreate) {
@@ -1170,7 +1173,7 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
   const fetchFolders = async () => {
     try {
       const res = await API.get("/folders", {
-        params: { companyId },
+        params: dealId ? { dealId } : { companyId },
       });
       setFolders(res.data || []);
       onFoldersChange?.(res.data || []);
@@ -1218,10 +1221,7 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
   // discarding what the user typed.
   const createFolder = async (name) => {
     try {
-      await API.post("/folders", {
-        name,
-        company: companyId,
-      });
+      await API.post("/folders", dealId ? { name, deal: dealId } : { name, company: companyId });
       setRefresh(!refresh);
       toast.success("Folder created");
       return {};
@@ -2110,6 +2110,7 @@ const Folder = ({ companyId: propCompanyId, onFoldersChange, isLoading = false, 
                             }}
                           >
                             {folder.files?.length || 0} {folder.files?.length === 1 ? "File" : "Files"}
+                            {!dealId && folder.deal?.title ? ` · ${folder.deal.title}` : ""}
                           </span>
                         </div>
                       </div>

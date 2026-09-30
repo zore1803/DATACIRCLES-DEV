@@ -36,8 +36,14 @@ export default function ApplyCreditModal({ party, onClose, onSuccess }) {
 
   useEffect(() => {
     setIsSliding(false);
-    const t = setTimeout(() => setIsSliding(true), 10);
-    return () => clearTimeout(t);
+    let r2;
+    const r1 = requestAnimationFrame(() => {
+      r2 = requestAnimationFrame(() => setIsSliding(true));
+    });
+    return () => {
+      cancelAnimationFrame(r1);
+      cancelAnimationFrame(r2);
+    };
   }, [party]);
 
   useEffect(() => {

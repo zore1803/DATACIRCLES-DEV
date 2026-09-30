@@ -377,7 +377,7 @@ const CompanyTaskForm = ({
   useEffect(() => {
     if (open) {
       setShouldRender(true);
-      setTimeout(() => setIsSliding(true), 10);
+      requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
       fetchCompanyDetails();
       fetchRelatedOptions();
 

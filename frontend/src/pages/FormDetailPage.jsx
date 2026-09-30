@@ -522,8 +522,14 @@ function SubmissionDrawer({ formId, submissionId, onClose }) {
   useBodyScrollLock(isOpen);
 
   useEffect(() => {
-    const t = setTimeout(() => setIsOpen(true), 10);
-    return () => clearTimeout(t);
+    let r2;
+    const r1 = requestAnimationFrame(() => {
+      r2 = requestAnimationFrame(() => setIsOpen(true));
+    });
+    return () => {
+      cancelAnimationFrame(r1);
+      cancelAnimationFrame(r2);
+    };
   }, []);
 
   const handleClose = () => {
@@ -560,7 +566,7 @@ function SubmissionDrawer({ formId, submissionId, onClose }) {
           dc-panel-card/dc-panel-w inset card, blurred backdrop, sticky uppercase header with an
           X, and a scrollable px-8 py-6 body — instead of this drawer's own flush-to-edge sheet. */}
       <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-out"
         style={{ opacity: isOpen ? 1 : 0 }}
         onClick={handleClose}
       />
@@ -569,7 +575,7 @@ function SubmissionDrawer({ formId, submissionId, onClose }) {
         className={`
           fixed dc-panel-card dc-panel-w z-[10003]
           bg-white shadow-2xl flex flex-col overflow-hidden
-          transform transition-transform duration-300 ease-in-out font-inter
+          transform transition-transform duration-300 ease-out font-inter
           ${isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}
         `}
       >

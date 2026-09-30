@@ -68,7 +68,7 @@ const QuickCallLogForm = ({ contacts, onCallLogCreated, onRequestClose }) => {
 
   useEffect(() => {
     setShouldRender(true);
-    setTimeout(() => setIsOpen(true), 10);
+    requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
     return () => {
       setIsOpen(false);
     };
@@ -256,12 +256,12 @@ const QuickCallLogForm = ({ contacts, onCallLogCreated, onRequestClose }) => {
       )}
 
       <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-out"
         style={{ opacity: isOpen ? 1 : 0 }}
         onClick={handleClose}
       />
       <div
- className={`fixed dc-panel-card dc-panel-w z-[10002] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-in-out ${
+ className={`fixed dc-panel-card dc-panel-w z-[10002] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${
           isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
         }`}
       >

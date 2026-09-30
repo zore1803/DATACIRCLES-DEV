@@ -114,10 +114,18 @@ const CompanyQuickView = ({ companyId, onClose, onEdit }) => {
     }
   }, [companyId]);
 
-  // Slide in once the panel actually has data to show.
+  // Slide in on mount (two frames later so the closed position paints first);
+  // the content fills in while the panel is already moving.
   useEffect(() => {
-    if (company) setIsOpen(true);
-  }, [company]);
+    let r2;
+    const r1 = requestAnimationFrame(() => {
+      r2 = requestAnimationFrame(() => setIsOpen(true));
+    });
+    return () => {
+      cancelAnimationFrame(r1);
+      cancelAnimationFrame(r2);
+    };
+  }, []);
 
   // Slide out first, then unmount — matches how it slides in instead of
   // vanishing instantly.
@@ -146,7 +154,7 @@ const CompanyQuickView = ({ companyId, onClose, onEdit }) => {
       <div
         className={`
           fixed dc-panel-card dc-panel-w
-          bg-white shadow-2xl z-[9999] transform transition-transform duration-300
+          bg-white shadow-2xl z-[9999] transform transition-transform duration-300 ease-out
           overflow-y-auto
           ${isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}
         `}

@@ -640,7 +640,7 @@ const InvoiceFormFull = ({
   useEffect(() => {
     if (isOpen) {
       setShouldRender(true);
-      setTimeout(() => setIsSliding(true), 10);
+      requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
       fetchItems();
       fetchCompanies();
       fetchContacts();

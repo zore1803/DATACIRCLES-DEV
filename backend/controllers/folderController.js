@@ -1,6 +1,7 @@
 // controllers/folderController.js
 const Folder = require('../models/Folder');
 const Company = require('../models/Company');
+const Deal = require('../models/Deal');
 const StorageUsage = require('../models/StorageUsage');
 const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
@@ -36,36 +37,64 @@ const deleteFromS3 = async (fileUrl) => {
 // organization, so cross-tenant access is blocked by fetching the folder
 // with its company populated and checking that company's organization
 // matches the caller's, instead of trusting the folder ID alone.
+// A deal folder is owned the same way, through its deal's organization.
 const getOwnedFolder = async (folderId, organizationId) => {
-  const folder = await Folder.findById(folderId).populate('company');
-  if (!folder || !folder.company || folder.company.organization?.toString() !== organizationId?.toString()) {
+  const folder = await Folder.findById(folderId).populate('company deal');
+  if (!folder) return null;
+  const owner = folder.deal || folder.company;
+  if (!owner || owner.organization?.toString() !== organizationId?.toString()) {
     return null;
   }
   return folder;
 };
 
-// Create folder
+// Names are unique within their own scope: one deal, or one company's own
+// (non-deal) folders.
+const scopeFilter = (folder) =>
+  folder.deal
+    ? { deal: folder.deal._id || folder.deal }
+    : { company: folder.company._id || folder.company, deal: null };
+
+const nameRegex = (name) => ({
+  $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+  $options: 'i',
+});
+
+// Create folder (for a company, or for a deal when `deal` is sent)
 exports.createFolder = async (req, res) => {
   try {
-    const { name, company } = req.body;
+    const { name, company, deal } = req.body;
     const trimmedName = (name || "").trim();
 
-    const companyDoc = await Company.findOne({
-      _id: company,
-      organization: req.user.organization,
-    });
-    if (!companyDoc) {
-      return res.status(404).json({ error: 'Company not found' });
+    let scope;
+    if (deal) {
+      const dealDoc = await Deal.findOne({
+        _id: deal,
+        organization: req.user.organization,
+      });
+      if (!dealDoc) {
+        return res.status(404).json({ error: 'Deal not found' });
+      }
+      scope = { deal: dealDoc._id, ...(dealDoc.company ? { company: dealDoc.company } : {}) };
+    } else {
+      const companyDoc = await Company.findOne({
+        _id: company,
+        organization: req.user.organization,
+      });
+      if (!companyDoc) {
+        return res.status(404).json({ error: 'Company not found' });
+      }
+      scope = { company: companyDoc._id, deal: null };
     }
 
     const existing = await Folder.findOne({
-      company,
-      name: { $regex: `^${trimmedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+      ...(deal ? { deal: scope.deal } : { company: scope.company, deal: null }),
+      name: nameRegex(trimmedName),
     });
     if (existing) {
       return res.status(409).json({ error: `A folder named "${trimmedName}" already exists` });
     }
-    await Folder.create({ name: trimmedName, company, user: req.user._id });
+    await Folder.create({ name: trimmedName, ...scope, user: req.user._id });
     res.json({
       message: "folder created successfully"
     });
@@ -192,8 +221,24 @@ exports.renameFile = async (req, res) => {
 // GET all folders (optionally by company) — always scoped to the caller's org
 exports.getAllFolders = async (req, res) => {
   try {
-    const { companyId } = req.query;
+    const { companyId, dealId } = req.query;
 
+    // One deal: only that deal's own folders.
+    if (dealId) {
+      const dealDoc = await Deal.findOne({
+        _id: dealId,
+        organization: req.user.organization,
+      });
+      if (!dealDoc) {
+        return res.status(404).json({ error: 'Deal not found' });
+      }
+      // `deal` stays an id here: the UI only labels a folder with its deal in
+      // the company view, where folders of different deals are mixed.
+      const folders = await Folder.find({ deal: dealId }).populate('company user');
+      return res.json(folders);
+    }
+
+    // One company: its own folders plus the folders of all its deals.
     if (companyId) {
       const companyDoc = await Company.findOne({
         _id: companyId,
@@ -202,12 +247,17 @@ exports.getAllFolders = async (req, res) => {
       if (!companyDoc) {
         return res.status(404).json({ error: 'Company not found' });
       }
-      const folders = await Folder.find({ company: companyId }).populate('company user');
+      const folders = await Folder.find({ company: companyId }).populate('company user').populate('deal', 'title name');
       return res.json(folders);
     }
 
-    const orgCompanyIds = await Company.find({ organization: req.user.organization }).distinct('_id');
-    const folders = await Folder.find({ company: { $in: orgCompanyIds } }).populate('company user');
+    const [orgCompanyIds, orgDealIds] = await Promise.all([
+      Company.find({ organization: req.user.organization }).distinct('_id'),
+      Deal.find({ organization: req.user.organization }).distinct('_id'),
+    ]);
+    const folders = await Folder.find({
+      $or: [{ company: { $in: orgCompanyIds } }, { deal: { $in: orgDealIds } }],
+    }).populate('company user').populate('deal', 'title name');
     res.json(folders);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch folders' });
@@ -240,16 +290,17 @@ exports.updateFolder = async (req, res) => {
       const trimmedName = req.body.name.trim();
       const existing = await Folder.findOne({
         _id: { $ne: req.params.id },
-        company: current.company._id,
-        name: { $regex: `^${trimmedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+        ...scopeFilter(current),
+        name: nameRegex(trimmedName),
       });
       if (existing) {
         return res.status(409).json({ error: `A folder named "${trimmedName}" already exists` });
       }
       req.body.name = trimmedName;
     }
-    // company is org-derived and must not be reassignable via this endpoint
+    // company/deal are org-derived and must not be reassignable via this endpoint
     delete req.body.company;
+    delete req.body.deal;
     const updated = await Folder.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.json(updated);
   } catch (err) {

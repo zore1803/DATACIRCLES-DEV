@@ -83,7 +83,7 @@ const ViewDetails = ({ item, onRequestClose, onEdit, onDelete }) => {
 
   useEffect(() => {
     setShouldRender(true);
-    setTimeout(() => setIsOpen(true), 10);
+    requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
     if (item.images && item.images.length > 0) {
       setImagePreviews(
         item.images.map((img) => img.startsWith("http") ? img : `${import.meta.env.VITE_APP_API_URL}${img}`),

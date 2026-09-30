@@ -67,7 +67,7 @@ const ImportPurchaseReturns = ({ isOpen, onClose, onImportSuccess }) => {
 
   React.useEffect(() => {
     if (isOpen) {
-      setTimeout(() => setIsSliding(true), 10);
+      requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
     } else {
       setIsSliding(false);
       setRows(null);

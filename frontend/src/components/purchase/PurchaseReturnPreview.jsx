@@ -63,7 +63,7 @@ const PurchaseReturnPreview = ({ purchaseReturn, isOpen, onClose, onEdit, onDele
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-out"
         style={{ opacity: open ? 1 : 0 }}
         onClick={handleClose}
       />

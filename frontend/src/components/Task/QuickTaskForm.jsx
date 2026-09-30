@@ -206,7 +206,7 @@ const QuickTaskForm = ({
 
   useEffect(() => {
     setShouldRender(true);
-    setTimeout(() => setIsOpen(true), 10);
+    requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
     fetchData();
     setLocalCompanies(companies);
     setLocalContacts(
@@ -574,12 +574,12 @@ const QuickTaskForm = ({
       )}
 
       <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-out"
         style={{ opacity: isOpen ? 1 : 0 }}
         onClick={handleClose}
       />
       <div
-        className={`fixed dc-panel-card z-[10001] dc-panel-w bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out font-inter ${
+        className={`fixed dc-panel-card z-[10001] dc-panel-w bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ease-out font-inter ${
           isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
         }`}
       >

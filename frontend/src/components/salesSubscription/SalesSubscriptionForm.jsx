@@ -124,7 +124,7 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
     : [editingSubscription.status, ...({ Draft: ["Active", "Cancelled"], Active: ["Draft", "Cancelled"], Error: ["Active", "Cancelled"] }[editingSubscription.status] || [])];
 
   useEffect(() => {
-    setTimeout(() => setIsSliding(true), 10);
+    requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
   }, []);
 
   useEffect(() => {
@@ -331,7 +331,7 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
   return createPortal(
     <>
       <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-out"
         style={{ opacity: isSliding ? 1 : 0 }}
         onClick={handleClose}
       />
@@ -340,7 +340,7 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
         className={`
           fixed dc-panel-card w-[calc(100%-3rem)] lg:w-[70vw] z-[10003]
           bg-white shadow-2xl flex flex-col overflow-hidden
-          transform transition-transform duration-300 ease-in-out font-inter
+          transform transition-transform duration-300 ease-out font-inter
           ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}
         `}
       >

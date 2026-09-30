@@ -35,7 +35,7 @@ const ItemFieldMappingModal = ({
   useEffect(() => {
     if (propIsOpen) {
       setShouldRender(true);
-      setTimeout(() => setIsOpen(true), 10);
+      requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
     } else {
       setIsOpen(false);
       setTimeout(() => {
@@ -125,7 +125,7 @@ const ItemFieldMappingModal = ({
     <>
       {/* Background Overlay */}
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10002] transition-opacity duration-300 ease-in-out"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10002] transition-opacity duration-300 ease-out"
         style={{ opacity: isOpen ? 1 : 0 }}
         onClick={handleClose}
       />

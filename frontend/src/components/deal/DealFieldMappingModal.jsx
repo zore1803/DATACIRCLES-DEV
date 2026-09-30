@@ -57,7 +57,7 @@ const DealFieldMappingModal = ({
   useEffect(() => {
     if (propIsOpen) {
       setShouldRender(true);
-      setTimeout(() => setIsOpen(true), 10);
+      requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
     } else {
       setIsOpen(false);
       setTimeout(() => {
@@ -154,14 +154,14 @@ const DealFieldMappingModal = ({
     <>
       {/* Background Overlay */}
       <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-out"
         style={{ opacity: isOpen ? 1 : 0 }}
         onClick={handleClose}
       />
       
       {/* Sliding Modal */}
       <div
-        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl overflow-y-auto transform transition-transform duration-300 ease-in-out ${
+        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl overflow-y-auto transform transition-transform duration-300 ease-out ${
           isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
         }`}
       >

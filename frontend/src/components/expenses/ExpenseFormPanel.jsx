@@ -101,8 +101,14 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
 
   useEffect(() => {
     setIsSliding(false);
-    const t = setTimeout(() => setIsSliding(true), 10);
-    return () => clearTimeout(t);
+    let r2;
+    const r1 = requestAnimationFrame(() => {
+      r2 = requestAnimationFrame(() => setIsSliding(true));
+    });
+    return () => {
+      cancelAnimationFrame(r1);
+      cancelAnimationFrame(r2);
+    };
   }, []);
 
   // Editing an existing row loads its values; creating starts clean.

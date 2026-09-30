@@ -29,7 +29,7 @@ const MeetingDetailsModal = ({ open, meetingData, users, onDelete, onClose, onEd
   React.useEffect(() => {
     if (open) {
       setShouldRender(true);
-      setTimeout(() => setIsSliding(true), 10);
+      requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
     } else {
       setIsSliding(false);
       setTimeout(() => setShouldRender(false), 300);
@@ -77,7 +77,7 @@ const MeetingDetailsModal = ({ open, meetingData, users, onDelete, onClose, onEd
         onClick={onClose}
       />
       <div
-        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 font-inter ${
+        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out font-inter ${
           isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
         }`}
         onClick={(e) => e.stopPropagation()}

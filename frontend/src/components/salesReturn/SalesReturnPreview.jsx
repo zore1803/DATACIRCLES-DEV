@@ -65,12 +65,12 @@ const SalesReturnPreview = ({ salesReturn, isOpen, onClose, onEdit, onDelete }) 
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-out"
         style={{ opacity: open ? 1 : 0 }}
         onClick={handleClose}
       />
       <div
-        className={`fixed inset-0 z-[10001] flex items-center justify-center p-2 transition-opacity duration-300 ease-in-out ${open ? "opacity-100" : "opacity-0"}`}
+        className={`fixed inset-0 z-[10001] flex items-center justify-center p-2 transition-opacity duration-300 ease-out ${open ? "opacity-100" : "opacity-0"}`}
         onClick={handleClose}
       >
         <div

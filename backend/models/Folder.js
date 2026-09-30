@@ -11,7 +11,15 @@ const fileSchema = new mongoose.Schema({
 
 const folderSchema = new mongoose.Schema({
   name: { type: String, required: true },
-  company: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
+  // A company folder has only `company`. A deal folder has `deal` and, when the
+  // deal is linked to a company, that company too (so the company's Folders
+  // tab can show its deals' folders alongside its own).
+  company: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Company',
+    required: function () { return !this.deal; },
+  },
+  deal: { type: mongoose.Schema.Types.ObjectId, ref: 'Deal', default: null, index: true },
   files: [fileSchema],
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });

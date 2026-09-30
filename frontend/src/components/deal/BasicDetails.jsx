@@ -76,23 +76,9 @@ const HEALTH_BAD  = "#F5325B";
 // a neutral for the collapsed "other items" row.
 const ITEM_PALETTE = ["#6366F1", "#A855F7", "#06B6D4", "#F43F5E", "#84CC16", "#F59E0B"];
 
-const STATUS_COLOR = {
-  open: "#0085FF",
-  won:  "#00C950",
-  lost: "#EF4444",
-};
-const statusColor = (s) => STATUS_COLOR[(s || "open").toLowerCase()] || "#0085FF";
-
-const daysBetween = (a, b = new Date()) =>
-  Math.max(0, Math.round(Math.abs((new Date(b) - new Date(a)) / 86400000)));
-
 const fmtDate = (d) => {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-};
-const fmtDateTime = (d) => {
-  if (!d) return "—";
-  return new Date(d).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
 };
 
 // ─── small atoms ─────────────────────────────────────────────────────────────
@@ -141,8 +127,6 @@ const BasicDetails = ({ deal }) => {
 
   const [invoices, setInvoices] = useState([]);
   const [tasks,    setTasks]    = useState([]);
-  const [meetings, setMeetings] = useState([]);
-  const [notes,    setNotes]    = useState([]);
 
   // Pipeline stages as configured in Settings -> Pipeline (KanbanBoard.statuses),
   // the same list the Deals Kanban board renders as columns. Fetched here so the
@@ -173,7 +157,7 @@ const BasicDetails = ({ deal }) => {
       const meetRaw  = meetR.data?.meetings ?? meetR.data;
       const meetList = Array.isArray(meetRaw)    ? meetRaw    : [];
       const noteList = Array.isArray(noteR.data) ? noteR.data : [];
-      setInvoices(invList); setTasks(taskList); setMeetings(meetList); setNotes(noteList);
+      setInvoices(invList); setTasks(taskList);
       const merged = [
         ...invList.map(i  => ({ type: "invoice", label: `Invoice ${i.invoiceNumber || "#"} created`, amount: i.amount, date: i.createdAt, status: i.status })),
         ...taskList.map(t  => ({ type: "task",    label: `Task: ${t.title || t.name || "Untitled"}`,                    date: t.createdAt })),
@@ -415,60 +399,11 @@ const BasicDetails = ({ deal }) => {
 
   // Pipeline stages
   const currentStatus = deal?.status || "Open";
-  const isTerminal    = currentStatus === "Won" || currentStatus === "Lost";
-  const daysInStage   = daysBetween(deal?.updatedAt);
-
+  
   // Activity filter
   const typeMap = { Invoices: "invoice", Tasks: "task", Meetings: "meeting", Notes: "note" };
   const filteredActivities = useMemo(() => activityFilter === "All" ? activities : activities.filter(a => a.type === typeMap[activityFilter]), [activities, activityFilter]);
 
-  // Next Best Action logic (factual)
-  const upcomingTasks    = tasks.filter(t => t.status !== "Completed").sort((a, b) => new Date(a.dueDate || a.createdAt) - new Date(b.dueDate || b.createdAt));
-  const upcomingMeetings = meetings.filter(m => m.scheduledAt && new Date(m.scheduledAt) >= new Date()).sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt));
-  const nextActivityDate = upcomingMeetings[0]?.scheduledAt || upcomingTasks[0]?.dueDate || null;
-
-
-
-  // Payment donut chart data
-  const donutData = useMemo(() => {
-    if (totalInvoiced === 0) return [];
-    return [
-      { name: "Collected",    value: totalPaid,         fill: "#00C950" },
-      { name: "Outstanding",  value: totalOutstanding,  fill: "#F59E0B" },
-    ].filter(d => d.value > 0);
-  }, [totalPaid, totalOutstanding, totalInvoiced]);
-
-  // Actual Revenue / Collection Line Graph based on historic invoice dates
-  const revenueChartData = useMemo(() => {
-    if (invoices.length === 0) return [];
-    
-    // Group invoices by date (using createdAt) and sum amount + paid amount
-    const groups = {};
-    invoices.forEach(inv => {
-       const d = new Date(inv.createdAt);
-       const mY = isNaN(d) ? "Unknown" : `${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear().toString().slice(2)}`;
-       if (!groups[mY]) groups[mY] = { name: mY, Invoiced: 0, Collected: 0, timestamp: isNaN(d) ? 0 : d.getTime() };
-       groups[mY].Invoiced += (inv.amount || 0);
-       if ((inv.status || "").toLowerCase() === "paid") groups[mY].Collected += (inv.amount || 0);
-    });
-    
-    let runningInv = 0, runningCol = 0;
-    const finalData = Object.values(groups)
-      .sort((a,b) => a.timestamp - b.timestamp)
-      .map(g => {
-         runningInv += g.Invoiced;
-         runningCol += g.Collected;
-         return { name: g.name, Invoiced: runningInv, Collected: runningCol };
-      });
-      
-    // If there's only one data point, a line chart will just draw a single dot.
-    // Prepend a starting zero point so a line is actually drawn.
-    if (finalData.length === 1) {
-       finalData.unshift({ name: "Start", Invoiced: 0, Collected: 0 });
-    }
-    
-    return finalData;
-  }, [invoices]);
 
   // Invoice Aging Logic
   const invoiceAging = useMemo(() => {
@@ -502,40 +437,6 @@ const BasicDetails = ({ deal }) => {
     if (paid + notDue + dueSoon + overdue === 0) return null;
     return { paid, notDue, dueSoon, overdue };
   }, [invoices]);
-
-  // Activity Breakdown Logic
-  const activityBreakdown = useMemo(() => {
-    const counts = {
-      Invoices: invoices.length,
-      Tasks: tasks.length,
-      Meetings: meetings.length,
-      Notes: notes.length,
-    };
-    
-    const categoriesWithData = Object.values(counts).filter(v => v > 0).length;
-    // Only show if there's multiple categories of activity (otherwise Timeline is enough)
-    if (categoriesWithData <= 1) return null; 
-    
-    return counts;
-  }, [invoices, tasks, meetings, notes]);
-
-  // Heatmap Data (Last 28 days activity count)
-  const heatmapData = useMemo(() => {
-    const days = [];
-    const now = new Date();
-    for (let i = 27; i >= 0; i--) {
-      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-      d.setHours(0,0,0,0);
-      days.push({ date: d, count: 0 });
-    }
-    activities.forEach(a => {
-      const ad = new Date(a.date);
-      ad.setHours(0,0,0,0);
-      const target = days.find(day => day.date.getTime() === ad.getTime());
-      if (target) target.count++;
-    });
-    return days;
-  }, [activities]);
 
 
   // Same order Settings -> Pipeline and the Deals Kanban board use, so a stage
@@ -652,7 +553,7 @@ const BasicDetails = ({ deal }) => {
         {/* BILLING WATERFALL — how much of the deal has been billed, and how
             much of that has actually landed. Each step is a subset of the one
             above it, so the shrinking bars read as one flow of money. */}
-        <div className="lg:col-span-3 bg-white p-6 sm:p-8 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col h-[300px] text-left">
+        <div className="lg:col-span-3 bg-white p-6 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col h-[350px] text-left">
           <h3 className="text-sm font-semibold text-[#0E121B]">Billing Waterfall</h3>
           <p className="text-xs text-[#525866] mt-1">Deal value through to cash in hand.</p>
 
@@ -722,7 +623,7 @@ const BasicDetails = ({ deal }) => {
 
 
         {/* ACTIVITY TIMELINE */}
-        <div className="lg:col-span-2 bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col h-[300px] text-left">
+        <div className="lg:col-span-2 bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm flex flex-col h-[350px] text-left">
           <div className="flex justify-between items-center mb-3">
             <h3 className="text-sm font-semibold text-[#0E121B]">Activity Timeline</h3>
           </div>
@@ -1076,13 +977,13 @@ const BasicDetails = ({ deal }) => {
         <div className="bg-white p-6 sm:p-8 rounded-xl border border-[#E7E4E3] shadow-sm text-left">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold text-[#0E121B]">Deal Health</h3>
-              <p className="text-xs text-[#525866] mt-1">
-                How well this deal is going, scored out of 100.
+              <h3 className="text-lg font-semibold tracking-tight text-[#0E121B]">Deal Health Score</h3>
+              <p className="text-sm text-[#525866] mt-1">
+                Overall score out of 100, based on billing, payments and recent activity.
               </p>
             </div>
             <span
-              className="text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap flex-shrink-0"
+              className="text-sm font-semibold px-3.5 py-1 rounded-full whitespace-nowrap flex-shrink-0"
               style={{ background: `${dealHealth.band.color}1A`, color: dealHealth.band.color }}
             >
               {dealHealth.band.label}
@@ -1118,13 +1019,13 @@ const BasicDetails = ({ deal }) => {
                   />
                 </svg>
                 <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
-                  <span className="text-3xl font-bold text-[#0E121B] leading-none">
+                  <span className="text-4xl font-bold text-[#0E121B] leading-none">
                     {dealHealth.score}
                   </span>
-                  <span className="text-xs text-gray-400 mt-1">out of 100</span>
+                  <span className="text-sm text-gray-500 mt-1">out of 100</span>
                 </div>
               </div>
-              <p className="text-xs text-gray-500 text-center leading-snug">
+              <p className="text-[13px] text-gray-500 text-center leading-snug">
                 Combines billing, payments, overdue amounts, contact and next steps.
               </p>
             </div>
@@ -1135,8 +1036,8 @@ const BasicDetails = ({ deal }) => {
                 {dealHealth.factors.map((f) => (
                   <div key={f.key}>
                     <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-sm font-medium text-[#0E121B]">{f.label}</span>
-                      <span className="text-xs font-semibold text-gray-600 flex-shrink-0 tabular-nums">
+                      <span className="text-[15px] font-semibold text-[#0E121B]">{f.label}</span>
+                      <span className="text-sm font-semibold text-gray-600 flex-shrink-0 tabular-nums">
                         {Math.round(f.points)} / {f.weight} pts
                       </span>
                     </div>
@@ -1155,18 +1056,18 @@ const BasicDetails = ({ deal }) => {
                       />
                     </div>
                     <div className="flex items-baseline justify-between gap-3 mt-1.5">
-                      <span className="text-xs text-gray-400">{f.hint}</span>
-                      <span className="text-xs text-gray-600 flex-shrink-0">{f.detail}</span>
+                      <span className="text-[13px] text-gray-500">{f.hint}</span>
+                      <span className="text-[13px] text-gray-700 flex-shrink-0">{f.detail}</span>
                     </div>
                   </div>
                 ))}
               </div>
 
               <details className="mt-6 group">
-                <summary className="text-xs font-medium text-[#0085FF] cursor-pointer select-none list-none">
+                <summary className="text-sm font-medium text-[#0085FF] cursor-pointer select-none list-none">
                   How is this scored?
                 </summary>
-                <div className="mt-2 text-xs text-gray-500 leading-relaxed space-y-1">
+                <div className="mt-2 text-[13px] text-gray-500 leading-relaxed space-y-1">
                   <p>
                     Each area earns points in proportion to how well it is going, up to its
                     maximum. The total is the score: {dealHealth.factors.map((f) => f.weight).join(" + ")} = 100.

@@ -1226,7 +1226,7 @@ const Profile = () => {
           used for Create Company/Deal/Invoice etc. (dc-panel-card/dc-panel-w,
           see src/index.css), not a centered modal. */}
       <div
-        className={`fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out ${sessionsModalOpen ? "" : "pointer-events-none"}`}
+        className={`fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-out ${sessionsModalOpen ? "" : "pointer-events-none"}`}
         style={{ opacity: sessionsModalOpen ? 1 : 0 }}
         onClick={() => setSessionsModalOpen(false)}
       />
@@ -1234,7 +1234,7 @@ const Profile = () => {
         className={`
           fixed dc-panel-card dc-panel-w z-[10003]
           bg-white shadow-2xl flex flex-col overflow-hidden
-          transform transition-transform duration-300 ease-in-out font-inter
+          transform transition-transform duration-300 ease-out font-inter
           ${sessionsModalOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}
         `}
       >

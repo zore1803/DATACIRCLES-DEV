@@ -126,7 +126,7 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
         : STATUS_OPTIONS;
 
   useEffect(() => {
-    setTimeout(() => setIsSliding(true), 10);
+    requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
   }, []);
 
   useEffect(() => {
@@ -302,7 +302,7 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-in-out"
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[10000] transition-opacity duration-300 ease-out"
         style={{ opacity: isSliding ? 1 : 0 }}
         onClick={handleClose}
       />

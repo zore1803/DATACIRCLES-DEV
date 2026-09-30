@@ -9,7 +9,9 @@ import StatTileSkeleton from "../common/StatTileSkeleton";
 
 const STORAGE_ALLOCATION_GB = 5;
 
-export default function CompanyFolderTab({ showStats = true, isLoading = false, autoOpenCreate = false, onAutoOpenCreateConsumed }) {
+// On a company page this lists the company's folders and its deals' folders;
+// pass `dealId` to scope it to a single deal.
+export default function CompanyFolderTab({ dealId, showStats = true, isLoading = false, autoOpenCreate = false, onAutoOpenCreateConsumed }) {
   const [folders, setFolders] = useState([]);
 
   const allFiles = folders.flatMap((f) => f.files || []);
@@ -102,6 +104,7 @@ export default function CompanyFolderTab({ showStats = true, isLoading = false, 
 
       {/* Existing folder UI (its own search/grid/upload) */}
       <Folder
+        dealId={dealId}
         onFoldersChange={setFolders}
         isLoading={isLoading}
         showStats={showStats}
