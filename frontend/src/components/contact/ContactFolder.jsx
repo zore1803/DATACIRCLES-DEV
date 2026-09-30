@@ -17,6 +17,7 @@ import {
 import ListIcon from "../common/ListIcon";
 import EditIcon from "../common/EditIcon";
 import ExpandableSearch from "../common/ExpandableSearch";
+import InlineNewFolder from "../common/InlineNewFolder";
 
 const ContactFolder = () => {
   const [folders, setFolders] = useState([]);
@@ -221,7 +222,7 @@ const ContactFolder = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-3 flex-nowrap min-w-0">
           <ExpandableSearch
             value={folderSearchTerm}
             onChange={setFolderSearchTerm}
@@ -250,52 +251,22 @@ const ContactFolder = () => {
             </button>
           </div>
 
-          <button
-            onClick={() => setShowCreateForm(!showCreateForm)}
-            className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-[#0085FF] text-white text-sm font-medium rounded-full hover:bg-blue-600 focus:outline-none transition-colors flex-shrink-0"
-          >
-            <PlusIcon className="w-4 h-4" />
-            New Folder
-          </button>
+          <InlineNewFolder
+            open={showCreateForm}
+            onOpen={() => setShowCreateForm(true)}
+            onClose={() => {
+              setShowCreateForm(false);
+              setNewFolderName("");
+            }}
+            value={newFolderName}
+            onChange={setNewFolderName}
+            onCreate={createFolder}
+            creating={creatingFolder}
+          />
         </div>
       </div>
 
       <div className="p-6 flex-1 min-h-0 overflow-y-auto">
-        {/* Create Folder Form */}
-        {showCreateForm && (
-          <div className="bg-blue-50/50 rounded-xl p-4 mb-6 border border-blue-100 animate-in fade-in slide-in-from-top-2">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-blue-900 text-sm">
-                New Folder
-              </h3>
-              <button
-                onClick={() => setShowCreateForm(false)}
-                className="text-blue-400 hover:text-blue-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="flex gap-2">
-              <input
-                className="flex-1 px-3 py-2 border border-blue-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
-                placeholder="Folder Name..."
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && createFolder()}
-                autoFocus
-              />
-              <button
-                onClick={createFolder}
-                disabled={creatingFolder}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <PlusIcon className="w-4 h-4" />
-                {creatingFolder ? "Creating..." : "Create"}
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* View Content */}
         {viewMode === "folder" ? (
           <div className="space-y-6">

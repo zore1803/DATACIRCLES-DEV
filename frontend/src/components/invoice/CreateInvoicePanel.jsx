@@ -2026,19 +2026,20 @@ const CreateInvoicePanel = ({
                 </button>
               </div>
             ) : (
-              <>
-                {/* Column headers */}
-                <div className="grid grid-cols-12 gap-3 pb-2 border-b border-[#E1E4EA] text-[11px] font-semibold text-[#525866] uppercase tracking-wide">
-                  <div className="col-span-3">Product Name</div>
-                  <div className="col-span-2 text-center">Quantity</div>
-                  <div className="col-span-2 text-right">Unit Price</div>
-                  <div className="col-span-1 text-center">GST %</div>
-                  <div className="col-span-2 text-center">Discount</div>
-                  <div className="col-span-2 text-right">Total</div>
-                </div>
+              <div className="overflow-x-auto pb-4 -mx-1 px-1">
+                <div className="min-w-[700px]">
+                  {/* Column headers */}
+                  <div className="grid grid-cols-12 gap-3 pb-2 border-b border-[#E1E4EA] text-[11px] font-semibold text-[#525866] uppercase tracking-wide">
+                    <div className="col-span-3">Product Name</div>
+                    <div className="col-span-2 text-center">Quantity</div>
+                    <div className="col-span-2 text-right">Unit Price</div>
+                    <div className="col-span-1 text-center">GST %</div>
+                    <div className="col-span-2 text-center">Discount</div>
+                    <div className="col-span-2 text-right">Total</div>
+                  </div>
 
-                {/* Item rows */}
-                <div className="mt-2">
+                  {/* Item rows */}
+                  <div className="mt-2">
                   {form.items.filter((it) => it.name || it._id).map((item) => {
                     const realIndex = form.items.indexOf(item);
                     const rowAmt = lineTotal(item) - itemDiscountAmount(item);
@@ -2121,14 +2122,17 @@ const CreateInvoicePanel = ({
                                 placeholder="0"
                                 className="flex-1 min-w-0 w-0 text-center text-[13px] py-1.5 px-2 bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                               />
-                              <select
-                                value={item.discountType}
-                                onChange={(e) => updateItem(realIndex, { discountType: e.target.value })}
-                                className="text-[11px] font-semibold border-l border-[#E1E4EA] bg-[#F0F1F3] px-1.5 py-1.5 focus:outline-none cursor-pointer flex-shrink-0"
-                              >
-                                <option value="amount">₹</option>
-                                <option value="percentage">%</option>
-                              </select>
+                              <div className="relative border-l border-[#E1E4EA] bg-[#F0F1F3] flex-shrink-0 h-full flex items-center">
+                                <select
+                                  value={item.discountType}
+                                  onChange={(e) => updateItem(realIndex, { discountType: e.target.value })}
+                                  className="appearance-none text-[11px] font-semibold bg-transparent pl-2 pr-4 py-1.5 focus:outline-none cursor-pointer w-full h-full"
+                                >
+                                  <option value="amount">₹</option>
+                                  <option value="percentage">%</option>
+                                </select>
+                                <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-[#525866]" />
+                              </div>
                             </div>
                           </div>
                           {/* Total + Delete */}
@@ -2168,9 +2172,9 @@ const CreateInvoicePanel = ({
                       </div>
                     );
                   })}
+                  </div>
                 </div>
-
-              </>
+              </div>
             )}
           </div>
 

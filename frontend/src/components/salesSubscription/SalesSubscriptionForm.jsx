@@ -89,6 +89,7 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
 
   const [deals, setDeals] = useState([]);
   const [dealId, setDealId] = useState("");
+  const [dealChangedFlag, setDealChangedFlag] = useState(0);
   // Org's own registered state — compared against the selected customer's
   // billing state to auto-decide intra vs inter-state, same pattern
   // InvoiceForm.jsx uses (GET /branding). The transactionType field stays a
@@ -146,12 +147,24 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
   // below still lets the user override it manually afterward.
   const handleDealChange = (id) => {
     setDealId(id);
-    const selected = deals.find((d) => d._id === id);
-    const customerState = (selected?.company?.billingAddress?.state || "").trim().toLowerCase();
-    if (sellerState && customerState) {
+    setDealChangedFlag((f) => f + 1);
+  };
+
+  useEffect(() => {
+    if (!dealId || !sellerState || isEditing) return;
+    const selected = deals.find((d) => d._id === dealId);
+    let customerState = (selected?.company?.billingAddress?.state || "").trim().toLowerCase();
+    
+    // B2C fallback (Wait, Contacts don't have addresses in this CRM, but we'll 
+    // leave this safe check in case they do eventually. B2C will default to intra.)
+    if (!customerState && selected?.contact) {
+      customerState = (selected.contact?.address?.state || "").trim().toLowerCase();
+    }
+
+    if (customerState) {
       setTransactionType(sellerState !== customerState ? "inter" : "intra");
     }
-  };
+  }, [dealChangedFlag, sellerState]);
 
   useEffect(() => {
     if (!editingSubscription) return;
@@ -258,10 +271,12 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
     return eligible;
   }, [deals, editingSubscription]);
 
-  const dealOptions = wonDeals.map((d) => ({
-    _id: d._id,
-    label: `${d.contact?.name || d.company?.name || d.title || "Untitled deal"}`,
-  }));
+  const dealOptions = wonDeals.map((d) => {
+    const dealTitle = d.title || "Untitled Deal";
+    const customerName = d.company?.name || d.contact?.name || "";
+    const label = customerName ? `${dealTitle} — ${customerName}` : dealTitle;
+    return { _id: d._id, label };
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
