@@ -14,7 +14,6 @@ import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
 import TableSkeletonRows from "../components/common/TableSkeletonRows";
 import { useTopLoadingSignal } from "../components/common/TopLoadingBar";
 import { createPortal } from "react-dom";
-import logo from "/DataCircles.png";
 import FilterIcon from "../components/common/FilterIcon";
 import {
   ChevronUp,
@@ -88,33 +87,6 @@ import KanbanViewIcon from "../components/common/KanbanViewIcon";
 import UploadIcon from "../components/common/UploadIcon";
 import EyeIcon from "../components/common/EyeIcon";
 import EditIcon from "../components/common/EditIcon";
-// Custom hook to detect mobile screen
-const useIsMobile = () => {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkIsMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-
-    checkIsMobile();
-    window.addEventListener("resize", checkIsMobile);
-
-    return () => window.removeEventListener("resize", checkIsMobile);
-  }, []);
-
-  return isMobile;
-};
-
-// The app renders inside #root which carries a CSS `zoom` (0.75 on desktop).
-// getBoundingClientRect() returns UNSCALED layout coordinates while portal overlays on
-// document.body render in visual space, so rect-derived positions must be multiplied by
-// this zoom factor to line up on screen.
-const getRootZoom = () => {
-  if (typeof window === "undefined") return 1;
-  const z = parseFloat(getComputedStyle(document.documentElement).zoom);
-  return z && !Number.isNaN(z) ? z : 1;
-};
 
 // Effective zoom applied to an element's ancestor chain. Used to correct
 // coordinates SET on a document.body portal (the drag-ghost), which is painted
@@ -172,20 +144,6 @@ function Contacts() {
     fetchLifecycleStages();
   }, [fetchLifecycleStages]);
   const [contacts, setContacts] = useState([]);
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    lifecycleStage: "Lead",
-    stageStatus: "New",
-    company: "",
-    avatar: "",
-    socialMedia: {
-      twitter: "",
-      linkedin: "",
-      facebook: "",
-    },
-  });
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   // Skeleton rows only on a genuinely empty table (first load / after a filter
@@ -197,7 +155,6 @@ function Contacts() {
   // whole table (see the table container below).
   useTopLoadingSignal(loading);
   const [contactFieldList, setContactFieldList] = useState([]);
-  const [additionalValues, setAdditionalValues] = useState({});
   const [permission, setPermission] = useState("");
   const [selectedContacts, setSelectedContacts] = useState([]);
   const [openRowActionsId, setOpenRowActionsId] = useState(null);
@@ -212,7 +169,6 @@ function Contacts() {
   const { subscription } = useSubscription();
   const hasBulkAccess = hasMinPlan(subscription?.subscription?.planName, "growth");
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [showForm, setShowForm] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [editContact, setEditContact] = useState(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -221,18 +177,9 @@ function Contacts() {
   const user = JSON.parse(localStorage.getItem("user"));
   const navigate = useNavigate();
 
-  // "View all" from the global search panel hands its query off via
-  // `?search=` rather than trying to replicate the search itself — this
-  // drops it straight into the table's own search box on arrival (open, not
-  // just filled in), so the list is already filtered instead of showing
-  // everything.
-  //
-  // Captured once, synchronously: the mount-time fetch effect further down
-  // needs to know *before its first run* that a search is coming, so it can
-  // skip its own empty-search request. Without that, two fetches land almost
-  // together — "" (every contact) and the real query — and the empty one,
-  // fetching the whole table, is inherently slower and can arrive second,
-  // clobbering the correctly-filtered result already on screen.
+  // "View all" from global search passes ?search= to open + fill the table's
+  // search box. Read synchronously so the mount fetch skips its empty-search
+  // request (an empty "" fetch could otherwise clobber the filtered result).
   const initialSearchFromUrl = useRef(
     new URLSearchParams(location.search).get("search")
   ).current;
@@ -272,7 +219,6 @@ function Contacts() {
     document.addEventListener("mousedown", handleClickOutsideMoreMenu);
     return () => document.removeEventListener("mousedown", handleClickOutsideMoreMenu);
   }, []);
-  const isMobile = useIsMobile();
   const [showKanban, setShowKanban] = useState(false);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [folders, setFolders] = useState([]);
@@ -298,35 +244,6 @@ function Contacts() {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const [columnSizing, setColumnSizing] = useState({});
-
-  const [contactColWidths, setContactColWidths] = useState({
-    name: 235,
-    company: 207,
-    email: 288,
-    phone: 196,
-    status: 198,
-    actions: 152,
-  });
-
-  const handleContactColResizeStart = (key) => (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const startX = e.clientX;
-    const startWidth = contactColWidths[key];
-    const onMouseMove = (moveEvent) => {
-      const delta = moveEvent.clientX - startX;
-      setContactColWidths((prev) => ({
-        ...prev,
-        [key]: Math.max(80, startWidth + delta),
-      }));
-    };
-    const onMouseUp = () => {
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-    };
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-  };
 
   const [pinnedColumns, setPinnedColumns] = useState([]); // [{ key, side: 'left' | 'right' }]
 
@@ -582,7 +499,6 @@ function Contacts() {
 
   // Selection mode state
   const [selectionMode, setSelectionMode] = useState(true);
-  const [longPressTimer, setLongPressTimer] = useState(null);
 
   // Delays the bulk-strip's unmount so it can play a slide-out-right exit
   // animation on deselect (mirroring the slide-in entrance).
@@ -604,7 +520,7 @@ function Contacts() {
   }, [selectionMode, selectedContacts.length]);
 
   //Pinning rows
-  const [pinnedIds, setPinnedIds] = useState(() => {
+  const [pinnedIds] = useState(() => {
     const saved = localStorage.getItem("pinned_companies");
     return saved ? JSON.parse(saved) : [];
   });
@@ -615,16 +531,6 @@ function Contacts() {
   }, [pinnedIds]);
 
   //function to toggle pinning
-  const togglePin = (e, companyId) => {
-    e.stopPropagation(); // Prevents triggering row selection or navigation
-    setPinnedIds((prev) =>
-      prev.includes(companyId)
-        ? prev.filter((id) => id !== companyId) // Unpin
-        : [companyId, ...prev] // Pin (adds to start of list)
-    );
-    toast.success(pinnedIds.includes(companyId) ? "Unpinned" : "Pinned to top");
-  };
-
   // Pagination state
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -715,87 +621,6 @@ function Contacts() {
     return additionalField?.value || "—";
   };
 
-  // Render cell content
-  const renderCellContent = (contact, column) => {
-    switch (column.key) {
-      case "name":
-        return (
-          <div className="flex items-center space-x-3">
-            <ProfilePicture contact={contact} />
-            <Link to={`/contacts/${contact._id}`}>
-              <div className="text-sm font-semibold text-gray-900 truncate hover:text-blue-600 transition-colors">
-                {contact.name}
-              </div>
-            </Link>
-          </div>
-        );
-
-      case "company":
-        return (
-          <div className="text-sm text-gray-700 truncate font-medium">
-            {contact.company?.name || "—"}
-          </div>
-        );
-
-      case "status":
-        return (
-          <div
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-          >
-            {permission !== "readonly" ? (
-              <StatusDropdown
-                contact={contact}
-                onUpdate={handleStatusUpdate}
-                isOpen={openDropdownId === contact._id}
-                onToggle={setOpenDropdownId}
-              />
-            ) : (
-              <span
-                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getBadgeColor(contact.stageStatus)}`}
-              >
-                {contact.stageStatus || "New"}
-              </span>
-            )}
-          </div>
-        );
-
-      case "email":
-        return (
-          <a
-            href={`mailto:${contact.email}?body=${encodeURIComponent(`Dear ${contact.name || "Sir/Madam"},\n\n\nRegards`)}`}
-            className="text-sm text-gray-700 hover:text-blue-600 transition-colors truncate"
-          >
-            {contact.email}
-          </a>
-        );
-
-      case "phone":
-        return contact.phone ? (
-          <a
-            href={`tel:${contact.phone}`}
-            className="text-sm text-gray-700 hover:text-blue-600 transition-colors truncate"
-          >
-            {contact.phone}
-          </a>
-        ) : (
-          <span className="text-sm text-gray-400">—</span>
-        );
-
-      default:
-        // Handle custom fields
-        const value = getFieldValue(contact, column.key);
-        return (
-          <span className="text-sm text-gray-700">
-            {String(value).length > 30
-              ? String(value).substring(0, 30) + "..."
-              : value}
-          </span>
-        );
-    }
-  };
-
   const columnHelper = createColumnHelper();
 
   // The server now returns contacts already starred-first (via the
@@ -820,15 +645,8 @@ function Contacts() {
               closeMenu();
               return;
             }
-            // Was anchored to the raw click coordinates (e.clientX/Y) with no
-            // zoom correction and no flip logic — so the menu's position
-            // depended on exactly where inside the small ⋮ hitbox the click
-            // landed, drifted under this app's dynamic zoom, and always
-            // opened straight down regardless of how close to the bottom of
-            // the screen the row was. Same fix as Deals/Tasks/Companies:
-            // anchor to the button's own rect, divide by ancestor zoom (the
-            // menu portals to document.body, which paints inside the zoom),
-            // flip upward when there isn't room below, clamp on both axes.
+            // Anchor the row menu to the button's rect (÷ ancestor zoom, since the
+            // menu portals to document.body), flip up when no room below, clamp both axes.
             const zMenu = getAncestorZoom(document.body);
             const MENU_W = 150;
             const MARGIN = 8;
@@ -1257,16 +1075,9 @@ function Contacts() {
     enableColumnResizing: true,
   });
 
-  // The single write path for a lifecycle change, used by the inline status
-  // dropdown, the row menu's Change Status modal, and the Kanban drop.
-  //
-  // It takes a contact ID and BOTH lifecycle fields. It used to take a contact
-  // OBJECT and a status alone, while its only caller (StatusDropdown) passed
-  // an ID — so `contact._id` was undefined and every inline status change sent
-  // PUT /contacts/undefined. It also sent stageStatus without lifecycleStage,
-  // which the API accepts per-field, leaving the two contradicting each other.
-  // Both are fixed: ID in, pair out, against the endpoint that validates the
-  // combination.
+  // Single lifecycle-change path (inline dropdown, Change Status modal, Kanban
+  // drop): takes a contact ID + both lifecycle fields, against the endpoint that
+  // validates the pair.
   const handleStatusUpdate = async (contactId, lifecycleStage, stageStatus) => {
     const previousContact = contacts.find((c) => c._id === contactId);
     const loadingToast = toast.loading("Updating status...");
@@ -1330,28 +1141,6 @@ function Contacts() {
       setContactToDelete(null);
     }
   };
-
-  // Long press handlers
-  const handleMouseDown = (contactId) => {
-    const timer = setTimeout(() => {
-      setSelectionMode(true);
-      handleSelectContact(contactId);
-    }, 500);
-    setLongPressTimer(timer);
-  };
-
-  const handleMouseUp = () => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      setLongPressTimer(null);
-    }
-  };
-
-  // Long-press-to-select is disabled on touch devices — mobile rows should
-  // only enter selection via the checkbox itself, never by holding the row.
-  const handleTouchStart = () => { };
-
-  const handleTouchEnd = () => { };
 
   // Exit selection mode
   const exitSelectionMode = () => {
@@ -1506,20 +1295,11 @@ function Contacts() {
     );
   };
 
-  // The hierarchical LifecycleStageDropdown that lived here was the THIRD
-  // definition of the lifecycle map (after backend/constants/contactLifecycle.js
-  // and utils/contactConstants.js) — and it was never rendered. It has been
-  // replaced by components/contact/ContactStatusModal.jsx, which is the same
-  // stage-then-status UI reading the shared constants, and is now actually
-  // wired up: the row menu's "Change Status" action opens it.
+  // The old inline LifecycleStageDropdown was unused; replaced by
+  // components/contact/ContactStatusModal.jsx (row menu "Change Status").
 
-  // Pagination lives in the Zustand store, so it OUTLIVES this component —
-  // leaving the page on 3 and coming back would otherwise remount still on 3.
-  // Reset to page 1 on unmount so a return visit always starts at page 1 with a
-  // single fetch. Doing it here (on the way out) rather than on mount is what
-  // avoids the flicker: if we reset on mount instead, the first fetch would
-  // already be in flight for page 3, land, paint page-3 rows, and only then get
-  // replaced by page 1.
+  // Pagination lives in the Zustand store (outlives this component), so reset to
+  // page 1 on unmount — doing it on the way out avoids a page-3 fetch flicker.
   useEffect(() => {
     return () => {
       setPagination((prev) => ({ ...prev, currentPage: 1 }));
@@ -1948,7 +1728,7 @@ function Contacts() {
         (p) => p.name.toLowerCase() === "contacts",
       );
       setPermission(contactPerm?.permission || "no");
-    } catch (err) {
+    } catch {
       console.error("Failed to fetch user permissions");
       toast.error("Failed to fetch user permissions");
     }
@@ -2160,132 +1940,8 @@ function Contacts() {
     }
   };
 
-  const resetForm = () => {
-    setForm({
-      name: "",
-      email: "",
-      phone: "",
-      lifecycleStage: "Lead",
-      stageStatus: "New",
-      company: "",
-      avatar: "",
-      socialMedia: {
-        twitter: "",
-        linkedin: "",
-        facebook: "",
-      },
-    });
-    setAdditionalValues({});
-  };
 
-  const toggleForm = () => {
-    if (showForm) {
-      resetForm();
-    }
-    setShowForm(!showForm);
-  };
 
-  // Render contact card for Kanban
-  const renderContactCard = (contact, isDragging) => (
-    <div
-      className={`
-        bg-white p-4 rounded-lg shadow-sm border border-gray-200 
-        hover:shadow-md cursor-grab active:cursor-grabbing 
-        transition-all duration-200 
-        ${isDragging ? "rotate-1 shadow-xl z-50 scale-105" : "hover:border-blue-300"}
-      `}
-    >
-      {/* Card Header with Avatar and Contact Name */}
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <div className="flex-shrink-0">
-            <ProfilePicture contact={contact} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-gray-900 text-sm truncate">
-              {contact.name}
-            </p>
-            <p className="text-xs text-gray-500 truncate">
-              {contact.jobTitle || contact.company?.name || "—"}
-            </p>
-          </div>
-        </div>
-        <div className="relative inline-block text-left group/action">
-          <button
-            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-          >
-            <MoreIcon className="w-4 h-4" />
-          </button>
-
-          <div className="hidden group-hover/action:block absolute right-0 mt-1 w-32 bg-white rounded-lg shadow-xl border border-gray-100 z-50 py-1">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleEditContact(contact);
-              }}
-              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-600"
-            >
-              Edit
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDelete(contact._id);
-              }}
-              className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Divider */}
-      <div className="border-b border-gray-100 mb-3"></div>
-
-      {/* Contact Details */}
-      <div className="space-y-2 mb-3">
-        {contact.email && (
-          <div className="flex items-center gap-2 text-xs text-gray-600 group">
-            <Mail className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-            <a
-              href={`mailto:${contact.email}?body=${encodeURIComponent(`Dear ${contact.name || "Sir/Madam"},\n\n\nRegards`)}`}
-              className="truncate hover:text-blue-600 hover:underline transition-colors"
-            >
-              {contact.email}
-            </a>
-          </div>
-        )}
-        {contact.phone && (
-          <div className="flex items-center gap-2 text-xs text-gray-600 group">
-            <CellphoneIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-            <a
-              href={`tel:${contact.phone}`}
-              className="hover:text-blue-600 hover:underline transition-colors"
-            >
-              {contact.phone}
-            </a>
-          </div>
-        )}
-      </div>
-
-      {/* Status Badge */}
-      {contact.stageStatus && (
-        <div className="">
-          <span
-            className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${getBadgeColor(
-              contact.stageStatus,
-            )}`}
-          >
-            {contact.stageStatus}
-          </span>
-        </div>
-      )}
-    </div>
-  );
 
   return (
     <div className={`bg-white ${showKanban ? "" : "min-h-screen"}`}>
@@ -2887,15 +2543,9 @@ function Contacts() {
               <ContactFolder />
             </div>
           ) : (
-            // No `loading ? "opacity-60 pointer-events-none"` on this container any
-            // more. Paging is server-side, so that fired on every page change and
-            // dimmed the whole table to 60% for the length of the round trip — the
-            // flash that made paging feel like the data blinked out. The rows never
-            // actually left (showLoadingSkeleton is gated on an empty list), so the
-            // old data now stays fully legible and clickable while the next page
-            // loads; the top progress bar reports the fetch instead.
-            // No border-t: the toolbar strip right above already has its own
-            // border-b, so a top border here would double up against it.
+            // No loading dim here: paging is server-side and rows never leave
+            // (skeleton is gated on empty), so old data stays legible while the
+            // next page loads — the top bar reports the fetch. No border-t (toolbar has border-b).
             <div className={`relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || sortedContacts.length > 0 ? "border-b" : ""}`} style={{ paddingLeft: "var(--content-inset, 16px)" }}>
               <table
                 className="w-full border-separate border-spacing-0 text-left"
@@ -3021,17 +2671,8 @@ function Contacts() {
                               className={`bg-white hover:bg-blue-50 transition-colors cursor-pointer ${selectedContactsSet.has(row.original._id) ? "!bg-blue-50" : ""}`}
                               style={{ height: 37, maxHeight: 37 }}
                               onClick={(e) => {
-                                // While a row-actions (⋮) menu is open — for THIS row or
-                                // any other — a click anywhere on the table should only
-                                // ever close/switch that menu, never also navigate away.
-                                // The menu's own full-screen backdrop is meant to absorb
-                                // that click, but relying on stacking order alone left a
-                                // gap: clicking a different row while a menu was open
-                                // still navigated to that row's detail page. This check
-                                // makes it impossible regardless of the backdrop's
-                                // z-index behavior. Once no menu is open, rows navigate
-                                // normally again — this only guards the "menu is up"
-                                // window, not row-clicking in general.
+                                // While any row menu is open, a table click should only
+                                // close/switch it, never navigate — regardless of backdrop z-index.
                                 if (openRowActionsId) return;
                                 if (e.target.closest("button") || e.target.closest("a") || e.target.closest("input")) return;
                                 navigate(`/contacts/${row.original._id}`);

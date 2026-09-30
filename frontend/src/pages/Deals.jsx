@@ -542,8 +542,8 @@ const ModernKanbanColumn = React.memo(({
     const sumAmount = (list) => list.reduce((sum, d) => sum + (parseInt(d.amount) || 0), 0);
     const thisWeek = sumAmount(deals.filter((d) => inRange(d, thisWeekStart, now)));
     const lastWeek = sumAmount(deals.filter((d) => inRange(d, lastWeekStart, thisWeekStart)));
-    if (lastWeek === 0) return thisWeek === 0 ? 0 : 100;
-    return Math.max(-999, Math.min(999, Math.round(((thisWeek - lastWeek) / lastWeek) * 100)));
+    if (lastWeek === 0) return { pct: 0, isNew: thisWeek > 0 };
+    return { pct: Math.max(-999, Math.min(999, Math.round(((thisWeek - lastWeek) / lastWeek) * 100))), isNew: false };
   }, [deals]);
 
   const tintColor =
@@ -644,7 +644,7 @@ const ModernKanbanColumn = React.memo(({
                 fontSize: "12px",
                 lineHeight: "15px",
                 letterSpacing: "-0.02em",
-                color: trendPct >= 0 ? "#0747A6" : "#E82222",
+                color: trendPct.pct >= 0 ? "#0747A6" : "#E82222",
                 marginLeft: "auto",
               }}
             >
@@ -1218,9 +1218,14 @@ function Deals() {
   // a fallback for the rare frame where the pointer is briefly outside every
   // droppable (e.g. over a column's padding/gap).
   const collisionDetectionStrategy = (args) => {
-    const pointerCollisions = pointerWithin(args);
+    // The dragged card is re-rendered inside the hovered column, so its own
+    // droppable sits under the pointer and would win as "over", resolving the
+    // drop to its old status. Skip it so the column/other cards decide.
+    const others = args.droppableContainers.filter((c) => c.id !== args.active?.id);
+    const scoped = { ...args, droppableContainers: others };
+    const pointerCollisions = pointerWithin(scoped);
     if (pointerCollisions.length > 0) return pointerCollisions;
-    return rectIntersection(args);
+    return rectIntersection(scoped);
   };
 
   // Close dropdown when clicking outside
@@ -1722,6 +1727,8 @@ function Deals() {
 
     const dealId = active.id.toString();
     let newStatus = over.id.toString();
+    // Dropped on its own (already re-homed) card: use the column last hovered.
+    if (newStatus === dealId && dragOverStatus) newStatus = dragOverStatus;
 
     if (newStatus.startsWith("quick-")) {
       newStatus = newStatus.replace("quick-", "");
@@ -1764,10 +1771,11 @@ function Deals() {
       }
     } catch (error) {
       console.error("Error updating deal status:", error);
-      // Revert optimistic update on failure
+      // Revert optimistic update on failure (to the server's status on a 409)
+      const revertStatus = error.response?.data?.currentStatus || oldStatus;
       setDeals((prevDeals) =>
         prevDeals.map((deal) =>
-          deal._id.toString() === dealId ? { ...deal, status: oldStatus } : deal,
+          deal._id.toString() === dealId ? { ...deal, status: revertStatus } : deal,
         ),
       );
       if (error.response?.status === 402) {
