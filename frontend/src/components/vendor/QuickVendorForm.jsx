@@ -8,6 +8,10 @@ import toast from "react-hot-toast";
 import { Country, State } from "country-state-city";
 import CustomDropdown from "../common/CustomDropdown";
 import { getStateCode, canonicalStateName } from "../../utils/gstStateCode";
+import {
+  FormBody, FormField, FormLabel, TextInput, InputWithAction, FieldActionButton,
+  FilePickerField, SectionDivider, HINT_CLS, PHONE_SELECT_CLS, inputCls, selectButtonCls,
+} from "../common/form";
 import { loadCityModule, useLazyCity } from "../../utils/lazyCityData";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
@@ -252,7 +256,7 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
       }
     };
 
-    const inputClassName = "w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter";
+    const inputClassName = inputCls();
 
     switch (fieldDef.type) {
       case "number":
@@ -723,41 +727,24 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
             </button>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto p-8 space-y-6">
+          <FormBody>
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Profile Picture
-              </label>
-              <div className="flex items-center gap-3">
-                {/* Pill-shaped "chosen file" field — shows the filename once
-                    picked (or the current photo while editing), otherwise the
-                    "Choose a file" placeholder — matching QuickCompanyForm's
-                    logo upload. */}
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex-1 flex items-center px-3 h-[38px] rounded-full border border-[#1F2937]/10 cursor-pointer"
-                >
-                  <span className="text-[12px] leading-5 text-[#1F2937] opacity-50 truncate">
-                    {profilePicture?.name || (profilePreview ? "Current photo" : "Choose a file")}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Upload profile picture"
-                  className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] border border-[#1F2937]/10 flex items-center justify-center hover:opacity-90 transition-opacity"
-                >
-                  <Paperclip className="w-[18px] h-[18px] text-white" strokeWidth={2} />
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-              </div>
-              <p className="text-[13px] font-inter text-[#A0A0A0] mt-1.5 uppercase font-medium">PNG, JPG upto 5MB</p>
+              <FormLabel>Profile Picture</FormLabel>
+              <FilePickerField
+                fileName={profilePicture?.name || (profilePreview ? "Current photo" : "")}
+                onPick={() => fileInputRef.current?.click()}
+                title="Upload profile picture"
+              >
+                <Paperclip className="w-[18px] h-[18px] text-white" strokeWidth={2} />
+              </FilePickerField>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <p className={HINT_CLS}>PNG, JPG upto 5MB</p>
               {profilePreview && (
                 <div className="relative mt-2 inline-block">
                   <img
@@ -785,69 +772,48 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
               )}
             </div>
 
-            <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Vendor Name <span className="text-red-500">*</span>
-              </label>
-              <input
+            <FormField label="Vendor Name" required error={nameError ? "Vendor name is required" : ""}>
+              <TextInput
                 ref={nameInputRef}
                 type="text"
                 value={form.name}
                 onChange={(e) => handleFormChange("name", e.target.value)}
-                className={`w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter ${
-                  nameError ? "border-red-500" : "border-[#1F2937]/10"
-                }`}
+                error={nameError}
                 placeholder="Enter Vendor Name"
               />
-              {nameError && (
-                <p className="mt-1 text-xs text-red-600">Vendor name is required</p>
-              )}
-            </div>
+            </FormField>
 
-            <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                GSTIN <span className="text-red-500">*</span>
-              </label>
-              <div className="flex gap-2">
-              <input
-                type="text"
-                value={form.gstin}
-                ref={gstinInputRef}
-                onChange={(e) => {
-                  handleFormChange("gstin", e.target.value.toUpperCase());
-                  if (gstinFieldError) setGstinFieldError("");
-                }}
-                className={`flex-1 min-w-0 border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter ${gstinFieldError ? "border-red-500" : "border-[#1F2937]/10"}`}
-                placeholder="eg., 22ABCDE1234F1Z5"
-                maxLength="15"
-              />
-                <button
-                  type="button"
-                  onClick={fetchGSTINDetails}
-                  disabled={gstinLoading || !form.gstin?.trim()}
-                  className={`px-4 h-[38px] text-[13px] font-bold rounded-full transition-colors font-inter flex-shrink-0 ${gstinLoading || !form.gstin?.trim() ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-[#0085FF] text-white hover:bg-blue-600"}`}
-                >
-                  {gstinLoading ? "Fetching..." : "Fetch"}
-                </button>
-              </div>
-              {gstinFieldError && (
-                <p className="mt-1 text-xs text-red-600">{gstinFieldError}</p>
-              )}
-            </div>
+            <FormField label="GSTIN" required error={gstinFieldError}>
+              <InputWithAction
+                action={
+                  <FieldActionButton
+                    onClick={fetchGSTINDetails}
+                    disabled={gstinLoading || !form.gstin?.trim()}
+                  >
+                    {gstinLoading ? "Fetching..." : "Fetch"}
+                  </FieldActionButton>
+                }
+              >
+                <TextInput
+                  type="text"
+                  value={form.gstin}
+                  ref={gstinInputRef}
+                  onChange={(e) => {
+                    handleFormChange("gstin", e.target.value.toUpperCase());
+                    if (gstinFieldError) setGstinFieldError("");
+                  }}
+                  error={gstinFieldError}
+                  placeholder="eg., 22ABCDE1234F1Z5"
+                  maxLength={15}
+                />
+              </InputWithAction>
+            </FormField>
 
             <div ref={addressRef}>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Address <span className="text-red-500">*</span>
-              </label>
+              <FormLabel required>Address</FormLabel>
               {(() => {
-                const inputCls = (missing) =>
-                  `w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter ${
-                    addressError && missing ? "border-red-500" : "border-[#1F2937]/10"
-                  }`;
-                const ddCls = (val, missing) =>
-                  `w-full border rounded-full px-3 h-[38px] text-[13px] text-left flex items-center justify-between transition-all bg-white font-inter ${val ? "text-[#1F2937]" : "text-[#1F2937] opacity-50"} ${
-                    addressError && missing ? "border-red-500" : "border-[#1F2937]/10"
-                  }`;
+                const fieldCls = (missing) => inputCls({ error: addressError && missing });
+                const ddCls = (val, missing) => selectButtonCls({ error: addressError && missing, hasValue: !!val });
                 const statesForCountry = getStatesForCountry(form.address.country);
                 return (
                   <div className="space-y-3">
@@ -855,14 +821,14 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
                       type="text"
                       value={form.address.line1}
                       onChange={(e) => handleFormChange("address.line1", e.target.value)}
-                      className={inputCls(!form.address.line1?.trim())}
+                      className={fieldCls(!form.address.line1?.trim())}
                       placeholder="Address Line 1 *"
                     />
                     <input
                       type="text"
                       value={form.address.line2}
                       onChange={(e) => handleFormChange("address.line2", e.target.value)}
-                      className={inputCls(false)}
+                      className={fieldCls(false)}
                       placeholder="Address Line 2"
                     />
                     <div className="grid grid-cols-2 gap-3">
@@ -888,7 +854,7 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
                           type="text"
                           value={form.address.state}
                           onChange={(e) => handleFormChange("address.state", e.target.value)}
-                          className={inputCls(!form.address.state?.trim())}
+                          className={fieldCls(!form.address.state?.trim())}
                           placeholder="State / Province *"
                         />
                       )}
@@ -908,7 +874,7 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
                             type="text"
                             value={form.address.city}
                             onChange={(e) => handleFormChange("address.city", e.target.value)}
-                            className={inputCls(!form.address.city?.trim())}
+                            className={fieldCls(!form.address.city?.trim())}
                             placeholder="City *"
                           />
                         );
@@ -919,7 +885,7 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
                           inputMode="numeric"
                           value={form.address.pincode}
                           onChange={handlePincodeChange}
-                          className={inputCls(!form.address.pincode?.trim())}
+                          className={fieldCls(!form.address.pincode?.trim())}
                           placeholder="Pincode *"
                         />
                         {pincodeLoading && (
@@ -933,7 +899,7 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
                         type="text"
                         value={form.address.stateCode || ""}
                         onChange={(e) => handleFormChange("address.stateCode", e.target.value)}
-                        className={inputCls(false)}
+                        className={fieldCls(false)}
                         placeholder="State Code"
                       />
                     </div>
@@ -945,11 +911,8 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
               })()}
             </div>
 
-            <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Email
-              </label>
-              <input
+            <FormField label="Email" error={emailError}>
+              <TextInput
                 ref={emailInputRef}
                 type="email"
                 value={form.email}
@@ -957,66 +920,49 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
                   handleFormChange("email", e.target.value);
                   if (emailError) setEmailError("");
                 }}
-                className={`w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter ${
-                  emailError ? "border-red-500" : "border-[#1F2937]/10"
-                }`}
+                error={emailError}
                 placeholder="Enter Vendor Email"
               />
-              {emailError && (
-                <p className="mt-1 text-xs text-red-600">{emailError}</p>
-              )}
-            </div>
+            </FormField>
 
-            <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Phone
-              </label>
+            <FormField label="Phone">
               <PhoneNumberInput
                 value={form.phone}
                 onChange={(next) => handleFormChange("phone", next)}
                 placeholder="Enter Phone Number"
-                selectClassName="border border-[#1F2937]/10 rounded-full px-2 h-[38px] text-[13px] text-[#1F2937] bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all flex-shrink-0"
-                inputClassName="flex-1 min-w-0 border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter"
+                selectClassName={PHONE_SELECT_CLS}
+                inputClassName={inputCls({ grow: true })}
               />
-            </div>
+            </FormField>
 
-            <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Company
-              </label>
-              <input
+            <FormField label="Company">
+              <TextInput
                 type="text"
                 value={form.company}
                 onChange={(e) => handleFormChange("company", e.target.value)}
-                className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter"
                 placeholder="Enter Company Name"
               />
-            </div>
+            </FormField>
 
             {fieldDefinitions.length > 0 && (
-              <div className="pt-4 space-y-6">
-                <h3 className="text-[16px] font-bold text-[#111216]">
-                  Custom Fields
-                </h3>
-                <div className="space-y-6 font-inter">
+              <div className="pt-4 space-y-4">
+                <SectionDivider>Custom Fields</SectionDivider>
+                <div className="space-y-6">
                   {fieldDefinitions.map((fieldDef) => (
-                    <div key={fieldDef.name} ref={(el) => (customFieldRefs.current[fieldDef.name] = el)}>
-                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                        {fieldDef.name} {fieldDef.required && <span className="text-red-500">*</span>}
-                      </label>
-                      {renderFieldInput(
-                        fieldDef,
-                        additionalFields[fieldDef.name]
-                      )}
-                      {additionalFieldErrors[fieldDef.name] && (
-                        <p className="mt-1 text-xs text-red-600">{additionalFieldErrors[fieldDef.name]}</p>
-                      )}
-                    </div>
+                    <FormField
+                      key={fieldDef.name}
+                      label={fieldDef.name}
+                      required={fieldDef.required}
+                      fieldRef={(el) => (customFieldRefs.current[fieldDef.name] = el)}
+                      error={additionalFieldErrors[fieldDef.name]}
+                    >
+                      {renderFieldInput(fieldDef, additionalFields[fieldDef.name])}
+                    </FormField>
                   ))}
                 </div>
               </div>
             )}
-          </div>
+          </FormBody>
 
           <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
             <button

@@ -126,6 +126,11 @@ const EntityPickerDropdown = ({ entities, value, onChange, entityLabel, displayK
   );
 };
 
+import {
+  FormBody, FormField, FormLabel, FieldRow, InputWithAction, FieldActionButton,
+  TextInput, TextArea, selectButtonCls,
+} from "../common/form";
+
 const QuickTaskForm = ({
   companies,
   contacts,
@@ -599,42 +604,28 @@ const QuickTaskForm = ({
           <div className="flex-1 overflow-y-auto">
             <form onSubmit={handleSubmit} noValidate className="flex flex-col h-full">
               {/* Content */}
-              <div className="px-8 py-6 space-y-6">
-                <div ref={titleInputRef}>
-                  <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    Task Title <span className="text-[#FF4935]">*</span>
-                  </label>
-                  <input
+              <FormBody className="overflow-visible!">
+                <FormField label="Task Title" required fieldRef={titleInputRef} error={validationErrors.title}>
+                  <TextInput
                     type="text"
                     value={form.title}
                     onChange={(e) => handleFormChange("title", e.target.value)}
-                    className={`w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter ${validationErrors.title ? "border-red-500 focus:ring-red-500" : "border-[#1F2937]/10 focus:ring-blue-500"
-                      }`}
+                    error={validationErrors.title}
                     placeholder="Enter Task Title"
                   />
-                  {validationErrors.title && (
-                    <p className="text-red-500 text-xs mt-1 font-inter">{validationErrors.title}</p>
-                  )}
-                </div>
+                </FormField>
 
-                <div>
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    Description
-                  </label>
-                  <textarea
+                <FormField label="Description">
+                  <TextArea
                     value={form.description}
                     onChange={(e) => handleFormChange("description", e.target.value)}
                     rows={4}
-                    className="w-full border border-[#1F2937]/10 rounded-2xl px-3 py-2 text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 resize-none"
                     placeholder="Describe the task objectives, requirements and important details"
                   />
-                </div>
+                </FormField>
 
                 {/* Related to (entity type) */}
-                <div>
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    Related To
-                  </label>
+                <FormField label="Related To">
                   <SingleSelectDropdown
                     options={relationOptions}
                     value={form.relationModel}
@@ -642,83 +633,58 @@ const QuickTaskForm = ({
                     isOpen={openDropdown === "relationModel"}
                     onOpenChange={(open) => setOpenDropdown(open ? "relationModel" : null)}
                   />
-                </div>
+                </FormField>
 
                 {/* The record itself, with a quick-create shortcut */}
-                <div ref={relatedToRef}>
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    {form.relationModel}
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <EntityPickerDropdown
-                        entities={getOptions()}
-                        value={form.relatedTo}
-                        onChange={(val) => handleFormChange("relatedTo", val)}
-                        entityLabel={form.relationModel}
-                        displayKey={getDisplayKey()}
-                        isOpen={openDropdown === "entity"}
-                        onOpenChange={(open) => setOpenDropdown(open ? "entity" : null)}
+                <FormField label={form.relationModel} fieldRef={relatedToRef} error={validationErrors.relatedTo}>
+                  <InputWithAction
+                    action={
+                      <FieldActionButton
+                        icon={<PlusIcon className="w-4 h-4 text-white" />}
+                        onClick={openQuickCreate}
+                        title={`Add New ${form.relationModel}`}
+                        aria-label={`Add New ${form.relationModel}`}
                       />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={openQuickCreate}
-                      title={`Add New ${form.relationModel}`}
-                      className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] border border-[#1F2937]/10 flex items-center justify-center hover:opacity-90 transition-opacity"
-                    >
-                      <PlusIcon className="w-4 h-4 text-white" />
-                    </button>
-                  </div>
-                  {validationErrors.relatedTo && (
-                    <p className="text-red-500 text-xs mt-1 font-inter">
-                      {validationErrors.relatedTo}
-                    </p>
-                  )}
-                </div>
+                    }
+                  >
+                    <EntityPickerDropdown
+                      entities={getOptions()}
+                      value={form.relatedTo}
+                      onChange={(val) => handleFormChange("relatedTo", val)}
+                      entityLabel={form.relationModel}
+                      displayKey={getDisplayKey()}
+                      isOpen={openDropdown === "entity"}
+                      onOpenChange={(open) => setOpenDropdown(open ? "entity" : null)}
+                    />
+                  </InputWithAction>
+                </FormField>
 
                 {/* Selected Date + Due Date */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div ref={selectedDateRef}>
-                    <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                      Selected Date <span className="text-[#FF4935]">*</span>
-                    </label>
-                    <input
+                <FieldRow>
+                  <FormField label="Selected Date" required fieldRef={selectedDateRef} error={validationErrors.selectedDate}>
+                    <TextInput
                       type="date"
                       value={form.selectedDate}
                       onChange={(e) => handleFormChange("selectedDate", e.target.value)}
-                      className={`w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 transition-all cursor-pointer ${validationErrors.selectedDate ? "border-red-500 focus:ring-red-500" : "border-[#1F2937]/10 focus:ring-blue-500"
-                        }`}
+                      error={validationErrors.selectedDate}
+                      className="cursor-pointer"
                     />
-                    {validationErrors.selectedDate && (
-                      <p className="text-red-500 text-xs mt-1 font-inter">{validationErrors.selectedDate}</p>
-                    )}
-                  </div>
-
-                  <div ref={dueDateRef}>
-                    <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                      Due Date <span className="text-[#FF4935]">*</span>
-                    </label>
-                    <input
+                  </FormField>
+                  <FormField label="Due Date" required fieldRef={dueDateRef} error={validationErrors.dueDate}>
+                    <TextInput
                       type="date"
                       value={form.dueDate}
                       min={form.selectedDate || ""}
                       onChange={(e) => handleFormChange("dueDate", e.target.value)}
-                      className={`w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 transition-all cursor-pointer ${validationErrors.dueDate ? "border-red-500 focus:ring-red-500" : "border-[#1F2937]/10 focus:ring-blue-500"
-                        }`}
+                      error={validationErrors.dueDate}
+                      className="cursor-pointer"
                     />
-                    {validationErrors.dueDate && (
-                      <p className="text-red-500 text-xs mt-1 font-inter">{validationErrors.dueDate}</p>
-                    )}
-                  </div>
-                </div>
+                  </FormField>
+                </FieldRow>
 
                 {/* Status + Priority */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                      Status
-                    </label>
+                <FieldRow>
+                  <FormField label="Status">
                     <SingleSelectDropdown
                       options={statusOptions}
                       value={form.status}
@@ -727,12 +693,8 @@ const QuickTaskForm = ({
                       onOpenChange={(open) => setOpenDropdown(open ? "status" : null)}
                       dropUp={true}
                     />
-                  </div>
-
-                  <div>
-                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                      Priority
-                    </label>
+                  </FormField>
+                  <FormField label="Priority">
                     <SingleSelectDropdown
                       options={priorityOptions}
                       value={form.priority}
@@ -741,14 +703,12 @@ const QuickTaskForm = ({
                       onOpenChange={(open) => setOpenDropdown(open ? "priority" : null)}
                       dropUp={true}
                     />
-                  </div>
-                </div>
+                  </FormField>
+                </FieldRow>
 
                 {/* Assignees */}
                 <div ref={usersRef}>
-                  <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    Assignees
-                  </label>
+                  <FormLabel>Assignees</FormLabel>
 
                   <div className="space-y-2 relative">
                     {assignedUsers.length > 0 && (
@@ -768,8 +728,7 @@ const QuickTaskForm = ({
                     <button
                       type="button"
                       onClick={() => setShowUserSelector(!showUserSelector)}
-                      className={`w-full flex items-center justify-between px-3 h-[38px] rounded-full text-[13px] focus:outline-none transition-all border bg-white ${validationErrors.users ? "border-red-300" : "border-[#1F2937]/10"
-                        }`}
+                      className={selectButtonCls({ error: !!validationErrors.users, hasValue: true })}
                     >
                       <span className="text-[#1F2937] opacity-50">
                         {form.users.length > 0 ? `${form.users.length} selected` : "Select Users"}
@@ -840,7 +799,7 @@ const QuickTaskForm = ({
                       />
                     </div>
                   )}
-              </div>
+              </FormBody>
             </form>
           </div>
 

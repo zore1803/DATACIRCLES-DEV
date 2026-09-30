@@ -14,6 +14,17 @@ import linkedinLogo from "../../assets/linkedin-logo.png";
 import facebookLogo from "../../assets/facebook-logo.png";
 import toast from "react-hot-toast";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import {
+  FormBody, FormField, FormLabel, TextInput, InputWithAction, FieldActionButton,
+  FilePickerField, SectionDivider, HINT_CLS, PHONE_SELECT_CLS, inputCls, selectButtonCls,
+} from "../common/form";
+
+const SOCIAL_LINKS = [
+  { key: "twitter", label: "X (Twitter)", logo: twitterLogo, scale: 1.56, placeholder: "https://x.com/username" },
+  { key: "linkedin", label: "LinkedIn", logo: linkedinLogo, scale: 1.5, placeholder: "https://linkedin.com/in/username" },
+  { key: "instagram", label: "Instagram", logo: instagramLogo, scale: 1.4, placeholder: "https://instagram.com/username" },
+  { key: "facebook", label: "Facebook", logo: facebookLogo, scale: 1.21, placeholder: "https://facebook.com/username" },
+];
 
 const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, onRequestClose, initialCompanyId = "", editContact = null }) => {
   const isEditing = !!editContact;
@@ -228,10 +239,7 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
     };
 
     const hasError = validationErrors[`additional_${fieldDef.name}`];
-    const inputClassName = `w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter ${hasError
-      ? 'border-red-500 focus:ring-red-500'
-      : 'border-[#1F2937]/10 focus:ring-blue-500'
-      }`;
+    const inputClassName = inputCls({ error: !!hasError });
 
     switch (fieldDef.type) {
       case "number":
@@ -565,35 +573,25 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
             </button>
           </div>
 
-          <div className="space-y-6 overflow-y-auto flex-1 px-8 py-6">
+          <FormBody>
             {/* Profile Picture */}
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] mb-2 tracking-[-0.05em]">
-                Profile Picture
-              </label>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 flex items-center px-3 h-[38px] rounded-full border border-[#1F2937]/10">
-                  <span className="text-[12px] leading-5 text-[#1F2937] opacity-50 truncate">
-                    {profilePicture ? profilePicture.name : "Choose a file"}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => profilePictureInputRef.current?.click()}
-                  title="Upload profile picture"
-                  className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] border border-[#1F2937]/10 flex items-center justify-center hover:opacity-90 transition-opacity"
-                >
-                  <Paperclip className="w-[18px] h-[18px] text-white" strokeWidth={2} />
-                </button>
-                <input
-                  ref={profilePictureInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-              </div>
-              <p className="text-[13px] font-inter text-[#A0A0A0] mt-1.5 uppercase font-medium">PNG, JPEG upto 5MB</p>
+              <FormLabel>Profile Picture</FormLabel>
+              <FilePickerField
+                fileName={profilePicture?.name}
+                onPick={() => profilePictureInputRef.current?.click()}
+                title="Upload profile picture"
+              >
+                <Paperclip className="w-[18px] h-[18px] text-white" strokeWidth={2} />
+              </FilePickerField>
+              <input
+                ref={profilePictureInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <p className={HINT_CLS}>PNG, JPEG upto 5MB</p>
               {profilePicturePreview && (
                 <div className="relative mt-2 inline-block">
                   <img
@@ -619,79 +617,53 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
               )}
             </div>
 
-            {/* Name - Now with validation */}
-            <div>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Full Name <span className="text-[#FF4935]">*</span>
-              </label>
-              <input
+            <FormField label="Full Name" required error={validationErrors.name}>
+              <TextInput
                 ref={nameInputRef}
                 type="text"
                 placeholder="Enter Full Name"
                 value={form.name}
                 onChange={(e) => handleFormChange("name", e.target.value)}
-                className={`w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter ${validationErrors.name
-                  ? 'border-red-500 focus:ring-red-500'
-                  : 'border-[#1F2937]/10 focus:ring-blue-500'
-                  }`}
+                error={validationErrors.name}
               />
-              {validationErrors.name && (
-                <p className="text-red-500 text-xs mt-1 font-inter">{validationErrors.name}</p>
-              )}
-            </div>
+            </FormField>
 
-            {/* Email - Now with validation */}
-            <div>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Email
-              </label>
-              <input
+            <FormField label="Email" error={validationErrors.email}>
+              <TextInput
                 ref={emailInputRef}
                 type="email"
                 placeholder="example@gmail.com"
                 value={form.email}
                 onChange={(e) => handleFormChange("email", e.target.value)}
-                className={`w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter ${validationErrors.email
-                  ? 'border-red-500 focus:ring-red-500'
-                  : 'border-[#1F2937]/10 focus:ring-blue-500'
-                  }`}
+                error={validationErrors.email}
               />
-              {validationErrors.email && (
-                <p className="text-red-500 text-xs mt-1 font-inter">{validationErrors.email}</p>
-              )}
-            </div>
+            </FormField>
 
-            {/* Phone */}
-            <div>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Phone
-              </label>
+            <FormField label="Phone" error={validationErrors.phone}>
               {/* Wrapper carries phoneInputRef: the scroll-to-first-error
-                  logic below targets a DOM node, and the ref used to sit on
-                  the raw <input>. */}
+                  logic targets a DOM node, not the raw <input>. */}
               <div ref={phoneInputRef}>
-              <PhoneNumberInput
-                value={form.phone}
-                onChange={(next) => handleFormChange("phone", next)}
-                placeholder="123456789"
-                selectClassName="border border-[#1F2937]/10 rounded-full px-2 h-[38px] text-[13px] text-[#1F2937] bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all flex-shrink-0"
-                inputClassName={`flex-1 min-w-0 border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter ${validationErrors.phone
-                  ? "border-red-500 focus:ring-red-500"
-                  : "border-[#1F2937]/10 focus:ring-blue-500"
-                  }`}
-              />
+                <PhoneNumberInput
+                  value={form.phone}
+                  onChange={(next) => handleFormChange("phone", next)}
+                  placeholder="123456789"
+                  selectClassName={PHONE_SELECT_CLS}
+                  inputClassName={inputCls({ error: validationErrors.phone, grow: true })}
+                />
               </div>
-              {validationErrors.phone && (
-                <p className="text-red-500 text-xs mt-1 font-inter">{validationErrors.phone}</p>
-              )}
-            </div>
+            </FormField>
 
-            {/* Company - Now required with validation */}
-            <div ref={companyRef}>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Company
-              </label>
-              <div className="flex items-center gap-3">
+            <FormField label="Company" fieldRef={companyRef} error={validationErrors.company}>
+              <InputWithAction
+                action={
+                  <FieldActionButton
+                    icon={<PlusIcon className="w-4 h-4 text-white" />}
+                    onClick={() => setShowQuickCompanyForm(true)}
+                    title="Add New Company"
+                    aria-label="Add New Company"
+                  />
+                }
+              >
                 <SearchableDropdown
                   options={localCompanies}
                   value={form.company}
@@ -699,67 +671,40 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
                   placeholder="Select Company"
                   displayKey="name"
                   valueKey="_id"
-                  className="flex-1"
                   error={validationErrors.company}
                   compact
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowQuickCompanyForm(true)}
-                  className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] border border-[#1F2937]/10 flex items-center justify-center hover:opacity-90 transition-opacity"
-                  title="Add New Company"
-                >
-                  <PlusIcon className="w-4 h-4 text-white" />
-                </button>
-              </div>
-              {validationErrors.company && (
-                <p className="text-red-500 text-xs mt-1 font-inter">{validationErrors.company}</p>
-              )}
-            </div>
+              </InputWithAction>
+            </FormField>
 
-            {/* Lead Source */}
-            <div ref={leadSourceRef}>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Lead Source
-              </label>
+            <FormField label="Lead Source" fieldRef={leadSourceRef} error={validationErrors.leadSource}>
               <CustomDropdown
                 options={["Referral", "Website", "Cold Call", "Social Media", "Event", "Advertisement", "Other"]}
                 value={form.leadSource}
                 onChange={(value) => handleFormChange("leadSource", value)}
                 placeholder="Choose Lead Source"
-                buttonClassName={`w-full border rounded-full px-3 h-[38px] text-[13px] text-left flex items-center justify-between transition-all bg-white font-inter ${validationErrors.leadSource ? 'border-red-500 focus:ring-red-500' : 'border-[#1F2937]/10'} ${form.leadSource ? "text-[#1F2937]" : "text-[#1F2937] opacity-50"}`}
+                buttonClassName={selectButtonCls({
+                  error: validationErrors.leadSource,
+                  hasValue: !!form.leadSource,
+                })}
               />
-              {validationErrors.leadSource && (
-                <p className="text-red-500 text-xs mt-1 font-inter">{validationErrors.leadSource}</p>
-              )}
-            </div>
+            </FormField>
 
             {/* Additional Fields - Now with validation */}
             {fieldDefinitions.length > 0 && (
               <div className="pt-4 space-y-4">
-                <div className="flex items-center gap-3">
-                  <span className="flex-1 h-px bg-[#D9D9D9]" />
-                  <h3 className="flex-shrink-0 text-[14px] font-medium leading-[120%] text-[#1F2937]">
-                    Custom Fields
-                  </h3>
-                  <span className="flex-1 h-px bg-[#D9D9D9]" />
-                </div>
+                <SectionDivider>Custom Fields</SectionDivider>
                 <div className="space-y-3 sm:space-y-4">
                   {fieldDefinitions.map((fieldDef) => (
-                    <div key={fieldDef.name} ref={(el) => (customFieldRefs.current[fieldDef.name] = el)}>
-                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                        {fieldDef.name} {fieldDef.required && <span className="text-[#FF4935]">*</span>}
-                      </label>
-                      {renderFieldInput(
-                        fieldDef,
-                        additionalFields[fieldDef.name]
-                      )}
-                      {validationErrors[`additional_${fieldDef.name}`] && (
-                        <p className="text-red-500 text-xs mt-1 font-inter">
-                          {validationErrors[`additional_${fieldDef.name}`]}
-                        </p>
-                      )}
-                    </div>
+                    <FormField
+                      key={fieldDef.name}
+                      label={fieldDef.name}
+                      required={fieldDef.required}
+                      fieldRef={(el) => (customFieldRefs.current[fieldDef.name] = el)}
+                      error={validationErrors[`additional_${fieldDef.name}`]}
+                    >
+                      {renderFieldInput(fieldDef, additionalFields[fieldDef.name])}
+                    </FormField>
                   ))}
                 </div>
               </div>
@@ -767,97 +712,37 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
 
             {/* Social Media Links — same layout as QuickCompanyForm's. */}
             <div>
-              <div className="flex items-center gap-3 mb-3">
-                <span className="flex-1 h-px bg-[#D9D9D9]" />
-                <h3 className="flex-shrink-0 text-[14px] font-medium leading-[120%] text-[#1F2937]">
-                  Social Media Links
-                </h3>
-                <span className="flex-1 h-px bg-[#D9D9D9]" />
+              <div className="mb-3">
+                <SectionDivider>Social Media Links</SectionDivider>
               </div>
               <div className="space-y-3">
-                <div>
-                  <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
-                      <img
-                        src={twitterLogo}
-                        alt=""
-                        className="w-[18px] h-[18px] object-contain"
-                        style={{ transform: "scale(1.56)" }}
-                      />
-                    </span>
-                    X (Twitter)
-                  </label>
-                  <input
-                    type="url"
-                    value={form.socialMedia.twitter}
-                    onChange={(e) => handleSocialMediaChange("twitter", e.target.value)}
-                    className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
-                    placeholder="https://x.com/username"
-                  />
-                </div>
-                <div>
-                  <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
-                      <img
-                        src={linkedinLogo}
-                        alt=""
-                        className="w-[18px] h-[18px] object-contain"
-                        style={{ transform: "scale(1.5)" }}
-                      />
-                    </span>
-                    LinkedIn
-                  </label>
-                  <input
-                    type="url"
-                    value={form.socialMedia.linkedin}
-                    onChange={(e) => handleSocialMediaChange("linkedin", e.target.value)}
-                    className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
-                    placeholder="https://linkedin.com/in/username"
-                  />
-                </div>
-                <div>
-                  <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
-                      <img
-                        src={instagramLogo}
-                        alt=""
-                        className="w-[18px] h-[18px] object-contain"
-                        style={{ transform: "scale(1.4)" }}
-                      />
-                    </span>
-                    Instagram
-                  </label>
-                  <input
-                    type="url"
-                    value={form.socialMedia.instagram}
-                    onChange={(e) => handleSocialMediaChange("instagram", e.target.value)}
-                    className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
-                    placeholder="https://instagram.com/username"
-                  />
-                </div>
-                <div>
-                  <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
-                      <img
-                        src={facebookLogo}
-                        alt=""
-                        className="w-[18px] h-[18px] object-contain"
-                        style={{ transform: "scale(1.21)" }}
-                      />
-                    </span>
-                    Facebook
-                  </label>
-                  <input
-                    type="url"
-                    value={form.socialMedia.facebook}
-                    onChange={(e) => handleSocialMediaChange("facebook", e.target.value)}
-                    className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
-                    placeholder="https://facebook.com/username"
-                  />
-                </div>
+                {SOCIAL_LINKS.map(({ key, label, logo, scale, placeholder }) => (
+                  <div key={key}>
+                    <FormLabel
+                      icon={
+                        <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
+                          <img
+                            src={logo}
+                            alt=""
+                            className="w-[18px] h-[18px] object-contain"
+                            style={{ transform: `scale(${scale})` }}
+                          />
+                        </span>
+                      }
+                    >
+                      {label}
+                    </FormLabel>
+                    <TextInput
+                      type="url"
+                      value={form.socialMedia[key]}
+                      onChange={(e) => handleSocialMediaChange(key, e.target.value)}
+                      placeholder={placeholder}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
+          </FormBody>
 
           <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
             <button

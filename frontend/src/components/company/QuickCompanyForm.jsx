@@ -17,6 +17,18 @@ import toast from "react-hot-toast";
 import { Country, State } from "country-state-city";
 import { loadCityModule, useLazyCity } from "../../utils/lazyCityData";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import {
+  FormBody, FormField, FormLabel, TextInput, InputWithAction, FieldActionButton,
+  FilePickerField, SectionDivider, HINT_CLS, PHONE_SELECT_CLS, ACTION_ROW_CLS,
+  inputCls, selectButtonCls,
+} from "../common/form";
+
+const SOCIAL_LINKS = [
+  { key: "twitter", label: "X (Twitter)", logo: twitterLogo, scale: 1.56, placeholder: "https://x.com/username" },
+  { key: "linkedin", label: "LinkedIn", logo: linkedinLogo, scale: 1.5, placeholder: "https://linkedin.com/in/username" },
+  { key: "instagram", label: "Instagram", logo: instagramLogo, scale: 1.4, placeholder: "https://instagram.com/username" },
+  { key: "facebook", label: "Facebook", logo: facebookLogo, scale: 1.21, placeholder: "https://facebook.com/username" },
+];
 
 // India first (GST is India-driven), then every other country alphabetically —
 // full list/state data from country-state-city instead of a hand-maintained one.
@@ -257,7 +269,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
             step="any"
             value={value || ""}
             onChange={(e) => handleFieldChange(e.target.value)}
-            className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-inter"
+            className={inputCls()}
             required={fieldDef.required}
           />
         );
@@ -270,7 +282,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
             onChange={(newValue) => handleFieldChange(newValue)}
             placeholder={`Select ${fieldDef.name}`}
             required={fieldDef.required}
-            buttonClassName={`w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-left flex items-center justify-between transition-all bg-white font-inter ${value ? "text-[#1F2937]" : "text-[#1F2937] opacity-50"}`}
+            buttonClassName={selectButtonCls({ hasValue: !!value })}
           />
         );
 
@@ -291,7 +303,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
             type="date"
             value={value || ""}
             onChange={(e) => handleFieldChange(e.target.value)}
-            className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-inter"
+            className={inputCls()}
             required={fieldDef.required}
           />
         );
@@ -302,7 +314,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
             type="url"
             value={value || ""}
             onChange={(e) => handleFieldChange(e.target.value)}
-            className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-inter placeholder:text-[#1F2937] placeholder:opacity-50"
+            className={inputCls()}
             required={fieldDef.required}
             placeholder="https://example.com"
           />
@@ -351,7 +363,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
             type="text"
             value={value || ""}
             onChange={(e) => handleFieldChange(e.target.value)}
-            className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-inter"
+            className={inputCls()}
             required={fieldDef.required}
           />
         );
@@ -679,21 +691,15 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
 
   // Shared 6-field address grid, reused by billing and each shipping address.
   const renderAddressGrid = (address, onFieldChange, disabled, showError) => {
-    const inputCls = (missing) =>
-      `w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 disabled:bg-gray-50 disabled:text-gray-400 ${
-        showError && missing ? "border-red-500" : "border-[#1F2937]/10"
-      }`;
-    const ddCls = (val, missing) =>
-      `w-full border rounded-full px-3 h-[38px] text-[13px] text-left flex items-center justify-between transition-all bg-white font-inter disabled:bg-gray-50 disabled:text-gray-400 ${val ? "text-[#1F2937]" : "text-[#1F2937] opacity-50"} ${
-        showError && missing ? "border-red-500" : "border-[#1F2937]/10"
-      }`;
+    const fieldCls = (missing) => inputCls({ error: showError && missing });
+    const ddCls = (val, missing) => selectButtonCls({ error: showError && missing, hasValue: !!val });
     return (
       <div className={`space-y-3 ${disabled ? "opacity-70 pointer-events-none" : ""}`}>
         <input
           type="text"
           value={address.addressLine1}
           onChange={(e) => onFieldChange("addressLine1", e.target.value)}
-          className={inputCls(!address.addressLine1?.trim())}
+          className={fieldCls(!address.addressLine1?.trim())}
           placeholder="Address Line 1 *"
           disabled={disabled}
         />
@@ -701,7 +707,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
           type="text"
           value={address.addressLine2}
           onChange={(e) => onFieldChange("addressLine2", e.target.value)}
-          className={inputCls(false)}
+          className={fieldCls(false)}
           placeholder="Address Line 2"
           disabled={disabled}
         />
@@ -735,7 +741,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                 type="text"
                 value={address.state}
                 onChange={(e) => onFieldChange("state", e.target.value)}
-                className={inputCls(!address.state?.trim())}
+                className={fieldCls(!address.state?.trim())}
                 placeholder="State / Province *"
                 disabled={disabled}
               />
@@ -761,7 +767,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                 type="text"
                 value={address.city}
                 onChange={(e) => onFieldChange("city", e.target.value)}
-                className={inputCls(!address.city?.trim())}
+                className={fieldCls(!address.city?.trim())}
                 placeholder="City *"
                 disabled={disabled}
               />
@@ -786,7 +792,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                 }
               }
             }}
-            className={inputCls(!address.pincode?.trim())}
+            className={fieldCls(!address.pincode?.trim())}
             placeholder="Pincode *"
             disabled={disabled}
           />
@@ -873,46 +879,26 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
           </div>
 
           {/* Scrollable body */}
-          <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6 space-y-6">
+          <FormBody>
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] mb-2 tracking-[-0.05em]">
-                Company Logo
-              </label>
-              <div className="flex items-center gap-3">
-                {/* Pill-shaped "chosen file" field — shows the filename once
-                    picked (or the current company logo's name while editing),
-                    otherwise the "Choose a file" placeholder. */}
-                <div
-                  onClick={() => profilePictureInputRef.current?.click()}
-                  className="flex-1 flex items-center px-3 h-[38px] rounded-full border border-[#1F2937]/10 cursor-pointer"
-                >
-                  <span className="text-[12px] leading-5 text-[#1F2937] opacity-50 truncate">
-                    {form.profilePicture?.name ||
-                      (profilePictureDisplayUrl ? "Current logo" : "Choose a file")}
-                  </span>
-                </div>
-                {/* Circular attach button — opens the file picker (the actual
-                    <input type=file> is hidden and triggered via the ref, same
-                    as before). */}
-                <button
-                  type="button"
-                  onClick={() => profilePictureInputRef.current?.click()}
-                  title="Upload company logo"
-                  className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] border border-[#1F2937]/10 flex items-center justify-center hover:opacity-90 transition-opacity"
-                >
-                  <Paperclip className="w-[18px] h-[18px] text-white" strokeWidth={2} />
-                </button>
-                <input
-                  ref={profilePictureInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    handleFormChange("profilePicture", e.target.files[0]);
-                  }}
-                  className="hidden"
-                />
-              </div>
-              <p className="text-[13px] font-inter text-[#A0A0A0] mt-1.5 uppercase font-medium">PNG, JPEG upto 5MB</p>
+              <FormLabel>Company Logo</FormLabel>
+              <FilePickerField
+                fileName={form.profilePicture?.name || (profilePictureDisplayUrl ? "Current logo" : "")}
+                onPick={() => profilePictureInputRef.current?.click()}
+                title="Upload company logo"
+              >
+                <Paperclip className="w-[18px] h-[18px] text-white" strokeWidth={2} />
+              </FilePickerField>
+              <input
+                ref={profilePictureInputRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  handleFormChange("profilePicture", e.target.files[0]);
+                }}
+                className="hidden"
+              />
+              <p className={HINT_CLS}>PNG, JPEG upto 5MB</p>
               {/* Preview of the selected/current logo, since the pill field
                   above only shows a filename, not the image itself. The X
                   clears whichever picture is showing — a freshly picked file,
@@ -944,11 +930,8 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
               )}
             </div>
 
-            <div>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Company Name <span className="text-[#FF4935]">*</span>
-              </label>
-              <input
+            <FormField label="Company Name" required error={nameError ? "Company name is required" : ""}>
+              <TextInput
                 ref={nameInputRef}
                 type="text"
                 value={form.name}
@@ -956,41 +939,36 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                   handleFormChange("name", e.target.value);
                   if (nameError) setNameError(false);
                 }}
-                className={`w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 ${
-                  nameError ? "border-red-500" : "border-[#1F2937]/10"
-                }`}
+                error={nameError}
                 placeholder="Enter Company Name"
               />
-              {nameError && (
-                <p className="mt-1 text-xs text-red-600">Company name is required</p>
-              )}
-            </div>
+            </FormField>
 
-            <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Industry
-              </label>
+            <FormField label="Industry">
               <CustomDropdown
                 options={industries}
                 value={form.industry}
                 onChange={(value) => handleFormChange("industry", value)}
                 placeholder="Select Industry"
                 searchable
-                buttonClassName={`w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-left flex items-center justify-between transition-all bg-white font-inter ${form.industry ? "text-[#1F2937]" : "text-[#1F2937] opacity-50"}`}
+                buttonClassName={selectButtonCls({ hasValue: !!form.industry })}
               />
-            </div>
+            </FormField>
 
             {/* WhatsApp Number — a dialable number, so it sits with the
                 company's own details rather than under Social Media Links
                 (which holds profile URLs). */}
             <div>
-              <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center">
-                  <FaWhatsapp className="w-[18px] h-[18px]" />
-                </span>
+              <FormLabel
+                icon={
+                  <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center">
+                    <FaWhatsapp className="w-[18px] h-[18px]" />
+                  </span>
+                }
+              >
                 WhatsApp Number
-              </label>
-              <div className="flex items-stretch gap-2">
+              </FormLabel>
+              <div className={ACTION_ROW_CLS}>
                 <select
                   value={form.whatsappNumber?.countryCode || DEFAULT_DIAL_CODE}
                   onChange={(e) =>
@@ -999,7 +977,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                       countryCode: e.target.value,
                     })
                   }
-                  className="border border-[#1F2937]/10 rounded-full px-2 h-[38px] text-[13px] text-[#1F2937] bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all flex-shrink-0"
+                  className={PHONE_SELECT_CLS}
                 >
                   {COUNTRY_DIAL_CODES.map((c) => (
                     <option key={`${c.iso}-${c.code}`} value={c.code}>
@@ -1018,18 +996,24 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                     })
                   }
                   maxLength={10}
-                  className="flex-1 min-w-0 border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
+                  className={inputCls({ grow: true })}
                   placeholder="1234567890"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                GSTIN
-              </label>
-              <div className="flex gap-2">
-                <input
+            <FormField label="GSTIN" error={gstinFieldError}>
+              <InputWithAction
+                action={
+                  <FieldActionButton
+                    onClick={fetchGstinDetails}
+                    disabled={gstinLoading || !form.gstin?.trim()}
+                  >
+                    {gstinLoading ? "Fetching..." : "Fetch"}
+                  </FieldActionButton>
+                }
+              >
+                <TextInput
                   type="text"
                   value={form.gstin}
                   ref={gstinInputRef}
@@ -1038,28 +1022,15 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                     handleFormChange("gstin", e.target.value.toUpperCase());
                     if (gstinFieldError) setGstinFieldError("");
                   }}
-                  className={`flex-1 min-w-0 border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 ${gstinFieldError ? "border-red-500" : "border-[#1F2937]/10"}`}
+                  error={gstinFieldError}
                   placeholder="eg., 22ABCDE1234F1Z5"
                 />
-                <button
-                  type="button"
-                  onClick={fetchGstinDetails}
-                  disabled={gstinLoading || !form.gstin?.trim()}
-                  className={`px-4 h-[38px] text-[13px] font-bold rounded-full transition-colors font-inter flex-shrink-0 ${gstinLoading || !form.gstin?.trim() ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-[#0085FF] text-white hover:bg-blue-600"}`}
-                >
-                  {gstinLoading ? "Fetching..." : "Fetch"}
-                </button>
-              </div>
-              {gstinFieldError && (
-                <p className="mt-1 text-xs text-red-600">{gstinFieldError}</p>
-              )}
-            </div>
+              </InputWithAction>
+            </FormField>
 
             {/* Billing Address (single — GST is calculated from its state) */}
             <div ref={billingAddressRef}>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Billing Address <span className="text-[#FF4935]">*</span>
-              </label>
+              <FormLabel required>Billing Address</FormLabel>
               {renderAddressGrid(
                 form.billingAddress,
                 (field, value) => handleBillingChange(field, value),
@@ -1132,26 +1103,17 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                   })
                   .map(([category, catFields]) => (
                     <div key={category} className="space-y-4">
-                      <div className="flex items-center gap-3">
-                        <span className="flex-1 h-px bg-[#D9D9D9]" />
-                        <h3 className="flex-shrink-0 text-[14px] font-medium leading-[120%] text-[#1F2937]">
-                          {category === "Uncategorized" ? "Custom Fields" : category}
-                        </h3>
-                        <span className="flex-1 h-px bg-[#D9D9D9]" />
-                      </div>
+                      <SectionDivider>{category === "Uncategorized" ? "Custom Fields" : category}</SectionDivider>
                       {catFields.map((fieldDef) => (
-                        <div key={fieldDef.name} ref={(el) => (customFieldRefs.current[fieldDef.name] = el)}>
-                          <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                            {fieldDef.name} {fieldDef.required && <span className="text-[#FF4935]">*</span>}
-                          </label>
-                          {renderFieldInput(
-                            fieldDef,
-                            additionalFields[fieldDef.name]
-                          )}
-                          {additionalFieldErrors[fieldDef.name] && (
-                            <p className="mt-1 text-xs text-red-600">{additionalFieldErrors[fieldDef.name]}</p>
-                          )}
-                        </div>
+                        <FormField
+                          key={fieldDef.name}
+                          label={fieldDef.name}
+                          required={fieldDef.required}
+                          fieldRef={(el) => (customFieldRefs.current[fieldDef.name] = el)}
+                          error={additionalFieldErrors[fieldDef.name]}
+                        >
+                          {renderFieldInput(fieldDef, additionalFields[fieldDef.name])}
+                        </FormField>
                       ))}
                     </div>
                   ))}
@@ -1159,16 +1121,14 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
             )}
 
             <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Website
-              </label>
+              <FormLabel>Website</FormLabel>
               {/* "https://" is a fixed prefix, not part of the typed value — only
                   the domain is editable, so nobody has to type the scheme. An
                   existing website (from editing a company) that already has a
                   protocol keeps it stripped here for display and re-added on
                   change; one saved without a protocol is treated the same way. */}
               <div className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] flex items-center gap-0.5 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
-                <span className="text-[12px] text-[#1F2937] opacity-50 flex-shrink-0">
+                <span className="text-[13px] text-[#1F2937] opacity-50 flex-shrink-0 font-inter">
                   https://
                 </span>
                 <input
@@ -1180,7 +1140,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                       `https://${e.target.value.replace(/^https?:\/\//i, "")}`
                     )
                   }
-                  className="flex-1 min-w-0 h-full text-[12px] text-[#1F2937] focus:outline-none placeholder:text-[#1F2937] placeholder:opacity-50 bg-transparent"
+                  className="flex-1 min-w-0 h-full text-[13px] text-[#1F2937] font-inter focus:outline-none placeholder:text-[#1F2937] placeholder:opacity-50 bg-transparent"
                   placeholder="www.company.com"
                   required
                 />
@@ -1188,11 +1148,8 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
             </div>
 
             {/* Email Address */}
-            <div>
-              <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Email Address
-              </label>
-              <input
+            <FormField label="Email Address" error={emailError}>
+              <TextInput
                 ref={emailInputRef}
                 type="email"
                 value={form.email}
@@ -1200,111 +1157,46 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                   handleFormChange("email", e.target.value);
                   if (emailError) setEmailError("");
                 }}
-                className={`w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 ${
-                  emailError ? "border-red-500" : "border-[#1F2937]/10"
-                }`}
+                error={emailError}
                 placeholder="contact@company.com"
               />
-              {emailError && (
-                <p className="mt-1 text-xs text-red-600">{emailError}</p>
-              )}
-            </div>
+            </FormField>
 
             {/* Social Media Links — icon + pill input per platform, matching
                 the spec's Frame 198 layout. */}
             <div>
-              <div className="flex items-center gap-3 mb-3">
-                <span className="flex-1 h-px bg-[#D9D9D9]" />
-                <h3 className="flex-shrink-0 text-[14px] font-medium leading-[120%] text-[#1F2937]">
-                  Social Media Links
-                </h3>
-                <span className="flex-1 h-px bg-[#D9D9D9]" />
+              <div className="mb-3">
+                <SectionDivider>Social Media Links</SectionDivider>
               </div>
               <div className="space-y-3">
-                <div>
-                  <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
-                      <img
-                        src={twitterLogo}
-                        alt=""
-                        className="w-[18px] h-[18px] object-contain"
-                        style={{ transform: "scale(1.56)" }}
-                      />
-                    </span>
-                    X (Twitter)
-                  </label>
-                  <input
-                    type="url"
-                    value={form.socialMedia.twitter}
-                    onChange={(e) => handleSocialMediaChange("twitter", e.target.value)}
-                    className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
-                    placeholder="https://x.com/vendorname"
-                  />
-                </div>
-                <div>
-                  <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
-                      <img
-                        src={linkedinLogo}
-                        alt=""
-                        className="w-[18px] h-[18px] object-contain"
-                        style={{ transform: "scale(1.5)" }}
-                      />
-                    </span>
-                    LinkedIn
-                  </label>
-                  <input
-                    type="url"
-                    value={form.socialMedia.linkedin}
-                    onChange={(e) => handleSocialMediaChange("linkedin", e.target.value)}
-                    className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
-                    placeholder="https://linkedin.com/vendorname"
-                  />
-                </div>
-                <div>
-                  <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
-                      <img
-                        src={instagramLogo}
-                        alt=""
-                        className="w-[18px] h-[18px] object-contain"
-                        style={{ transform: "scale(1.4)" }}
-                      />
-                    </span>
-                    Instagram
-                  </label>
-                  <input
-                    type="url"
-                    value={form.socialMedia.instagram}
-                    onChange={(e) => handleSocialMediaChange("instagram", e.target.value)}
-                    className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
-                    placeholder="https://instagram.com/vendorname"
-                  />
-                </div>
-                <div>
-                  <label className="flex items-center gap-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                    <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
-                      <img
-                        src={facebookLogo}
-                        alt=""
-                        className="w-[18px] h-[18px] object-contain"
-                        style={{ transform: "scale(1.21)" }}
-                      />
-                    </span>
-                    Facebook
-                  </label>
-                  <input
-                    type="url"
-                    value={form.socialMedia.facebook}
-                    onChange={(e) => handleSocialMediaChange("facebook", e.target.value)}
-                    className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
-                    placeholder="https://facebook.com/vendorname"
-                  />
-                </div>
+                {SOCIAL_LINKS.map(({ key, label, logo, scale, placeholder }) => (
+                  <div key={key}>
+                    <FormLabel
+                      icon={
+                        <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center overflow-hidden rounded-[5px]">
+                          <img
+                            src={logo}
+                            alt=""
+                            className="w-[18px] h-[18px] object-contain"
+                            style={{ transform: `scale(${scale})` }}
+                          />
+                        </span>
+                      }
+                    >
+                      {label}
+                    </FormLabel>
+                    <TextInput
+                      type="url"
+                      value={form.socialMedia[key]}
+                      onChange={(e) => handleSocialMediaChange(key, e.target.value)}
+                      placeholder={placeholder}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
 
-          </div>
+          </FormBody>
 
           {/* Sticky footer — compact, matching the note editor card */}
           <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-between gap-3">

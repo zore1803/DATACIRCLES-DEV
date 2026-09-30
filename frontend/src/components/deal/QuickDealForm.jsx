@@ -10,6 +10,10 @@ import { X } from "lucide-react";
 import toast from "react-hot-toast";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
+import {
+  FormBody, FormField, InputWithAction, FieldActionButton, SectionDivider, TextInput, inputCls,
+} from "../common/form";
+
 const QuickDealForm = ({
   companies,
   contacts,
@@ -197,10 +201,7 @@ const QuickDealForm = ({
     };
 
     const hasError = validationErrors[fieldDef.name];
-    const inputClassName = `w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter ${hasError
-        ? 'border-red-500 focus:ring-red-500'
-        : 'border-[#1F2937]/10 focus:ring-blue-500'
-      }`;
+    const inputClassName = inputCls({ error: !!hasError });
 
     switch (fieldDef.type) {
       case "number":
@@ -558,14 +559,19 @@ const QuickDealForm = ({
               <X className="w-[18px] h-[18px]" strokeWidth={2} />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto px-8 py-6">
-            <div className="space-y-6">
+          <FormBody>
             {/* Company - NOW REQUIRED */}
-            <div ref={companyRef}>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Company <span className="text-[#FF4935]">*</span>
-              </label>
-              <div className="flex items-center gap-3">
+            <FormField label="Company" required fieldRef={companyRef} error={validationErrors.company}>
+              <InputWithAction
+                action={
+                  <FieldActionButton
+                    icon={<PlusIcon className="w-4 h-4 text-white" />}
+                    onClick={() => setShowQuickCompanyForm(true)}
+                    title="Add New Company"
+                    aria-label="Add New Company"
+                  />
+                }
+              >
                 <SearchableDropdown
                   options={localCompanies}
                   value={form.company}
@@ -573,77 +579,48 @@ const QuickDealForm = ({
                   placeholder="Select Company"
                   displayKey="name"
                   valueKey="_id"
-                  className="flex-1"
                   error={validationErrors.company}
                   compact
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowQuickCompanyForm(true)}
-                  className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] border border-[#1F2937]/10 flex items-center justify-center hover:opacity-90 transition-opacity cursor-pointer"
-                  title="Add New Company"
-                >
-                  <PlusIcon className="w-4 h-4 text-white" />
-                </button>
-              </div>
-              {validationErrors.company && (
-                <p className="text-red-500 text-xs mt-1 font-inter">{validationErrors.company}</p>
-              )}
-            </div>
+              </InputWithAction>
+            </FormField>
 
             {/* Title - Now with validation */}
-            <div>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Deal Name <span className="text-[#FF4935]">*</span>
-              </label>
-              {/* Generated from the company above, so it's read-only and
-                  greyed: the name follows the company selection rather than
-                  being typed. It stays a real input (not plain text) so the
-                  scroll-to-first-error ref and the validation styling below
-                  keep working. */}
-              <input
+            <FormField label="Deal Name" required error={validationErrors.title}>
+              {/* Generated from the company above, so it's read-only and greyed.
+                  It stays a real input so the error ref and styling keep working. */}
+              <TextInput
                 ref={titleInputRef}
                 type="text"
                 value={form.title}
                 readOnly
                 tabIndex={-1}
                 aria-readonly="true"
-                className={`w-full border rounded-full px-3 h-[38px] text-[13px] bg-[#F5F6F6] text-[#6B7280] cursor-not-allowed focus:outline-none transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter ${validationErrors.title ? 'border-red-500' : 'border-[#1F2937]/10'
-                  }`}
+                error={validationErrors.title}
+                className="bg-[#F5F6F6]! text-[#6B7280]! cursor-not-allowed"
                 placeholder="Select a company to generate the name"
               />
-              {validationErrors.title && (
-                <p className="text-red-500 text-xs mt-1 font-inter">{validationErrors.title}</p>
-              )}
-            </div>
+            </FormField>
 
             {/* Amount - Now with validation */}
-            <div>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Amount <span className="text-[#FF4935]">*</span>
-              </label>
-              <input
+            <FormField label="Amount" required error={validationErrors.amount}>
+              <TextInput
                 ref={amountInputRef}
                 type="number"
                 value={form.amount}
                 onChange={(e) => handleFormChange("amount", e.target.value)}
-                className={`w-full border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter ${validationErrors.amount ? 'border-red-500 focus:ring-red-500' : 'border-[#1F2937]/10 focus:ring-blue-500'
-                  }`}
+                error={validationErrors.amount}
                 min={"0"}
                 step="1"
                 placeholder="Enter Deal Amount"
               />
-              {validationErrors.amount && (
-                <p className="text-red-500 text-xs mt-1 font-inter">{validationErrors.amount}</p>
-              )}
-            </div>
+            </FormField>
 
             {/* Status */}
-            <div ref={statusRef}>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Status <span className="text-[#FF4935]">*</span>
-              </label>
-              <div className="flex items-center gap-3">
+            <FormField label="Status" required fieldRef={statusRef} error={validationErrors.status}>
+              <InputWithAction
+                action={<FieldActionButton icon={<PlusIcon className="w-4 h-4 text-white" />} aria-label="Add status" />}
+              >
                 <SearchableDropdown
                   options={statusOptions.map(opt => ({ name: opt, _id: opt }))}
                   value={form.status}
@@ -651,28 +628,26 @@ const QuickDealForm = ({
                   placeholder="Choose Status of the Deal"
                   displayKey="name"
                   valueKey="_id"
-                  className="flex-1"
                   error={validationErrors.status}
                   compact
                 />
-                <button
-                  type="button"
-                  className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] border border-[#1F2937]/10 flex items-center justify-center hover:opacity-90 transition-opacity"
-                >
-                  <PlusIcon className="w-4 h-4 text-white" />
-                </button>
-              </div>
-              {validationErrors.status && (
-                <p className="text-red-500 text-xs mt-1 font-inter">{validationErrors.status}</p>
-              )}
-            </div>
+              </InputWithAction>
+            </FormField>
 
             {/* Contact - NOW REQUIRED */}
-            <div ref={contactRef}>
-              <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Contact <span className="text-[#FF4935]">*</span>
-              </label>
-              <div className="flex items-center gap-3">
+            <FormField label="Contact" required fieldRef={contactRef} error={validationErrors.contact}>
+              <InputWithAction
+                action={
+                  !isContactLocked && (
+                    <FieldActionButton
+                      icon={<PlusIcon className="w-4 h-4 text-white" />}
+                      onClick={() => setShowQuickContactForm(true)}
+                      title="Add New Contact"
+                      aria-label="Add New Contact"
+                    />
+                  )
+                }
+              >
                 <SearchableDropdown
                   options={localContacts}
                   value={form.contact}
@@ -680,54 +655,27 @@ const QuickDealForm = ({
                   placeholder="Choose Contact"
                   displayKey="displayName"
                   valueKey="_id"
-                  className="flex-1"
                   error={validationErrors.contact}
                   disabled={isContactLocked}
                   compact
                 />
-                {!isContactLocked && (
-                  <button
-                    type="button"
-                    onClick={() => setShowQuickContactForm(true)}
-                    className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] border border-[#1F2937]/10 flex items-center justify-center hover:opacity-90 transition-opacity cursor-pointer"
-                    title="Add New Contact"
-                  >
-                    <PlusIcon className="w-4 h-4 text-white" />
-                  </button>
-                )}
-              </div>
-              {validationErrors.contact && (
-                <p className="text-red-500 text-xs mt-1 font-inter">{validationErrors.contact}</p>
-              )}
-            </div>
+              </InputWithAction>
+            </FormField>
 
             {/* Additional Fields - Now with validation */}
             {fieldDefinitions.length > 0 && (
               <div className="pt-4 space-y-4">
-                <div className="flex items-center gap-3">
-                  <span className="flex-1 h-px bg-[#D9D9D9]" />
-                  <h3 className="flex-shrink-0 text-[14px] font-medium leading-[120%] text-[#1F2937]">
-                    Custom Fields
-                  </h3>
-                  <span className="flex-1 h-px bg-[#D9D9D9]" />
-                </div>
+                <SectionDivider>Custom Fields</SectionDivider>
                 <div className="space-y-4">
                   {fieldDefinitions.map((fieldDef) => (
-                    <div key={fieldDef.name}>
-                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                        {fieldDef.name} {fieldDef.required && <span className="text-[#FF4935]">*</span>}
-                      </label>
-                      {renderFieldInput(
-                        fieldDef,
-                        additionalFieldValues[fieldDef.name]
-                      )}
-                    </div>
+                    <FormField key={fieldDef.name} label={fieldDef.name} required={fieldDef.required}>
+                      {renderFieldInput(fieldDef, additionalFieldValues[fieldDef.name])}
+                    </FormField>
                   ))}
                 </div>
               </div>
             )}
-            </div>
-          </div>
+          </FormBody>
           <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
             <button
               type="button"
