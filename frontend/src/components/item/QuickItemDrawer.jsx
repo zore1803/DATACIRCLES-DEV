@@ -352,7 +352,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
             </div>
 
             {/* Product / Service toggle */}
-              <div className="inline-flex p-0.5 bg-gray-100 rounded-full border border-gray-200">
+              <div className="inline-flex p-0.5 bg-gray-100 rounded-full border border-[#1F2937]/10">
                 {["Product", "Service"].map((t) => (
                   <button
                     key={t}
@@ -571,7 +571,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                           Each belongs to the variant, not the product: a Small and a Large are
                           scanned, described, pictured and discounted separately. All optional —
                           left blank the variant inherits the item's value (variantResolve.js). */}
-                      <div className="pt-2 mt-1 border-t border-gray-100">
+                      <div className="pt-2 mt-1 border-t border-[#1F2937]/10">
                         <p className="text-[11px] text-gray-400 mb-2">Leave blank to use the item's value.</p>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
@@ -624,7 +624,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                         <label htmlFor="vActive" className="text-sm font-medium text-[#161618] cursor-pointer font-inter">Active</label>
                       </div>
                       <div className="flex gap-3 pt-2">
-                        <button type="button" onClick={() => { setShowVariantForm(false); setCurrentVariant(BLANK_VARIANT); setVariantIndex(null); }} className="flex-1 border border-gray-200 text-gray-700 font-bold rounded-[25px] hover:bg-gray-50 py-2 text-sm transition-colors font-inter">Cancel</button>
+                        <button type="button" onClick={() => { setShowVariantForm(false); setCurrentVariant(BLANK_VARIANT); setVariantIndex(null); }} className="flex-1 border border-[#1F2937]/10 text-gray-700 font-bold rounded-[25px] hover:bg-gray-50 py-2 text-sm transition-colors font-inter">Cancel</button>
                         <button type="button" onClick={handleAddVariant} className="flex-1 bg-[#158FFF] hover:opacity-90 text-white font-bold rounded-[25px] py-2 text-sm transition-colors font-inter">{variantIndex !== null ? "Update Variant" : "Add Variant"}</button>
                       </div>
                     </div>
@@ -632,12 +632,12 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                 )}
 
                 {!showVariantForm && variants.length === 0 && (
-                  <div className="px-4 py-3 border border-dashed border-gray-200 rounded-xl text-xs text-gray-400 text-center">No Variants Added</div>
+                  <div className="px-4 py-3 border border-dashed border-[#1F2937]/10 rounded-2xl text-xs text-gray-400 text-center">No Variants Added</div>
                 )}
                 {!showVariantForm && variants.length > 0 && (
                   <div className="space-y-2">
                     {variants.map((v, i) => (
-                      <div key={i} className="flex justify-between items-center bg-gray-50 border border-gray-100 rounded-lg p-3">
+                      <div key={i} className="flex justify-between items-center bg-gray-50 border border-[#1F2937]/10 rounded-xl p-3">
                         <div className="min-w-0">
                           <div className="text-sm font-medium text-gray-900 truncate">{v.name}</div>
                           <div className="text-xs text-gray-500 mt-0.5">SKU: {v.sku || "N/A"} • ₹{v.sellingPrice} • Stock: {v.stock}</div>
@@ -681,7 +681,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                     className={inp} 
                   />
                   {categoryDropdownOpen && categories.filter(c => c.toLowerCase().includes((form.category || "").toLowerCase())).length > 0 && (
-                     <div className="absolute z-[10010] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                     <div className="absolute z-[10010] mt-1 w-full bg-white border border-[#1F2937]/10 rounded-xl shadow-lg max-h-48 overflow-y-auto">
                         {categories.filter(c => c.toLowerCase().includes((form.category || "").toLowerCase())).map(c => (
                            <div key={c} className="px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 cursor-pointer" onMouseDown={(e) => e.preventDefault()} onClick={() => {
                                handleChange("category", c);
@@ -717,7 +717,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                   value={form.description}
                   onChange={(val) => handleChange("description", val)}
                   placeholder="Add product description..."
-                  className="rounded-xl border border-[#1F2937]/10 overflow-hidden [&_.ql-editor]:min-h-[150px] [&_.ql-toolbar]:!border-0 [&_.ql-toolbar]:!border-b [&_.ql-toolbar]:!border-gray-100 [&_.ql-toolbar]:rounded-t-xl [&_.ql-container]:!border-0 [&_.ql-container]:rounded-b-xl text-sm"
+                  className="rounded-2xl border border-[#1F2937]/10 overflow-hidden [&_.ql-editor]:min-h-[150px] [&_.ql-toolbar]:!border-0 [&_.ql-toolbar]:!border-b [&_.ql-toolbar]:!border-[#1F2937]/10 [&_.ql-toolbar]:rounded-t-2xl [&_.ql-container]:!border-0 [&_.ql-container]:rounded-b-2xl text-sm"
                 />
               </div>
 
@@ -843,8 +843,8 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
         </div>
 
         {/* —— Footer —— */}
-        <div className="flex items-center justify-end gap-3 px-4 py-2.5 bg-white border-t border-gray-100 flex-shrink-0 rounded-b-2xl">
-          <button type="button" onClick={handleClose} className="px-6 py-2 border border-gray-200 text-gray-700 text-sm font-bold rounded-[25px] hover:bg-gray-50 transition-colors">
+        <div className="flex items-center justify-end gap-3 px-4 py-2.5 bg-white border-t border-[#1F2937]/10 flex-shrink-0 rounded-b-2xl">
+          <button type="button" onClick={handleClose} className="px-6 py-2 border border-[#1F2937]/10 text-gray-700 text-sm font-bold rounded-[25px] hover:bg-gray-50 transition-colors">
             Cancel
           </button>
           <button

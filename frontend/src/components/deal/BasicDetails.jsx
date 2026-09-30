@@ -308,32 +308,32 @@ const BasicDetails = ({ deal }) => {
     const factors = [
       {
         key: "billed",
-        label: "Billing coverage",
-        hint: "Invoiced against deal value",
+        label: "Invoiced so far",
+        hint: "Invoices raised vs. deal value",
         weight: 25,
         ratio: dealValue > 0 ? Math.min(1, totalInvoiced / dealValue) : totalInvoiced > 0 ? 1 : 0,
-        detail: dealValue > 0 ? `${Math.round(Math.min(100, (totalInvoiced / dealValue) * 100))}%` : "No deal value",
+        detail: dealValue > 0 ? `${Math.round(Math.min(100, (totalInvoiced / dealValue) * 100))}% invoiced` : "No deal value",
       },
       {
         key: "collected",
-        label: "Collection rate",
-        hint: "Cash received against invoiced",
+        label: "Payments received",
+        hint: "Money collected vs. invoiced",
         weight: 30,
         ratio: totalInvoiced > 0 ? totalPaid / totalInvoiced : 0,
-        detail: totalInvoiced > 0 ? `${Math.round((totalPaid / totalInvoiced) * 100)}%` : "Nothing invoiced",
+        detail: totalInvoiced > 0 ? `${Math.round((totalPaid / totalInvoiced) * 100)}% collected` : "Nothing invoiced",
       },
       {
         key: "overdue",
-        label: "No overdue debt",
-        hint: "Balance past its due date",
+        label: "Overdue payments",
+        hint: "Full points when nothing is late",
         weight: 20,
         ratio: totalInvoiced > 0 ? 1 - Math.min(1, overdueAmount / totalInvoiced) : 1,
-        detail: overdueAmount > 0 ? `${fmt(overdueAmount)} late` : "Clean",
+        detail: overdueAmount > 0 ? `${fmt(overdueAmount)} overdue` : "Nothing overdue",
       },
       {
         key: "recency",
-        label: "Recent contact",
-        hint: "Days since the last activity",
+        label: "Last contact",
+        hint: "Full points within 14 days, none after 60",
         weight: 15,
         // Full marks inside a fortnight, decaying to zero at 60 days.
         ratio:
@@ -342,15 +342,20 @@ const BasicDetails = ({ deal }) => {
             : daysSinceTouch <= 14
             ? 1
             : Math.max(0, 1 - (daysSinceTouch - 14) / 46),
-        detail: daysSinceTouch === null ? "No activity" : `${daysSinceTouch}d ago`,
+        detail:
+          daysSinceTouch === null
+            ? "No activity yet"
+            : daysSinceTouch === 0
+            ? "Today"
+            : `${daysSinceTouch} day${daysSinceTouch === 1 ? "" : "s"} ago`,
       },
       {
         key: "followup",
-        label: "Follow-up in place",
-        hint: "At least one task still open",
+        label: "Next step planned",
+        hint: "At least one open task",
         weight: 10,
         ratio: openTasks > 0 ? 1 : 0,
-        detail: openTasks > 0 ? `${openTasks} open` : "None open",
+        detail: openTasks > 0 ? `${openTasks} open task${openTasks === 1 ? "" : "s"}` : "No open tasks",
       },
     ].map((f) => ({ ...f, points: f.ratio * f.weight }));
 
@@ -1072,20 +1077,22 @@ const BasicDetails = ({ deal }) => {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold text-[#0E121B]">Deal Health</h3>
-              <p className="text-xs text-[#525866] mt-1">Five signals, weighted into one score.</p>
+              <p className="text-xs text-[#525866] mt-1">
+                How well this deal is going, scored out of 100.
+              </p>
             </div>
             <span
-              className="text-[10px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap flex-shrink-0"
+              className="text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap flex-shrink-0"
               style={{ background: `${dealHealth.band.color}1A`, color: dealHealth.band.color }}
             >
               {dealHealth.band.label}
             </span>
           </div>
 
-          <div className="flex flex-col lg:flex-row lg:items-center gap-6 lg:gap-10 mt-6">
-            {/* Score arc */}
-            <div className="flex items-center gap-4 flex-shrink-0">
-              <div className="relative w-[128px] h-[74px] flex-shrink-0">
+          <div className="flex flex-col lg:flex-row lg:items-stretch gap-6 lg:gap-10 mt-6">
+            {/* Score */}
+            <div className="flex flex-col items-center justify-center gap-3 lg:w-[220px] flex-shrink-0">
+              <div className="relative w-[160px] h-[92px]">
                 <svg viewBox="0 0 100 56" className="w-full h-full">
                   <defs>
                     <linearGradient id="dcHealthArc" x1="0" y1="0" x2="1" y2="0">
@@ -1111,29 +1118,29 @@ const BasicDetails = ({ deal }) => {
                   />
                 </svg>
                 <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
-                  <span className="text-2xl font-bold text-[#0E121B] leading-none">
+                  <span className="text-3xl font-bold text-[#0E121B] leading-none">
                     {dealHealth.score}
                   </span>
-                  <span className="text-[10px] text-gray-400 mt-0.5">of 100</span>
+                  <span className="text-xs text-gray-400 mt-1">out of 100</span>
                 </div>
               </div>
-              <p className="text-[11px] text-gray-500 leading-snug max-w-[180px]">
-                Weighted across billing, collection, overdue debt, contact recency and
-                open follow-ups.
+              <p className="text-xs text-gray-500 text-center leading-snug">
+                Combines billing, payments, overdue amounts, contact and next steps.
               </p>
             </div>
 
-            {/* Factor breakdown — two columns on wide screens so the card uses
-                its width instead of running as one tall list. */}
-            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 lg:border-l lg:border-gray-100 lg:pl-10">
-              {dealHealth.factors.map((f) => (
-                <div key={f.key} title={f.hint}>
-                  <div className="flex items-baseline justify-between gap-2 mb-1">
-                    <span className="text-[11px] font-medium text-gray-600 truncate">{f.label}</span>
-                    <span className="text-[10px] text-gray-400 flex-shrink-0">{f.detail}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+            {/* Breakdown */}
+            <div className="flex-1 lg:border-l lg:border-gray-100 lg:pl-10">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
+                {dealHealth.factors.map((f) => (
+                  <div key={f.key}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-sm font-medium text-[#0E121B]">{f.label}</span>
+                      <span className="text-xs font-semibold text-gray-600 flex-shrink-0 tabular-nums">
+                        {Math.round(f.points)} / {f.weight} pts
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden mt-2">
                       <div
                         className="h-full rounded-full transition-all duration-700"
                         style={{
@@ -1147,12 +1154,33 @@ const BasicDetails = ({ deal }) => {
                         }}
                       />
                     </div>
-                    <span className="w-9 flex-shrink-0 text-right text-[10px] font-semibold text-gray-500">
-                      {Math.round(f.points)}/{f.weight}
-                    </span>
+                    <div className="flex items-baseline justify-between gap-3 mt-1.5">
+                      <span className="text-xs text-gray-400">{f.hint}</span>
+                      <span className="text-xs text-gray-600 flex-shrink-0">{f.detail}</span>
+                    </div>
                   </div>
+                ))}
+              </div>
+
+              <details className="mt-6 group">
+                <summary className="text-xs font-medium text-[#0085FF] cursor-pointer select-none list-none">
+                  How is this scored?
+                </summary>
+                <div className="mt-2 text-xs text-gray-500 leading-relaxed space-y-1">
+                  <p>
+                    Each area earns points in proportion to how well it is going, up to its
+                    maximum. The total is the score: {dealHealth.factors.map((f) => f.weight).join(" + ")} = 100.
+                    For example, 85% invoiced earns 0.85 × 25 = 21 points.
+                  </p>
+                  <p>
+                    <span className="font-medium" style={{ color: HEALTH_GOOD }}>70–100 Healthy</span>
+                    {" · "}
+                    <span className="font-medium" style={{ color: HEALTH_WARN }}>40–69 Needs attention</span>
+                    {" · "}
+                    <span className="font-medium" style={{ color: HEALTH_BAD }}>0–39 At risk</span>
+                  </p>
                 </div>
-              ))}
+              </details>
             </div>
           </div>
         </div>

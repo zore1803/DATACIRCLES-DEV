@@ -5,6 +5,7 @@ const authMiddleware = require("../middlewares/auth");
 const checkPermission = require("../middlewares/checkPermission");
 const uploadMiddlewareS3 = require("../middlewares/uploadMiddlewareS3");
 const restrictByPlan = require("../middlewares/restrictByPlan");
+const { gstinError } = require("../utils/gstinValidation");
 const Company = require("../models/Company");
 const Subscription = require("../models/Subscription");
 const PlanConfig = require("../models/PlanConfig");
@@ -200,8 +201,15 @@ router.post(
           });
           return;
         }
+        const gstin = String(company.gstin || "").trim().toUpperCase();
+        const gstinProblem = gstin ? gstinError(gstin) : "";
+        if (gstinProblem) {
+          skippedCompanies.push({ row: rowNumber, company, reason: gstinProblem });
+          return;
+        }
         validCompanies.push({
           ...company,
+          gstin,
           organization: req.user.organization,
           user: req.user._id,
         });

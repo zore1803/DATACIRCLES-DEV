@@ -1,3 +1,4 @@
+const { gstinError } = require('../utils/gstinValidation');
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const Vendor = require("../models/Vendor");
 const Payment = require("../models/Payment");
@@ -232,6 +233,13 @@ exports.bulkImportVendors = async (req, res) => {
           vendor,
           reason: "Missing required field: Name",
         });
+        continue;
+      }
+
+      vendor.gstin = String(vendor.gstin || '').trim().toUpperCase();
+      const gstinProblem = vendor.gstin ? gstinError(vendor.gstin) : '';
+      if (gstinProblem) {
+        skippedVendors.push({ row: rowNumber, vendor, reason: gstinProblem });
         continue;
       }
 

@@ -277,44 +277,7 @@ const globalSearch = require("./routes/globalSearch");
 // const { Axios } = require('axios');
 app.use('/api/search', globalSearch);
 
-app.post("/api/gstin-details", async (req, res) => {
-  try {
-    const { gstin } = req.body;
-
-    if (!gstin) {
-      return res.status(400).json({ error: "gstin is required" });
-    }
-
-    const response = await axios.post(
-      "https://in.staging.decentro.tech/kyc/public_registry/validate",
-      {
-        reference_id: "GSTIN-Detailed Document Verification",
-        document_type: "GSTIN_DETAILED",
-        id_number: gstin,
-        consent: "Y",
-        consent_purpose: "To verify GSTIN document",
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "client-id": process.env.DECENTRO_CLIENT_ID,
-          "client-secret": process.env.DECENTRO_CLIENT_SECRET,
-          "module-id": process.env.DECENTRO_MODULE_SECRET, // or module-id if that’s what your account uses
-          env: "staging",
-        },
-      }
-    );
-
-    // Pass Decentro response back to frontend
-    return res.status(200).json(response.data);
-  } catch (err) {
-    console.error("Decentro GSTIN error:", err.response?.data || err.message);
-    return res
-      .status(err.response?.status || 500)
-      .json(err.response?.data || { error: "Something went wrong" });
-  }
-});
-
+app.use("/api/gstin", require("./routes/gstinRoutes"));
 
 app.get('/health', (req, res) => {
   res.status(200).json({ message: "server is running..." })

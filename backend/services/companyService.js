@@ -1,5 +1,17 @@
 const Company = require("../models/Company");
 const { processAdditionalFields } = require("./fieldCoercionService");
+const { gstinError } = require("../utils/gstinValidation");
+
+// Uppercases/trims a submitted GSTIN and rejects it if invalid. A value equal to the one
+// already stored is accepted, so older records with a bad GSTIN can still be edited.
+function checkGstin(data, previous = "") {
+  if (data.gstin === undefined || data.gstin === null) return;
+  const gstin = String(data.gstin).trim().toUpperCase();
+  data.gstin = gstin;
+  if (!gstin || gstin === String(previous || "").trim().toUpperCase()) return;
+  const invalid = gstinError(gstin);
+  if (invalid) throw new Error(invalid);
+}
 
 function normalizeSocialMedia(socialMedia) {
   return {
@@ -75,6 +87,8 @@ async function createCompany(
     lastUpdatedBy: createdByUserId,
   };
 
+  checkGstin(companyData);
+
   if (profilePictureUrl) {
     companyData.profilePicture = profilePictureUrl;
   }
@@ -133,6 +147,16 @@ async function updateCompany(
 
   delete updateData.createdBy;
 
+  if (updateData.gstin && String(updateData.gstin).trim()) {
+    const existing = await Company.findOne({ _id: companyId, organization: organizationId })
+      .select("gstin")
+      .lean()
+      .session(session || null);
+    checkGstin(updateData, existing?.gstin);
+  } else {
+    checkGstin(updateData);
+  }
+
   if (profilePictureUrl) {
     updateData.profilePicture = profilePictureUrl;
   }
@@ -166,6 +190,7 @@ async function updateCompany(
 }
 
 module.exports = {
+  checkGstin,
   createCompany,
   updateCompany,
 };

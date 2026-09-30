@@ -9,8 +9,10 @@ import facebookLogo from "../../assets/facebook-logo.png";
 import { FaWhatsapp } from "react-icons/fa";
 
 import API from "../../services/api";
+import { gstinError } from "../../utils/gstinValidation";
 import CustomDropdown from "../common/CustomDropdown";
 import { lookupIndianPincode } from "../../utils/pincodeUtils";
+import { canonicalStateName } from "../../utils/gstStateCode";
 import toast from "react-hot-toast";
 import { Country, State } from "country-state-city";
 import { loadCityModule, useLazyCity } from "../../utils/lazyCityData";
@@ -76,6 +78,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
   });
   const [nameError, setNameError] = useState(false);
   const [emailError, setEmailError] = useState("");
+  const [gstinFieldError, setGstinFieldError] = useState("");
   const [billingAddressError, setBillingAddressError] = useState(false);
   const [shippingAddressErrors, setShippingAddressErrors] = useState([]);
   const [additionalFields, setAdditionalFields] = useState({});
@@ -94,6 +97,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
   const profilePictureInputRef = useRef(null);
   const nameInputRef = useRef(null);
   const emailInputRef = useRef(null);
+  const gstinInputRef = useRef(null);
   const billingAddressRef = useRef(null);
   const shippingAddressRefs = useRef([]);
   // Scroll-to-error targets for custom fields, keyed by field name.
@@ -367,6 +371,12 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
     const nameInvalid = !form.name.trim();
     const emailInvalid = !!form.email.trim() && !emailRegex.test(form.email.trim());
     const billingInvalid = !isAddressComplete(form.billingAddress);
+    // An unchanged GSTIN on an existing company is accepted, same as the server does.
+    const gstinValue = form.gstin.trim().toUpperCase();
+    const gstinMsg =
+      gstinValue && !(isEditing && gstinValue === (editCompany?.gstin || "").trim().toUpperCase())
+        ? gstinError(gstinValue)
+        : "";
     const newShippingErrors = form.shippingAddresses.map(
       (ship) => !isAddressComplete(ship)
     );
@@ -389,21 +399,24 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
     setNameError(nameInvalid);
     setEmailError(emailInvalid ? "Invalid email format" : "");
     setBillingAddressError(billingInvalid);
+    setGstinFieldError(gstinMsg);
     setShippingAddressErrors(newShippingErrors);
     setAdditionalFieldErrors(newAdditionalFieldErrors);
 
     if (
       nameInvalid ||
       emailInvalid ||
+      gstinMsg ||
       billingInvalid ||
       newShippingErrors.some(Boolean) ||
       Object.keys(newAdditionalFieldErrors).length > 0
     ) {
-      toast.error("Please fill in all required fields");
+      toast.error(gstinMsg && !nameInvalid && !emailInvalid && !billingInvalid ? gstinMsg : "Please fill in all required fields");
 
       const candidates = [
         nameInvalid ? nameInputRef.current : null,
         emailInvalid ? emailInputRef.current : null,
+        gstinMsg ? gstinInputRef.current : null,
         billingInvalid ? billingAddressRef.current : null,
         ...newShippingErrors.map((invalid, i) => (invalid ? shippingAddressRefs.current[i] : null)),
         ...Object.keys(newAdditionalFieldErrors).map((name) => customFieldRefs.current[name]),
@@ -550,6 +563,67 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
     });
     setIsFormDirty(true);
     if (billingAddressError) setBillingAddressError(false);
+  };
+
+  // GSTIN lookup: fills the billing address (and name) only; nothing is saved until Save.
+  const [gstinLoading, setGstinLoading] = useState(false);
+  const lastFetchedGstin = useRef("");
+  const fetchGstinDetails = async () => {
+    if (gstinLoading) return;
+    const gstin = form.gstin?.trim().toUpperCase();
+    // Validate fully offline first so an invalid number never reaches the API.
+    const invalid = gstinError(gstin);
+    if (invalid) {
+      toast.error(invalid);
+      return;
+    }
+    if (lastFetchedGstin.current === gstin) {
+      toast("Details for this GSTIN are already applied");
+      return;
+    }
+    setGstinLoading(true);
+    try {
+      console.log("[GSTIN:company] 1. requesting /api/gstin/verify", gstin);
+      const { data } = await API.post("/gstin/verify", { gstin });
+      console.log("[GSTIN:company] 2. backend responded", data);
+      const r = data.data;
+      const a = r.address || {};
+      const state = canonicalStateName(a.stateCode || a.state, getStatesForCountry("India")) || a.state;
+      console.log("[GSTIN:company] 3. mapped state ->", state);
+      // Only overwrite a field when the lookup actually has a value for it.
+      setForm((prev) => {
+        const b = prev.billingAddress;
+        const billingAddress = {
+          ...b,
+          addressLine1: a.line1 || b.addressLine1,
+          addressLine2: a.line2 || b.addressLine2,
+          city: a.city || b.city,
+          state: state || b.state,
+          pincode: a.pincode || b.pincode,
+          country: a.country || b.country,
+        };
+        const shippingAddresses = prev.shippingAddresses.map((s) =>
+          s.sameAsBilling ? { ...billingAddress, sameAsBilling: true } : s
+        );
+        return {
+          ...prev,
+          gstin,
+          name: r.legalName || r.tradeName || prev.name,
+          billingAddress,
+          shippingAddresses,
+        };
+      });
+      setIsFormDirty(true);
+      if (billingAddressError) setBillingAddressError(false);
+      lastFetchedGstin.current = gstin;
+      console.log("[GSTIN:company] 4. form updated");
+      toast.success("GSTIN details fetched. Review and save");
+    } catch (error) {
+      console.log("[GSTIN:company] FAILED", error.response?.status, error.response?.data || error.message);
+      toast.error(error.response?.data?.error || "Failed to fetch GSTIN details");
+    } finally {
+      setGstinLoading(false);
+    }
   };
 
   // Update one field of the shipping address at `index`.
@@ -954,13 +1028,31 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
               <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                 GSTIN
               </label>
-              <input
-                type="text"
-                value={form.gstin}
-                onChange={(e) => handleFormChange("gstin", e.target.value)}
-                className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
-                placeholder="eg., 22ABCDE1234F1Z5"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={form.gstin}
+                  ref={gstinInputRef}
+                  maxLength={15}
+                  onChange={(e) => {
+                    handleFormChange("gstin", e.target.value.toUpperCase());
+                    if (gstinFieldError) setGstinFieldError("");
+                  }}
+                  className={`flex-1 min-w-0 border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 ${gstinFieldError ? "border-red-500" : "border-[#1F2937]/10"}`}
+                  placeholder="eg., 22ABCDE1234F1Z5"
+                />
+                <button
+                  type="button"
+                  onClick={fetchGstinDetails}
+                  disabled={gstinLoading || !form.gstin?.trim()}
+                  className={`px-4 h-[38px] text-[13px] font-bold rounded-full transition-colors font-inter flex-shrink-0 ${gstinLoading || !form.gstin?.trim() ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-[#0085FF] text-white hover:bg-blue-600"}`}
+                >
+                  {gstinLoading ? "Fetching..." : "Fetch"}
+                </button>
+              </div>
+              {gstinFieldError && (
+                <p className="mt-1 text-xs text-red-600">{gstinFieldError}</p>
+              )}
             </div>
 
             {/* Billing Address (single — GST is calculated from its state) */}

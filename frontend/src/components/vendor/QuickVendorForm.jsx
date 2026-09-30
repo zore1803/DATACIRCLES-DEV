@@ -2,6 +2,7 @@ import Checkbox from "../common/Checkbox";
 import React, { useEffect, useState, useRef } from "react";
 import PhoneNumberInput from "../common/PhoneNumberInput";
 import API from "../../services/api";
+import { gstinError } from "../../utils/gstinValidation";
 import { Paperclip, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { Country, State } from "country-state-city";
@@ -110,14 +111,15 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
   });
   const [nameError, setNameError] = useState(false);
   const [emailError, setEmailError] = useState("");
+  const [gstinFieldError, setGstinFieldError] = useState("");
+  const [gstinLoading, setGstinLoading] = useState(false);
+  const lastFetchedGstin = useRef("");
   const [addressError, setAddressError] = useState(false);
   const [additionalFields, setAdditionalFields] = useState({});
   const [fieldDefinitions, setFieldDefinitions] = useState([]);
   const [additionalFieldErrors, setAdditionalFieldErrors] = useState({});
   const [profilePicture, setProfilePicture] = useState(null);
   const [profilePreview, setProfilePreview] = useState(null);
-  const [gstinLoading, setGstinLoading] = useState(false);
-  const [gstinData, setGstinData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [shouldRender, setShouldRender] = useState(true);
@@ -127,15 +129,10 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
   const fileInputRef = useRef(null);
   const nameInputRef = useRef(null);
   const emailInputRef = useRef(null);
+  const gstinInputRef = useRef(null);
   const addressRef = useRef(null);
   // Scroll-to-error targets for custom fields, keyed by field name.
   const customFieldRefs = useRef({});
-
-  // GSTIN API configuration
-  const GSTIN_API_KEY = import.meta.env.VITE_APP_GSTIN_API_KEY || "";
-  const GSTIN_API_URL = "https://sheet.gstincheck.co.in/check/";
-  const gstinRegex =
-    /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
   useEffect(() => {
     setShouldRender(true);
@@ -217,95 +214,6 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
   const handleSaveAndExit = async () => {
     setShowConfirmDialog(false);
     await handleSubmit({ preventDefault: () => { } }, true);
-  };
-
-  const fetchGSTINDetails = async () => {
-    const gstin = form.gstin?.trim().toUpperCase();
-
-    if (!gstin) {
-      toast.error("Please enter GSTIN number first");
-      return;
-    }
-
-    if (!gstinRegex.test(gstin)) {
-      toast.error("Invalid GSTIN format. Please check the number");
-      return;
-    }
-
-    setGstinLoading(true);
-    setGstinData(null);
-
-    try {
-      const response = await fetch(`${GSTIN_API_URL}${GSTIN_API_KEY}/${gstin}`);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      if (data.flag === true && data.data) {
-        const result = data.data;
-        setGstinData(result);
-
-        const addressInfo = result.pradr || {};
-        const fullAddress = addressInfo.adr || "";
-        const location = addressInfo.loc || "";
-        const city = addressInfo.addr.dst || location || "";
-        const state =
-          addressInfo.std || extractStateFromString(result.stj) || "";
-        const pincode = addressInfo.addr.pncd || "";
-
-        const addressParts = fullAddress.split(",").map((part) => part.trim());
-
-        let addressLine1 = "";
-        let addressLine2 = "";
-
-        if (addressParts.length >= 2) {
-          addressLine1 = addressParts.slice(0, 2).join(", ");
-          addressLine2 = addressParts.slice(2).join(", ");
-        } else {
-          addressLine1 = fullAddress;
-        }
-
-        setForm((prevForm) => ({
-          ...prevForm,
-          name: result.lgnm || prevForm.name,
-          company: result.tradeNam || result.lgnm || prevForm.company,
-          address: {
-            ...prevForm.address,
-            line1: addressLine1 || prevForm.address.line1,
-            line2: addressLine2 || prevForm.address.line2,
-            city: city || prevForm.address.city,
-            state: state || prevForm.address.state,
-            pincode: pincode || prevForm.address.pincode,
-            country: "India",
-          },
-        }));
-        setIsFormDirty(true);
-        toast.success("GSTIN details fetched and applied");
-      } else if (data.flag === false) {
-        const errorMsg = data.message || "GSTIN not found or invalid";
-        toast.error(errorMsg);
-      } else {
-        toast.error("Unexpected response from GSTIN API. Please try again.");
-      }
-    } catch (error) {
-      console.error("GSTIN fetch error:", error);
-      toast.error(`Failed to fetch GSTIN details: ${error.message}`);
-    } finally {
-      setGstinLoading(false);
-    }
-  };
-
-  const extractStateFromString = (jurisdictionString) => {
-    if (!jurisdictionString) return "";
-    const stateMatch = jurisdictionString.match(/State\s*-\s*([^,]+)/);
-    return stateMatch ? stateMatch[1].trim() : "";
-  };
-
-  const clearGSTINData = () => {
-    setGstinData(null);
-    setIsFormDirty(true);
   };
 
   const handleFileChange = (e) => {
@@ -471,6 +379,68 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
   };
 
 
+  // GSTIN lookup: only fills the form; nothing is saved until Save.
+  const fetchGSTINDetails = async () => {
+    if (gstinLoading) return;
+    const gstin = form.gstin?.trim().toUpperCase();
+
+    // Validate fully offline first so an invalid number never reaches the API.
+    const invalid = gstinError(gstin);
+    if (invalid) {
+      setGstinFieldError(invalid);
+      toast.error(invalid);
+      return;
+    }
+    if (lastFetchedGstin.current === gstin) {
+      toast("Details for this GSTIN are already applied");
+      return;
+    }
+
+    setGstinLoading(true);
+    setGstinFieldError("");
+    try {
+      console.log("[GSTIN:vendor] 1. requesting /gstin/verify", gstin);
+      const { data } = await API.post("/gstin/verify", { gstin });
+      console.log("[GSTIN:vendor] 2. backend responded", data);
+      const result = data.data;
+      const a = result.address || {};
+      // Use the dropdown's own spelling of the state; the GST code is the reliable key.
+      const state =
+        canonicalStateName(a.stateCode || a.state, getStatesForCountry("India")) || a.state;
+      const stateCode = a.stateCode || getStateCode(state);
+      console.log("[GSTIN:vendor] 3. mapped state/code ->", state, stateCode);
+
+      // Only overwrite a field when the lookup actually has a value for it.
+      setForm((prev) => ({
+        ...prev,
+        gstin,
+        name: result.legalName || prev.name,
+        company: result.tradeName || result.legalName || prev.company,
+        address: {
+          ...prev.address,
+          line1: a.line1 || prev.address.line1,
+          line2: a.line2 || prev.address.line2,
+          city: a.city || prev.address.city,
+          state: state || prev.address.state,
+          stateCode: stateCode || prev.address.stateCode,
+          pincode: a.pincode || prev.address.pincode,
+          country: a.country || prev.address.country,
+        },
+      }));
+      lastFetchedGstin.current = gstin;
+      setIsFormDirty(true);
+      if (nameError) setNameError(false);
+      if (addressError) setAddressError(false);
+      console.log("[GSTIN:vendor] 4. form updated");
+      toast.success("GSTIN details fetched. Review and save");
+    } catch (error) {
+      console.log("[GSTIN:vendor] FAILED", error.response?.status, error.response?.data || error.message);
+      toast.error(error.response?.data?.error || "Failed to fetch GSTIN details");
+    } finally {
+      setGstinLoading(false);
+    }
+  };
+
   const handleFormChange = (key, value) => {
     if (key.startsWith("address.")) {
       const addressKey = key.split(".")[1];
@@ -565,6 +535,12 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
     const nameInvalid = !form.name.trim();
     const emailInvalid = !!form.email.trim() && !emailRegex.test(form.email.trim());
     const addressInvalid = !isAddressComplete(form.address);
+    // An unchanged GSTIN on an existing vendor is accepted, same as the server does.
+    const gstinValue = form.gstin.trim().toUpperCase();
+    const gstinMsg =
+      gstinValue && !(isEditing && gstinValue === (editVendor?.gstin || "").trim().toUpperCase())
+        ? gstinError(gstinValue)
+        : "";
     // Required custom fields only block CREATING a new vendor — a field
     // marked required after a vendor already existed shouldn't retroactively
     // block that older vendor from being saved just because it predates the
@@ -584,14 +560,16 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
     setNameError(nameInvalid);
     setEmailError(emailInvalid ? "Invalid email format" : "");
     setAddressError(addressInvalid);
+    setGstinFieldError(gstinMsg);
     setAdditionalFieldErrors(newAdditionalFieldErrors);
 
-    if (nameInvalid || emailInvalid || addressInvalid || Object.keys(newAdditionalFieldErrors).length > 0) {
-      toast.error("Please fill in all required fields");
+    if (nameInvalid || emailInvalid || addressInvalid || gstinMsg || Object.keys(newAdditionalFieldErrors).length > 0) {
+      toast.error(gstinMsg && !nameInvalid && !emailInvalid && !addressInvalid ? gstinMsg : "Please fill in all required fields");
 
       const candidates = [
         nameInvalid ? nameInputRef.current : null,
         emailInvalid ? emailInputRef.current : null,
+        gstinMsg ? gstinInputRef.current : null,
         addressInvalid ? addressRef.current : null,
         ...Object.keys(newAdditionalFieldErrors).map((name) => customFieldRefs.current[name]),
       ].filter(Boolean);
@@ -832,88 +810,30 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
                 GSTIN <span className="text-red-500">*</span>
               </label>
               <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={form.gstin}
-                  onChange={(e) =>
-                    handleFormChange("gstin", e.target.value.toUpperCase())
-                  }
-                  className="flex-1 min-w-0 border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter"
-                  placeholder="GSTIN123456789"
-                  maxLength="15"
-                />
+              <input
+                type="text"
+                value={form.gstin}
+                ref={gstinInputRef}
+                onChange={(e) => {
+                  handleFormChange("gstin", e.target.value.toUpperCase());
+                  if (gstinFieldError) setGstinFieldError("");
+                }}
+                className={`flex-1 min-w-0 border rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter ${gstinFieldError ? "border-red-500" : "border-[#1F2937]/10"}`}
+                placeholder="eg., 22ABCDE1234F1Z5"
+                maxLength="15"
+              />
                 <button
                   type="button"
                   onClick={fetchGSTINDetails}
                   disabled={gstinLoading || !form.gstin?.trim()}
-                  className={`px-4 h-[38px] text-[13px] font-bold rounded-full transition-colors font-inter flex-shrink-0 ${gstinLoading || !form.gstin?.trim()
-                      ? "bg-[#F2F2F7] text-gray-400 cursor-not-allowed"
-                      : "bg-[#F2F2F7] text-[#111216] hover:bg-gray-200"
-                    }`}
+                  className={`px-4 h-[38px] text-[13px] font-bold rounded-full transition-colors font-inter flex-shrink-0 ${gstinLoading || !form.gstin?.trim() ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-[#0085FF] text-white hover:bg-blue-600"}`}
                 >
                   {gstinLoading ? "Fetching..." : "Fetch"}
                 </button>
               </div>
-              {gstinData && (
-                <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex items-start gap-2">
-                    <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center mt-0.5">
-                      <div className="w-2 h-2 rounded-full bg-green-600"></div>
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="text-sm font-semibold text-green-800 mb-2">
-                        ✓ GSTIN Details Found & Applied
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                        <div>
-                          <span className="font-medium text-green-700">
-                            Legal Name:
-                          </span>
-                          <p className="text-green-600">
-                            {gstinData.lgnm || "N/A"}
-                          </p>
-                        </div>
-                        {gstinData.tradeNam && (
-                          <div>
-                            <span className="font-medium text-green-700">
-                              Trade Name:
-                            </span>
-                            <p className="text-green-600">
-                              {gstinData.tradeNam}
-                            </p>
-                          </div>
-                        )}
-                        <div>
-                          <span className="font-medium text-green-700">
-                            Business Type:
-                          </span>
-                          <p className="text-green-600">
-                            {gstinData.ctb || "N/A"}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="font-medium text-green-700">
-                            Status:
-                          </span>
-                          <p className="text-green-600">
-                            {gstinData.sts || "N/A"}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={clearGSTINData}
-                        className="text-xs text-green-600 hover:text-green-800 mt-2 underline"
-                      >
-                        Clear GSTIN Data
-                      </button>
-                    </div>
-                  </div>
-                </div>
+              {gstinFieldError && (
+                <p className="mt-1 text-xs text-red-600">{gstinFieldError}</p>
               )}
-              <p className="text-[12px] text-gray-500 mt-2 font-inter italic">
-                Enter a valid 15-digit GSTIN and click "FETCH" to auto-fill company details
-              </p>
             </div>
 
             <div ref={addressRef}>

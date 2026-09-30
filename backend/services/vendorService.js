@@ -1,5 +1,6 @@
 const Vendor = require("../models/Vendor");
 const { processAdditionalFields } = require("./fieldCoercionService");
+const { gstinError } = require("../utils/gstinValidation");
 
 /**
  * Purpose: Error subclass carrying the exact {message} response shape the
@@ -12,6 +13,17 @@ class VendorInputError extends Error {
     super(message);
     this.name = "VendorInputError";
   }
+}
+
+// Uppercases/trims a submitted GSTIN and rejects it if invalid. A value equal to the one
+// already stored is accepted, so older records with a bad GSTIN can still be edited.
+function checkGstin(data, previous = "") {
+  if (data.gstin === undefined || data.gstin === null) return;
+  const gstin = String(data.gstin).trim().toUpperCase();
+  data.gstin = gstin;
+  if (!gstin || gstin === String(previous || "").trim().toUpperCase()) return;
+  const invalid = gstinError(gstin);
+  if (invalid) throw new VendorInputError(invalid);
 }
 
 function normalizeSocialMedia(socialMedia) {
@@ -83,6 +95,7 @@ async function buildVendorPayload(rawData, organizationId) {
  */
 async function createVendor(organizationId, rawData, { userId, avatarUrl, session } = {}) {
   const payload = await buildVendorPayload(rawData, organizationId);
+  checkGstin(payload);
 
   const vendorData = {
     ...payload,
@@ -114,6 +127,15 @@ async function createVendor(organizationId, rawData, { userId, avatarUrl, sessio
  */
 async function updateVendor(vendorId, organizationId, rawData, { avatarUrl, session } = {}) {
   const payload = await buildVendorPayload(rawData, organizationId);
+  if (payload.gstin && String(payload.gstin).trim()) {
+    const existing = await Vendor.findOne({ _id: vendorId, organization: organizationId })
+      .select("gstin")
+      .lean()
+      .session(session || null);
+    checkGstin(payload, existing?.gstin);
+  } else {
+    checkGstin(payload);
+  }
 
   const updateData = { ...payload };
   if (avatarUrl) {
@@ -131,6 +153,7 @@ async function updateVendor(vendorId, organizationId, rawData, { avatarUrl, sess
 
 module.exports = {
   VendorInputError,
+  checkGstin,
   createVendor,
   updateVendor,
 };

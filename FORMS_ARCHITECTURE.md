@@ -31,7 +31,7 @@ All three share the same `additionalFields: [{key, value, type, category}]` shap
 
 ### 1.2 Validation
 
-No field-value validation exists today beyond type coercion (`parseFloat` for number, `String()` for everything else). No email/phone/GSTIN/URL/date format checks run against submitted values anywhere in the create/update paths. `express-validator` is installed but not wired into these routes. GSTIN pattern logic may exist client-side only, in `frontend/src/components/vendor/GSTINHelper.jsx`.
+No field-value validation exists today beyond type coercion (`parseFloat` for number, `String()` for everything else). No email/phone/GSTIN/URL/date format checks run against submitted values anywhere in the create/update paths. `express-validator` is installed but not wired into these routes. GSTIN format is checked in `backend/services/gstinService.js` (used by `POST /api/gstin/verify`) and client-side in the Vendor/Company forms before Fetch.
 
 ### 1.3 File uploads
 
