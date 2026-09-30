@@ -8,6 +8,7 @@ import toast from "react-hot-toast";
 import ReactQuill from "react-quill-new";
 import '../../QuickCallLogForm.css';
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { FormLabel, FormError, inputCls } from "../common/form";
 
 const callTypeOptions = [
   { value: "Outbound", label: "Outbound", icon: OutgoingCallIcon },
@@ -261,30 +262,29 @@ const QuickCallLogForm = ({ contacts, onCallLogCreated, onRequestClose }) => {
         onClick={handleClose}
       />
       <div
- className={`fixed dc-panel-card dc-panel-w z-[10002] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out ${
+ className={`fixed dc-panel-card dc-panel-w z-[10002] bg-white shadow-2xl flex flex-col overflow-hidden font-inter transform transition-transform duration-300 ease-out ${
           isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
         }`}
       >
         <form onSubmit={handleSubmit} className="flex flex-col h-full min-h-0">
-          <div className="flex justify-between items-center p-4 border-b border-gray-100 flex-shrink-0">
-            <h3 className="text-base font-semibold text-gray-700">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
+            <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
               Add New Call Log
-            </h3>
+            </h2>
             <button
               type="button"
               onClick={handleClose}
-              className="p-1 px-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-100 cursor-pointer"
+              title="Close"
+              className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity"
               aria-label="Close"
             >
-              <X className="w-5 h-5 text-gray-400" />
+              <X className="w-[18px] h-[18px]" strokeWidth={2} />
             </button>
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
+          <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6 space-y-6">
             {/* Contact - Now with validation */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Contact *
-              </label>
+              <FormLabel required>Contact</FormLabel>
               <SearchableDropdown
                 options={contacts}
                 value={form.contact}
@@ -305,21 +305,15 @@ const QuickCallLogForm = ({ contacts, onCallLogCreated, onRequestClose }) => {
                 required={true}
                 error={validationErrors.contact}
               />
-              {validationErrors.contact && (
-                <p className="text-red-500 text-xs mt-1">
-                  {validationErrors.contact}
-                </p>
-              )}
+              <FormError>{validationErrors.contact}</FormError>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Call Type
-              </label>
+              <FormLabel>Call Type</FormLabel>
               <select
                 value={form.callType}
                 onChange={(e) => handleFormChange("callType", e.target.value)}
-                className="w-full border border-gray-300 rounded-[25px] px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm cursor-pointer"
+                className={`${inputCls()} bg-white cursor-pointer`}
                 required
               >
                 {callTypeOptions.map((option) => (
@@ -331,13 +325,11 @@ const QuickCallLogForm = ({ contacts, onCallLogCreated, onRequestClose }) => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Call Status
-              </label>
+              <FormLabel>Call Status</FormLabel>
               <select
                 value={form.status}
                 onChange={(e) => handleStatusChange(e.target.value)}
-                className="w-full border border-gray-300 rounded-[25px] px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm cursor-pointer"
+                className={`${inputCls()} bg-white cursor-pointer`}
                 required
               >
                 {statusOptions.map((option) => (
@@ -350,23 +342,12 @@ const QuickCallLogForm = ({ contacts, onCallLogCreated, onRequestClose }) => {
 
             {/* Duration - Now with validation */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Duration (seconds)
-                {form.status === "Connected" && (
-                  <span className="text-red-500"> *</span>
-                )}
-              </label>
+              <FormLabel required={form.status === "Connected"}>Duration (seconds)</FormLabel>
               <input
                 type="number"
                 value={form.duration}
                 onChange={(e) => handleFormChange("duration", e.target.value)}
-                className={`w-full border rounded-[25px] px-3 py-2 text-sm ${
-                  validationErrors.duration
-                    ? "border-red-500 focus:ring-red-500 outline-none focus:ring-2"
-                    : allowDuration
-                    ? "border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                    : "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
-                }`}
+                className={`${inputCls({ error: !!validationErrors.duration })} ${allowDuration ? "" : "cursor-not-allowed"}`}
                 placeholder={
                   allowDuration ? "Enter duration" : "Not applicable"
                 }
@@ -374,27 +355,21 @@ const QuickCallLogForm = ({ contacts, onCallLogCreated, onRequestClose }) => {
                 disabled={!allowDuration}
                 required={form.status === "Connected"}
               />
-              {validationErrors.duration && (
-                <p className="text-red-500 text-xs mt-1">
-                  {validationErrors.duration}
-                </p>
-              )}
+              <FormError>{validationErrors.duration}</FormError>
               {!allowDuration && !validationErrors.duration && (
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="text-[13px] font-inter text-[#A0A0A0] mt-1.5">
                   Duration not applicable for "{form.status}" calls
                 </p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Notes
-              </label>
+              <FormLabel>Notes</FormLabel>
               <ReactQuill
                 value={form.notes || ""}
                 onChange={(value) => handleFormChange("notes", value)}
                 theme="snow"
-                className="bg-white border border-gray-300 rounded-lg shadow-sm"
+                className="bg-white border border-[#1F2937]/10 rounded-2xl overflow-hidden"
                 modules={{
                   toolbar: [
                     [{ header: [1, 2, false] }],
@@ -424,16 +399,16 @@ const QuickCallLogForm = ({ contacts, onCallLogCreated, onRequestClose }) => {
               />
             </div>
           </div>
-          <div className="p-4 border-t border-gray-100 flex items-center justify-end gap-3 flex-shrink-0 bg-white">
+          <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={handleClose}
-              className="px-6 py-2.5 border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-colors cursor-pointer"
+              className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors font-inter"
             >
               Cancel
             </button>
             <button
-              className="px-6 py-2.5 bg-[#0C4FCD] text-white rounded-xl text-sm font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-inter"
               type="submit"
               disabled={loading}
             >

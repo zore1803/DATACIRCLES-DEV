@@ -408,35 +408,27 @@ const ContactMeetingForm = ({ open, mode, meetingData, calendarDate, contactId, 
         style={{ transform: isSliding ? 'translateX(0)' : 'translateX(calc(100% + 2rem))' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="h-full flex flex-col">
+        <div className="h-full min-h-0 flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-600 p-2.5 rounded-xl shadow-sm">
-                <CalendarIcon className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">
-                  {isCreating ? "Schedule New Meeting" : isViewing ? "Meeting Details" : "Edit Meeting"}
-                </h3>
-                <p className="text-sm text-gray-600">
-                  {isCreating ? "Create a new meeting with your contact" : isViewing ? "View meeting information" : "Update meeting information"}
-                </p>
-              </div>
-            </div>
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
+            <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
+              {isCreating ? "Add New Meeting" : isViewing ? "Meeting Details" : "Edit Meeting"}
+            </h2>
             <button
               onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white rounded-xl transition-colors"
+              title="Close"
+              className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity"
+              aria-label="Close"
             >
-              <X className="w-5 h-5" />
+              <X className="w-[18px] h-[18px]" strokeWidth={2} />
             </button>
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto">
             {isViewing ? (
               /* VIEW MODE - Details Display */
-              <div className="p-6 space-y-6">
+              <div className="px-8 py-6 space-y-6">
                 <div className="space-y-4">
                   <div className="flex items-start justify-between">
                     <h2 className="text-2xl font-bold text-gray-900 leading-tight pr-4">{form.title}</h2>
@@ -494,29 +486,10 @@ const ContactMeetingForm = ({ open, mode, meetingData, calendarDate, contactId, 
                   )}
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex gap-3 pt-6 border-t border-gray-200">
-                  <button
-                    onClick={handleEdit}
-                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl font-semibold transition-colors"
-                  >
-                    <EditIcon className="w-4 h-4" />
-                    Edit Meeting
-                  </button>
-                  {onDelete && (
-                    <button
-                      onClick={handleDelete}
-                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl font-semibold transition-colors"
-                    >
-                      <DeleteIcon className="w-4 h-4" />
-                      Delete Meeting
-                    </button>
-                  )}
-                </div>
               </div>
             ) : (
               /* EDIT/CREATE MODE - Form */
-              <form onSubmit={handleSubmit} noValidate className="p-6 space-y-6">
+              <form id="contact-meeting-form" onSubmit={handleSubmit} noValidate className="px-8 py-6 space-y-6">
                 <FormField label="Meeting Title" required error={errors.title}>
                   <input
                     ref={titleInputRef}
@@ -674,38 +647,59 @@ const ContactMeetingForm = ({ open, mode, meetingData, calendarDate, contactId, 
                   </div>
                 )}
 
-                <div className="flex gap-3 pt-6 border-t border-gray-200">
-                  <button
-                    type="button"
-                    onClick={isEditing ? handleCancelEdit : onClose}
-                    className="flex-1 px-6 py-3 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading || timeConflict}
-                    className={`flex-1 px-6 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-                      loading || timeConflict
-                        ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                        : "bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl"
-                    }`}
-                  >
-                    {loading ? (
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : timeConflict ? (
-                      "Resolve Conflict First"
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-4 h-4" />
-                        {isEditing ? "Update Meeting" : "Schedule Meeting"}
-                      </>
-                    )}
-                  </button>
-                </div>
               </form>
             )}
           </div>
+          {isViewing ? (
+            <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
+              {onDelete && (
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="px-6 py-2 border border-red-200 text-red-600 rounded-[25px] text-sm font-bold hover:bg-red-50 transition-colors font-inter flex items-center gap-2"
+                >
+                  <DeleteIcon className="w-4 h-4" />
+                  Delete Meeting
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleEdit}
+                className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 transition-colors font-inter flex items-center gap-2"
+              >
+                <EditIcon className="w-4 h-4" />
+                Edit Meeting
+              </button>
+            </div>
+          ) : (
+            <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={isEditing ? handleCancelEdit : onClose}
+                className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors font-inter"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="contact-meeting-form"
+                disabled={loading || timeConflict}
+                className={`px-6 py-2 rounded-[25px] text-sm font-bold transition-colors font-inter flex items-center gap-2 ${
+                  loading || timeConflict
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-[#158FFF] text-white hover:opacity-90"
+                }`}
+              >
+                {loading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : timeConflict ? (
+                  "Resolve Conflict First"
+                ) : (
+                  <>{isEditing ? "Update Meeting" : "Schedule Meeting"}</>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

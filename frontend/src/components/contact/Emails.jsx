@@ -6,6 +6,7 @@ import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import AppToaster from "../AppToaster";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { FormLabel, inputCls } from "../common/form";
 
 const Emails = ({ contactId, contactEmail }) => {
   const [logs, setLogs] = useState([]);
@@ -205,132 +206,95 @@ const Emails = ({ contactId, contactEmail }) => {
                 onClick={() => setShowCompose(false)}
               />
               <div
-                className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl overflow-y-auto transform transition-transform duration-300 ease-out ${
+                className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out font-inter ${
                   isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
                 }`}
               >
-                <div className="h-full flex flex-col">
-                  {/* Header */}
-                  <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                          <Mail className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900">Compose Email</h3>
-                          <p className="text-sm text-gray-600">Send a new message</p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setShowCompose(false)}
-                        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
+                <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
+                  <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
+                    Compose Email
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setShowCompose(false)}
+                    title="Close"
+                    className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity"
+                    aria-label="Close"
+                  >
+                    <X className="w-[18px] h-[18px]" strokeWidth={2} />
+                  </button>
+                </div>
+
+                <form
+                  id="compose-email-form"
+                  onSubmit={handleSend}
+                  className="flex-1 min-h-0 overflow-y-auto px-8 py-6 space-y-6"
+                >
+                  <div>
+                    <FormLabel>From</FormLabel>
+                    <input type="email" value={user.email} disabled className={inputCls()} />
+                  </div>
+
+                  <div>
+                    <FormLabel>To</FormLabel>
+                    <input type="email" value={contactEmail} disabled className={inputCls()} />
+                  </div>
+
+                  <div>
+                    <FormLabel htmlFor="email-subject" required>Subject</FormLabel>
+                    <input
+                      id="email-subject"
+                      type="text"
+                      value={subject}
+                      onChange={(e) => setSubject(e.target.value)}
+                      className={inputCls()}
+                      placeholder="Enter email subject..."
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <FormLabel required>Message</FormLabel>
+                    <div className="border border-[#1F2937]/10 rounded-2xl overflow-hidden">
+                      <ReactQuill
+                        value={body}
+                        onChange={setBody}
+                        modules={quillModules}
+                        formats={quillFormats}
+                        className="bg-white min-h-[200px]"
+                        theme="snow"
+                        placeholder="Write your email message here..."
+                      />
                     </div>
+                    <p className="text-[13px] font-inter text-[#A0A0A0] mt-1.5">
+                      Use the toolbar above to format your message
+                    </p>
                   </div>
+                </form>
 
-                  {/* Form Content */}
-                  <div className="flex-1 overflow-y-auto">
-                    <form onSubmit={handleSend} className="p-6 space-y-6">
-                      {/* From Field */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-semibold text-gray-700">
-                          <User className="w-4 h-4 inline mr-2" />
-                          From
-                        </label>
-                        <input
-                          type="email"
-                          value={user.email}
-                          disabled
-                          className="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed text-sm font-medium"
-                        />
-                      </div>
-
-                      {/* To Field */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-semibold text-gray-700">
-                          <Mail className="w-4 h-4 inline mr-2" />
-                          To
-                        </label>
-                        <input
-                          type="email"
-                          value={contactEmail}
-                          disabled
-                          className="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed text-sm font-medium"
-                        />
-                      </div>
-
-                      {/* Subject Field */}
-                      <div className="space-y-2">
-                        <label htmlFor="email-subject" className="block text-sm font-semibold text-gray-700">
-                          Subject *
-                        </label>
-                        <input
-                          id="email-subject"
-                          type="text"
-                          value={subject}
-                          onChange={(e) => setSubject(e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm outline-none transition-all duration-200 hover:border-gray-400"
-                          placeholder="Enter email subject..."
-                          required
-                        />
-                      </div>
-
-                      {/* Body Field */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-semibold text-gray-700">
-                          Message *
-                        </label>
-                        <div className="border border-gray-300 rounded-lg overflow-hidden hover:border-gray-400 transition-colors duration-200">
-                          <ReactQuill
-                            value={body}
-                            onChange={setBody}
-                            modules={quillModules}
-                            formats={quillFormats}
-                            className="bg-white min-h-[200px]"
-                            theme="snow"
-                            placeholder="Write your email message here..."
-                          />
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Use the toolbar above to format your message
-                        </p>
-                      </div>
-                    </form>
-                  </div>
-
-                  {/* Footer Actions */}
-                  <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
-                    <div className="flex items-center justify-end gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setShowCompose(false)}
-                        className="px-6 py-3 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors duration-200"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        onClick={handleSend}
-                        disabled={sending}
-                        className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 min-w-[100px] justify-center"
-                      >
-                        {sending ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                            Sending...
-                          </>
-                        ) : (
-                          <>
-                            <Send className="w-4 h-4" />
-                            Send Email
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
+                <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCompose(false)}
+                    className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors font-inter"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    form="compose-email-form"
+                    disabled={sending}
+                    className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-inter flex items-center gap-2"
+                  >
+                    {sending ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Sending...
+                      </>
+                    ) : (
+                      "Send Email"
+                    )}
+                  </button>
                 </div>
               </div>
             </>

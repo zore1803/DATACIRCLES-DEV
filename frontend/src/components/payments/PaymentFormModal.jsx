@@ -14,6 +14,7 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
   const [banks, setBanks] = useState([]);
   const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
   const notesEditorRef = useRef(null);
+  const openedAtRef = useRef(0);
   const [selectedBankId, setSelectedBankId] = useState("");
   const [loading, setLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
@@ -102,8 +103,10 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
 
   useEffect(() => {
     if (isOpen) {
-      fetchBanks();
-      fetchParties("OUT");
+      // Lookups wait for the 300ms slide: their responses re-render this big
+      // form, and landing mid-animation makes the drawer look like it pops open.
+      openedAtRef.current = Date.now();
+      const banksTimer = setTimeout(fetchBanks, 320);
       resetPartyState();
       setValidationErrors({});
       setFormData({
@@ -118,15 +121,19 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
       // The notes editor is an uncontrolled contentEditable, so its live DOM
       // has to be cleared too — resetting state alone leaves the old content.
       if (notesEditorRef.current) notesEditorRef.current.innerHTML = "";
+      return () => clearTimeout(banksTimer);
     }
   }, [isOpen]);
 
   // Switching direction switches which side of the ledger we settle against,
-  // so the party and any split against their documents are cleared.
+  // so the party and any split against their documents are cleared. On first
+  // open the fetch waits out the rest of the slide; later switches are instant.
   useEffect(() => {
     if (!isOpen) return;
-    fetchParties(formData.direction);
+    const wait = Math.max(0, 320 - (Date.now() - openedAtRef.current));
+    const partiesTimer = setTimeout(() => fetchParties(formData.direction), wait);
     resetPartyState();
+    return () => clearTimeout(partiesTimer);
   }, [formData.direction, isOpen]);
 
   // The party's open documents (and any credit they're already sitting on).
@@ -312,7 +319,7 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
         aria-hidden="true"
       />
       <div
-        className={`fixed dc-panel-card dc-panel-w bg-white shadow-2xl flex flex-col z-[100001] overflow-hidden transform transition-transform duration-300 ease-out ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
+        className={`fixed dc-panel-card dc-panel-w bg-white shadow-2xl flex flex-col z-[100001] overflow-hidden transform transition-transform duration-300 ease-out will-change-transform ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">

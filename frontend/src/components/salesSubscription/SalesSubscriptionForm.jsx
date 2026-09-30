@@ -134,7 +134,9 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
     API.get("/items")
       .then((res) => {
         const list = res.data?.items || res.data || [];
-        setCatalog(Array.isArray(list) ? list.filter((it) => it.type !== "service" || true) : []);
+        // Both products and services are billable subscription lines (services
+        // just don't move stock), so the whole catalog is kept.
+        setCatalog(Array.isArray(list) ? list : []);
       })
       .catch(() => setCatalog([]));
     API.get("/branding")

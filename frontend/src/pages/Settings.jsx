@@ -556,14 +556,20 @@ const Settings = () => {
           }}
         >
           <div className="flex items-center gap-4 w-full">
-            <button
-              onClick={goBack}
-              className="flex items-center gap-1.5 text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium flex-shrink-0"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back
-            </button>
-            <div className="h-6 w-px bg-gray-200 flex-shrink-0" />
+            {/* Forms has its own sidebar entry, so it's a top-level page like
+                Companies/Deals: title on the left, no Back button. */}
+            {activeSection.id !== "forms" && (
+              <>
+                <button
+                  onClick={goBack}
+                  className="flex items-center gap-1.5 text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium flex-shrink-0"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back
+                </button>
+                <div className="h-6 w-px bg-gray-200 flex-shrink-0" />
+              </>
+            )}
             <div className="min-w-0">
               <h1 className="m-0 leading-tight font-bold text-base sm:text-lg text-gray-900 truncate">
                 {activeSection.label}

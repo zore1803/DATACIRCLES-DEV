@@ -26,6 +26,7 @@ import {
 import TeamIcon from "../common/TeamIcon";
 import EditIcon from "../common/EditIcon";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { FormLabel, FormError, SectionDivider, STATIC_FIELD_CLS, inputCls, textareaCls } from "../common/form";
 
 const initialState = {
   title: "",
@@ -65,69 +66,6 @@ const PriorityChip = ({ priority }) => {
     <div className={`inline-flex items-center gap-2 px-3 py-1.5 ${color.bg} ${color.text} rounded-lg text-sm font-medium ${color.border}`}>
       <Flag className="w-3 h-3" />
       <span className="capitalize">{priority}</span>
-    </div>
-  );
-};
-
-// isOpen/onOpenChange are controlled by the parent form (a single shared
-// "which dropdown is open" key) rather than each instance owning its own
-// state — otherwise opening Meeting Type doesn't close Priority, and their
-// option lists render stacked on top of each other.
-const SingleSelectDropdown = ({ options, value, onChange, disabled, isOpen, onOpenChange }) => {
-  const selectedOption = options.find(opt => opt.value === value) || options[0];
-  const wrapperRef = useRef(null);
-
-  // Close on outside click via a listener, not a fixed backdrop (which would
-  // block scrolling the form while the dropdown is open).
-  useEffect(() => {
-    if (!isOpen) return;
-    const onDown = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) onOpenChange(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [isOpen, onOpenChange]);
-
-  return (
-    <div className="relative" ref={wrapperRef}>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => onOpenChange(!isOpen)}
-        className={`w-full flex items-center justify-end gap-2 px-3 py-1.5 rounded-full text-xs font-semibold focus:outline-none transition-all ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'
-          } ${selectedOption.className}`}
-      >
-        <div className="flex items-center gap-1.5">
-          {selectedOption.icon && <selectedOption.icon className="w-3 h-3" />}
-          <span className="capitalize">{selectedOption.label}</span>
-        </div>
-        {!disabled && <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />}
-      </button>
-
-      {isOpen && (
-        <>
-          <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-xl z-50 py-1 overflow-hidden animate-in fade-in zoom-in duration-200">
-            {options.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => {
-                  onChange(option.value);
-                  onOpenChange(false);
-                }}
-                className={`w-full flex items-center gap-3 px-3 py-1.5 text-[13px] transition-colors hover:bg-gray-50 ${value === option.value ? 'bg-blue-50/50 text-blue-600' : 'text-gray-600'
-                  }`}
-              >
-                <div className={`p-1.5 rounded-lg ${option.className}`}>
-                  {option.icon && <option.icon className="w-3.5 h-3.5" />}
-                </div>
-                <span className="font-medium">{option.label}</span>
-                {value === option.value && <CheckCircle2 className="w-4 h-4 ml-auto text-blue-600" />}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
     </div>
   );
 };
@@ -348,7 +286,6 @@ const CompanyMeetingForm = ({
   const { meetingTypes } = useSystemSettings();
   // Which of the Duration/Meeting Type/Priority dropdowns is open, if any —
   // shared so opening one closes the others instead of them stacking.
-  const [openDropdown, setOpenDropdown] = useState(null);
   const [loading, setLoading] = useState(false);
   const [generatingLink, setGeneratingLink] = useState(false);
   const [googleStatus, setGoogleStatus] = useState(null); // { configured, connected, connectedEmail }
@@ -644,365 +581,321 @@ const CompanyMeetingForm = ({
         onClick={onClose}
       />
       <div
-        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl transform transition-transform duration-300 ease-out overflow-hidden ${
+        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out font-inter ${
           isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
         }`}
       >
-        <div className="h-full flex flex-col">
-          {/* Header */}
-          <div className="flex items-center justify-between p-5 border-b border-gray-200 bg-gray-50">
-            <h3 className="text-base font-bold text-gray-900">
-              Add New Meeting
-            </h3>
-            <button
-              onClick={onClose}
-              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
+          <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
+            {mode === "view" ? (isEditMode ? "Edit Meeting" : "Meeting Details") : "Add New Meeting"}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            title="Close"
+            className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity"
+            aria-label="Close"
+          >
+            <X className="w-[18px] h-[18px]" strokeWidth={2} />
+          </button>
+        </div>
+
+        <form
+          id="company-meeting-form"
+          onSubmit={handleSubmit}
+          noValidate
+          className="flex-1 min-h-0 overflow-y-auto px-8 py-6 space-y-6"
+        >
+          <div>
+            <FormLabel required>Meeting Title</FormLabel>
+            <input
+              type="text"
+              value={form.title}
+              onChange={(e) => handleChange("title", e.target.value)}
+              className={inputCls({ error: !!errors.title })}
+              placeholder="Enter Meeting Title"
+              disabled={!isEditMode && mode === "view"}
+            />
+            <FormError>{errors.title}</FormError>
           </div>
 
-          {/* Form Body */}
-          <div className="flex-1 overflow-y-auto">
-            <form onSubmit={handleSubmit} className="flex flex-col h-full">
-              {/* Content */}
-              <div className="p-5 space-y-6">
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    value={form.title}
-                    onChange={(e) => handleChange("title", e.target.value)}
-                    className={`w-full text-2xl font-bold border-none bg-transparent placeholder-gray-300 focus:outline-none focus:ring-0 ${errors.title ? 'text-red-600' : 'text-gray-900'
-                      }`}
-                    placeholder="Meeting Title"
-                    disabled={!isEditMode && mode === "view"}
-                  />
-                  {errors.title && <p className="text-xs text-red-500 font-medium">*{errors.title}</p>}
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-gray-700">Description</label>
-                  <textarea
-                    value={form.description}
-                    onChange={(e) => handleChange("description", e.target.value)}
-                    rows={5}
-                    className="w-full px-3 py-2.5 rounded-xl border border-gray-100 bg-gray-50/50 focus:bg-white focus:border-blue-500 transition-all focus:outline-none resize-none text-xs text-gray-600"
-                    placeholder="Description the task objectives, requirements and important details"
-                    disabled={!isEditMode && mode === "view"}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-gray-700">Location</label>
-                    <div className="flex items-center gap-3">
-                    {(isEditMode || mode === "create") && googleStatus?.configured && !googleStatus?.connected && (
-                      <button
-                        type="button"
-                        disabled={connectingGoogle}
-                        onClick={async () => {
-                          setConnectingGoogle(true);
-                          try {
-                            const res = await API.get("/auth/google/connect");
-                            if (res.data?.authUrl) {
-                              window.location.href = res.data.authUrl;
-                            } else {
-                              toast.error("Could not start Google connect flow");
-                              setConnectingGoogle(false);
-                            }
-                          } catch {
-                            toast.error("Could not start Google connect flow");
-                            setConnectingGoogle(false);
-                          }
-                        }}
-                        className="text-xs font-medium text-gray-500 hover:text-gray-700 underline disabled:opacity-50"
-                        title="One-time setup: connects a Google account so Generate Link can create real Google Meet links"
-                      >
-                        {connectingGoogle ? "Connecting…" : "Connect Google Account"}
-                      </button>
-                    )}
-                    {(isEditMode || mode === "create") && (
-                      <button
-                        type="button"
-                        disabled={generatingLink}
-                        onClick={async () => {
-                          setGeneratingLink(true);
-                          try {
-                            // Real Zoom or Google Meet link — tries Zoom
-                            // first (if configured), then this org's
-                            // connected Google account. Same link works for
-                            // staff and the external client, no login
-                            // required on either side.
-                            const res = await API.post("/meetings/generate-video-link", {
-                              title: form.title,
-                              scheduledAt: form.date ? getScheduledAt() : undefined,
-                              duration: form.duration,
-                            });
-                            if (res.data?.provider && res.data?.joinUrl) {
-                              handleChange("location", res.data.joinUrl);
-                            } else if (res.data?.error) {
-                              toast.error(res.data.error);
-                            } else if (googleStatus?.configured && !googleStatus?.connected) {
-                              toast.error("Connect your Google account first (link above) to generate a Meet link");
-                            } else {
-                              toast.error("No video-call provider is configured yet");
-                            }
-                          } catch {
-                            toast.error("Failed to generate a video-call link");
-                          } finally {
-                            setGeneratingLink(false);
-                          }
-                          if (form.meetingType !== "video-call") handleChange("meetingType", "video-call");
-                        }}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-50"
-                      >
-                        <VideoIcon className="w-4 h-4" />
-                        {generatingLink ? "Generating…" : "Generate Link"}
-                      </button>
-                    )}
-                    </div>
-                  </div>
-                  <input
-                    type="text"
-                    value={form.location}
-                    onChange={(e) => handleChange("location", e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-gray-100 bg-gray-50/50 focus:bg-white focus:border-blue-500 transition-all focus:outline-none text-xs text-gray-600"
-                    placeholder="Meeting Room Address or video call link"
-                    disabled={!isEditMode && mode === "view"}
-                  />
-                </div>
+          <div>
+            <FormLabel>Meeting Type</FormLabel>
+            <div className="relative">
+                <select
+                  value={form.meetingType}
+                  onChange={(e) => handleChange("meetingType", e.target.value)}
+                  disabled={!isEditMode && mode === "view"}
+                  className={`${inputCls()} appearance-none bg-white`}
+                >
+                  {meetingTypeOptions.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#1F2937] opacity-50" />
               </div>
-
-              {/* Meta */}
-              <div className="px-5 pb-5 space-y-5 bg-white border-t border-gray-100 pt-5">
-                {/* Meta Rows */}
-                <div className="space-y-3">
-                  {/* Entity Type */}
-                  <div className="flex items-center justify-between group">
-                    <div className="flex items-center gap-2 text-gray-600 text-xs">
-                      <User className="w-3.5 h-3.5" />
-                      <span>Entity Type</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-900 text-xs font-medium">
-                      <Building className="w-3.5 h-3.5 text-gray-400" />
-                      <span className="capitalize">{company?.industry || "Company"}</span>
-                    </div>
-                  </div>
-
-                  {/* Company Name */}
-                  <div className="flex items-center justify-between group">
-                    <div className="flex items-center gap-2 text-gray-600 text-xs">
-                      <Building className="w-3.5 h-3.5" />
-                      <span>Company</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-900 text-xs font-medium">
-                      <span className="truncate max-w-[150px]">{company?.name || "Company Name"}</span>
-                    </div>
-                  </div>
-
-                  {/* Date */}
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-gray-600 text-xs">
-                        <CalendarIcon className="w-3.5 h-3.5" />
-                        <span>Date</span>
-                      </div>
-                      <input
-                        type="date"
-                        value={form.date || calendarDate || ""}
-                        min={new Date().toISOString().split("T")[0]}
-                        onChange={(e) => handleChange("date", e.target.value)}
-                        disabled={!isEditMode && mode === "view"}
-                        className={`text-xs font-medium border-none bg-transparent p-0 focus:ring-0 text-right cursor-pointer ${errors.date ? 'text-red-600' : 'text-gray-900'}`}
-                      />
-                    </div>
-                    {errors.date && <p className="text-[10px] text-red-500 font-medium text-right mt-1">{errors.date}</p>}
-                  </div>
-
-                  {/* Time */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-gray-600 text-xs">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>Time</span>
-                    </div>
-                    <input
-                      type="time"
-                      value={form.time}
-                      onChange={(e) => handleChange("time", e.target.value)}
-                      disabled={!isEditMode && mode === "view"}
-                      className="text-xs font-medium text-gray-900 border-none bg-transparent p-0 focus:ring-0 text-right cursor-pointer"
-                    />
-                  </div>
-
-                  {/* Duration */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-gray-600 text-xs">
-                      <Timer className="w-3.5 h-3.5" />
-                      <span>Duration</span>
-                    </div>
-                    <SingleSelectDropdown
-                      options={durationOptions}
-                      value={form.duration}
-                      onChange={(val) => handleChange("duration", val)}
-                      disabled={!isEditMode && mode === "view"}
-                      isOpen={openDropdown === "duration"}
-                      onOpenChange={(open) => setOpenDropdown(open ? "duration" : null)}
-                    />
-                  </div>
-
-                  {/* Meeting Type */}
-                  <div className="flex items-center justify-between group">
-                    <div className="flex items-center gap-2 text-gray-600 text-xs">
-                      <div className="flex items-center gap-2">
-                        <VideoIcon className="w-4 h-4" />
-                        <span>Meeting Type</span>
-                      </div>
-                    </div>
-                    <SingleSelectDropdown
-                      options={meetingTypeOptions}
-                      value={form.meetingType}
-                      onChange={(val) => handleChange("meetingType", val)}
-                      disabled={!isEditMode && mode === "view"}
-                      isOpen={openDropdown === "meetingType"}
-                      onOpenChange={(open) => setOpenDropdown(open ? "meetingType" : null)}
-                    />
-                  </div>
-
-                  {/* Meeting Category */}
-                  <div className="flex items-center justify-between group">
-                    <div className="flex items-center gap-2 text-gray-600 text-xs">
-                      <PdfIcon className="w-4 h-4" />
-                      <span>Category</span>
-                    </div>
-                    <select
-                      value={form.meetingCategory}
-                      onChange={(e) => handleChange("meetingCategory", e.target.value)}
-                      disabled={!isEditMode && mode === "view"}
-                      className="text-xs font-semibold text-gray-700 bg-transparent focus:outline-none border-none disabled:opacity-60"
-                    >
-                      <option value="">— Select —</option>
-                      {meetingTypes.map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Priority */}
-                  <div className="flex items-center justify-between group">
-                    <div className="flex items-center gap-2 text-gray-600 text-xs">
-                      <Flag className="w-3.5 h-3.5" />
-                      <span>Priority</span>
-                    </div>
-                    <SingleSelectDropdown
-                      options={priorityOptions}
-                      value={form.priority}
-                      onChange={(val) => handleChange("priority", val)}
-                      disabled={!isEditMode && mode === "view"}
-                      isOpen={openDropdown === "priority"}
-                      onOpenChange={(open) => setOpenDropdown(open ? "priority" : null)}
-                    />
-                  </div>
-
-                  {/* Internal Team — your own staff attending, kept as a
-                      separate list from Client Contacts below so Meeting
-                      Details can actually tell the two apart instead of
-                      lumping everyone under one bucket. */}
-                  <div className="space-y-3 pt-2">
-                    <div className="flex items-center gap-2 text-gray-600 text-xs">
-                      <TeamIcon className="w-3.5 h-3.5" />
-                      <span>Internal Team</span>
-                    </div>
-                    <MultiSelectDropdown
-                      users={staffUsers}
-                      selectedUsers={form.internalParticipants}
-                      onSelectionChange={(internalParticipants) => handleChange("internalParticipants", internalParticipants)}
-                      placeholder="Add internal team members"
-                    />
-                  </div>
-
-                  {/* Client Contacts */}
-                  <div className="space-y-3 pt-2">
-                    <div className="flex items-center gap-2 text-gray-600 text-xs">
-                      <TeamIcon className="w-3.5 h-3.5" />
-                      <span>Client Contacts</span>
-                    </div>
-                    <MultiSelectDropdown
-                      users={dealId ? (users || []).filter((u) => String(u._id) === dealContactId || (form.participants || []).includes(u._id)) : users}
-                      selectedUsers={form.participants}
-                      onSelectionChange={(participants) => handleChange("participants", participants)}
-                      placeholder="Add client contacts"
-                    />
-                    {errors.participants && <p className="text-[10px] text-red-500 font-medium">{errors.participants}</p>}
-                  </div>
-                </div>
-
-                {/* Conflict Alert in Right Column */}
-                {timeConflict && (
-                  <div className="pt-2">
-                    <TimeConflictAlert
-                      conflict={timeConflict}
-                      suggestedTimes={getSuggestedTimes()}
-                      onTimeSelect={(time) => handleChange("time", time)}
-                    />
-                  </div>
-                )}
-              </div>
-            </form>
           </div>
 
-          {/* Footer Actions */}
-          <div className="p-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
-            <div>
-              {mode === "view" && onDelete && (
+          <SectionDivider>Meeting Information</SectionDivider>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Location</span>
+              <div className="flex items-center gap-3">
+              {(isEditMode || mode === "create") && googleStatus?.configured && !googleStatus?.connected && (
                 <button
                   type="button"
-                  onClick={handleDelete}
-                  className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-all border border-gray-100 bg-white"
-                  title="Delete Meeting"
+                  disabled={connectingGoogle}
+                  onClick={async () => {
+                    setConnectingGoogle(true);
+                    try {
+                      const res = await API.get("/auth/google/connect");
+                      if (res.data?.authUrl) {
+                        window.location.href = res.data.authUrl;
+                      } else {
+                        toast.error("Could not start Google connect flow");
+                        setConnectingGoogle(false);
+                      }
+                    } catch {
+                      toast.error("Could not start Google connect flow");
+                      setConnectingGoogle(false);
+                    }
+                  }}
+                  className="text-xs font-medium text-gray-500 hover:text-gray-700 underline disabled:opacity-50"
+                  title="One-time setup: connects a Google account so Generate Link can create real Google Meet links"
                 >
-                  <DeleteIcon className="w-4 h-4" />
+                  {connectingGoogle ? "Connecting…" : "Connect Google Account"}
                 </button>
               )}
-            </div>
+              {(isEditMode || mode === "create") && (
+                <button
+                  type="button"
+                  disabled={generatingLink}
+                  onClick={async () => {
+                    setGeneratingLink(true);
+                    try {
+                      // Real Zoom or Google Meet link — tries Zoom
+                      // first (if configured), then this org's
+                      // connected Google account. Same link works for
+                      // staff and the external client, no login
+                      // required on either side.
+                      const res = await API.post("/meetings/generate-video-link", {
+                        title: form.title,
+                        scheduledAt: form.date ? getScheduledAt() : undefined,
+                        duration: form.duration,
+                      });
+                      if (res.data?.provider && res.data?.joinUrl) {
+                        handleChange("location", res.data.joinUrl);
+                      } else if (res.data?.error) {
+                        toast.error(res.data.error);
+                      } else if (googleStatus?.configured && !googleStatus?.connected) {
+                        toast.error("Connect your Google account first (link above) to generate a Meet link");
+                      } else {
+                        toast.error("No video-call provider is configured yet");
+                      }
+                    } catch {
+                      toast.error("Failed to generate a video-call link");
+                    } finally {
+                      setGeneratingLink(false);
+                    }
+                    if (form.meetingType !== "video-call") handleChange("meetingType", "video-call");
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                >
+                  <VideoIcon className="w-4 h-4" />
+                  {generatingLink ? "Generating…" : "Generate Link"}
+                </button>
+              )}
 
-            <div className="flex gap-3">
+              </div>
+            </div>
+            <input
+              type="text"
+              value={form.location}
+              onChange={(e) => handleChange("location", e.target.value)}
+              className={inputCls()}
+              placeholder="Meeting Room Address or video call link"
+              disabled={!isEditMode && mode === "view"}
+            />
+          </div>
+
+          <div>
+            <FormLabel>Company</FormLabel>
+            <div className={`${STATIC_FIELD_CLS} w-full gap-2 bg-[#F9F9FB]`}>
+              <Building className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
+              <span className="truncate text-[#1F2937]">{company?.name || "Company Name"}</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <FormLabel>Category</FormLabel>
+              <div className="relative">
+                <select
+                  value={form.meetingCategory}
+                  onChange={(e) => handleChange("meetingCategory", e.target.value)}
+                  disabled={!isEditMode && mode === "view"}
+                  className={`${inputCls()} appearance-none bg-white`}
+                >
+                  <option value="">— Select —</option>
+                  {meetingTypes.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#1F2937] opacity-50" />
+              </div>
+            </div>
+            <div>
+              <FormLabel>Priority</FormLabel>
+              <div className="relative">
+                <select
+                  value={form.priority}
+                  onChange={(e) => handleChange("priority", e.target.value)}
+                  disabled={!isEditMode && mode === "view"}
+                  className={`${inputCls()} appearance-none bg-white`}
+                >
+                  {priorityOptions.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#1F2937] opacity-50" />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <FormLabel required>Date</FormLabel>
+              <input
+                type="date"
+                value={form.date || calendarDate || ""}
+                min={new Date().toISOString().split("T")[0]}
+                onChange={(e) => handleChange("date", e.target.value)}
+                disabled={!isEditMode && mode === "view"}
+                className={`${inputCls({ error: !!errors.date })} cursor-pointer`}
+              />
+              <FormError>{errors.date}</FormError>
+            </div>
+            <div>
+              <FormLabel>Time</FormLabel>
+              <input
+                type="time"
+                value={form.time}
+                onChange={(e) => handleChange("time", e.target.value)}
+                disabled={!isEditMode && mode === "view"}
+                className={`${inputCls()} cursor-pointer`}
+              />
+            </div>
+            <div>
+              <FormLabel>Duration</FormLabel>
+              <div className="relative">
+                <select
+                  value={form.duration}
+                  onChange={(e) => handleChange("duration", Number(e.target.value))}
+                  disabled={!isEditMode && mode === "view"}
+                  className={`${inputCls()} appearance-none bg-white`}
+                >
+                  {durationOptions.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#1F2937] opacity-50" />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <FormLabel>Description</FormLabel>
+            <textarea
+              value={form.description}
+              onChange={(e) => handleChange("description", e.target.value)}
+              rows={4}
+              className={textareaCls()}
+              placeholder="Describe the meeting objectives, agenda and important details"
+              disabled={!isEditMode && mode === "view"}
+            />
+          </div>
+
+          {/* Internal Team — your own staff attending, kept separate from Client
+              Contacts so Meeting Details can tell the two apart. */}
+          <div>
+            <FormLabel>Internal Team</FormLabel>
+            <MultiSelectDropdown
+              users={staffUsers}
+              selectedUsers={form.internalParticipants}
+              onSelectionChange={(internalParticipants) => handleChange("internalParticipants", internalParticipants)}
+              placeholder="Add internal team members"
+            />
+          </div>
+
+          <div>
+            <FormLabel>Client Contacts</FormLabel>
+            <MultiSelectDropdown
+              users={dealId ? (users || []).filter((u) => String(u._id) === dealContactId || (form.participants || []).includes(u._id)) : users}
+              selectedUsers={form.participants}
+              onSelectionChange={(participants) => handleChange("participants", participants)}
+              placeholder="Add client contacts"
+            />
+            <FormError>{errors.participants}</FormError>
+          </div>
+
+          {timeConflict && (
+            <TimeConflictAlert
+              conflict={timeConflict}
+              suggestedTimes={getSuggestedTimes()}
+              onTimeSelect={(time) => handleChange("time", time)}
+            />
+          )}
+        </form>
+
+        <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-between gap-3">
+          <div>
+            {mode === "view" && onDelete && (
               <button
                 type="button"
-                onClick={onClose}
-                className="px-5 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 transition-colors"
+                onClick={handleDelete}
+                className="px-6 py-2 border border-red-200 text-red-600 rounded-[25px] text-sm font-bold hover:bg-red-50 transition-colors font-inter flex items-center gap-2"
               >
-                Cancel
+                <DeleteIcon className="w-4 h-4" />
+                Delete
               </button>
-              {(!isEditMode && mode === "view") ? (
-                <button
-                  type="button"
-                  onClick={() => setIsEditMode(true)}
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-200 transition-all flex items-center gap-2"
-                >
-                  <EditIcon className="w-4 h-4" />
-                  Edit Meeting
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={loading || timeConflict}
-                  className={`px-6 py-2 rounded-xl text-xs font-bold shadow-lg transition-all flex items-center gap-2 ${loading || timeConflict
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'
-                    }`}
-                >
-                  {loading ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4" />
-                      {isEditMode && mode === "view" ? "Save Changes" : "Schedule Meeting"}
-                    </span>
-                  )}
-                </button>
-              )}
-            </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors font-inter"
+            >
+              Cancel
+            </button>
+            {!isEditMode && mode === "view" ? (
+              <button
+                type="button"
+                onClick={() => setIsEditMode(true)}
+                className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 transition-colors font-inter flex items-center gap-2"
+              >
+                <EditIcon className="w-4 h-4" />
+                Edit Meeting
+              </button>
+            ) : (
+              <button
+                type="submit"
+                form="company-meeting-form"
+                disabled={loading || timeConflict}
+                className={`px-6 py-2 rounded-[25px] text-sm font-bold transition-colors font-inter flex items-center gap-2 ${loading || timeConflict
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-[#158FFF] text-white hover:opacity-90"
+                  }`}
+              >
+                {loading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>{isEditMode && mode === "view" ? "Save Changes" : "Schedule Meeting"}</>
+                )}
+              </button>
+            )}
           </div>
         </div>
       </div>

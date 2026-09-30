@@ -54,6 +54,20 @@ const FieldMappingModal = ({
     ...normalizedCompanyFields
   ], [standardFields, normalizedCompanyFields]);
 
+  // Value signatures for the auto-map effect below. Depending on these
+  // primitive strings (instead of the csvHeaders / allAvailableFields object
+  // references) means the effect only re-runs when the actual columns or
+  // available fields change by value — never merely because a parent handed
+  // down a fresh array with the same contents.
+  const headersSignature = useMemo(
+    () => (Array.isArray(csvHeaders) ? csvHeaders.join("|") : ""),
+    [csvHeaders]
+  );
+  const fieldsSignature = useMemo(
+    () => allAvailableFields.map((f) => f.key).join("|"),
+    [allAvailableFields]
+  );
+
   // Handle modal opening/closing animation
   useEffect(() => {
     if (propIsOpen) {
@@ -91,18 +105,19 @@ const FieldMappingModal = ({
       autoMapping[header] = matchingField ? matchingField.key : "";
     });
 
-    // Only update if mapping actually changed
+    // Only update if the mapping actually changed, so a no-op re-run can't
+    // trigger another render (React bails when the same state ref is returned).
     setFieldMapping(prevMapping => {
-      const hasChanged = Object.keys(autoMapping).some(
-        key => prevMapping[key] !== autoMapping[key]
-      );
-      
-      if (hasChanged) {
-        return autoMapping;
-      }
-      return prevMapping;
+      const keys = Object.keys(autoMapping);
+      const hasChanged =
+        keys.length !== Object.keys(prevMapping).length ||
+        keys.some(key => prevMapping[key] !== autoMapping[key]);
+      return hasChanged ? autoMapping : prevMapping;
     });
-  }, [propIsOpen, csvHeaders, allAvailableFields]);
+    // Depends on value signatures, not object identities — see above. csvHeaders
+    // and allAvailableFields are read inside but intentionally not deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propIsOpen, headersSignature, fieldsSignature]);
 
   const handleClose = useCallback(() => {
     setIsOpen(false);

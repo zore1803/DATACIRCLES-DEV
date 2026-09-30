@@ -762,36 +762,42 @@ const AdminMeetingForm = ({
 
   // Initialize form when modal opens
   useEffect(() => {
+    let fetchTimer;
     if (open) {
       setShouldRender(true);
       requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
-      API.get("/auth/google/status")
-        .then((res) => setGoogleStatus(res.data))
-        .catch(() => setGoogleStatus(null));
-      API.get("/deals")
-        .then((res) => {
-          const dealsList = res.data || [];
-          setLinkableDeals(dealsList);
-          
-          // Opened from a Deal without an explicit company: adopt the deal's
-          // company and its single contact (the pickers below scope to it).
-          if (initialDealId && !initialCompanyId) {
-            const linkedDeal = dealsList.find(d => d._id === initialDealId);
-            if (linkedDeal) {
-              const cid = linkedDeal.company?._id || linkedDeal.company || null;
-              const dcid = linkedDeal.contact?._id || linkedDeal.contact || null;
-              setForm(f => ({ ...f, ...(cid ? { companyId: cid } : {}), linkedContactId: dcid }));
-              if (cid) fetchCompanyContacts(cid);
+      // Start the lookups after the 300ms slide: their responses re-render this
+      // large form, and landing mid-animation drops frames so the drawer looks
+      // like it opens instantly.
+      fetchTimer = setTimeout(() => {
+        API.get("/auth/google/status")
+          .then((res) => setGoogleStatus(res.data))
+          .catch(() => setGoogleStatus(null));
+        API.get("/deals")
+          .then((res) => {
+            const dealsList = res.data || [];
+            setLinkableDeals(dealsList);
+
+            // Opened from a Deal without an explicit company: adopt the deal's
+            // company and its single contact (the pickers below scope to it).
+            if (initialDealId && !initialCompanyId) {
+              const linkedDeal = dealsList.find(d => d._id === initialDealId);
+              if (linkedDeal) {
+                const cid = linkedDeal.company?._id || linkedDeal.company || null;
+                const dcid = linkedDeal.contact?._id || linkedDeal.contact || null;
+                setForm(f => ({ ...f, ...(cid ? { companyId: cid } : {}), linkedContactId: dcid }));
+                if (cid) fetchCompanyContacts(cid);
+              }
             }
-          }
-        })
-        .catch(() => setLinkableDeals([]));
-      API.get("/invoices")
-        .then((res) => setLinkableInvoices(res.data || []))
-        .catch(() => setLinkableInvoices([]));
-      API.get("/meeting-fields")
-        .then((res) => setMeetingFieldDefs(res.data?.fields || []))
-        .catch(() => setMeetingFieldDefs([]));
+          })
+          .catch(() => setLinkableDeals([]));
+        API.get("/invoices")
+          .then((res) => setLinkableInvoices(res.data || []))
+          .catch(() => setLinkableInvoices([]));
+        API.get("/meeting-fields")
+          .then((res) => setMeetingFieldDefs(res.data?.fields || []))
+          .catch(() => setMeetingFieldDefs([]));
+      }, 320);
 
       if (meetingData && mode === "view") {
         const initialFormData = {
@@ -843,6 +849,7 @@ const AdminMeetingForm = ({
 
       setErrors({});
       setIsEditMode(mode === "create" || !meetingData || !!startInEditMode);
+      return () => clearTimeout(fetchTimer);
     } else {
       setIsSliding(false);
       setTimeout(() => setShouldRender(false), 300);
@@ -1226,7 +1233,7 @@ const AdminMeetingForm = ({
         onClick={onClose}
       />
       <div
-        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out font-inter ${
+        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out will-change-transform font-inter ${
           isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
         }`}
       >

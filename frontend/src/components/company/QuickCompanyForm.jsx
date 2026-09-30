@@ -629,7 +629,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
       if (billingAddressError) setBillingAddressError(false);
       lastFetchedGstin.current = gstin;
       console.log("[GSTIN:company] 4. form updated");
-      toast.success("GSTIN details fetched. Review and save");
+      toast.success("GSTIN details fetched.");
     } catch (error) {
       console.log("[GSTIN:company] FAILED", error.response?.status, error.response?.data || error.message);
       toast.error(error.response?.data?.error || "Failed to fetch GSTIN details");

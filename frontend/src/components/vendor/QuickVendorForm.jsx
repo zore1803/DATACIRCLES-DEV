@@ -435,7 +435,7 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
       if (nameError) setNameError(false);
       if (addressError) setAddressError(false);
       console.log("[GSTIN:vendor] 4. form updated");
-      toast.success("GSTIN details fetched. Review and save");
+      toast.success("GSTIN details fetched.");
     } catch (error) {
       console.log("[GSTIN:vendor] FAILED", error.response?.status, error.response?.data || error.message);
       toast.error(error.response?.data?.error || "Failed to fetch GSTIN details");

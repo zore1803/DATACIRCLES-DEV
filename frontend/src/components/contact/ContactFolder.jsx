@@ -21,6 +21,7 @@ import InlineNewFolder from "../common/InlineNewFolder";
 
 const ContactFolder = () => {
   const [folders, setFolders] = useState([]);
+  const [foldersLoading, setFoldersLoading] = useState(true);
   const [newFolderName, setNewFolderName] = useState("");
   const [editingFolder, setEditingFolder] = useState(null);
   const [editingName, setEditingName] = useState("");
@@ -93,6 +94,8 @@ const ContactFolder = () => {
       setFolders(res.data);
     } catch (error) {
       toast.error("Failed to fetch contact folders");
+    } finally {
+      setFoldersLoading(false);
     }
   };
 
@@ -268,7 +271,19 @@ const ContactFolder = () => {
 
       <div className="p-6 flex-1 min-h-0 overflow-y-auto">
         {/* View Content */}
-        {viewMode === "folder" ? (
+        {foldersLoading ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="p-4 rounded-xl flex flex-col items-center gap-3">
+                  <div className="w-16 h-16 rounded-2xl bg-gray-200 animate-pulse" />
+                  <div className="w-20 h-3 rounded bg-gray-200 animate-pulse" />
+                  <div className="w-12 h-2.5 rounded bg-gray-100 animate-pulse" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : viewMode === "folder" ? (
           <div className="space-y-6">
             {/* Folder Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
@@ -458,13 +473,13 @@ const ContactFolder = () => {
           </div>
         )}
 
-        {folders.length > 0 && visibleFolders.length === 0 && (
+        {!foldersLoading && folders.length > 0 && visibleFolders.length === 0 && (
           <div className="text-center py-20 text-gray-500 text-sm">
             No folders match your search
           </div>
         )}
 
-        {folders?.length === 0 && (
+        {!foldersLoading && folders?.length === 0 && (
           <div className="text-center py-20">
             <div className="bg-gray-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
               <FolderIcon className="w-10 h-10 text-gray-300" />

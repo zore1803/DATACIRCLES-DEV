@@ -579,7 +579,7 @@ const QuickTaskForm = ({
         onClick={handleClose}
       />
       <div
-        className={`fixed dc-panel-card z-[10001] dc-panel-w bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ease-out font-inter ${
+        className={`fixed dc-panel-card z-[10001] dc-panel-w bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out font-inter ${
           isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
         }`}
       >

@@ -72,8 +72,8 @@ const FormField = ({ label, required, children, error, description }) => (
   <div>
     <FormLabel required={required}>{label}</FormLabel>
     {children}
-    {description && <p className="text-xs text-gray-500">{description}</p>}
-    {error && <p className="text-xs text-red-600 flex items-center gap-1">
+    {description && <p className="text-[13px] font-inter text-[#A0A0A0] mt-1.5">{description}</p>}
+    {error && <p className="text-xs text-red-500 font-inter mt-1 flex items-center gap-1">
       <AlertCircle className="w-3 h-3" />
       {error}
     </p>}
@@ -261,31 +261,23 @@ const handleSubmit = async (e) => {
           isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
         }`}
       >
-        <div className="h-full flex flex-col">
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gray-50">
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-100 p-2 rounded-xl">
-                <CheckCircle2 className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">
-                  {isEditMode ? "Edit Task" : mode === "create" ? "Create Task" : "Task Details"}
-                </h3>
-                <p className="text-sm text-gray-600">
-                  {isEditMode ? "Update task details" : mode === "create" ? "Add a new task to your workflow" : "View and manage task details"}
-                </p>
-              </div>
-            </div>
+        <div className="h-full min-h-0 flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
+            <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
+              {isEditMode ? "Edit Task" : mode === "create" ? "Create Task" : "Task Details"}
+            </h2>
             <button
               onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
+              title="Close"
+              className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity"
+              aria-label="Close"
             >
-              <X className="w-5 h-5" />
+              <X className="w-[18px] h-[18px]" strokeWidth={2} />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6">
             {isEditMode ? (
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form id="contact-task-form" onSubmit={handleSubmit} className="space-y-6">
                 <FormField label="Task Title" required error={errors.title}>
                   <input
                     type="text"
@@ -373,7 +365,7 @@ const handleSubmit = async (e) => {
                     <button
                       type="button"
                       onClick={() => setShowUserSelector(!showUserSelector)}
-                      className="flex items-center gap-2 px-4 py-3 bg-blue-50 text-blue-700 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors w-full justify-center"
+                      className="flex items-center gap-2 h-[38px] px-4 bg-[#158FFF]/10 text-[#158FFF] rounded-full border border-[#158FFF]/20 hover:bg-[#158FFF]/20 transition-colors w-full justify-center text-[13px] font-medium"
                     >
                       <PlusIcon className="w-4 h-4" />
                       {showUserSelector ? "Hide Users" : "Select Users"}
@@ -409,32 +401,6 @@ const handleSubmit = async (e) => {
                     )}
                   </div>
                 </FormField>
-                <div className="flex gap-3 pt-6 border-t border-gray-200">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="flex-1 px-6 py-3 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {loading ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        {isEditMode && mode === "view" ? "Updating..." : "Saving..."}
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        {isEditMode && mode === "view" ? "Update Task" : "Create Task"}
-                      </>
-                    )}
-                  </button>
-                </div>
               </form>
             ) : (
               <div className="space-y-8">
@@ -507,41 +473,66 @@ const handleSubmit = async (e) => {
                     </div>
                   </div>
                 </div>
-                {onDelete && (
-                  <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
-                    <button
-                      onClick={() => setIsEditMode(true)}
-                      className="flex items-center gap-2 px-6 py-3 text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl font-semibold transition-colors"
-                    >
-                      <EditIcon className="w-4 h-4" />
-                      Edit Task
-                    </button>
-                    <button
-                      onClick={handleDelete}
-                      disabled={isDeleting}
-                      className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-colors border
-                        ${isDeleting
-                          ? "bg-red-100 text-red-400 border-red-100 cursor-not-allowed"
-                          : "text-red-700 bg-red-50 hover:bg-red-100 border-red-200"
-                        }`}
-                    >
-                      {isDeleting ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Deleting...
-                        </>
-                      ) : (
-                        <>
-                          <DeleteIcon className="w-4 h-4" />
-                          Delete Task
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
               </div>
             )}
           </div>
+          {isEditMode ? (
+            <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors font-inter"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="contact-task-form"
+                disabled={loading}
+                className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-inter flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    {isEditMode && mode === "view" ? "Updating..." : "Saving..."}
+                  </>
+                ) : (
+                  <>{isEditMode && mode === "view" ? "Update Task" : "Create Task"}</>
+                )}
+              </button>
+            </div>
+          ) : (
+            onDelete && (
+              <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditMode(true)}
+                  className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors font-inter flex items-center gap-2"
+                >
+                  <EditIcon className="w-4 h-4" />
+                  Edit Task
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="px-6 py-2 border border-red-200 text-red-600 rounded-[25px] text-sm font-bold hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-inter flex items-center gap-2"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <DeleteIcon className="w-4 h-4" />
+                      Delete Task
+                    </>
+                  )}
+                </button>
+              </div>
+            )
+          )}
         </div>
       </div>
     </>

@@ -72,6 +72,14 @@ router.put('/:id/remove-company',
   companyFolderController.removeCompanyFromFolder
 );
 
+// REMOVE several companies from folder (bulk)
+router.put('/:id/remove-companies',
+  requireAuth,
+  subscriptionGate,
+  restrictByPlan('folders', 'write'),
+  companyFolderController.removeCompaniesFromFolder
+);
+
 // Delete folder
 router.delete('/:id',
   requireAuth,

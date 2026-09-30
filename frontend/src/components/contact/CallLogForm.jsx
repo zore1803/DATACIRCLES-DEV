@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import ReactQuill from 'react-quill-new';
 import AppToaster from "../AppToaster";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import { FormLabel, FormError, inputCls } from "../common/form";
 
 const initialFormState = {
   callType: "Outbound",
@@ -262,165 +263,145 @@ const CallLogForm = ({
         onClick={onClose}
       />
       <div
-        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl overflow-y-auto transform transition-transform duration-300 ease-out ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
+        className={`fixed dc-panel-card dc-panel-w z-[10001] bg-white shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-out font-inter ${isSliding ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"
           }`}
       >
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">
-              {editLog ? "Edit Call Log" : "Add New Call Log"}
-            </h3>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
+          <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
+            {editLog ? "Edit Call Log" : "Add New Call Log"}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            title="Close"
+            className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity"
+            aria-label="Close"
+          >
+            <X className="w-[18px] h-[18px]" strokeWidth={2} />
+          </button>
+        </div>
+
+        <form
+          id="contact-call-log-form"
+          onSubmit={handleSubmit}
+          className="flex-1 min-h-0 overflow-y-auto px-8 py-6 space-y-6"
+        >
+          {/* Contact Selection - Now with validation */}
+          {!contactId && !editLog && (
+            <div>
+              <FormLabel required>Contact</FormLabel>
+              <SearchableDropdown
+                options={contacts}
+                value={form.contact}
+                onChange={(value) => {
+                  handleFormChange("contact", value);
+                  // Clear validation error when contact is selected
+                  if (validationErrors.contact) {
+                    setValidationErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors.contact;
+                      return newErrors;
+                    });
+                  }
+                }}
+                placeholder="Select Contact"
+                displayKey="name"
+                valueKey="_id"
+                required={true}
+                error={validationErrors.contact}
+              />
+              <FormError>{validationErrors.contact}</FormError>
+            </div>
+          )}
+
+          <div>
+            <FormLabel>Call Type</FormLabel>
+            <select
+              value={form.callType}
+              onChange={(e) => handleFormChange("callType", e.target.value)}
+              className={`${inputCls()} bg-white cursor-pointer`}
+              required
             >
-              <X className="w-5 h-5" />
-            </button>
+              {callTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 gap-6">
-              {/* Contact Selection - Now with validation */}
-              {!contactId && !editLog && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Contact <span className="text-red-500">*</span>
-                  </label>
-                  <SearchableDropdown
-                    options={contacts}
-                    value={form.contact}
-                    onChange={(value) => {
-                      handleFormChange("contact", value);
-                      // Clear validation error when contact is selected
-                      if (validationErrors.contact) {
-                        setValidationErrors(prev => {
-                          const newErrors = { ...prev };
-                          delete newErrors.contact;
-                          return newErrors;
-                        });
-                      }
-                    }}
-                    placeholder="Select Contact"
-                    displayKey="name"
-                    valueKey="_id"
-                    required={true}
-                    error={validationErrors.contact}
-                  />
-                  {validationErrors.contact && (
-                    <p className="text-red-500 text-xs mt-1">{validationErrors.contact}</p>
-                  )}
-                </div>
-              )}
+          <div>
+            <FormLabel>Call Status</FormLabel>
+            <select
+              value={form.status}
+              onChange={(e) => handleStatusChange(e.target.value)}
+              className={`${inputCls()} bg-white cursor-pointer`}
+              required
+            >
+              {statusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Call Type
-                </label>
-                <select
-                  value={form.callType}
-                  onChange={(e) => handleFormChange("callType", e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm cursor-pointer"
-                  required
-                >
-                  {callTypeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          {/* Duration - Now with validation */}
+          <div>
+            <FormLabel required={form.status === "Connected"}>Duration (seconds)</FormLabel>
+            <input
+              type="number"
+              value={form.duration}
+              onChange={(e) => handleFormChange("duration", e.target.value)}
+              className={`${inputCls({ error: !!validationErrors.duration })} ${allowDuration ? "" : "cursor-not-allowed"}`}
+              placeholder={allowDuration ? "Enter duration" : "Not applicable"}
+              min="0"
+              disabled={!allowDuration}
+              required={form.status === "Connected"}
+            />
+            <FormError>{validationErrors.duration}</FormError>
+            {!allowDuration && !validationErrors.duration && (
+              <p className="text-[13px] font-inter text-[#A0A0A0] mt-1.5">
+                Duration not applicable for "{form.status}" calls
+              </p>
+            )}
+          </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Call Status
-                </label>
-                <select
-                  value={form.status}
-                  onChange={(e) => handleStatusChange(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm cursor-pointer"
-                  required
-                >
-                  {statusOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Duration - Now with validation */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Duration (seconds)
-                  {form.status === "Connected" && (
-                    <span className="text-red-500"> *</span>
-                  )}
-                </label>
-                <input
-                  type="number"
-                  value={form.duration}
-                  onChange={(e) => handleFormChange("duration", e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-lg text-sm ${validationErrors.duration
-                    ? 'border-red-500 focus:ring-red-500'
-                    : allowDuration
-                      ? "border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                      : "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
-                    }`}
-                  placeholder={
-                    allowDuration ? "Enter duration" : "Not applicable"
-                  }
-                  min="0"
-                  disabled={!allowDuration}
-                  required={form.status === "Connected"}
-                />
-                {validationErrors.duration && (
-                  <p className="text-red-500 text-xs mt-1">{validationErrors.duration}</p>
-                )}
-                {!allowDuration && !validationErrors.duration && (
-                  <p className="mt-1 text-xs text-gray-500">
-                    Duration not applicable for "{form.status}" calls
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Notes
-                </label>
-                <div className="border border-gray-300 rounded-lg overflow-hidden">
-                  <ReactQuill
-                    value={form.notes || ''}
-                    onChange={(value) => handleFormChange("notes", value)}
-                    theme="snow"
-                    modules={quillModules}
-                    formats={quillFormats}
-                    placeholder="Add notes..."
-                  />
-                </div>
-              </div>
+          <div>
+            <FormLabel>Notes</FormLabel>
+            <div className="border border-[#1F2937]/10 rounded-2xl overflow-hidden">
+              <ReactQuill
+                value={form.notes || ''}
+                onChange={(value) => handleFormChange("notes", value)}
+                theme="snow"
+                modules={quillModules}
+                formats={quillFormats}
+                placeholder="Add notes..."
+              />
             </div>
+          </div>
+        </form>
 
-            <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              >
-                {submitting
-                  ? "Saving..."
-                  : editLog
-                    ? "Update Call Log"
-                    : "Add Call Log"}
-              </button>
-            </div>
-          </form>
+        <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors font-inter"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="contact-call-log-form"
+            disabled={submitting}
+            className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-inter"
+          >
+            {submitting
+              ? "Saving..."
+              : editLog
+                ? "Update Call Log"
+                : "Add Call Log"}
+          </button>
         </div>
       </div>
 

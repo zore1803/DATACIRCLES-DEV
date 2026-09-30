@@ -1,5 +1,6 @@
 const CompanyFolder = require('../models/CompanyFolder');
 const Company = require('../models/Company');
+const { enrichFolders } = require('../utils/companyFolderEnrich');
 
 // Create folder
 exports.createFolder = async (req, res) => {
@@ -42,9 +43,12 @@ exports.getAllFolders = async (req, res) => {
       organization: req.user.organization
     }).populate({
       path: 'companies',
-      match: { organization: req.user.organization } // Ensure populated companies are from same org
-    }).populate('user', 'name email');
-    
+      match: { organization: req.user.organization }, // Ensure populated companies are from same org
+      populate: { path: 'owner', select: 'name email' },
+    }).populate('user', 'name email').lean();
+
+    // Attach real contact/deal counts + last activity for the hotlist views.
+    await enrichFolders(folders, req.user.organization);
     res.json(folders);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -76,13 +80,15 @@ exports.getFolderById = async (req, res) => {
       organization: req.user.organization
     }).populate({
       path: 'companies',
-      match: { organization: req.user.organization }
-    }).populate('user', 'name email');
-    
+      match: { organization: req.user.organization },
+      populate: { path: 'owner', select: 'name email' },
+    }).populate('user', 'name email').lean();
+
     if (!folder) {
       return res.status(404).json({ error: 'Folder not found' });
     }
-    
+
+    await enrichFolders(folder, req.user.organization);
     res.json(folder);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -205,6 +211,33 @@ exports.removeCompanyFromFolder = async (req, res) => {
     });
     
     res.json(updatedFolder);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+// REMOVE several companies from a folder in one call (bulk-action bar). Only
+// takes them off the list — the company records themselves are untouched.
+exports.removeCompaniesFromFolder = async (req, res) => {
+  try {
+    const { companyIds } = req.body;
+    if (!Array.isArray(companyIds) || companyIds.length === 0) {
+      return res.status(400).json({ error: 'companyIds is required' });
+    }
+    const folder = await CompanyFolder.findOneAndUpdate(
+      { _id: req.params.id, organization: req.user.organization },
+      { $pull: { companies: { $in: companyIds } } },
+      { new: true }
+    )
+      .populate({
+        path: 'companies',
+        match: { organization: req.user.organization },
+        populate: { path: 'owner', select: 'name email' },
+      })
+      .lean();
+    if (!folder) return res.status(404).json({ error: 'Folder not found' });
+    await enrichFolders(folder, req.user.organization);
+    res.json(folder);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

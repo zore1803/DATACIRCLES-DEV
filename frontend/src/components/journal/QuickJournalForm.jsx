@@ -4,7 +4,17 @@ import toast from "react-hot-toast";
 import CustomDropdown from "../common/CustomDropdown";
 import API from "../../services/api";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
-import { inputCls, textareaCls } from "../common/form";
+import {
+  FieldActionButton,
+  FormError,
+  FormLabel,
+  HINT_CLS,
+  InputWithAction,
+  STATIC_FIELD_CLS,
+  inputCls,
+  selectButtonCls,
+  textareaCls,
+} from "../common/form";
 
 const MAX_FILES = 3;
 
@@ -155,7 +165,7 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
         <form onSubmit={handleSubmit} noValidate className="flex flex-col h-full min-h-0">
           {/* Sticky header — matches the QuickCompanyForm header spec */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
-            <h2 className="text-base font-normal leading-5 text-[#78788D] uppercase tracking-wide">
+            <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
               {editJournal ? "Edit Journal" : "Create New Journal"}
             </h2>
             <button
@@ -172,9 +182,7 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
           {/* Scrollable body */}
           <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6 space-y-6">
             <div>
-              <label className="flex items-center gap-0.5 text-sm font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Journal Name <span className="text-[#FF4935]">*</span>
-              </label>
+              <FormLabel required>Journal Name</FormLabel>
               <input
                 ref={nameInputRef}
                 type="text"
@@ -183,16 +191,12 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
                 className={inputCls({ error: !!(nameError) })}
                 placeholder="e.g. Petty Cash Journal"
               />
-              {nameError && (
-                <p className="mt-1 text-xs text-red-600">Journal name is required</p>
-              )}
+              <FormError>{nameError ? "Journal name is required" : ""}</FormError>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                  Journal Date
-                </label>
+                <FormLabel>Journal Date</FormLabel>
                 <input
                   type="date"
                   value={form.date}
@@ -201,9 +205,7 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                  Time <span className="text-[#1F2937]/40 font-normal">(optional)</span>
-                </label>
+                <FormLabel>Time <span className="text-[#A0A0A0] font-normal">(optional)</span></FormLabel>
                 <input
                   type="time"
                   value={form.time}
@@ -214,31 +216,27 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Category
-              </label>
+              <FormLabel>Category</FormLabel>
               <CustomDropdown
                 options={JOURNAL_CATEGORIES}
                 value={form.category}
                 onChange={(value) => handleFormChange("category", value)}
                 placeholder="Select Category"
                 searchable
-                buttonClassName={`w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-sm text-left flex items-center justify-between transition-all bg-white font-inter ${form.category ? "text-[#1F2937]" : "text-[#1F2937] opacity-50"}`}
+                buttonClassName={selectButtonCls({ hasValue: !!form.category })}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Opening Balance
-              </label>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center rounded-full border border-[#1F2937]/10 p-1 flex-shrink-0">
+              <FormLabel>Opening Balance</FormLabel>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center h-[38px] rounded-full border border-[#1F2937]/10 p-1 flex-shrink-0">
                   {["Debit", "Credit"].map((type) => (
                     <button
                       key={type}
                       type="button"
                       onClick={() => handleFormChange("balanceType", type)}
-                      className={`h-6 px-3 rounded-full text-sm font-medium transition-colors ${
+                      className={`h-full px-4 rounded-full text-[13px] font-medium transition-colors ${
                         form.balanceType === type
                           ? type === "Debit"
                             ? "bg-red-50 text-red-600"
@@ -256,16 +254,14 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
                   min="0"
                   value={form.openingBalance}
                   onChange={(e) => handleFormChange("openingBalance", e.target.value)}
-                  className="flex-1 min-w-0 border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-sm text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
+                  className={inputCls({ grow: true })}
                   placeholder="0.00"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Notes
-              </label>
+              <FormLabel>Notes</FormLabel>
               <textarea
                 value={form.notes}
                 onChange={(e) => handleFormChange("notes", e.target.value)}
@@ -276,40 +272,39 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[#161618] tracking-[-0.05em] mb-2">
-                Attach Files
-              </label>
-              <div className="flex items-center gap-3">
+              <FormLabel>Attach Files</FormLabel>
+              <InputWithAction
+                action={
+                  <FieldActionButton
+                    icon={<Paperclip className="w-[18px] h-[18px] text-white" strokeWidth={2} />}
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={attachments.length >= MAX_FILES}
+                    title="Attach files"
+                    aria-label="Attach files"
+                  />
+                }
+              >
                 <div
                   onClick={() => attachments.length < MAX_FILES && fileInputRef.current?.click()}
-                  className={`flex-1 flex items-center px-3 h-[38px] rounded-full border border-[#1F2937]/10 ${
+                  className={`${STATIC_FIELD_CLS} ${
                     attachments.length >= MAX_FILES ? "cursor-not-allowed opacity-50" : "cursor-pointer"
                   }`}
                 >
-                  <span className="text-sm leading-5 text-[#1F2937] opacity-50 truncate">
+                  <span className="text-[#1F2937] opacity-50 truncate">
                     {attachments.length >= MAX_FILES
                       ? `Maximum ${MAX_FILES} files attached`
                       : "Click to upload files"}
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={attachments.length >= MAX_FILES}
-                  title="Attach files"
-                  className="flex-shrink-0 w-[38px] h-[38px] rounded-full bg-[#158FFF] border border-[#1F2937]/10 flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Paperclip className="w-[18px] h-[18px] text-white" strokeWidth={2} />
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  onChange={handleFilesSelected}
-                  className="hidden"
-                />
-              </div>
-              <p className="text-sm font-inter text-[#A0A0A0] mt-1.5 uppercase font-medium">
+              </InputWithAction>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={handleFilesSelected}
+                className="hidden"
+              />
+              <p className={HINT_CLS}>
                 Up to {MAX_FILES} files ({attachments.length}/{MAX_FILES} attached)
               </p>
 
@@ -318,9 +313,9 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
                   {attachments.map((file, index) => (
                     <li
                       key={`${file.name}-${index}`}
-                      className="flex items-center justify-between gap-2 px-3 h-8 rounded-full bg-[#F9F9FB] border border-[#1F2937]/10"
+                      className="flex items-center justify-between gap-2 px-3 h-[34px] rounded-full bg-[#F9F9FB] border border-[#1F2937]/10"
                     >
-                      <span className="text-sm text-[#1F2937] truncate">
+                      <span className="text-[13px] text-[#1F2937] truncate">
                         {file.name}
                       </span>
                       <button
@@ -343,12 +338,12 @@ const QuickJournalForm = ({ onRequestClose, onJournalCreated, onJournalUpdated, 
             <button
               type="button"
               onClick={handleClose}
-              className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors"
+              className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors font-inter"
             >
               Cancel
             </button>
             <button
-              className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-inter"
               type="submit"
               disabled={loading}
             >

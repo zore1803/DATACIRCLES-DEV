@@ -1,8 +1,13 @@
 import DeleteIcon from "../common/DeleteIcon";
+import MoreIcon from "../common/MoreIcon";
+import EyeIcon from "../common/EyeIcon";
+import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import API from "../../services/api";
 import { useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
+import { getAncestorZoom } from "../../utils/domUtils";
 import toast from "react-hot-toast";
 import HighlightText from "../common/HighlightText";
 import SearchIcon from "../common/SearchIcon";
@@ -14,7 +19,15 @@ import {
   Check,
   Menu,
   ChevronLeft,
+  ChevronRight,
+  ChevronDown,
   LayoutGrid,
+  Users,
+  FileText,
+  Calendar,
+  CheckSquare,
+  Clock,
+  SlidersHorizontal,
   Folder as LucideFolder,
 } from "lucide-react";
 import ListIcon from "../common/ListIcon";
@@ -33,134 +46,163 @@ const FolderIcon = ({ className = "h-8 w-8" }) => (
   <LucideFolder className={`${className} fill-blue-300/50 text-blue-400`} strokeWidth={1.5} />
 );
 
-/**
- * One company, in the "card" arrangement of an opened folder.
- *
- * Deliberately a <div> (not <Link>) wrapping the whole surface, with
- * navigation done via onClick + a button-guard, matching the row-click
- * pattern already used for Companies/Contacts/Tasks elsewhere in this app.
- * That's what makes adding an expandable task list here later a small,
- * additive change instead of a redesign: a <Link> wrapping the entire card
- * cannot legally contain nested interactive content (a future task list
- * would have its own buttons/checkboxes — invalid HTML inside <a>, and it
- * breaks click handling). A plain div with a guarded onClick has no such
- * ceiling — an expand chevron + a conditionally-rendered task block can be
- * dropped in below the existing content without touching the grid, the
- * search, or any other row/card.
- */
-const FolderCompanyCard = ({ company, query, onOpen, onEdit, onRemove }) => (
-  <div
-    onClick={(e) => {
-      if (e.target.closest("button") || e.target.closest("a")) return;
-      onOpen(company._id);
-    }}
-    className="bg-white p-3 sm:p-4 rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-sm transition-all group cursor-pointer"
-  >
-    <div className="flex items-start gap-2 sm:gap-3">
-      <div className="p-1.5 sm:p-2 bg-blue-50 rounded-lg group-hover:bg-blue-100 transition-colors flex-shrink-0">
-        <Building2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-600" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <h5 className="font-medium text-gray-900 truncate text-sm sm:text-base">
-          <HighlightText text={company.name || "Unnamed Company"} query={query} />
-        </h5>
-        <div className="mt-1 space-y-1">
-          <div className="flex items-center gap-1.5 text-xs text-gray-600">
-            <Briefcase className="h-3 w-3 flex-shrink-0" />
-            <span className="truncate"><HighlightText text={company.industry || "N/A"} query={query} /></span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-gray-600">
-            <MapPin className="h-3 w-3 flex-shrink-0" />
-            <span className="truncate"><HighlightText text={company.address || "N/A"} query={query} /></span>
-          </div>
-        </div>
-      </div>
+// Relative time for the "last activity" signal: "2h ago", "Yesterday", "3d ago".
+const formatRelative = (date) => {
+  if (!date) return "";
+  const diff = Date.now() - new Date(date).getTime();
+  if (diff < 60000) return "just now";
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+};
 
-      {/* Always visible, not hover-only — same reasoning as the list row:
-          hover-only actions are undiscoverable and don't work on touch. The
-          card's onClick has a closest("button") guard, so these never also
-          trigger navigation. */}
-      <div className="flex items-center gap-1 flex-shrink-0">
-        <button
-          onClick={() => onEdit(company._id)}
-          className="p-1.5 rounded text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-          title="Open company to edit"
-        >
-          <EditIcon className="h-3.5 w-3.5" />
-        </button>
+const ACTIVITY_ICON = { Note: FileText, Meeting: Calendar, Task: CheckSquare, Deal: Briefcase };
+
+// { Icon, label } for a company's most recent real CRM activity, or null.
+const activityMeta = (lastActivity) => {
+  if (!lastActivity?.date) return null;
+  return {
+    Icon: ACTIVITY_ICON[lastActivity.type] || Clock,
+    label: `${lastActivity.type} · ${formatRelative(lastActivity.date)}`,
+  };
+};
+
+// Toggleable table columns (Company + Actions are always shown).
+const HOTLIST_COLUMNS = [
+  { key: "industry", label: "Industry" },
+  { key: "location", label: "Location" },
+  { key: "contacts", label: "Contacts" },
+  { key: "deals", label: "Deals" },
+  { key: "activity", label: "Last Activity" },
+  { key: "owner", label: "Owner" },
+];
+
+// Comparable value for a column, so table sorting matches what's shown.
+const sortValue = (c, key) => {
+  switch (key) {
+    case "company": return (c.name || "").toLowerCase();
+    case "industry": return (c.industry || "").toLowerCase();
+    case "location": return (c.address || "").toLowerCase();
+    case "contacts": return c.contactCount || 0;
+    case "deals": return c.dealCount || 0;
+    case "activity": return c.lastActivity?.date ? new Date(c.lastActivity.date).getTime() : 0;
+    case "owner": return (c.owner?.name || "").toLowerCase();
+    default: return "";
+  }
+};
+
+// One table cell's contents for a given column.
+const CompanyCell = ({ company, colKey, query }) => {
+  switch (colKey) {
+    case "industry":
+      return <span className="truncate block max-w-[220px]"><HighlightText text={company.industry || "—"} query={query} /></span>;
+    case "location":
+      return <span className="truncate block max-w-[260px]"><HighlightText text={company.address || "—"} query={query} /></span>;
+    case "contacts":
+      return <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5 text-gray-400" />{company.contactCount || 0}</span>;
+    case "deals":
+      return <span className="inline-flex items-center gap-1"><Briefcase className="h-3.5 w-3.5 text-gray-400" />{company.dealCount || 0}</span>;
+    case "activity": {
+      const a = activityMeta(company.lastActivity);
+      return a
+        ? <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><a.Icon className="h-3.5 w-3.5 text-gray-400" />{a.label}</span>
+        : <span className="text-gray-400">—</span>;
+    }
+    case "owner":
+      return company.owner?.name
+        ? <span className="truncate block max-w-[160px]">{company.owner.name}</span>
+        : <span className="text-gray-400">—</span>;
+    default:
+      return null;
+  }
+};
+
+/**
+ * One company in the grid ("card") view — richer than a bare tile: counts,
+ * last activity and a View affordance. A plain div (not a Link) with a
+ * button/input-guarded onClick, so the checkbox and remove button work and a
+ * task block can still be dropped in later.
+ */
+const FolderCompanyCard = ({ company, query, selected, onToggleSelect, onOpen, onRemove }) => {
+  const act = activityMeta(company.lastActivity);
+  return (
+    <div
+      onClick={(e) => {
+        if (e.target.closest("button") || e.target.closest("input")) return;
+        onOpen(company._id);
+      }}
+      className={`relative bg-white rounded-xl border p-4 transition-all cursor-pointer group flex flex-col ${
+        selected ? "border-[#0085FF] ring-1 ring-[#0085FF]/30" : "border-[#E1E4EA] hover:border-blue-300 hover:shadow-sm"
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <span className="mt-1 inline-flex flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+          <Checkbox checked={selected} onChange={() => onToggleSelect(company._id)} />
+        </span>
+        <div className="p-2 bg-blue-50 rounded-lg flex-shrink-0">
+          <Building2 className="h-4 w-4 text-blue-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h5 className="font-semibold text-gray-900 truncate text-sm">
+            <HighlightText text={company.name || "Unnamed Company"} query={query} />
+          </h5>
+          <p className="text-xs text-gray-500 truncate mt-0.5">
+            <HighlightText text={company.industry || "—"} query={query} />
+          </p>
+        </div>
         <button
           onClick={() => onRemove(company)}
-          className="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+          className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
           title="Remove from this hotlist"
         >
-          <DeleteIcon className="w-4 h-4" />
+          <X className="w-4 h-4" />
         </button>
       </div>
-    </div>
-    {/* Reserved: an expand chevron + conditional task block belong here, as
-        siblings of the row above — no change needed to this component's
-        outer shape or the grid it sits in. */}
-  </div>
-);
 
-/**
- * One company, in the "list" arrangement — a row in a div-based table (not
- * a literal <table>/<tr>), for the same forward-compatibility reason as
- * FolderCompanyCard above: a task block can be added as a sibling <div>
- * inside this row later without fighting table row/cell semantics.
- */
-const FolderCompanyRow = ({ company, query, onOpen, onEdit, onRemove }) => (
-  <div
-    onClick={(e) => {
-      if (e.target.closest("button") || e.target.closest("a")) return;
-      onOpen(company._id);
-    }}
-    // No grid `gap` — cells carry their own padding and a right border instead,
-    // so the vertical column dividers run edge-to-edge with no break between
-    // them (a gap would leave the divider floating with blank space either
-    // side, which is why this isn't just `gap-3` + `border-r`).
-    className="grid grid-cols-[auto_1fr_1fr_1fr_auto] items-stretch hover:bg-gray-50 transition-colors group cursor-pointer"
-  >
-    <div className="flex items-center px-4 py-3 border-r border-gray-100">
-      <div className="p-1.5 bg-blue-50 rounded-lg group-hover:bg-blue-100 transition-colors flex-shrink-0">
-        <Building2 className="h-3.5 w-3.5 text-blue-600" />
+      <div className="flex items-center gap-1.5 text-xs text-gray-600 mt-3 min-w-0">
+        <MapPin className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+        <span className="truncate"><HighlightText text={company.address || "No location"} query={query} /></span>
+      </div>
+
+      <div className="border-t border-gray-100 mt-3 pt-3 flex items-center gap-4 text-xs">
+        <span className="flex items-center gap-1.5 text-gray-700">
+          <Users className="h-3.5 w-3.5 text-gray-400" />
+          <b className="font-semibold">{company.contactCount || 0}</b> Contacts
+        </span>
+        <span className="flex items-center gap-1.5 text-gray-700">
+          <Briefcase className="h-3.5 w-3.5 text-gray-400" />
+          <b className="font-semibold">{company.dealCount || 0}</b> Deals
+        </span>
+      </div>
+
+      <div className="mt-3">
+        {act ? (
+          <span className="flex items-center gap-1.5 text-xs text-gray-500">
+            <act.Icon className="h-3.5 w-3.5 text-gray-400" />{act.label}
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400">No recent activity</span>
+        )}
+      </div>
+
+      <div className="border-t border-gray-100 mt-3 pt-3 flex items-center justify-between gap-2">
+        <span className="text-xs text-gray-500 truncate">
+          {company.owner?.name ? `Owner: ${company.owner.name}` : "\u00A0"}
+        </span>
+        <span className="flex items-center gap-1 text-xs font-medium text-[#0085FF]">
+          View <ChevronRight className="h-3.5 w-3.5" />
+        </span>
       </div>
     </div>
-    <div className="flex items-center px-4 py-3 border-r border-gray-100 min-w-0">
-      <span className="font-medium text-gray-900 text-sm truncate">
-        <HighlightText text={company.name || "Unnamed Company"} query={query} />
-      </span>
-    </div>
-    <div className="flex items-center gap-1.5 px-4 py-3 border-r border-gray-100 min-w-0 text-xs text-gray-600">
-      <Briefcase className="h-3 w-3 flex-shrink-0" />
-      <span className="truncate"><HighlightText text={company.industry || "N/A"} query={query} /></span>
-    </div>
-    <div className="flex items-center gap-1.5 px-4 py-3 border-r border-gray-100 min-w-0 text-xs text-gray-600">
-      <MapPin className="h-3 w-3 flex-shrink-0" />
-      <span className="truncate"><HighlightText text={company.address || "N/A"} query={query} /></span>
-    </div>
-
-    {/* Actions — always visible now, not hover-only. Hover-only buttons are
-        undiscoverable (you can't tell the action exists until you happen to
-        mouse over the row) and unusable on touch, where there is no hover. */}
-    <div className="flex items-center gap-1 px-3 py-3 flex-shrink-0">
-      <button
-        onClick={() => onEdit(company._id)}
-        className="p-1.5 rounded text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-        title="Open company to edit"
-      >
-        <EditIcon className="h-3.5 w-3.5" />
-      </button>
-      <button
-        onClick={() => onRemove(company)}
-        className="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
-        title="Remove from this hotlist"
-      >
-        <DeleteIcon className="w-4 h-4" />
-      </button>
-    </div>
-  </div>
-);
+  );
+};
 
 const Hotlist = () => {
   const [folders, setFolders] = useState([]);
@@ -187,6 +229,15 @@ const Hotlist = () => {
   const [saving, setSaving] = useState(false);
   const [confirmState, setConfirmState] = useState(null);
   const [editFocus, setEditFocus] = useState("name");
+  // Drill-down table controls: sort, selection, and column visibility.
+  const [sort, setSort] = useState({ key: "company", dir: "asc" });
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
+  const [hiddenCols, setHiddenCols] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("dc_hotlist_hidden_cols") || "[]")); } catch { return new Set(); }
+  });
+  const [colMenuOpen, setColMenuOpen] = useState(false);
+  const colMenuRef = useRef(null);
+  const [rowMenu, setRowMenu] = useState(null); // { id, top, left } for the row three-dot menu
   const [folderViewMode, setFolderViewMode] = useState("card"); // "card" | "list"
   const [foldersViewMode, setFoldersViewMode] = useState("folder"); // top-level hotlist: "folder" | "list"
   // Search scoped to the companies inside whichever folder is currently open —
@@ -196,7 +247,24 @@ const Hotlist = () => {
   const [companySearchTerm, setCompanySearchTerm] = useState("");
   useEffect(() => {
     setCompanySearchTerm("");
+    setSelectedCompanyIds([]);
+    setColMenuOpen(false);
+    setRowMenu(null);
   }, [openFolderId]);
+
+  // Persist which columns are hidden across sessions.
+  useEffect(() => {
+    try { localStorage.setItem("dc_hotlist_hidden_cols", JSON.stringify([...hiddenCols])); } catch { /* ignore */ }
+  }, [hiddenCols]);
+
+  // Close the column menu on an outside click.
+  useEffect(() => {
+    const onDown = (e) => {
+      if (colMenuRef.current && !colMenuRef.current.contains(e.target)) setColMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
 
   // Search and selection states
   const [searchTerm, setSearchTerm] = useState("");
@@ -391,13 +459,43 @@ const Hotlist = () => {
   const askDeleteFolder = (folder) => setConfirmState({ kind: "folder", folder });
   const askRemoveCompany = (folderId, company) =>
     setConfirmState({ kind: "company", folderId, company });
+  const askBulkRemove = (folderId, ids) => setConfirmState({ kind: "bulk", folderId, ids });
 
   const runConfirm = () => {
     const c = confirmState;
     setConfirmState(null);
     if (!c) return;
     if (c.kind === "folder") deleteFolder(c.folder._id);
+    else if (c.kind === "bulk") bulkRemoveFromFolder(c.folderId, c.ids);
     else removeCompanyFromFolder(c.folderId, c.company);
+  };
+
+  const toggleSort = (key) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
+  const toggleCol = (key) =>
+    setHiddenCols((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+  const toggleSelect = (id) =>
+    setSelectedCompanyIds((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const toggleSelectAllVisible = (ids) =>
+    setSelectedCompanyIds((p) => (ids.every((id) => p.includes(id)) ? p.filter((id) => !ids.includes(id)) : [...new Set([...p, ...ids])]));
+  const clearSelection = () => setSelectedCompanyIds([]);
+
+  // Bulk "remove from hotlist" — takes several companies off the list in one
+  // call; the company records themselves are untouched.
+  const bulkRemoveFromFolder = async (folderId, ids) => {
+    const loadingToast = toast.loading("Removing from hotlist...");
+    try {
+      await API.put(`/company-folders/${folderId}/remove-companies`, { companyIds: ids });
+      clearSelection();
+      toast.success(`Removed ${ids.length} from hotlist`, { id: loadingToast });
+      fetchFolders();
+    } catch (error) {
+      if (error.response?.status === 402) {
+        toast.error(error.response?.data?.message || "An active subscription is required to make changes.", { id: loadingToast });
+      } else {
+        toast.error(error.response?.data?.error || "Failed to remove from hotlist", { id: loadingToast });
+      }
+    }
   };
 
   // Opening a company leaves the page, so remember the folder for the way back.
@@ -408,6 +506,66 @@ const Hotlist = () => {
       // storage unavailable: Back just lands on the Companies list
     }
     navigate(`/companies/${id}`);
+  };
+
+  // Row three-dot menu, matching the Companies table: a portal positioned off
+  // the button's rect (zoom-corrected, flips up / clamps) so it never clips
+  // inside the scrolling table.
+  const renderRowActions = (company) => {
+    const isOpen = rowMenu?.id === company._id;
+    return (
+      <div className="relative inline-flex" onMouseDown={(e) => e.stopPropagation()}>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (isOpen) { setRowMenu(null); return; }
+            const z = getAncestorZoom(document.body);
+            const MENU_W = 190, MARGIN = 8, MENU_H = 100;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const viewportH = window.innerHeight / z;
+            const viewportW = window.innerWidth / z;
+            const top = rect.bottom / z + 4;
+            const openUp = viewportH - top < MENU_H + MARGIN;
+            let calcTop = openUp ? rect.top / z - 4 - MENU_H : top;
+            calcTop = Math.max(MARGIN, Math.min(calcTop, viewportH - MENU_H - MARGIN));
+            let calcLeft = rect.right / z - MENU_W;
+            calcLeft = Math.min(calcLeft, viewportW - MENU_W - MARGIN);
+            calcLeft = Math.max(calcLeft, MARGIN);
+            setRowMenu({ id: company._id, top: calcTop, left: calcLeft });
+          }}
+          className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+          title="More actions"
+        >
+          <MoreIcon className="w-4 h-4" />
+        </button>
+        {isOpen && createPortal(
+          <>
+            <div className="fixed inset-0 z-[9998]" onClick={() => setRowMenu(null)} />
+            <div
+              style={{ position: "fixed", top: rowMenu.top, left: rowMenu.left }}
+              className="w-[190px] z-[9999] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right"
+            >
+              <button
+                onClick={() => { setRowMenu(null); openCompany(company._id); }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+              >
+                <EyeIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
+                Open company
+              </button>
+              <div className="w-full border-t border-[#F1F1F5] my-0.5" />
+              <button
+                onClick={() => { setRowMenu(null); askRemoveCompany(openFolder._id, company); }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#CD3636] hover:bg-red-50 whitespace-nowrap"
+              >
+                <DeleteIcon className="w-3.5 h-3.5 text-[#CD3636]" />
+                Remove from hotlist
+              </button>
+            </div>
+          </>,
+          document.body
+        )}
+      </div>
+    );
   };
 
   const toggleCompany = (companyObj) => {
@@ -470,6 +628,8 @@ const Hotlist = () => {
       message={
         confirmState?.kind === "folder"
           ? `"${confirmState.folder.name}" will be deleted. The companies inside it are not deleted.`
+          : confirmState?.kind === "bulk"
+          ? `Remove ${confirmState.ids.length} compan${confirmState.ids.length === 1 ? "y" : "ies"} from this hotlist?\n\nThis only takes them off the list. The companies themselves are not deleted.`
           : `Remove "${confirmState?.company?.name || "this company"}" from this hotlist?\n\nThis only takes it off the list. The company itself is not deleted.`
       }
       confirmLabel={confirmState?.kind === "folder" ? "Delete" : "Remove"}
@@ -637,20 +797,48 @@ const Hotlist = () => {
   if (openFolder) {
     const query = companySearchTerm.trim();
     const q = query.toLowerCase();
-    const visibleCompanies = (openFolder.companies || []).filter((c) => {
+    const filtered = (openFolder.companies || []).filter((c) => {
       if (!q) return true;
-      return [c.name, c.industry, c.address].some((field) =>
-        field?.toLowerCase().includes(q),
-      );
+      return [c.name, c.industry, c.address, c.owner?.name].some((f) => f?.toLowerCase().includes(q));
+    });
+    const dir = sort.dir === "asc" ? 1 : -1;
+    const visibleCompanies = [...filtered].sort((a, b) => {
+      const av = sortValue(a, sort.key);
+      const bv = sortValue(b, sort.key);
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
     });
 
     const total = openFolder.companies?.length || 0;
     const companyWord = total === 1 ? "company" : "companies";
+    const selectedCount = selectedCompanyIds.length;
+    const visibleIds = visibleCompanies.map((c) => c._id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedCompanyIds.includes(id));
+    const shownCols = HOTLIST_COLUMNS.filter((col) => !hiddenCols.has(col.key));
+
+    const SortHeader = ({ colKey, label, center }) => {
+      const active = sort.key === colKey;
+      return (
+        <button
+          type="button"
+          onClick={() => toggleSort(colKey)}
+          className={`flex items-center gap-1 transition-colors ${active ? "text-[#0085FF]" : "hover:text-gray-700"} ${center ? "justify-center w-full" : ""}`}
+        >
+          {label}
+          {/* One down chevron, matching the Companies header. It rotates up when
+              the column is sorted ascending, and turns blue while it's active. */}
+          <ChevronDown
+            className={`h-3.5 w-3.5 transition-transform ${active && sort.dir === "asc" ? "rotate-180" : ""} ${active ? "opacity-100" : "opacity-40"}`}
+          />
+        </button>
+      );
+    };
 
     return (
       <>
       <div className="bg-white overflow-hidden h-full min-h-full flex flex-col">
-        {/* Same header strip as the folder grid: Back + name, search, view toggle, Add Companies. */}
+        {/* Header strip — same shape as the folder grid and the Companies page. */}
         <div className="sm:h-16 px-4 sm:px-6 lg:px-8 py-2 border-b border-[#E1E4EA] flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 bg-white flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -665,7 +853,11 @@ const Hotlist = () => {
             <div className="min-w-0 flex flex-col justify-center gap-1.5">
               <h2 className="m-0 leading-tight font-bold text-base sm:text-lg text-gray-900 truncate">{openFolder.name}</h2>
               <p className="m-0 leading-tight text-[10px] sm:text-xs text-gray-500 font-inter truncate">
-                {q ? `${visibleCompanies.length} of ${total} ${companyWord}` : `${total} ${companyWord}`}
+                {selectedCount > 0
+                  ? `${selectedCount} selected`
+                  : q
+                  ? `${visibleCompanies.length} of ${total} ${companyWord}`
+                  : `${total} ${companyWord}`}
               </p>
             </div>
           </div>
@@ -692,11 +884,40 @@ const Hotlist = () => {
               <button
                 onClick={() => setFolderViewMode("list")}
                 className={`relative z-10 flex items-center justify-center w-8 h-8 rounded-full transition-colors ${folderViewMode === "list" ? "text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
-                title="List View"
+                title="Table View"
               >
                 <ListIcon className="w-4 h-4" />
               </button>
             </div>
+
+            {folderViewMode === "list" && (
+              <div className="relative flex-shrink-0" ref={colMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setColMenuOpen((o) => !o)}
+                  className="inline-flex items-center justify-center h-10 w-10 rounded-full border border-[#E1E4EA] text-[#525866] hover:bg-gray-50 transition-colors"
+                  title="Columns"
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                </button>
+                {colMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-52 bg-white border border-[#E1E4EA] rounded-xl shadow-lg z-20 py-2">
+                    <p className="px-3 py-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Columns</p>
+                    {HOTLIST_COLUMNS.map((col) => (
+                      <button
+                        key={col.key}
+                        type="button"
+                        onClick={() => toggleCol(col.key)}
+                        className="w-full flex items-center justify-between px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        {col.label}
+                        {!hiddenCols.has(col.key) && <Check className="h-4 w-4 text-[#0085FF]" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <button
               type="button"
@@ -709,9 +930,31 @@ const Hotlist = () => {
           </div>
         </div>
 
-        <div className="px-4 sm:px-6 lg:px-8 py-6 flex-1 min-h-0 overflow-y-auto">
+        {/* Bulk-action bar — appears once companies are selected in either view. */}
+        {selectedCount > 0 && (
+          <div className="px-4 sm:px-6 lg:px-8 py-2.5 bg-[#0085FF]/5 border-b border-[#E1E4EA] flex items-center gap-3 flex-shrink-0">
+            <span className="text-sm font-medium text-gray-700">{selectedCount} selected</span>
+            <button
+              type="button"
+              onClick={() => askBulkRemove(openFolder._id, selectedCompanyIds)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-white border border-[#E1E4EA] text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+              Remove from hotlist
+            </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="text-sm font-medium text-gray-500 hover:text-gray-700"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
+        <div className="flex-1 min-h-0 overflow-y-auto">
           {total === 0 ? (
-            <div className="text-center py-20">
+            <div className="px-4 sm:px-6 lg:px-8 text-center py-20">
               <div className="bg-gray-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Building2 className="w-10 h-10 text-gray-300" />
               </div>
@@ -719,44 +962,96 @@ const Hotlist = () => {
               <p className="text-gray-500 mt-2 max-w-sm mx-auto">Add companies to this folder to get started.</p>
             </div>
           ) : visibleCompanies.length === 0 ? (
-            <div className="text-center py-20">
+            <div className="px-4 sm:px-6 lg:px-8 text-center py-20">
               <SearchIcon className="h-10 w-10 mx-auto text-gray-300 mb-3" />
               <p className="text-sm text-gray-500">No companies in this folder match "{companySearchTerm}".</p>
             </div>
           ) : folderViewMode === "card" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <div className="px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {visibleCompanies.map((company) => (
                 <FolderCompanyCard
                   key={company._id}
                   company={company}
                   query={query}
+                  selected={selectedCompanyIds.includes(company._id)}
+                  onToggleSelect={toggleSelect}
                   onOpen={openCompany}
-                  onEdit={openCompany}
                   onRemove={(c) => askRemoveCompany(openFolder._id, c)}
                 />
               ))}
             </div>
           ) : (
-            <div className="bg-white border border-[#E1E4EA] rounded-xl overflow-hidden">
-              <div className="hidden sm:grid grid-cols-[auto_1fr_1fr_1fr_auto] items-stretch bg-gray-50 border-b border-[#E1E4EA] text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                <span className="px-4 py-2.5 border-r border-[#E1E4EA] w-[26px] box-content" />
-                <span className="px-4 py-2.5 border-r border-[#E1E4EA]">Company</span>
-                <span className="px-4 py-2.5 border-r border-[#E1E4EA]">Industry</span>
-                <span className="px-4 py-2.5 border-r border-[#E1E4EA]">Location</span>
-                <span className="px-3 py-2.5">Actions</span>
-              </div>
-              <div className="divide-y divide-gray-100">
-                {visibleCompanies.map((company) => (
-                  <FolderCompanyRow
-                    key={company._id}
-                    company={company}
-                    query={query}
-                    onOpen={openCompany}
-                    onEdit={openCompany}
-                    onRemove={(c) => askRemoveCompany(openFolder._id, c)}
-                  />
-                ))}
-              </div>
+            <div className="overflow-x-auto border-b border-[#E1E4EA]">
+              <table className="w-full border-separate border-spacing-0 text-left">
+                <thead className="bg-[#F5F7FA]">
+                  <tr className="text-sm font-bold text-[#525866] select-none">
+                    <th className="w-10 px-4 py-3 border-r border-b border-[#E1E4EA]">
+                      <span className="inline-flex" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={allVisibleSelected}
+                          onChange={() => toggleSelectAllVisible(visibleIds)}
+                          uncheckedColor="text-[#525866]"
+                        />
+                      </span>
+                    </th>
+                    <th className="px-4 py-3 border-r border-b border-[#E1E4EA]"><SortHeader colKey="company" label="Company" /></th>
+                    {shownCols.map((col) => {
+                      const center = col.key === "contacts" || col.key === "deals";
+                      return (
+                        <th key={col.key} className={`px-4 py-3 border-r border-b border-[#E1E4EA] ${center ? "text-center" : ""}`}>
+                          <SortHeader colKey={col.key} label={col.label} center={center} />
+                        </th>
+                      );
+                    })}
+                    <th className="w-16 px-4 py-3 border-b border-[#E1E4EA] text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleCompanies.map((company) => {
+                    const selected = selectedCompanyIds.includes(company._id);
+                    return (
+                      <tr
+                        key={company._id}
+                        onClick={(e) => {
+                          if (e.target.closest("button") || e.target.closest("input")) return;
+                          openCompany(company._id);
+                        }}
+                        className={`text-sm cursor-pointer transition-colors ${selected ? "bg-[#0085FF]/5" : "hover:bg-gray-50"}`}
+                      >
+                        <td className="px-4 py-3 border-r border-b border-[#E1E4EA]">
+                          <span className="inline-flex" onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={selected}
+                              onChange={() => toggleSelect(company._id)}
+                            />
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 border-r border-b border-[#E1E4EA]">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="p-1.5 bg-blue-50 rounded-lg flex-shrink-0">
+                              <Building2 className="h-3.5 w-3.5 text-blue-600" />
+                            </div>
+                            <span className="font-semibold text-[#0085FF] hover:underline truncate max-w-[220px]">
+                              <HighlightText text={company.name || "Unnamed Company"} query={query} />
+                            </span>
+                          </div>
+                        </td>
+                        {shownCols.map((col) => {
+                          const center = col.key === "contacts" || col.key === "deals";
+                          return (
+                            <td key={col.key} className={`px-4 py-3 border-r border-b border-[#E1E4EA] text-[#525866] ${center ? "text-center" : ""}`}>
+                              <CompanyCell company={company} colKey={col.key} query={query} />
+                            </td>
+                          );
+                        })}
+                        <td className="px-4 py-3 border-b border-[#E1E4EA] text-right">
+                          {renderRowActions(company)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -911,9 +1206,15 @@ const Hotlist = () => {
         )}
 
         {foldersLoading && (
-          <div className="flex justify-center py-20" role="status" aria-label="Loading folders">
-            <span className="w-8 h-8 border-2 border-[#0085FF] border-t-transparent rounded-full animate-spin" />
-          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="p-4 rounded-xl flex flex-col items-center gap-3">
+                  <div className="w-16 h-16 rounded-2xl bg-gray-200 animate-pulse" />
+                  <div className="w-20 h-3 rounded bg-gray-200 animate-pulse" />
+                  <div className="w-12 h-2.5 rounded bg-gray-100 animate-pulse" />
+                </div>
+              ))}
+            </div>
         )}
 
         {!foldersLoading && visibleFolders?.length === 0 && (

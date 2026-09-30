@@ -582,10 +582,10 @@ const FolderCard = ({ folder, expanded, onToggle, onEdit, onDelete, onSelect, on
                 value={editingName}
                 onChange={(e) => onEditingNameChange(e.target.value)}
                 onKeyDown={(e) => {
-                  // Escape attempts a save too (instead of a blind discard)
-                  // so a duplicate name still shows its error, same as
-                  // Enter/blur.
-                  if (e.key === "Enter" || e.key === "Escape") onSaveEdit();
+                  if (e.key === "Enter") onSaveEdit();
+                  // Escape cancels rather than saving, so a NEW draft isn't
+                  // committed as "New Folder" on a keystroke meant to back out.
+                  if (e.key === "Escape") onCancelEdit();
                 }}
                 onBlur={onSaveEdit}
                 onClick={(e) => e.stopPropagation()}
@@ -607,6 +607,9 @@ const FolderCard = ({ folder, expanded, onToggle, onEdit, onDelete, onSelect, on
       </div>
       <div className="flex items-center flex-shrink-0" style={{ gap: 12 }}>
         <button
+          // Keep focus on the name input so its onBlur save doesn't fire and
+          // create the draft before this cancel runs.
+          onMouseDown={(e) => { if (folder._id === "NEW") e.preventDefault(); }}
           onClick={(e) => {
             e.stopPropagation();
             if (folder._id === "NEW") {
@@ -616,7 +619,7 @@ const FolderCard = ({ folder, expanded, onToggle, onEdit, onDelete, onSelect, on
             }
           }}
           className="hover:opacity-70 transition-opacity"
-          title="Delete"
+          title={folder._id === "NEW" ? "Cancel" : "Delete"}
         >
           <RowDeleteIcon size={20} style={{ color: "#CD3636" }} />
         </button>
@@ -1124,6 +1127,7 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
   } = useFillToBottom();
   const companyId = propCompanyId || paramCompanyId;
   const [folders, setFolders] = useState([]);
+  const [foldersLoading, setFoldersLoading] = useState(true);
   const [selectedFolderId, setSelectedFolderId] = useState("");
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [folderPickerSearch, setFolderPickerSearch] = useState("");
@@ -1179,6 +1183,8 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
       onFoldersChange?.(res.data || []);
     } catch (err) {
       toast.error("Failed to fetch folders");
+    } finally {
+      setFoldersLoading(false);
     }
   };
 
@@ -1257,36 +1263,55 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
     }
   };
 
-  const handleInlineSave = async (id) => {
-    if (!inlineEditingId) return; // Prevent double save
-    const nameToSave = inlineEditingName.trim() || "Untitled Folder";
+  const cancelInlineEdit = () => {
+    setInlineEditingId(null);
+    setInlineEditingName("");
     setInlineEditingError("");
+  };
 
-    if (id === "NEW") {
-      const result = await createFolder(nameToSave);
-      if (!result.error) {
-        setInlineEditingId(null);
-        setInlineEditingName("");
-      } else if (result.error !== "failed") {
-        // Duplicate-name conflict: keep the input open with the error
-        // shown right there so the user can just change the name and
-        // retry instead of restarting the whole creation from scratch.
-        setInlineEditingError(result.error);
-      }
-    } else {
-      const folder = folders.find(f => f._id === id);
-      if (folder && folder.name !== nameToSave) {
-        const result = await renameFolder(id, nameToSave);
+  // Enter saves the input, which clears inlineEditingId and unmounts it — that
+  // unmount fires onBlur, which would call this a second time and create/rename
+  // twice (a duplicate folder, or a "already exists" toast on what just
+  // succeeded). This ref makes the whole async save atomic so the second call
+  // is a no-op.
+  const savingRef = React.useRef(false);
+
+  const handleInlineSave = async (id) => {
+    if (!inlineEditingId) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
+    try {
+      const nameToSave = inlineEditingName.trim() || "Untitled Folder";
+      setInlineEditingError("");
+
+      if (id === "NEW") {
+        const result = await createFolder(nameToSave);
         if (!result.error) {
           setInlineEditingId(null);
           setInlineEditingName("");
         } else if (result.error !== "failed") {
+          // Duplicate-name conflict: keep the input open with the error
+          // shown right there so the user can just change the name and
+          // retry instead of restarting the whole creation from scratch.
           setInlineEditingError(result.error);
         }
       } else {
-        setInlineEditingId(null);
-        setInlineEditingName("");
+        const folder = folders.find(f => f._id === id);
+        if (folder && folder.name !== nameToSave) {
+          const result = await renameFolder(id, nameToSave);
+          if (!result.error) {
+            setInlineEditingId(null);
+            setInlineEditingName("");
+          } else if (result.error !== "failed") {
+            setInlineEditingError(result.error);
+          }
+        } else {
+          setInlineEditingId(null);
+          setInlineEditingName("");
+        }
       }
+    } finally {
+      savingRef.current = false;
     }
   };
 
@@ -1842,7 +1867,7 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
         ) : (
           <>
             {/* Search + Controls */}
-            {isLoading ? (
+            {(isLoading || foldersLoading) ? (
               <div className="flex items-center gap-4 mb-4" style={{ height: "44px" }}>
                 <Skeleton height={44} shape="rect" className="flex-1 rounded-full" />
                 <Skeleton height={44} width={96} shape="rect" className="rounded-full flex-shrink-0" />
@@ -1952,7 +1977,7 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
             )}
 
             {/* Folders List / Grid */}
-            {!isLoading && folderViewMode === "grid" && folders.length === 0 ? (
+            {!isLoading && !foldersLoading && folderViewMode === "grid" && folders.length === 0 ? (
               <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
                 {/* The inline "NEW" card lives in the populated-grid branch, which never renders
                     while there are no folders, so this opens the same dialog the list view's does. */}
@@ -1968,7 +1993,7 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                   }
                 />
               </div>
-            ) : !isLoading && folderViewMode === "grid" && filteredFolders.length === 0 ? (
+            ) : !isLoading && !foldersLoading && folderViewMode === "grid" && filteredFolders.length === 0 ? (
               <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
                 <EmptyState icon={FolderIcon} noun="Folder" isFiltered />
               </div>
@@ -1989,7 +2014,7 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                   ...fillStyle,
                 }}
               >
-                {isLoading ? (
+                {(isLoading || foldersLoading) ? (
                   [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((_, idx) => (
                     <div key={idx} className="flex flex-col justify-center items-center" style={{ boxSizing: "border-box", width: "100%", height: 150, borderRadius: 8, gap: 12 }}>
                       <Skeleton width={100} height={100} className="rounded-xl" />
@@ -2017,16 +2042,19 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                         </button>
                         <div className="w-px h-3 bg-gray-200" />
                         <button
+                          // Keep focus on the name input so its onBlur save
+                          // doesn't create the draft before this cancel runs.
+                          onMouseDown={(e) => { if (folder._id === "NEW") e.preventDefault(); }}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (folder._id === "NEW") {
-                              setInlineEditingId(null);
+                              cancelInlineEdit();
                             } else {
                               deleteFolder(folder._id);
                             }
                           }}
                           className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                          title="Delete"
+                          title={folder._id === "NEW" ? "Cancel" : "Delete"}
                         >
                           <DeleteIcon className="w-4 h-4" />
                         </button>
@@ -2048,10 +2076,11 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                                 value={inlineEditingName}
                                 onChange={(e) => { setInlineEditingName(e.target.value); if (inlineEditingError) setInlineEditingError(""); }}
                                 onKeyDown={(e) => {
-                                  // Escape now attempts a save too (instead of a
-                                  // blind discard) so a duplicate name still shows
-                                  // its error right below, same as Enter/blur.
-                                  if (e.key === "Enter" || e.key === "Escape") handleInlineSave(folder._id);
+                                  if (e.key === "Enter") handleInlineSave(folder._id);
+                                  // Escape cancels: for a NEW draft it drops the
+                                  // card, so it doesn't silently create a folder
+                                  // literally named "New Folder".
+                                  if (e.key === "Escape") cancelInlineEdit();
                                 }}
                                 onBlur={() => handleInlineSave(folder._id)}
                                 onClick={(e) => e.stopPropagation()}
@@ -2118,7 +2147,7 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                   </div>
                 ))}
               </div>
-            ) : !isLoading && folders.length === 0 ? (
+            ) : !isLoading && !foldersLoading && folders.length === 0 ? (
               <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
                 <EmptyState
                   icon={FolderIcon}
@@ -2132,7 +2161,7 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                   }
                 />
               </div>
-            ) : !isLoading && filteredFolders.length === 0 ? (
+            ) : !isLoading && !foldersLoading && filteredFolders.length === 0 ? (
               <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
                 <EmptyState icon={FolderIcon} noun="Folder" isFiltered />
               </div>
@@ -2142,7 +2171,7 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                 className="border border-gray-200 rounded-lg overflow-x-hidden overflow-y-auto"
                 style={fillStyle}
               >
-                {isLoading ? (
+                {(isLoading || foldersLoading) ? (
                   [1, 2, 3, 4, 5, 6].map((_, idx) => (
                     <div key={idx} className="transition-all">
                       <div
