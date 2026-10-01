@@ -260,8 +260,11 @@ const duplicatePerformaInvoice = async (req, res) => {
 
 const getAllPerformaInvoices = async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, deal } = req.query;
     let query = { organization: req.user.organization };
+
+    // Scope to a single deal when requested (deal detail page's Documents tab).
+    if (deal) query.deal = deal;
 
     if (search) {
       const matchingDeals = await Deal.find(
@@ -282,7 +285,7 @@ const getAllPerformaInvoices = async (req, res) => {
       const ownedDealIds = await getOwnedDealIds(req.user._id, req.user.organization);
       const ownFilter = { $or: [{ user: req.user._id }, { deal: { $in: ownedDealIds } }] };
       if (query.$or) {
-        query = { organization: query.organization, $and: [{ $or: query.$or }, ownFilter] };
+        query = { organization: query.organization, ...(deal ? { deal } : {}), $and: [{ $or: query.$or }, ownFilter] };
       } else {
         Object.assign(query, ownFilter);
       }

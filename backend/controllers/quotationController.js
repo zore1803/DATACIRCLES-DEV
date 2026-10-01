@@ -278,9 +278,12 @@ exports.duplicateQuotation = async (req, res) => {
 // Get All Quotations
 exports.getAllQuotations = async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, deal } = req.query;
     let query = { organization: req.user.organization };
     const andConditions = [];
+
+    // Scope to a single deal when requested (deal detail page's Documents tab).
+    if (deal) query.deal = deal;
 
     if (req.ownOnly) {
       const ownedDealIds = await getOwnedDealIds(req.user._id, req.user.organization);

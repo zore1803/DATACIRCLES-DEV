@@ -9,6 +9,7 @@ import toast from "react-hot-toast";
 import SearchableDropdown from "../contact/SearchableDropdown";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 import NotesTermsDrawer from "../invoice/NotesTermsDrawer";
+import { resolveTransactionType } from "../../utils/placeOfSupply";
 
 const UNITS = [
   { value: "day", label: "Day(s)" },
@@ -91,10 +92,13 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
   const [dealId, setDealId] = useState("");
   const [dealChangedFlag, setDealChangedFlag] = useState(0);
   // Org's own registered state — compared against the selected customer's
-  // billing state to auto-decide intra vs inter-state, same pattern
-  // InvoiceForm.jsx uses (GET /branding). The transactionType field stays a
-  // manual dropdown too, so this is just a sensible default, not a lock.
+  // billing state to auto-decide intra vs inter-state using the shared
+  // resolveTransactionType() util (compares GST state CODES, not raw strings).
+  // Transaction type is READ-ONLY: the user cannot override it.
   const [sellerState, setSellerState] = useState("");
+  // null = seller or customer state unknown (show "Could not determine")
+  // "intra" | "inter" = resolved
+  const [resolvedTxnType, setResolvedTxnType] = useState(null);
 
   const [catalog, setCatalog] = useState([]);
   const [itemSearch, setItemSearch] = useState("");
@@ -144,29 +148,39 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
       .catch(() => {});
   }, []);
 
-  // Picking a customer auto-decides intra/inter-state by comparing the org's
-  // own state to that deal's linked Company billing state — the dropdown
-  // below still lets the user override it manually afterward.
+  // Picking a customer auto-decides intra/inter-state. Read-only — the user
+  // cannot override the calculated type.
   const handleDealChange = (id) => {
     setDealId(id);
     setDealChangedFlag((f) => f + 1);
   };
 
+  // Recalculates resolvedTxnType whenever the deal or sellerState changes.
+  // Uses the same resolveTransactionType() util that the Invoice form uses:
+  //   - Compares GST STATE CODES (not raw strings) → immune to spelling variants
+  //     like "Chhattisgarh" vs "Chattisgarh".
+  //   - Falls through Company billingAddress → Contact address → null.
+  //   - Returns null when either side is unknown (shown as "Could not determine").
+  // No isEditing guard: editing an existing subscription should also display
+  // the correct type when sellerState loads.
   useEffect(() => {
-    if (!dealId || !sellerState || isEditing) return;
+    if (!dealId || !sellerState) {
+      setResolvedTxnType(null);
+      return;
+    }
     const selected = deals.find((d) => d._id === dealId);
-    let customerState = (selected?.company?.billingAddress?.state || "").trim().toLowerCase();
-    
-    // B2C fallback (Wait, Contacts don't have addresses in this CRM, but we'll 
-    // leave this safe check in case they do eventually. B2C will default to intra.)
-    if (!customerState && selected?.contact) {
-      customerState = (selected.contact?.address?.state || "").trim().toLowerCase();
-    }
+    if (!selected) { setResolvedTxnType(null); return; }
 
-    if (customerState) {
-      setTransactionType(sellerState !== customerState ? "inter" : "intra");
-    }
-  }, [dealChangedFlag, sellerState]);
+    // Build a minimal address object for the util (needs .state at minimum).
+    // Priority: Company billing → Contact address (future-proof) → null.
+    const companyBilling = selected?.company?.billingAddress || null;
+    const contactAddr   = selected?.contact?.address || null;
+    const customerAddr  = companyBilling || contactAddr || {};
+
+    const resolved = resolveTransactionType(sellerState, customerAddr, customerAddr);
+    setResolvedTxnType(resolved); // "intra" | "inter" | null
+    if (resolved) setTransactionType(resolved);
+  }, [dealChangedFlag, sellerState, deals]);
 
   useEffect(() => {
     if (!editingSubscription) return;
@@ -582,17 +596,26 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
                 </div>
                 <div>
                   <label className={labelClass}>Transaction Type</label>
-                  <SelectWrapper>
-                    <select
-                      value={transactionType}
-                      onChange={(e) => setTransactionType(e.target.value)}
-                      className={selectClass}
-                    >
-                      <option value="intra">Intra-state</option>
-                      <option value="inter">Inter-state</option>
-                    </select>
-                  </SelectWrapper>
-                  <p className="text-[13px] font-inter text-[#A0A0A0] mt-1.5">Auto-set from your business state vs. the customer's — change it here if that doesn't apply.</p>
+                  {/* READ-ONLY — auto-derived from seller state vs. customer
+                      billing state using GST state codes. Not user-editable. */}
+                  <div
+                    className={`${inputClass} flex items-center bg-gray-50 cursor-not-allowed select-none`}
+                    title="Auto-calculated from your business state vs. the customer's billing state"
+                    aria-readonly="true"
+                  >
+                    <span className={resolvedTxnType ? "text-[#1F2937]" : "text-[#A0A0A0] italic"}>
+                      {resolvedTxnType === "inter"
+                        ? "Inter-state"
+                        : resolvedTxnType === "intra"
+                        ? "Intra-state"
+                        : dealId
+                        ? "Could not determine — customer has no state set"
+                        : "Select a customer to auto-determine"}
+                    </span>
+                  </div>
+                  <p className="text-[13px] font-inter text-[#A0A0A0] mt-1.5">
+                    Auto-set from your business state vs. the customer's billing state (read-only).
+                  </p>
                 </div>
                 <div>
                   <label className={labelClass}>Discount Type</label>

@@ -25,6 +25,7 @@ import {
   XCircle,
 } from "lucide-react";
 import BasicDetails from "../components/deal/BasicDetails";
+import DealDocumentsTab from "../components/deal/DealDocumentsTab";
 import DealSummaryCard from "../components/deal/DealSummaryCard";
 import CompanyInvoicesTab from "../components/company/CompanyInvoicesTab";
 import CompanyNotesTab from "../components/company/CompanyNotesTab";
@@ -46,7 +47,7 @@ import EditIcon from "../components/common/EditIcon";
 // deals all behave the same way. The tab set is the deal's own — Tasks,
 // Meetings and Calendar were "coming soon" placeholders before this and now
 // run the same components the company page uses, scoped to the deal.
-const tabs = ["Overview", "Invoices", "Notes", "Tasks", "Meetings", "Folders", "Calendar"];
+const tabs = ["Overview", "Invoices", "Documents", "Notes", "Tasks", "Meetings", "Folders", "Calendar"];
 
 const newEntryOptions = [
   { label: "New Invoice", icon: Receipt, tab: "Invoices", create: "invoice" },
@@ -635,6 +636,9 @@ function DealDetail() {
               onAutoOpenCreateConsumed={() => setPendingCreate(null)}
               companyId={companyId}
             />
+          )}
+          {activeTab === "Documents" && (
+            <DealDocumentsTab dealId={dealId} showStats={showStats} />
           )}
           {activeTab === "Notes" && (
             <CompanyNotesTab

@@ -325,8 +325,10 @@ exports.createSalesReturn = async (req, res) => {
 
 exports.getAllSalesReturns = async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, deal } = req.query;
     const query = { organization: req.user.organization };
+    // Scope to a single deal when requested (deal detail page's Documents tab).
+    if (deal) query.deal = deal;
     if (search) {
       query.$or = [
         { returnNumber: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
