@@ -6,6 +6,8 @@ const { EXPENSE_CATEGORIES, INCOME_CATEGORIES } = require("../models/Expense");
 // otherwise fail with MissingSchemaError.
 require("../models/Vendor");
 require("../models/BankDetails");
+const Deal = require("../models/Deal");
+const mongoose = require("mongoose");
 const Branding = require("../models/Branding");
 const expenseReceiptPdf = require("../utils/expenseReceiptPdf");
 
@@ -60,6 +62,25 @@ const normalizeAttachments = (value) => {
     }));
 };
 
+// The optional Deal association. Returns the Deal id to store, or null for "no
+// deal". An id that isn't a real Deal in this organisation is rejected rather
+// than stored — the association is only ever what the user explicitly picked.
+const resolveDeal = async (value, organizationId) => {
+  if (!value) return null;
+  if (!mongoose.Types.ObjectId.isValid(value)) {
+    const err = new Error("Selected deal was not found.");
+    err.statusCode = 400;
+    throw err;
+  }
+  const exists = await Deal.exists({ _id: value, organization: organizationId });
+  if (!exists) {
+    const err = new Error("Selected deal was not found.");
+    err.statusCode = 400;
+    throw err;
+  }
+  return value;
+};
+
 // A "Paid" entry must carry the settlement fields; a "Pending" one must not
 // keep stale ones from a previous save. Normalised in one place so create and
 // update can't drift apart.
@@ -89,6 +110,15 @@ exports.list = async (req, res) => {
 
     const query = { organization: orgId, kind };
 
+    // Records associated with one Deal (the Deal page's list). Just a filter:
+    // the summary totals below stay org-wide for the kind, as before.
+    if (req.query.dealId) {
+      if (!mongoose.Types.ObjectId.isValid(req.query.dealId)) {
+        return res.status(400).json({ error: "Selected deal was not found." });
+      }
+      query.deal = req.query.dealId;
+    }
+
     if (req.query.status && ["Pending", "Paid"].includes(req.query.status)) {
       query.status = req.query.status;
     }
@@ -115,6 +145,7 @@ exports.list = async (req, res) => {
       Expense.find(query)
         .populate("vendor", "name companyName email phone gstin")
         .populate("bankAccount", "bank accountNumber")
+        .populate("deal", "title")
         .sort({ date: -1, createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
@@ -240,6 +271,7 @@ exports.create = async (req, res) => {
     }
 
     const converted = resolveAmount(req.body);
+    const deal = await resolveDeal(req.body.deal, req.user.organization);
 
     const doc = {
       kind: parseKind(req.body.kind),
@@ -251,6 +283,7 @@ exports.create = async (req, res) => {
       category: req.body.category || "",
       notes: req.body.notes || "",
       vendor: req.body.vendor || null,
+      deal,
       attachments: normalizeAttachments(req.body.attachments),
       organization: req.user.organization,
       user: req.user._id,
@@ -301,6 +334,10 @@ exports.update = async (req, res) => {
     if (req.body.category !== undefined) doc.category = req.body.category;
     if (req.body.notes !== undefined) doc.notes = req.body.notes;
     if (req.body.vendor !== undefined) doc.vendor = req.body.vendor || null;
+    // `deal: null` clears the association; omitting the field leaves it alone.
+    if (req.body.deal !== undefined) {
+      doc.deal = await resolveDeal(req.body.deal, req.user.organization);
+    }
     if (req.body.attachments !== undefined) {
       doc.attachments = normalizeAttachments(req.body.attachments);
     }

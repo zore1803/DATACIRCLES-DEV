@@ -33,6 +33,7 @@ import CompanyTasksTab from "../components/company/CompanyTasksTab";
 import CompanyMeetingsTab from "../components/company/CompanyMeetingsTab";
 import CompanyCalendar from "../components/company/CompanyCalendar";
 import CompanyFolderTab from "../components/company/CompanyFolderTab";
+import DealFinanceTab from "../components/deal/DealFinanceTab";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import StatTile from "../components/common/StatTile";
 import StatTileSkeleton from "../components/common/StatTileSkeleton";
@@ -47,7 +48,7 @@ import EditIcon from "../components/common/EditIcon";
 // deals all behave the same way. The tab set is the deal's own — Tasks,
 // Meetings and Calendar were "coming soon" placeholders before this and now
 // run the same components the company page uses, scoped to the deal.
-const tabs = ["Overview", "Invoices", "Documents", "Notes", "Tasks", "Meetings", "Folders", "Calendar"];
+const tabs = ["Overview", "Invoices", "Documents", "Notes", "Tasks", "Meetings", "Income & Expenses", "Folders", "Calendar"];
 
 const newEntryOptions = [
   { label: "New Invoice", icon: Receipt, tab: "Invoices", create: "invoice" },
@@ -670,6 +671,7 @@ function DealDetail() {
               isLoading={statsLoading}
             />
           )}
+          {activeTab === "Income & Expenses" && <DealFinanceTab dealId={dealId} />}
           {activeTab === "Folders" && (
             <CompanyFolderTab
               dealId={dealId}

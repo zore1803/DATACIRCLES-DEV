@@ -62,6 +62,12 @@ const expenseSchema = new mongoose.Schema(
     // doesn't mean. Null for most entries.
     vendor: { type: mongoose.Schema.Types.ObjectId, ref: "Vendor", default: null },
 
+    // Optional Deal this entry is associated with. A plain reference and
+    // nothing more: it never feeds Deal Value, invoice revenue or any total.
+    // Deal stage/status changes leave it alone, and deleting the Deal unlinks
+    // it (sets it back to null) rather than deleting this record.
+    deal: { type: mongoose.Schema.Types.ObjectId, ref: "Deal", default: null },
+
     // Receipts and bills backing the entry. Stored as pointers to the
     // uploaded objects, not the bytes — the file itself lives in S3 behind
     // CloudFront, same as every other upload in the app.
@@ -106,6 +112,7 @@ const expenseSchema = new mongoose.Schema(
 
 expenseSchema.index({ organization: 1, kind: 1, date: -1 });
 expenseSchema.index({ organization: 1, kind: 1, status: 1 });
+expenseSchema.index({ organization: 1, deal: 1 });
 
 module.exports = mongoose.model("Expense", expenseSchema);
 module.exports.EXPENSE_CATEGORIES = EXPENSE_CATEGORIES;

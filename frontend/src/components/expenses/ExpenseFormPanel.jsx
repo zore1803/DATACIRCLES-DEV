@@ -4,6 +4,7 @@ import { X, Check, ChevronDown, Paperclip } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import SearchableDropdown from "../contact/SearchableDropdown";
 import { LABEL_CLS, inputCls as fieldInputCls, textareaCls } from "../common/form";
 
 /*
@@ -72,6 +73,8 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
   // does NOT turn the entry into a vendor payment or let it settle a bill.
   const [withVendor, setWithVendor] = useState(false);
   const [vendors, setVendors] = useState([]);
+  // Optional Deal association: a reference only, any deal in any stage.
+  const [deals, setDeals] = useState([]);
   const [vendorOpen, setVendorOpen] = useState(false);
   const [vendorSearch, setVendorSearch] = useState("");
   // Multi-currency, off by default. When on, the amount is typed in the
@@ -95,6 +98,7 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
     bankAccount: "",
     paymentNotes: "",
     vendor: "",
+    deal: "",
     currency: BASE_CURRENCY,
     exchangeRate: "",
   });
@@ -125,6 +129,7 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
       bankAccount: record.bankAccount?._id || record.bankAccount || "",
       paymentNotes: record.paymentNotes || "",
       vendor: record.vendor?._id || record.vendor || "",
+      deal: record.deal?._id || record.deal || "",
     });
     // Editing an entry that already has a vendor shows the field open, rather
     // than hiding the value behind a collapsed toggle.
@@ -162,6 +167,24 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
       }
     })();
   }, [kind]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      API.get("/deals")
+        .then((res) => setDeals(Array.isArray(res.data) ? res.data : res.data?.deals || []))
+        .catch(() => setDeals([]));
+    }, 320);
+    return () => clearTimeout(t);
+  }, []);
+
+  const dealOptions = useMemo(
+    () =>
+      deals.map((d) => {
+        const customer = d.company?.name || d.contact?.name || "";
+        return { _id: d._id, label: customer ? `${d.title || "Untitled Deal"} — ${customer}` : d.title || "Untitled Deal" };
+      }),
+    [deals]
+  );
 
   // The rate is fetched for you, but the field stays editable - a company
   // booking at a contracted or bank rate needs to override the mid-market one.
@@ -319,6 +342,8 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
         // Cleared when the toggle is off, so turning it off actually detaches
         // a previously-saved vendor instead of silently keeping it.
         vendor: withVendor ? form.vendor || null : null,
+        // null detaches a previously-saved deal; an untouched record keeps it.
+        deal: form.deal || null,
         attachments,
         currency: multiCurrency ? form.currency : BASE_CURRENCY,
         exchangeRate: multiCurrency ? Number(form.exchangeRate) : 1,
@@ -533,6 +558,19 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
                   )}
                 </div>
               )}
+            </div>
+
+            <div>
+              <label className={labelCls}>Deal</label>
+              <SearchableDropdown
+                compact
+                options={dealOptions}
+                value={form.deal}
+                onChange={(value) => set("deal", value)}
+                displayKey="label"
+                valueKey="_id"
+                placeholder="Deal (optional)"
+              />
             </div>
 
             <div>

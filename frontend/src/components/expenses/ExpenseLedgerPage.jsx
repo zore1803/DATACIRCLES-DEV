@@ -52,6 +52,7 @@ const MIN_COL_WIDTH = 60;
 const ALL_COLUMNS = [
   { key: "category", label: "Category", width: 240 },
   { key: "vendor", label: "Vendor", width: 190 },
+  { key: "deal", label: "Deal", width: 200 },
   { key: "amount", label: "Amount", width: 160 },
   { key: "mode", label: "Mode", width: 200 },
   { key: "notes", label: "Notes", width: 260 },
@@ -63,6 +64,7 @@ const ALL_COLUMNS = [
 const SORT_VALUE = {
   category: (r) => (r.category || "").toLowerCase(),
   vendor: (r) => (r.vendor?.companyName || r.vendor?.name || "").toLowerCase(),
+  deal: (r) => (r.deal?.title || "").toLowerCase(),
   amount: (r) => Number(r.amount) || 0,
   mode: (r) => (r.paymentType || "").toLowerCase(),
   notes: (r) => (r.notes || "").toLowerCase(),
@@ -294,6 +296,8 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
         return row.category || noun;
       case "vendor":
         return row.vendor?.companyName || row.vendor?.name || "—";
+      case "deal":
+        return row.deal?.title || "—";
       case "amount":
         return money(row.amount);
       case "mode":
@@ -550,6 +554,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
         Date: formatDate(row.date),
         Category: row.category || "",
         Vendor: row.vendor?.companyName || row.vendor?.name || "",
+        Deal: row.deal?.title || "",
         Notes: row.notes || "",
         Mode: row.paymentType || "",
         Bank: row.bankAccount?.bank || "",
@@ -577,6 +582,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
         category: row.category || "",
         notes: row.notes || "",
         vendor: row.vendor?._id || row.vendor || null,
+        deal: row.deal?._id || row.deal || null,
         attachments: row.attachments || [],
         status: row.status,
         paymentDate: row.paymentDate,
@@ -619,6 +625,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
       `Amount: ${money(row.amount)}`,
       `Date: ${formatDate(row.date)}`,
       row.vendor?.companyName || row.vendor?.name ? `Vendor: ${row.vendor.companyName || row.vendor.name}` : null,
+      row.deal?.title ? `Deal: ${row.deal.title}` : null,
       row.paymentType ? `Mode: ${row.paymentType}` : null,
       row.notes ? `Notes: ${row.notes}` : null,
     ]
@@ -648,6 +655,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
       Date: formatDate(r.date),
       Category: r.category || "",
       Vendor: r.vendor?.companyName || r.vendor?.name || "",
+      Deal: r.deal?.title || "",
       Notes: r.notes || "",
       Mode: r.paymentType || "",
       Bank: r.bankAccount?.bank || "",
@@ -1048,6 +1056,11 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
                               {col.key === "vendor" && (
                                 <span className={vendorName ? "" : "text-gray-400"}>
                                   {vendorName || "\u2014"}
+                                </span>
+                              )}
+                              {col.key === "deal" && (
+                                <span className={`truncate ${r.deal?.title ? "" : "text-gray-400"}`} title={r.deal?.title || ""}>
+                                  {r.deal?.title || "\u2014"}
                                 </span>
                               )}
                               {col.key === "amount" && (

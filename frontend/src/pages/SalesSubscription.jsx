@@ -607,9 +607,9 @@ const SalesSubscription = () => {
             e.stopPropagation();
             if (isOpen) return close();
             const zMenu = getAncestorZoom(document.body);
-            const MENU_W = 160;
+            const MENU_W = 176;
             const MARGIN = 8;
-            const MENU_H = 260;
+            const MENU_H = 230;
             const rect = e.currentTarget.getBoundingClientRect();
             const viewportH = window.innerHeight / zMenu;
             const viewportW = window.innerWidth / zMenu;
@@ -634,7 +634,7 @@ const SalesSubscription = () => {
             <div className="fixed inset-0 z-[9998]" onClick={close} />
             <div
               style={{ position: "fixed", top: rowActionsPos.top, left: rowActionsPos.left }}
-              className="w-48 z-[9999] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right"
+              className="w-[176px] z-[9999] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right"
             >
               {canGenerate && (
                 <button
@@ -642,38 +642,44 @@ const SalesSubscription = () => {
                   disabled={generatingId === row._id}
                   className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap disabled:opacity-50"
                 >
-                  <Zap className="w-3.5 h-3.5 text-blue-600" />
+                  <Zap className="w-3.5 h-3.5 text-[#1C1B1F]" />
                   {generatingId === row._id ? "Generating…" : "Generate Invoice Now"}
                 </button>
               )}
-              {canGenerate && <div className="w-full border-t border-[#F1F1F5] my-0.5" />}
-              {statusActions.map((action) => (
-                <React.Fragment key={action.to}>
-                  <button
-                    onClick={() => runStatusAction(action)}
-                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap ${
-                      action.danger ? "text-[#CD3636] hover:bg-red-50" : "text-[#161618] hover:bg-gray-50"
-                    }`}
-                  >
-                    <action.icon className={`w-3.5 h-3.5 ${action.danger ? "text-[#CD3636]" : "text-orange-600"}`} />
-                    {action.label}
-                  </button>
-                  <div className="w-full border-t border-[#F1F1F5] my-0.5" />
-                </React.Fragment>
+              {statusActions.filter((action) => !action.danger).map((action) => (
+                <button
+                  key={action.to}
+                  onClick={() => runStatusAction(action)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                >
+                  <action.icon className="w-3.5 h-3.5 text-[#1C1B1F]" />
+                  {action.label}
+                </button>
               ))}
               <button
                 onClick={() => { close(); openEdit(row); }}
                 className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
               >
-                <EditIcon className="w-3.5 h-3.5 text-blue-600" />
+                <EditIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                 Edit
               </button>
+              {/* Destructive actions sit below a single divider, like the Contacts row menu. */}
               <div className="w-full border-t border-[#F1F1F5] my-0.5" />
+              {statusActions.filter((action) => action.danger).map((action) => (
+                <button
+                  key={action.to}
+                  onClick={() => runStatusAction(action)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#CD3636] hover:bg-red-50 whitespace-nowrap"
+                >
+                  <action.icon className="w-3.5 h-3.5 text-[#CD3636]" />
+                  {action.label}
+                </button>
+              ))}
               <button
                 onClick={() => { close(); handleDelete(row._id); }}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#CD3636] hover:bg-red-50"
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#CD3636] hover:bg-red-50 whitespace-nowrap"
               >
-                <DeleteIcon className="w-4 h-4 text-[#CD3636]" />
+                <DeleteIcon className="w-3.5 h-3.5 text-[#CD3636]" />
                 Delete
               </button>
             </div>

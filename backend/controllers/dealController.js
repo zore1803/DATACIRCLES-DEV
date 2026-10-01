@@ -2,6 +2,7 @@ const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 // controllers/dealController.js (updated to handle field types)
 const Deal = require("../models/Deal");
 const Invoice = require("../models/Invoice");
+const Expense = require("../models/Expense");
 const DealFields = require("../models/DealFields");
 const sendGridMail = require("../utils/sendGridMail");
 const NotificationSettings = require("../models/NotificationSettings");
@@ -563,6 +564,13 @@ const deleteDeal = async (req, res) => {
     });
 
     await Promise.all(invoices.map((inv) => inv.deleteOne()));
+
+    // Expenses / Indirect Income are standalone financial records: they
+    // survive the Deal and are simply unlinked from it.
+    await Expense.updateMany(
+      { deal: deal._id, organization: req.user.organization },
+      { $set: { deal: null } },
+    );
 
     await deal.deleteOne();
     res.json({ message: "Deal deleted successfully" });
