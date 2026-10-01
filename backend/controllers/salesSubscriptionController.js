@@ -599,11 +599,17 @@ async function generateInvoiceForSubscription(subscription, userId, organization
     );
     if (!claimed) throw new CycleAlreadyBilledError();
 
+    const invoiceDueDate = new Date(invoiceDate);
+    invoiceDueDate.setDate(invoiceDueDate.getDate() + 7);
+
     const invoice = new Invoice({
       _id: invoiceId,
       deal: subscription.deal,
       invoiceNumber,
       date: invoiceDate,
+      // Default payment window: 7 days from invoice date. The user can edit
+      // the due date on the invoice itself after it is generated.
+      dueDate: invoiceDueDate,
       amount: invoiceAmount,
       discount: subscription.discount,
       status: "Draft",

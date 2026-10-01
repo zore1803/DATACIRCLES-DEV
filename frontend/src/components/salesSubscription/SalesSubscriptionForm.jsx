@@ -240,8 +240,11 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
         hsn: item.hsnSac || "",
         rate: item.sellingPrice || 0,
         quantity: 1,
-        discountType: "amount",
-        discount: 0,
+        // Snapshot the item's own catalog discount so the subscription starts
+        // from the correct baseline. Changing this later only affects the
+        // subscription — never the original Item in the catalog.
+        discountType: item.discount?.type || "amount",
+        discount: item.discount?.value ?? 0,
         gstRate: item.gstRate || 0,
         taxInclusive: !!item.taxInclusive,
       },
