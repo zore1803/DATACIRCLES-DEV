@@ -49,6 +49,7 @@ import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
 import UploadIcon from "../components/common/UploadIcon";
 import EyeIcon from "../components/common/EyeIcon";
 import BulkDeleteModal from "../components/common/BulkDeleteModal";
+import EInvoiceConnectDrawer from "../components/einvoice/EInvoiceConnectDrawer";
 
 const getAncestorZoom = (el) => {
   let z = 1;
@@ -92,6 +93,7 @@ const EMPTY_LIST = [];
 export default function EInvoicing() {
   const isSearchOverlayOpen = useSearchOverlayOpen();
 
+  const [showConnectDrawer, setShowConnectDrawer] = useState(false);
   const [portalConnected, setPortalConnected] = useState(() => {
     try {
       return localStorage.getItem("einvoicing_portal_connected") === "true";
@@ -734,7 +736,7 @@ export default function EInvoicing() {
       setPortalConnected(false);
       toast.success("Disconnected from E-Invoicing Portal");
     } else {
-      toast("Portal connection flow is coming soon.", { icon: "🔌" });
+      setShowConnectDrawer(true);
     }
   };
 
@@ -1556,6 +1558,8 @@ export default function EInvoicing() {
         onCancel={() => setShowBulkDeleteModal(false)}
         onConfirm={executeBulkDelete}
       />
+
+      {showConnectDrawer && <EInvoiceConnectDrawer onClose={() => setShowConnectDrawer(false)} />}
     </div>
   );
 }
