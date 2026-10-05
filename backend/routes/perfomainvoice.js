@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const performaInvoiceController = require("../controllers/performaInvoiceController.js");
+const ProformaInvoice = require("../models/ProformaInvoice");
+const { listDocsByDealEntity } = require("../utils/dealEntityDocs");
 const authMiddleware = require("../middlewares/auth");
 const checkPermission = require("../middlewares/checkPermission");
 const userSync = require("../middlewares/userSync");
@@ -47,6 +49,24 @@ router.get(
   restrictByPlan("invoices", "read"),
   checkPermission("invoices", "readonly"),
   performaInvoiceController.downloadPerformaInvoice
+);
+
+// Documents-tab rollups: proforma invoices of all deals under a company / contact.
+router.get(
+  "/company/:companyId",
+  requireAuth,
+  subscriptionGate,
+  restrictByPlan("invoices", "read"),
+  checkPermission("invoices", "readonly"),
+  listDocsByDealEntity(ProformaInvoice, "company")
+);
+router.get(
+  "/contact/:contactId",
+  requireAuth,
+  subscriptionGate,
+  restrictByPlan("invoices", "read"),
+  checkPermission("invoices", "readonly"),
+  listDocsByDealEntity(ProformaInvoice, "contact")
 );
 
 // POST /api/performa-invoices/:id/duplicate (Create a new Draft pro forma invoice cloned from an existing one)

@@ -4,6 +4,8 @@ const authMiddleware = require("../middlewares/auth");
 const userSync = require("../middlewares/userSync");
 const subscriptionGate = require("../middlewares/subscriptionGate");
 const c = require("../controllers/salesReturnController");
+const SalesReturn = require("../models/SalesReturn");
+const { listDocsByDealEntity } = require("../utils/dealEntityDocs");
 
 const requireAuth = [authMiddleware, userSync];
 
@@ -16,6 +18,10 @@ router.get("/download/:id", requireAuth, subscriptionGate, c.downloadSalesReturn
 router.post("/bulk-import", requireAuth, subscriptionGate, c.bulkImportSalesReturns);
 // Before /:id so "invoice" isn't swallowed as a return id.
 router.get("/invoice/:invoiceId/available", requireAuth, subscriptionGate, c.getInvoiceItemsForReturn);
+// Documents-tab rollups: sales returns of all deals under a company / contact.
+// Also before /:id so "company"/"contact" aren't swallowed as a return id.
+router.get("/company/:companyId", requireAuth, subscriptionGate, listDocsByDealEntity(SalesReturn, "company"));
+router.get("/contact/:contactId", requireAuth, subscriptionGate, listDocsByDealEntity(SalesReturn, "contact"));
 
 // Refunds to the customer — money OUT, recorded as a real Payment + allocation.
 router.get("/:id/payments", requireAuth, subscriptionGate, c.getSalesReturnRefunds);

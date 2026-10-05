@@ -5,6 +5,8 @@ const authMiddleware = require("../middlewares/auth");
 const checkPermission = require("../middlewares/checkPermission");
 const userSync = require("../middlewares/userSync");
 const deliveryChallanController = require("../controllers/deliveryChallanController");
+const DeliveryChallan = require("../models/deliveryChallan");
+const { listDocsByDealEntity } = require("../utils/dealEntityDocs");
 
 const requireAuth = [authMiddleware, userSync];
 const subscriptionGate = require('../middlewares/subscriptionGate');
@@ -42,6 +44,23 @@ router.get(
   restrictByPlan("delivery-challans", "read"),
   checkPermission("delivery-challans", "readonly"),
   deliveryChallanController.downloadDeliveryChallan
+);
+// Documents-tab rollups: delivery challans of all deals under a company / contact.
+router.get(
+  "/company/:companyId",
+  requireAuth,
+  subscriptionGate,
+  restrictByPlan("delivery-challans", "read"),
+  checkPermission("delivery-challans", "readonly"),
+  listDocsByDealEntity(DeliveryChallan, "company")
+);
+router.get(
+  "/contact/:contactId",
+  requireAuth,
+  subscriptionGate,
+  restrictByPlan("delivery-challans", "read"),
+  checkPermission("delivery-challans", "readonly"),
+  listDocsByDealEntity(DeliveryChallan, "contact")
 );
 router.post(
   "/:id/duplicate",

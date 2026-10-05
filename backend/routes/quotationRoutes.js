@@ -5,6 +5,8 @@ const authMiddleware = require("../middlewares/auth");
 const checkPermission = require("../middlewares/checkPermission");
 const userSync = require("../middlewares/userSync");
 const quotationController = require("../controllers/quotationController");
+const Quotation = require("../models/quotation");
+const { listDocsByDealEntity } = require("../utils/dealEntityDocs");
 
 const requireAuth = [authMiddleware, userSync];
 const subscriptionGate = require('../middlewares/subscriptionGate');
@@ -42,6 +44,23 @@ router.get(
   restrictByPlan("quotations", "read"),
   checkPermission("quotations", "readonly"),
   quotationController.downloadQuotation
+);
+// Documents-tab rollups: quotations of all deals under a company / contact.
+router.get(
+  "/company/:companyId",
+  requireAuth,
+  subscriptionGate,
+  restrictByPlan("quotations", "read"),
+  checkPermission("quotations", "readonly"),
+  listDocsByDealEntity(Quotation, "company")
+);
+router.get(
+  "/contact/:contactId",
+  requireAuth,
+  subscriptionGate,
+  restrictByPlan("quotations", "read"),
+  checkPermission("quotations", "readonly"),
+  listDocsByDealEntity(Quotation, "contact")
 );
 router.post(
   "/:id/duplicate",

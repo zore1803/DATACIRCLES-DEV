@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const invoiceController = require("../controllers/invoiceController");
+const Invoice = require("../models/Invoice");
+const { listDocsByDealEntity } = require("../utils/dealEntityDocs");
 const authMiddleware = require("../middlewares/auth");
 const checkPermission = require("../middlewares/checkPermission");
 const userSync = require("../middlewares/userSync");
@@ -45,6 +47,18 @@ router.get(
   restrictByPlan("invoices", "read"),
   checkPermission("invoices", "readonly"),
   invoiceController.getInvoicesByCompany
+);
+
+// Documents-tab rollup for the Contact page: invoices of all deals under a
+// contact. (Company already has getInvoicesByCompany above, which returns
+// { invoices, summary }; this returns a plain array like the other sales types.)
+router.get(
+  "/contact/:contactId",
+  requireAuth,
+  subscriptionGate,
+  restrictByPlan("invoices", "read"),
+  checkPermission("invoices", "readonly"),
+  listDocsByDealEntity(Invoice, "contact")
 );
 
 // GET /api/invoices/pagination (Paginated - requires read permission)

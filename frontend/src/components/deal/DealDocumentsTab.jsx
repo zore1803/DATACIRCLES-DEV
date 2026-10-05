@@ -41,8 +41,6 @@ const PURCHASE_TYPES = [
   { key: "purchaseReturn", label: "Purchase Return", route: "/purchase-return", endpoint: "/purchase-returns", numberField: "returnNumber", amountField: "grandTotal", dateField: "returnDate", showAmount: true, dealScoped: false, icon: RotateCcw },
 ];
 
-const ALL_TYPES = [...SALES_TYPES, ...PURCHASE_TYPES];
-
 // Shared status palette — same hex family as DealDetail's StatusBadge, so a
 // document's status reads the same here as everywhere else. Unknown statuses
 // fall back to the neutral grey.
@@ -147,6 +145,10 @@ const DocTypeCard = ({ def, rows, onOpen }) => {
 // deal" vs "...for this company").
 const SCOPE_NOUN = { deal: "deal", company: "company", contact: "contact", vendor: "vendor" };
 
+// `auto-rows-fr` keeps every card in the grid the same height as the tallest one,
+// so all cards align cleanly — without stretching to fill the viewport. The
+// section sits at its natural content height; the page ends after the cards with
+// normal whitespace below (no forced min-height / flex fill).
 const CategorySection = ({ title, subtitle, defs, docsByType, loading, onOpen, gridClass }) => (
   <div>
     <div className="mb-0.5">
@@ -154,7 +156,7 @@ const CategorySection = ({ title, subtitle, defs, docsByType, loading, onOpen, g
     </div>
     {subtitle && <p className="text-xs text-gray-400 mb-3">{subtitle}</p>}
     <div className="h-px bg-[#E5E7EB] mb-4" />
-    <div className={`grid grid-cols-2 sm:grid-cols-3 ${gridClass} gap-3`}>
+    <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${gridClass} gap-3 auto-rows-fr`}>
       {loading
         ? defs.map((d) => <DocTypeCardSkeleton key={d.key} />)
         : defs.map((def) => (
@@ -164,14 +166,26 @@ const CategorySection = ({ title, subtitle, defs, docsByType, loading, onOpen, g
   </div>
 );
 
-// `dealId`, `companyId`, `contactId` or `vendorId` set the scope. Deal, company
-// and contact show both the Sales and Purchase sections; the vendor scope shows
-// only the Purchase & Procurement cards, since vendors are tied to procurement
-// documents, not customer-facing sales ones.
-// Only the deal scope is wired to real data today; company/contact/vendor
-// document fetching is intentionally not implemented yet (the scoping endpoints
-// are still being designed), so those pages render the cards in their empty
-// state for UI review. TODO: wire the fetch once the endpoints are agreed.
+// `dealId`, `companyId`, `contactId` or `vendorId` set the scope, and each scope
+// shows exactly one section of document-type cards:
+//   deal / company / contact → Sales Documents (invoice, quotation, proforma,
+//     delivery challan, sales return)
+//   vendor                   → Purchase & Procurement Documents
+// There is no "other" section per page — a deal/company/contact never shows
+// purchase cards, and a vendor never shows sales cards, mirroring the data model
+// (sales docs hang off deals; purchase docs off vendors).
+//
+// Empty is a first-class state: the cards still render so the user can see which
+// document types exist here, each showing "0 docs" / "No documents yet" with no
+// fabricated totals.
+//
+// Each scope hits a different endpoint shape (see `requestFor` below):
+//   deal    → GET /{type}?deal=:id       sales docs on that deal
+//   company → GET /{type}/company/:id    sales docs across the company's deals
+//   contact → GET /{type}/contact/:id    sales docs across the contact's deals
+//   vendor  → GET /{type}/vendor/:id     purchase docs on that vendor
+// Sales docs link to a Deal (not directly to a company/contact), so the
+// company/contact endpoints resolve the entity's deals server-side first.
 const DealDocumentsTab = ({ dealId, companyId, contactId, vendorId, showStats = true }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -186,28 +200,61 @@ const DealDocumentsTab = ({ dealId, companyId, contactId, vendorId, showStats = 
     : vendorId
     ? "vendor"
     : null;
-  // Vendors see only procurement documents.
+  // Vendors see procurement documents. Everyone else sees sales documents; the
+  // Company page additionally shows the org-wide Purchase & Procurement cards for
+  // context (purchase docs belong to vendors, not to the company's deals).
   const isVendor = scope === "vendor";
+  const isCompany = scope === "company";
+  const showSales = !isVendor; // deal, contact, company
+  const showPurchase = isVendor || isCompany; // vendor, company
+  const fetchTypes = [
+    ...(showSales ? SALES_TYPES : []),
+    ...(showPurchase ? PURCHASE_TYPES : []),
+  ];
 
-  // "View documents" leaves the deal and opens that type's own main page
+  // "View documents" leaves this page and opens that type's own main page
   // (sales docs deep-link to the Accounting tab; the rest have their own page).
   const openDocType = (def) => navigate(def.route);
 
   useEffect(() => {
+    // No scope yet (e.g. a parent id still loading) — clear to the empty state.
+    if (!scope) {
+      setDocsByType({});
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
-    const fetchAll = async () => {
+
+    // Each document maps to an endpoint by its scope. Sales docs are filtered by
+    // the entity (deal / company / contact); purchase docs by vendor, or fetched
+    // org-wide on the Company page. Every endpoint returns a plain array except
+    // invoices-by-company ({ invoices, summary }) — the parser handles both via
+    // the `key + "s"` fallback.
+    const requestFor = (def) => {
+      if (def.dealScoped) {
+        // Sales document — scoped to deal / company / contact.
+        if (scope === "company") return API.get(`${def.endpoint}/company/${companyId}`);
+        if (scope === "contact") return API.get(`${def.endpoint}/contact/${contactId}`);
+        return API.get(def.endpoint, { params: { deal: dealId } });
+      }
+      // Purchase document — by vendor, or org-wide on the Company page.
+      if (scope === "vendor") return API.get(`${def.endpoint}/vendor/${vendorId}`);
+      return API.get(def.endpoint);
+    };
+
+    const fetchVisible = async () => {
       setLoading(true);
       try {
         const results = await Promise.all(
-          ALL_TYPES.map((def) =>
-            API.get(def.endpoint, { params: def.dealScoped ? { deal: dealId } : {} })
+          fetchTypes.map((def) =>
+            requestFor(def)
               .then((res) => (Array.isArray(res.data) ? res.data : res.data?.[def.key + "s"] || []))
               .catch(() => [])
           )
         );
         if (cancelled) return;
         const map = {};
-        ALL_TYPES.forEach((def, i) => {
+        fetchTypes.forEach((def, i) => {
           map[def.key] = results[i];
         });
         setDocsByType(map);
@@ -215,37 +262,33 @@ const DealDocumentsTab = ({ dealId, companyId, contactId, vendorId, showStats = 
         if (!cancelled) setLoading(false);
       }
     };
-    if (dealId) {
-      fetchAll();
-    } else {
-      // Company/contact/vendor scope: fetch not wired yet — show the cards'
-      // empty state rather than an endless skeleton.
-      setDocsByType({});
-      setLoading(false);
-    }
+    fetchVisible();
     return () => {
       cancelled = true;
     };
-  }, [dealId, companyId, contactId, vendorId]);
+    // fetchTypes is derived from the scope ids, so the id deps cover it.
+  }, [scope, dealId, companyId, contactId, vendorId]);
 
-  // Summary tiles track whichever section this scope shows: sales documents for
-  // deal/company/contact, procurement documents for a vendor.
+  // Summary tiles reflect the primary section: sales for deal/company/contact,
+  // procurement for a vendor. Values are real aggregates of what's loaded
+  // (0 / ₹0 when empty — accurate, not fabricated).
   const summaryTypes = isVendor ? PURCHASE_TYPES : SALES_TYPES;
-  const summaryTypesWithDocs = summaryTypes.filter((d) => (docsByType[d.key] || []).length > 0).length;
-  const totalSummaryDocs = summaryTypes.reduce((n, d) => n + (docsByType[d.key] || []).length, 0);
-  // Sales value is the invoiced amount; procurement value is the total across
-  // all purchase document types.
+  const typesWithDocs = summaryTypes.filter((d) => (docsByType[d.key] || []).length > 0).length;
+  const totalDocs = summaryTypes.reduce((n, d) => n + (docsByType[d.key] || []).length, 0);
   const summaryValue = isVendor
     ? summaryTypes.reduce((sum, d) => sum + sumAmount(docsByType[d.key] || [], d.amountField), 0)
     : sumAmount(docsByType.invoice || [], "amount");
 
   const summaryTiles = [
     // "4 of 5" = how many of the section's document types have at least one doc.
-    { label: "Document Types Used", value: `${summaryTypesWithDocs} of ${summaryTypes.length}`, icon: PdfIcon },
-    { label: isVendor ? "Purchase Documents" : "Sales Documents", value: totalSummaryDocs, icon: FilesIcon },
+    { label: "Document Types Used", value: `${typesWithDocs} of ${summaryTypes.length}`, icon: PdfIcon },
+    { label: isVendor ? "Purchase Documents" : "Sales Documents", value: totalDocs, icon: FilesIcon },
     { label: isVendor ? "Procurement Value" : "Invoiced Value", value: `₹${formatNumberToIndian(summaryValue)}`, icon: IndianRupeeIcon },
   ];
 
+  // Sections sit at their natural height and the page ends after the cards — no
+  // forced min-height or flex fill, so Vendor (3 cards) simply has normal
+  // whitespace below rather than a stretched, awkward empty container.
   return (
     <div className="font-sf space-y-6">
       {showStats && (
@@ -256,8 +299,7 @@ const DealDocumentsTab = ({ dealId, companyId, contactId, vendorId, showStats = 
         </div>
       )}
 
-      {/* Sales documents don't apply to a vendor — procurement only. */}
-      {!isVendor && (
+      {showSales && (
         <CategorySection
           title="Sales Documents"
           subtitle={`Customer-facing documents for this ${SCOPE_NOUN[scope] || "deal"}`}
@@ -269,19 +311,21 @@ const DealDocumentsTab = ({ dealId, companyId, contactId, vendorId, showStats = 
         />
       )}
 
-      <CategorySection
-        title="Purchase & Procurement Documents"
-        subtitle={
-          isVendor
-            ? "Procurement documents for this vendor"
-            : `Organisation-wide procurement records — not associated with this ${SCOPE_NOUN[scope] || "deal"}`
-        }
-        defs={PURCHASE_TYPES}
-        docsByType={docsByType}
-        loading={loading}
-        onOpen={openDocType}
-        gridClass="lg:grid-cols-3"
-      />
+      {showPurchase && (
+        <CategorySection
+          title="Purchase & Procurement Documents"
+          subtitle={
+            isVendor
+              ? "Procurement documents for this vendor"
+              : "Organisation-wide procurement records — not associated with this company"
+          }
+          defs={PURCHASE_TYPES}
+          docsByType={docsByType}
+          loading={loading}
+          onOpen={openDocType}
+          gridClass="lg:grid-cols-3"
+        />
+      )}
     </div>
   );
 };
