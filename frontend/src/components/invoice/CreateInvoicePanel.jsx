@@ -363,6 +363,13 @@ const CreateInvoicePanel = ({
   const [companies, setCompanies] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  // Unsaved-changes guard (parity with the full-width screens). `hasUnsavedRef`
+  // mirrors the state so the popstate listener — registered once with an empty
+  // dep array — reads the current value instead of a stale closure.
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const hasUnsavedRef = useRef(false);
+  useEffect(() => { hasUnsavedRef.current = hasUnsavedChanges; }, [hasUnsavedChanges]);
   const [stockErrorMessage, setStockErrorMessage] = useState(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -601,7 +608,17 @@ const CreateInvoicePanel = ({
   // instead of navigating away to the previous page.
   useEffect(() => {
     window.history.pushState({ accountingPanel: true }, "");
-    const handlePop = () => onClose();
+    const handlePop = () => {
+      // Unsaved edits: keep the panel open behind a confirmation instead of
+      // closing on Back. Re-arm the history entry we just consumed so a later
+      // Back still works once the user decides.
+      if (hasUnsavedRef.current) {
+        window.history.pushState({ accountingPanel: true }, "");
+        setShowConfirmDialog(true);
+      } else {
+        onClose();
+      }
+    };
     window.addEventListener("popstate", handlePop);
     return () => window.removeEventListener("popstate", handlePop);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -806,21 +823,27 @@ const CreateInvoicePanel = ({
     await loadSignatures(sigData.dataUrl);
   };
 
-  const updateItem = (index, patch) =>
+  const updateItem = (index, patch) => {
+    setHasUnsavedChanges(true);
     setForm((p) => ({
       ...p,
       items: p.items.map((it, i) => (i === index ? { ...it, ...patch } : it)),
     }));
+  };
 
-  const addItem = () =>
+  const addItem = () => {
+    setHasUnsavedChanges(true);
     setForm((p) => ({ ...p, items: [...p.items, blankItem()] }));
+  };
 
-  const removeItem = (index) =>
+  const removeItem = (index) => {
+    setHasUnsavedChanges(true);
     setForm((p) => ({
       ...p,
       items:
         p.items.length === 1 ? [blankItem()] : p.items.filter((_, i) => i !== index),
     }));
+  };
 
   const handleAddToBill = () => {
     const searchText = quickAddSearch.trim();
@@ -1273,7 +1296,10 @@ const CreateInvoicePanel = ({
     );
   };
   // Selecting a deal, whether picked by the user or preselected by the caller.
-  const applyDealSelection = (dealId) => {
+  const applyDealSelection = (dealId, { markDirty = true } = {}) => {
+    // A preselect (opening from a Company/Deal page) is not a user edit, so it
+    // must not trip the unsaved-changes guard.
+    if (markDirty) setHasUnsavedChanges(true);
     setFieldErrors((prev) => ({ ...prev, deal: false }));
 
     // Clearing the deal (quotation/proforma only) switches to direct-link mode,
@@ -1324,6 +1350,7 @@ const CreateInvoicePanel = ({
   // Direct Company pick (deal-less quotation/proforma). Fills address/GST from the
   // company the way a deal would, and drops a contact outside that company.
   const applyCompanySelection = (companyId) => {
+    setHasUnsavedChanges(true);
     const selectedCompany = companies.find((c) => c._id === companyId);
     const nextBilling =
       selectedCompany && !isAddressEmpty(selectedCompany.billingAddress)
@@ -1357,6 +1384,7 @@ const CreateInvoicePanel = ({
   // Direct Contact pick. Adopts the contact's company (and its address/GST) when
   // no company is chosen yet.
   const applyContactSelection = (contactId) => {
+    setHasUnsavedChanges(true);
     const selectedContact = contacts.find((c) => c._id === contactId);
     const contactCompanyId = selectedContact?.company?._id || selectedContact?.company || "";
     setFieldErrors((prev) => ({ ...prev, deal: false }));
@@ -1415,7 +1443,7 @@ const CreateInvoicePanel = ({
       if (last.withOrg || !withOrg || form.deal !== preselectDealId) return;
     }
     preselectAppliedRef.current = { started: true, dealId: preselectDealId, withOrg };
-    applyDealSelection(preselectDealId);
+    applyDealSelection(preselectDealId, { markDirty: false });
     // applyDealSelection is recreated each render; keyed on the inputs that matter instead.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preselectDealId, deals, orgDetails, isEditing, formOverride]);
@@ -1438,11 +1466,66 @@ const CreateInvoicePanel = ({
   // Description isn't a column any more — it's an optional box under each row.
   const itemRowCols = "@2xl:grid-cols-[1.9fr_0.7fr_0.7fr_0.55fr_1.1fr_0.9fr_32px]";
 
+  const handleConfirmExit = () => {
+    setHasUnsavedChanges(false);
+    setShowConfirmDialog(false);
+    onClose();
+  };
+  const handleSaveAndExit = async () => {
+    // Save as Draft so the exit always succeeds (draft skips the full-create
+    // validation); the submit's own success path closes the panel.
+    await submitInvoice("Draft");
+    setShowConfirmDialog(false);
+  };
+
   return (
     <div
       className="fixed right-0 bottom-0 bg-white z-[60] flex flex-col top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
       style={{ left: "var(--sidebar-width, 0px)" }}
+      // Catch-all so any native field edit (text, date, select, checkbox,
+      // textarea) marks the form dirty for the unsaved-changes guard. Custom
+      // dropdowns (deal/company/contact/item) mark dirty in their own handlers.
+      onInput={() => setHasUnsavedChanges(true)}
+      onChange={() => setHasUnsavedChanges(true)}
     >
+      {showConfirmDialog && (
+        <div className="fixed inset-0 bg-black/50 z-[10004] flex items-center justify-center">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-sm sm:max-w-lg mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Unsaved Changes
+            </h3>
+            <p className="text-sm text-gray-600 mb-6">
+              You have unsaved changes. Are you sure you want to exit without
+              saving?
+            </p>
+            <div className="flex justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConfirmDialog(false)}
+                className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors cursor-pointer hidden sm:block"
+              >
+                Cancel
+              </button>
+              <div className="flex space-x-1">
+                <button
+                  type="button"
+                  onClick={handleConfirmExit}
+                  className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors cursor-pointer"
+                >
+                  Exit Without Saving
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAndExit}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors cursor-pointer"
+                >
+                  Save and Exit
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Single continuous resizer line spanning the strip + panels, so the
           divider reads as one line from the navbar down. */}
       <div

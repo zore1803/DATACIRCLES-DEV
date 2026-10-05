@@ -2114,13 +2114,13 @@ const QuotationForm = ({
                   <button
                     type="button"
                     onClick={handleOpenItemForm}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-800 ml-2"
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-800 ml-2 whitespace-nowrap"
                   >
                     + Add new Product?
                   </button>
                 </div>
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 text-sm text-gray-600">
+                <div className="flex items-center gap-4 flex-shrink-0">
+                  <label className="flex items-center gap-2 text-sm text-gray-600 whitespace-nowrap">
                     <input type="checkbox" className="rounded text-blue-600 focus:ring-blue-500" defaultChecked />
                     Show description
                   </label>
