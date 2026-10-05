@@ -19,6 +19,11 @@ const Deal = require("../models/Deal");
  * @returns {import('express').RequestHandler}
  */
 function listDocsByDealEntity(Model, dealField) {
+  // Quotation/Proforma can also be linked DIRECTLY to a company/contact (no deal).
+  // Those models carry a `company`/`contact` path; invoice/challan/sales-return
+  // do not, so we only add the direct-link branch when the model actually has it.
+  const hasDirectLink = !!Model.schema.path(dealField);
+
   return async (req, res) => {
     try {
       const entityId = req.params[`${dealField}Id`];
@@ -29,8 +34,15 @@ function listDocsByDealEntity(Model, dealField) {
       }).select("_id");
       const dealIds = deals.map((d) => d._id);
 
+      // Union of deal-linked docs and (where supported) directly-linked ones. A
+      // document has either a deal or a direct link — never both — so there is no
+      // double counting.
+      const match = hasDirectLink
+        ? { $or: [{ deal: { $in: dealIds } }, { [dealField]: entityId }] }
+        : { deal: { $in: dealIds } };
+
       const docs = await Model.find({
-        deal: { $in: dealIds },
+        ...match,
         organization: req.user.organization,
       })
         .populate("deal")

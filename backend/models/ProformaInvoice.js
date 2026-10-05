@@ -13,7 +13,13 @@ const postalAddressSchema = new mongoose.Schema({
 }, { _id: false });
 
 const proformaInvoiceSchema = new mongoose.Schema({
-  deal: { type: mongoose.Schema.Types.ObjectId, ref: 'Deal', required: true },
+  // Deal is optional — see the matching note on the Quotation model. A proforma
+  // can be linked directly to a Company and/or Contact. Deal-linked proformas
+  // keep resolving customer/address/GST through the Deal (unchanged); `company`/
+  // `contact` are populated only for deal-less (direct-link) proformas.
+  deal: { type: mongoose.Schema.Types.ObjectId, ref: 'Deal', default: null },
+  company: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', default: null },
+  contact: { type: mongoose.Schema.Types.ObjectId, ref: 'Contact', default: null },
   performaInvoiceNumber: { type: String, required: true },
   // Free-text field (e.g. a customer's PO number) — has no bearing on
   // performaInvoiceNumber/numbering, purely informational. Matches the same

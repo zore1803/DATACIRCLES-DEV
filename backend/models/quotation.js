@@ -37,7 +37,15 @@ const itemSchema = new mongoose.Schema({
 });
 
 const quotationSchema = new mongoose.Schema({
-  deal: { type: mongoose.Schema.Types.ObjectId, ref: 'Deal', required: true },
+  // Deal is optional. A quotation can instead (or additionally) be linked
+  // directly to a Company and/or Contact. When a Deal IS set it stays the source
+  // of truth and the customer/address/GST data is resolved from it exactly as
+  // before — existing deal-linked quotations are unaffected. `company`/`contact`
+  // are populated only for deal-less quotations (direct links); deal-linked ones
+  // keep resolving through the Deal, so there is one source of truth per document.
+  deal: { type: mongoose.Schema.Types.ObjectId, ref: 'Deal', default: null },
+  company: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', default: null },
+  contact: { type: mongoose.Schema.Types.ObjectId, ref: 'Contact', default: null },
   // Kept separate from quotationNumber (rather than baked in once) so the
   // create/edit form's Prefix and Number boxes can round-trip independently
   // instead of the prefix having to be re-parsed back out of the combined
