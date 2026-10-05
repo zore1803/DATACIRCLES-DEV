@@ -363,8 +363,6 @@ const PerformaInvoiceForm = ({
   const [showQuickDealForm, setShowQuickDealForm] = useState(false);
   const [localDeals, setLocalDeals] = useState(deals);
   const [sellerState, setSellerState] = useState("");
-  const [companies, setCompanies] = useState([]);
-  const [contacts, setContacts] = useState([]);
   const [itemForm, setItemForm] = useState({
     type: "product",
     name: "",
@@ -473,41 +471,18 @@ const PerformaInvoiceForm = ({
     }
   }, []);
 
-  // Fetch companies and contacts for QuickDealForm
-  const fetchCompanies = useCallback(async () => {
-    try {
-      const res = await API.get("/companies");
-      setCompanies(res.data);
-    } catch (error) {
-      console.error("Error fetching companies:", error);
-      toast.error("Failed to fetch companies.");
-    }
-  }, []);
-
-  const fetchContacts = useCallback(async () => {
-    try {
-      const res = await API.get("/contacts");
-      setContacts(res.data);
-    } catch (error) {
-      console.error("Error fetching contacts:", error);
-      toast.error("Failed to fetch contacts.");
-    }
-  }, []);
-
   useEffect(() => {
     if (isOpen) {
       setShouldRender(true);
       requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
       fetchItems();
-      fetchCompanies();
-      fetchContacts();
       setLocalDeals(deals);
       API.get("/branding").then(r => setSellerState((r.data?.state || "").trim().toLowerCase())).catch(() => {});
     } else {
       setIsSliding(false);
       setTimeout(() => setShouldRender(false), 300);
     }
-  }, [isOpen, fetchItems, fetchCompanies, fetchContacts, deals]);
+  }, [isOpen, fetchItems, deals]);
 
   // Same default-signature behavior as QuotationForm.jsx: fall back to the
   // org's default signature whenever this document isn't already pointing
@@ -1107,8 +1082,6 @@ const PerformaInvoiceForm = ({
 
       {showQuickDealForm && (
         <QuickDealForm
-          companies={companies}
-          contacts={contacts}
           onDealCreated={handleDealCreated}
           onRequestClose={() => setShowQuickDealForm(false)}
         />

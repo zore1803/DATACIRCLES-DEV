@@ -26,7 +26,7 @@ const SOCIAL_LINKS = [
   { key: "facebook", label: "Facebook", logo: facebookLogo, scale: 1.21, placeholder: "https://facebook.com/username" },
 ];
 
-const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, onRequestClose, initialCompanyId = "", editContact = null }) => {
+const QuickContactForm = ({ onContactCreated, onContactUpdated, onRequestClose, initialCompanyId = "", editContact = null }) => {
   const isEditing = !!editContact;
   const [form, setForm] = useState({
     name: "",
@@ -70,7 +70,6 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
   const [isOpen, setIsOpen] = useState(false);
   const [shouldRender, setShouldRender] = useState(true);
   const [showQuickCompanyForm, setShowQuickCompanyForm] = useState(false);
-  const [localCompanies, setLocalCompanies] = useState(companies);
   const [isFormDirty, setIsFormDirty] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
@@ -83,18 +82,10 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
     setShouldRender(true);
     requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
     fetchFieldDefinitions();
-    setLocalCompanies(companies);
-    // Callers that don't already hold a company list (e.g. the contact quick
-    // view) get one here, so the Company picker is never empty.
-    if (!companies || companies.length === 0) {
-      API.get("/companies")
-        .then((res) => setLocalCompanies(res.data?.companies || res.data || []))
-        .catch(() => {});
-    }
     return () => {
       setIsOpen(false);
     };
-  }, [companies]);
+  }, []);
 
   // Pre-fill when editing so edit and create share one form.
   useEffect(() => {
@@ -177,7 +168,6 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
   };
 
   const handleCompanyCreated = (newCompany) => {
-    setLocalCompanies((prev) => [...prev, newCompany]);
     setForm((prev) => ({ ...prev, company: newCompany._id }));
     setShowQuickCompanyForm(false);
     setIsFormDirty(true);
@@ -665,7 +655,8 @@ const QuickContactForm = ({ companies = [], onContactCreated, onContactUpdated, 
                 }
               >
                 <SearchableDropdown
-                  options={localCompanies}
+                  options={[]}
+                  remote={{ endpoint: "/companies" }}
                   value={form.company}
                   onChange={(value) => handleFormChange("company", value)}
                   placeholder="Select Company"

@@ -511,8 +511,6 @@ const DeliveryChallanFormFull = ({
       setSavingNumber(false);
     }
   };
-  const [companies, setCompanies] = useState([]);
-  const [contacts, setContacts] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [items, setItems] = useState([]);
@@ -602,41 +600,18 @@ const DeliveryChallanFormFull = ({
     }
   }, []);
 
-  // Fetch companies and contacts
-  const fetchCompanies = useCallback(async () => {
-    try {
-      const res = await API.get("/companies");
-      setCompanies(res.data);
-    } catch (error) {
-      console.error("Error fetching companies:", error);
-      toast.error("Failed to fetch companies.");
-    }
-  }, []);
-
-  const fetchContacts = useCallback(async () => {
-    try {
-      const res = await API.get("/contacts");
-      setContacts(res.data);
-    } catch (error) {
-      console.error("Error fetching contacts:", error);
-      toast.error("Failed to fetch contacts.");
-    }
-  }, []);
-
   useEffect(() => {
     if (isOpen) {
       setShouldRender(true);
       requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
       fetchItems();
-      fetchCompanies();
-      fetchContacts();
       setLocalDeals(deals);
       API.get("/branding").then(r => setSellerState((r.data?.state || "").trim().toLowerCase())).catch(() => {});
     } else {
       setIsSliding(false);
       setTimeout(() => setShouldRender(false), 300);
     }
-  }, [isOpen, fetchItems, fetchCompanies, fetchContacts, deals]);
+  }, [isOpen, fetchItems, deals]);
 
   useEffect(() => {
     if (formOverride) {
@@ -1400,8 +1375,6 @@ const DeliveryChallanFormFull = ({
 
       {showQuickDealForm && (
         <QuickDealForm
-          companies={companies}
-          contacts={contacts}
           initialCompanyId={initialCompanyId || ""}
           onDealCreated={handleDealCreated}
           onRequestClose={() => setShowQuickDealForm(false)}

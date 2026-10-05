@@ -15,8 +15,6 @@ import {
 } from "../common/form";
 
 const QuickDealForm = ({
-  companies,
-  contacts,
   onDealCreated,
   onDealUpdated,
   onRequestClose,
@@ -25,6 +23,7 @@ const QuickDealForm = ({
   initialStatus = "Open",
   editDeal = null,
   isContactLocked = false,
+  isCompanyLocked = false,
 }) => {
   const isEditing = !!editDeal;
   const [form, setForm] = useState({
@@ -39,8 +38,6 @@ const QuickDealForm = ({
   const [statusOptions, setStatusOptions] = useState(["Open", "Won", "Lost"]);
   const [showQuickCompanyForm, setShowQuickCompanyForm] = useState(false);
   const [showQuickContactForm, setShowQuickContactForm] = useState(false);
-  const [localCompanies, setLocalCompanies] = useState(companies);
-  const [localContacts, setLocalContacts] = useState(contacts);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   useBodyScrollLock(isOpen);
@@ -61,25 +58,18 @@ const QuickDealForm = ({
     requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
     fetchFieldDefinitions();
     fetchStatuses();
-    setLocalCompanies(companies);
-    setLocalContacts(
-      contacts.map(contact => ({
-        ...contact,
-        displayName: `${contact.name} (${contact.company?.name || 'No Company'})`
-      }))
-    );
     return () => {
       setIsOpen(false);
     };
-  }, [companies, contacts]);
+  }, []);
 
   // If a default company is provided, auto-generate the deal name on mount
   useEffect(() => {
-    if (!editDeal && initialCompanyId && localCompanies.length > 0) {
+    if (!editDeal && initialCompanyId) {
       suggestDealName(initialCompanyId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialCompanyId, editDeal, localCompanies.length]);
+  }, [initialCompanyId, editDeal]);
 
   // Pre-fill when editing so edit and create share one form.
   useEffect(() => {
@@ -147,7 +137,6 @@ const QuickDealForm = ({
   };
 
   const handleCompanyCreated = (newCompany) => {
-    setLocalCompanies((prev) => [...prev, newCompany]);
     setForm((prev) => ({ ...prev, company: newCompany._id }));
     setShowQuickCompanyForm(false);
     setIsFormDirty(true);
@@ -163,11 +152,7 @@ const QuickDealForm = ({
   };
 
   const handleContactCreated = (newContact) => {
-    const contactWithDisplay = {
-      ...newContact,
-      displayName: `${newContact.name} (${newContact.company?.name || 'No Company'})`
-    };
-    setLocalContacts((prev) => [...prev, contactWithDisplay]);
+    // The picker fetches the selected contact by id, so no local list to update.
     setForm((prev) => ({ ...prev, contact: newContact._id }));
     setShowQuickContactForm(false);
     setIsFormDirty(true);
@@ -309,11 +294,19 @@ const QuickDealForm = ({
   // once someone types their own name, changing the company must not
   // overwrite it.
   const suggestDealName = async (companyId) => {
-    const company = localCompanies.find((c) => c._id === companyId);
+    // Looked up by id rather than from a preloaded company list. Deals are
+    // requested without a limit on purpose: numbering needs every existing
+    // deal for this company, not a page of them.
+    let company;
+    try {
+      company = (await API.get(`/companies/${companyId}`)).data;
+    } catch {
+      return;
+    }
     if (!company?.name) return;
     let next = 1;
     try {
-      const res = await API.get("/deals", { params: { company: companyId, limit: 500 } });
+      const res = await API.get("/deals", { params: { company: companyId } });
       const deals = Array.isArray(res.data) ? res.data : res.data?.deals || [];
       const used = deals
         .map((d) => {
@@ -530,7 +523,6 @@ const QuickDealForm = ({
       )}
       {showQuickContactForm && (
         <QuickContactForm
-          companies={localCompanies}
           onContactCreated={handleContactCreated}
           onRequestClose={() => setShowQuickContactForm(false)}
         />
@@ -573,8 +565,10 @@ const QuickDealForm = ({
                 }
               >
                 <SearchableDropdown
-                  options={localCompanies}
+                  options={[]}
+                  remote={{ endpoint: "/companies" }}
                   value={form.company}
+                  disabled={isCompanyLocked}
                   onChange={(value) => handleFormChange("company", value)}
                   placeholder="Select Company"
                   displayKey="name"
@@ -649,7 +643,14 @@ const QuickDealForm = ({
                 }
               >
                 <SearchableDropdown
-                  options={localContacts}
+                  options={[]}
+                  remote={{
+                    endpoint: "/contacts",
+                    map: (c) => ({
+                      ...c,
+                      displayName: `${c.name} (${c.company?.name || "No Company"})`,
+                    }),
+                  }}
                   value={form.contact}
                   onChange={(value) => handleFormChange("contact", value)}
                   placeholder="Choose Contact"

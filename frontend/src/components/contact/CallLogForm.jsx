@@ -88,7 +88,6 @@ const CallLogForm = ({
   const [submitting, setSubmitting] = useState(false);
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(true);
-  const [contacts, setContacts] = useState([]);
 
   useBodyScrollLock(isOpen);
 
@@ -101,27 +100,6 @@ const CallLogForm = ({
   );
   const allowDuration = currentStatusConfig?.allowDuration || false;
 
-  // Fetch contacts if no contactId is provided
-  useEffect(() => {
-    const fetchContacts = async () => {
-      try {
-        const res = await API.get("/contacts");
-        // /contacts has no server-side company filter, so narrow it here —
-        // opened from a Company Profile page, picking a contact from a
-        // different company would silently mislink the call log.
-        const list = companyId
-          ? res.data.filter((c) => (c.company?._id || c.company) === companyId)
-          : res.data;
-        setContacts(list);
-      } catch (err) {
-        toast.error(err.response?.data?.error || 'Failed to fetch contacts.');
-      }
-    };
-
-    if (!contactId && !editLog) {
-      fetchContacts();
-    }
-  }, [contactId, editLog, companyId]);
 
   useEffect(() => {
     if (isOpen) {
@@ -291,7 +269,11 @@ const CallLogForm = ({
             <div>
               <FormLabel required>Contact</FormLabel>
               <SearchableDropdown
-                options={contacts}
+                options={[]}
+                remote={{
+                  endpoint: "/contacts",
+                  params: companyId ? { company: companyId } : {},
+                }}
                 value={form.contact}
                 onChange={(value) => {
                   handleFormChange("contact", value);

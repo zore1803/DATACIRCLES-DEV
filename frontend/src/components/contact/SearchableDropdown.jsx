@@ -1,4 +1,13 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
+import API from "../../services/api";
+
+// How many matches the server returns per query in remote mode.
+const REMOTE_LIMIT = 20;
+const SEARCH_DEBOUNCE_MS = 250;
+
+// List endpoints return either a bare array or an object wrapping one.
+const extractList = (data) =>
+  Array.isArray(data) ? data : Object.values(data || {}).find(Array.isArray) || [];
 
 const SearchableDropdown = ({
   options,
@@ -15,19 +24,84 @@ const SearchableDropdown = ({
   // shared component keeps its existing 14px/48px look.
   compact = false,
   disabled = false,
+  // Opt-in server-side mode, e.g. { endpoint: "/companies" }. Nothing is
+  // loaded until the dropdown opens; typing queries the server with `search`
+  // (debounced) and returns at most REMOTE_LIMIT rows. The currently selected
+  // record is fetched by id, so editing keeps its label even when it isn't in
+  // the first page of results. Without it, `options` is used exactly as before.
+  remote = null,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const dropdownRef = useRef(null);
 
+  const remoteEndpoint = remote?.endpoint;
+  // Optional per-row decoration, e.g. adding a combined display label.
+  const toDisplayOption = (o) => (remote?.map ? remote.map(o) : o);
+  const remoteParamsKey = JSON.stringify(remote?.params || {});
+  const [remoteOptions, setRemoteOptions] = useState([]);
+  const [remoteLoading, setRemoteLoading] = useState(false);
+  const [selectedRemote, setSelectedRemote] = useState(null);
+  const requestIdRef = useRef(0);
+
+  // Search while open. The request id guards against a slow earlier response
+  // overwriting a newer one.
+  useEffect(() => {
+    if (!remoteEndpoint || !isOpen) return;
+    const requestId = ++requestIdRef.current;
+    const timer = setTimeout(async () => {
+      setRemoteLoading(true);
+      try {
+        const res = await API.get(remoteEndpoint, {
+          params: {
+            ...JSON.parse(remoteParamsKey),
+            ...(searchTerm ? { search: searchTerm } : {}),
+            limit: REMOTE_LIMIT,
+          },
+        });
+        if (requestId === requestIdRef.current)
+          setRemoteOptions(extractList(res.data).map(toDisplayOption));
+      } catch {
+        if (requestId === requestIdRef.current) setRemoteOptions([]);
+      } finally {
+        if (requestId === requestIdRef.current) setRemoteLoading(false);
+      }
+    }, searchTerm ? SEARCH_DEBOUNCE_MS : 0);
+    return () => clearTimeout(timer);
+  }, [remoteEndpoint, remoteParamsKey, isOpen, searchTerm]);
+
+  // Load the selected record by id if it isn't already the one we have.
+  useEffect(() => {
+    if (!remoteEndpoint || !value) {
+      setSelectedRemote(null);
+      return;
+    }
+    if (selectedRemote?.[valueKey] === value) return;
+    let cancelled = false;
+    API.get(`${remoteEndpoint}/${value}`)
+      .then((res) => {
+        if (!cancelled) setSelectedRemote(toDisplayOption(res.data));
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedRemote(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remoteEndpoint, value]);
+
   const filteredOptions = useMemo(() => {
+    if (remoteEndpoint) return remoteOptions;
     if (!searchTerm) return options;
     return options.filter((option) =>
       option[displayKey].toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [options, searchTerm, displayKey]);
+  }, [remoteEndpoint, remoteOptions, options, searchTerm, displayKey]);
 
-  const selectedOption = options.find((option) => option[valueKey] === value);
+  const selectedOption = remoteEndpoint
+    ? (selectedRemote?.[valueKey] === value ? selectedRemote : undefined)
+    : options.find((option) => option[valueKey] === value);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -141,7 +215,7 @@ const SearchableDropdown = ({
               </>
             ) : (
               <div className="px-3 py-4 text-[13px] text-gray-400 text-center font-inter italic">
-                No options found
+                {remoteEndpoint && remoteLoading ? "Searching..." : "No options found"}
               </div>
             )}
           </div>

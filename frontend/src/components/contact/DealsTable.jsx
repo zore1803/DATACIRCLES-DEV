@@ -37,7 +37,7 @@ const stagePillStyle = (status) =>
       ? { backgroundColor: "rgba(232, 34, 34, 0.1)", color: "#E82222" }
       : { backgroundColor: "rgba(0, 133, 255, 0.1)", color: "#0085FF" };
 
-const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCreated, title = "Associated Deals" }) => {
+const DealsTable = ({ deals = [], contact, company, onDealCreated, title = "Associated Deals" }) => {
   const navigate = useNavigate();
   const [showQuickDealForm, setShowQuickDealForm] = useState(false);
   const [editDeal, setEditDeal] = useState(null);
@@ -230,8 +230,7 @@ const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCre
       {/* Create Deal */}
       {showQuickDealForm && (
         <QuickDealForm
-          companies={company ? [company] : (allCompanies.length > 0 ? allCompanies : [])}
-          contacts={contact ? [contact] : []}
+          isCompanyLocked={!!company}
           initialCompanyId={company?._id}
           initialContactId={contact?._id}
           isContactLocked={!!contact}
@@ -243,8 +242,7 @@ const DealsTable = ({ deals = [], contact, company, allCompanies = [], onDealCre
       {/* Edit Deal */}
       {editDeal && (
         <QuickDealForm
-          companies={company ? [company] : (allCompanies.length > 0 ? allCompanies : [])}
-          contacts={contact ? [contact] : []}
+          isCompanyLocked={!!company}
           editDeal={editDeal}
           isContactLocked={!!contact}
           onDealUpdated={() => { setEditDeal(null); window.location.reload(); }}

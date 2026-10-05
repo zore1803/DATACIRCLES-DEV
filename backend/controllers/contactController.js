@@ -1,4 +1,5 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
+const { parsePickerLimit } = require('../utils/pickerLimit');
 // controllers/contactController.js (updated to handle field types)
 const Contact = require("../models/Contact");
 const Company = require("../models/Company");
@@ -93,7 +94,7 @@ const updateContact = async (req, res) => {
 
 const getAllContacts = async (req, res) => {
   try {
-    const { search, lifecycleStage, stageStatus } = req.query;
+    const { search, lifecycleStage, stageStatus, company } = req.query;
     let query = { organization: req.user.organization };
     const andConditions = [];
 
@@ -141,11 +142,22 @@ const getAllContacts = async (req, res) => {
       query.stageStatus = stageStatus;
     }
 
-    const contacts = await Contact.find(query)
+    // Filter by company (used by the call-log contact picker on a company page).
+    if (company) {
+      query.company = company;
+    }
+
+    let listQuery = Contact.find(query)
       .populate("company")
       .populate("user", "name")
       .populate("createdBy", "name")
       .populate("lastUpdatedBy", "name");
+
+    // Picker callers pass ?limit= so they never pull the whole collection.
+    const cap = parsePickerLimit(req.query.limit);
+    if (cap) listQuery = listQuery.sort({ name: 1 }).limit(cap);
+
+    const contacts = await listQuery;
 
     res.json(contacts);
   } catch (error) {

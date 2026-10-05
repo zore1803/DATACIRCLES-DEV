@@ -514,8 +514,6 @@ const InvoiceFormFull = ({
       setSavingNumber(false);
     }
   };
-  const [companies, setCompanies] = useState([]);
-  const [contacts, setContacts] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [stockErrorMessage, setStockErrorMessage] = useState(null);
   const [items, setItems] = useState([]);
@@ -616,41 +614,18 @@ const InvoiceFormFull = ({
     }
   }, []);
 
-  // Fetch companies and contacts
-  const fetchCompanies = useCallback(async () => {
-    try {
-      const res = await API.get("/companies");
-      setCompanies(res.data);
-    } catch (error) {
-      console.error("Error fetching companies:", error);
-      toast.error("Failed to fetch companies.");
-    }
-  }, []);
-
-  const fetchContacts = useCallback(async () => {
-    try {
-      const res = await API.get("/contacts");
-      setContacts(res.data);
-    } catch (error) {
-      console.error("Error fetching contacts:", error);
-      toast.error("Failed to fetch contacts.");
-    }
-  }, []);
-
   useEffect(() => {
     if (isOpen) {
       setShouldRender(true);
       requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
       fetchItems();
-      fetchCompanies();
-      fetchContacts();
       setLocalDeals(deals);
       API.get("/branding").then(r => setSellerState((r.data?.state || "").trim().toLowerCase())).catch(() => {});
     } else {
       setIsSliding(false);
       setTimeout(() => setShouldRender(false), 300);
     }
-  }, [isOpen, fetchItems, fetchCompanies, fetchContacts, deals]);
+  }, [isOpen, fetchItems, deals]);
 
   useEffect(() => {
     // A handoff from the split-view panel is already in this component's own
@@ -1506,8 +1481,6 @@ const InvoiceFormFull = ({
     <>
       {showQuickDealForm && (
         <QuickDealForm
-          companies={companies}
-          contacts={contacts}
           initialCompanyId={initialCompanyId || ""}
           onDealCreated={handleDealCreated}
           onRequestClose={() => setShowQuickDealForm(false)}

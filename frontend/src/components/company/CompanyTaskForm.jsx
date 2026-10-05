@@ -363,12 +363,13 @@ const CompanyTaskForm = ({
   const fetchRelatedOptions = async () => {
     if (!companyId) return;
     try {
+      // Company-scoped on the server — only this company's rows are fetched.
       const [contactsRes, dealsRes] = await Promise.all([
-        API.get("/contacts"),
-        API.get("/deals"),
+        API.get("/contacts", { params: { company: companyId } }),
+        API.get("/deals", { params: { company: companyId } }),
       ]);
-      setContacts(contactsRes.data.filter((c) => c.company?._id === companyId));
-      setDeals(dealsRes.data.filter((d) => d.company?._id === companyId));
+      setContacts(contactsRes.data);
+      setDeals(dealsRes.data);
     } catch (error) {
       console.error("Error fetching related contact/deal options:", error);
     }

@@ -1,4 +1,5 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
+const { parsePickerLimit } = require('../utils/pickerLimit');
 // controllers/dealController.js (updated to handle field types)
 const Deal = require("../models/Deal");
 const Invoice = require("../models/Invoice");
@@ -131,13 +132,18 @@ const getAllDeals = async (req, res) => {
       query.$and = preAndConditions;
     }
 
-    const deals = await Deal.find(query)
+    let listQuery = Deal.find(query)
       .populate("company")
       .populate("contact")
       .populate("user", "name")
       .populate("createdBy", "name")
-      .populate("lastUpdatedBy", "name")
-      .lean();
+      .populate("lastUpdatedBy", "name");
+
+    // Picker callers pass ?limit= so they never pull the whole collection.
+    const cap = parsePickerLimit(req.query.limit);
+    if (cap) listQuery = listQuery.sort({ title: 1 }).limit(cap);
+
+    const deals = await listQuery.lean();
 
     const userId = req.user._id.toString();
     const dealsWithStar = deals.map((d) => {

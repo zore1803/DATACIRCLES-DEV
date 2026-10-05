@@ -103,8 +103,6 @@ function DealDetail() {
   // create form there, the same as the Company page does.
   const [pendingCreate, setPendingCreate] = useState(null);
   const [invoicesLoading, setInvoicesLoading] = useState(true);
-  const [companies, setCompanies] = useState([]);
-  const [contacts, setContacts] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [meetings, setMeetings] = useState([]);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -200,14 +198,9 @@ function DealDetail() {
       setError(null);
       // Only the deal itself is fatal: a failure loading the side data
       // shouldn't replace the whole page with an error screen.
-      const [dealRes, companiesRes, contactsRes] = await Promise.all([
-        API.get(`/deals/${dealId}`),
-        API.get("/companies").catch(() => ({ data: { companies: [] } })),
-        API.get("/contacts").catch(() => ({ data: { contacts: [] } })),
-      ]);
+      // Company/contact pickers load their own search results on demand.
+      const dealRes = await API.get(`/deals/${dealId}`);
       setDeal(dealRes.data);
-      setCompanies(companiesRes.data?.companies || companiesRes.data || []);
-      setContacts(contactsRes.data?.contacts || contactsRes.data || []);
     } catch (err) {
       console.error("Failed to load deal details:", err);
       setError("Failed to load deal details. Please try again.");
@@ -340,8 +333,6 @@ function DealDetail() {
     <div className="bg-white -mt-6 -mx-4 sm:-mx-6 lg:-mx-8 pt-6 px-6">
       {showForm && (
         <QuickDealForm
-          companies={companies}
-          contacts={contacts}
           editDeal={deal}
           onDealUpdated={() => {
             fetchData();

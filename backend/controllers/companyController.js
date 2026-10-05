@@ -5,6 +5,7 @@ const Meeting = require('../models/Meeting');
 const Task = require('../models/Task');
 const companyService = require('../services/companyService');
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
+const { parsePickerLimit } = require('../utils/pickerLimit');
 
 const createCompany = async (req, res) => {
   try {
@@ -52,11 +53,17 @@ const getAllCompanies = async (req, res) => {
       }
     }
 
-    const companies = await Company.find(query)
+    let listQuery = Company.find(query)
       .populate("user", "name")
       .populate("createdBy", "name")
       .populate("lastUpdatedBy", "name")
       .populate("owner", "name email");
+
+    // Picker callers pass ?limit= so they never pull the whole collection.
+    const cap = parsePickerLimit(req.query.limit);
+    if (cap) listQuery = listQuery.sort({ name: 1 }).limit(cap);
+
+    const companies = await listQuery;
 
     res.json(companies);
   } catch (error) {

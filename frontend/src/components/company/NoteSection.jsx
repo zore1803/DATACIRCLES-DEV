@@ -1262,7 +1262,6 @@ export const NoteEditor = ({
   // QuickDealForm needs, and callbacks that let the parent refresh its own
   // deal/invoice lists after something is created here.
   companyId = null,
-  companies = [],
   onDealCreated,
   onInvoicesChanged,
   // Optional controlled state: callers that persist the links pass these in,
@@ -1279,7 +1278,6 @@ export const NoteEditor = ({
   const [linkModalUrl, setLinkModalUrl] = useState("");
   const [quickDealOpen, setQuickDealOpen] = useState(false);
   const [quickContactOpen, setQuickContactOpen] = useState(false);
-  const [companyOptions, setCompanyOptions] = useState(companies);
   const [quickInvoiceOpen, setQuickInvoiceOpen] = useState(false);
   const navigate = useNavigate();
   const documentDefaults = useDocumentDefaults();
@@ -1337,29 +1335,11 @@ export const NoteEditor = ({
   const newInvoiceDealId = taggedDeals.length ? taggedDeals[taggedDeals.length - 1].value : null;
   const newInvoiceDeals = deals.filter((d) => String(d._id) === String(newInvoiceDealId));
 
-  // Same lazy load CompanyInvoicesTab does before opening QuickDealForm — the
-  // list isn't needed until the shortcut is actually used.
-  const openQuickDeal = async () => {
-    if (companyOptions.length === 0) {
-      try {
-        const res = await API.get("/companies");
-        setCompanyOptions(res.data?.companies || res.data || []);
-      } catch {
-        toast.error("Failed to load companies");
-      }
-    }
-    setQuickDealOpen(true);
-  };
+  // The deal/contact forms search companies and contacts on the server, so
+  // opening them needs no preloaded list.
+  const openQuickDeal = () => setQuickDealOpen(true);
 
-  const openQuickContact = async () => {
-    if (companyOptions.length === 0) {
-      try {
-        const res = await API.get("/companies");
-        setCompanyOptions(res.data?.companies || res.data || []);
-      } catch {
-        toast.error("Failed to load companies");
-      }
-    }
+  const openQuickContact = () => {
     setQuickContactOpen(true);
   };
 
@@ -1792,7 +1772,6 @@ export const NoteEditor = ({
         <div className="relative z-[10060]">
           {quickContactOpen && (
             <QuickContactForm
-              companies={companyOptions}
               initialCompanyId={companyId || ""}
               onContactCreated={handleQuickContactCreated}
               onRequestClose={() => setQuickContactOpen(false)}
@@ -1800,8 +1779,6 @@ export const NoteEditor = ({
           )}
           {quickDealOpen && (
             <QuickDealForm
-              companies={companyOptions}
-              contacts={contacts}
               initialCompanyId={companyId || ""}
               initialContactId={lockedContactId || ""}
               isContactLocked={!!lockedContactId}
@@ -1879,11 +1856,9 @@ const NoteSection = ({ companyId: propCompanyId, dealId, isQuickView }) => {
 
   const fetchContacts = useCallback(async () => {
     try {
-      const res = await API.get("/contacts");
-      const companyContacts = res.data.filter(
-        (c) => c.company?._id === companyId,
-      );
-      setContacts(companyContacts);
+      // Company-scoped on the server — only this company's contacts are fetched.
+      const res = await API.get("/contacts", { params: { company: companyId } });
+      setContacts(res.data);
     } catch (err) {
       toast.error("Failed to load contacts");
     }
@@ -1892,8 +1867,8 @@ const NoteSection = ({ companyId: propCompanyId, dealId, isQuickView }) => {
   const fetchDeals = useCallback(async () => {
     if (!companyId) return;
     try {
-      const res = await API.get("/deals");
-      setDeals(res.data.filter((d) => d.company?._id === companyId));
+      const res = await API.get("/deals", { params: { company: companyId } });
+      setDeals(res.data);
     } catch (err) {
       toast.error("Failed to load deals");
     }

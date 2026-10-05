@@ -1456,7 +1456,7 @@ const ContactCalendar = ({ activity, loading, onNavigateTab }) => {
   );
 };
 
-const BasicDetails = ({ contact, company, allCompanies = [], deals, onContactUpdate, onDealCreated, onNavigateTab }) => {
+const BasicDetails = ({ contact, company, deals, onContactUpdate, onDealCreated, onNavigateTab }) => {
   // Real contact activity, fetched here (the same per-type endpoints the
   // Call Logs / Notes / Tasks / Meetings tabs use) to back the Engagement
   // Overview and Recent Activity sections. Failures degrade to empty lists so
@@ -1500,7 +1500,7 @@ const BasicDetails = ({ contact, company, allCompanies = [], deals, onContactUpd
       <LifecycleJourney contact={contact} onContactUpdate={onContactUpdate} />
 
       {/* 2. Associated Deals (moved up — its own header + table). */}
-      <DealsTable deals={deals || []} contact={contact} company={company} allCompanies={allCompanies} onDealCreated={onDealCreated} />
+      <DealsTable deals={deals || []} contact={contact} company={company} onDealCreated={onDealCreated} />
 
       {/* 3. Overview row: Relationship Pulse on the left (~60%), and on the
              right (~340px) the Activity Timeline over a compact Calendar. Both

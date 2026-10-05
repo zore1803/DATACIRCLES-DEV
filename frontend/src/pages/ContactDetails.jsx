@@ -127,7 +127,6 @@ const ContactDetailsPage = () => {
   const { currentContactIds } = useContactStore();
 
   const [showForm, setShowForm] = useState(false);
-  const [allCompanies, setAllCompanies] = useState([]); // for the edit form's company dropdown
   const [contactFieldList, setContactFieldList] = useState([]);
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [showDealForm, setShowDealForm] = useState(false);
@@ -222,9 +221,6 @@ const ContactDetailsPage = () => {
       try {
         const resDeals = await API.get("/deals/");
         setDeals(resDeals.data.filter((deal) => deal?.contact?._id == id));
-
-        const resCompanies = await API.get("/companies");
-        setAllCompanies(resCompanies.data.companies || resCompanies.data);
 
         // Use /latest to get the organization's master template, not just the
         // current user's copy.
@@ -391,7 +387,6 @@ const ContactDetailsPage = () => {
     <div className="bg-white -mt-6 -mx-4 sm:-mx-6 lg:-mx-8 pt-6 px-6">
       {showForm && (
         <QuickContactForm
-          companies={allCompanies}
           editContact={contact}
           onContactUpdated={() => {
             fetchContactDetails();
@@ -810,7 +805,6 @@ const ContactDetailsPage = () => {
             <BasicDetails
               contact={contact}
               company={company}
-              allCompanies={allCompanies}
               deals={deals}
               contactFieldList={contactFieldList}
               onContactUpdate={handleContactUpdate}
@@ -874,8 +868,8 @@ const ContactDetailsPage = () => {
 
       {showDealForm && (
         <QuickDealForm
-          companies={company ? [company] : []}
-          contacts={contact ? [contact] : []}
+          isCompanyLocked={!!company}
+          isContactLocked={!!contact}
           initialCompanyId={company?._id || ""}
           onDealCreated={handleDealCreated}
           onRequestClose={() => setShowDealForm(false)}
