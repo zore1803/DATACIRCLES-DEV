@@ -12,6 +12,7 @@ import StatTileSkeleton from "../components/common/StatTileSkeleton";
 import StatTile from "../components/common/StatTile";
 import TableSkeletonRows from "../components/common/TableSkeletonRows";
 import PaymentsTable from "../components/vendor/PaymentsTable";
+import DealDocumentsTab from "../components/deal/DealDocumentsTab";
 import NoteSection from "../components/vendor/NoteSection";
 import VendorTasksTable from "../components/vendor/VendorTasksTable";
 import VendorMeetingsTable from "../components/vendor/VendorMeetingsTable";
@@ -62,7 +63,7 @@ const vendorNewEntryOptions = [
 ];
 
 /* ─── Tab Configuration ─── */
-const tabs = ["Overview", "Payments", "Notes", "Tasks", "Meetings", "Calendar"];
+const tabs = ["Overview", "Payments", "Documents", "Notes", "Tasks", "Meetings", "Calendar"];
 
 /* ─── Financial Summary Icons ─── */
 // Bare icon components, matching CompanyProfilePage.jsx's statTiles pattern
@@ -1267,6 +1268,9 @@ const VendorDetailsPageNew = () => {
                       autoOpenCreate={pendingCreate === "payment"}
                       onAutoOpenCreateConsumed={() => setPendingCreate(null)}
                     />
+                  )}
+                  {activeTab === "Documents" && (
+                    <DealDocumentsTab vendorId={id} showStats={showKPI} />
                   )}
                   {activeTab === "Notes" && (
                     <NoteSection

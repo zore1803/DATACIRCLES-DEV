@@ -145,7 +145,7 @@ const DocTypeCard = ({ def, rows, onOpen }) => {
 // Which entity this tab is scoped to, used only for the section subtitles so the
 // copy reads correctly on the deal, company and contact pages ("...for this
 // deal" vs "...for this company").
-const SCOPE_NOUN = { deal: "deal", company: "company", contact: "contact" };
+const SCOPE_NOUN = { deal: "deal", company: "company", contact: "contact", vendor: "vendor" };
 
 const CategorySection = ({ title, subtitle, defs, docsByType, loading, onOpen, gridClass }) => (
   <div>
@@ -164,18 +164,30 @@ const CategorySection = ({ title, subtitle, defs, docsByType, loading, onOpen, g
   </div>
 );
 
-// `dealId`, `companyId` or `contactId` set the scope — the same cards render on
-// all three (deal, company and contact) pages. Only the deal scope is wired to
-// real data today; company/contact document fetching is intentionally not
-// implemented yet (the scoping endpoints are still being designed), so those
-// pages render the cards in their empty state for UI review. TODO: wire the
-// company/contact fetch once the endpoints are agreed.
-const DealDocumentsTab = ({ dealId, companyId, contactId, showStats = true }) => {
+// `dealId`, `companyId`, `contactId` or `vendorId` set the scope. Deal, company
+// and contact show both the Sales and Purchase sections; the vendor scope shows
+// only the Purchase & Procurement cards, since vendors are tied to procurement
+// documents, not customer-facing sales ones.
+// Only the deal scope is wired to real data today; company/contact/vendor
+// document fetching is intentionally not implemented yet (the scoping endpoints
+// are still being designed), so those pages render the cards in their empty
+// state for UI review. TODO: wire the fetch once the endpoints are agreed.
+const DealDocumentsTab = ({ dealId, companyId, contactId, vendorId, showStats = true }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [docsByType, setDocsByType] = useState({});
 
-  const scope = dealId ? "deal" : companyId ? "company" : contactId ? "contact" : null;
+  const scope = dealId
+    ? "deal"
+    : companyId
+    ? "company"
+    : contactId
+    ? "contact"
+    : vendorId
+    ? "vendor"
+    : null;
+  // Vendors see only procurement documents.
+  const isVendor = scope === "vendor";
 
   // "View documents" leaves the deal and opens that type's own main page
   // (sales docs deep-link to the Accounting tab; the rest have their own page).
@@ -206,28 +218,32 @@ const DealDocumentsTab = ({ dealId, companyId, contactId, showStats = true }) =>
     if (dealId) {
       fetchAll();
     } else {
-      // Company/contact scope: fetch not wired yet — show the cards' empty
-      // state rather than an endless skeleton.
+      // Company/contact/vendor scope: fetch not wired yet — show the cards'
+      // empty state rather than an endless skeleton.
       setDocsByType({});
       setLoading(false);
     }
     return () => {
       cancelled = true;
     };
-  }, [dealId, companyId, contactId]);
+  }, [dealId, companyId, contactId, vendorId]);
 
-  // Summary is the deal's own (sales) documents — purchase docs are org-wide
-  // context, not part of this deal's KPIs.
-  const salesTypesWithDocs = SALES_TYPES.filter((d) => (docsByType[d.key] || []).length > 0).length;
-  const totalSalesDocs = SALES_TYPES.reduce((n, d) => n + (docsByType[d.key] || []).length, 0);
-  const invoicedValue = sumAmount(docsByType.invoice || [], "amount");
+  // Summary tiles track whichever section this scope shows: sales documents for
+  // deal/company/contact, procurement documents for a vendor.
+  const summaryTypes = isVendor ? PURCHASE_TYPES : SALES_TYPES;
+  const summaryTypesWithDocs = summaryTypes.filter((d) => (docsByType[d.key] || []).length > 0).length;
+  const totalSummaryDocs = summaryTypes.reduce((n, d) => n + (docsByType[d.key] || []).length, 0);
+  // Sales value is the invoiced amount; procurement value is the total across
+  // all purchase document types.
+  const summaryValue = isVendor
+    ? summaryTypes.reduce((sum, d) => sum + sumAmount(docsByType[d.key] || [], d.amountField), 0)
+    : sumAmount(docsByType.invoice || [], "amount");
 
   const summaryTiles = [
-    // "4 of 5" = how many of the 5 sales document types have at least one doc.
-    { label: "Document Types Used", value: `${salesTypesWithDocs} of ${SALES_TYPES.length}`, icon: PdfIcon },
-    // Scope is this deal's sales documents only (purchase docs are org-wide).
-    { label: "Sales Documents", value: totalSalesDocs, icon: FilesIcon },
-    { label: "Invoiced Value", value: `₹${formatNumberToIndian(invoicedValue)}`, icon: IndianRupeeIcon },
+    // "4 of 5" = how many of the section's document types have at least one doc.
+    { label: "Document Types Used", value: `${summaryTypesWithDocs} of ${summaryTypes.length}`, icon: PdfIcon },
+    { label: isVendor ? "Purchase Documents" : "Sales Documents", value: totalSummaryDocs, icon: FilesIcon },
+    { label: isVendor ? "Procurement Value" : "Invoiced Value", value: `₹${formatNumberToIndian(summaryValue)}`, icon: IndianRupeeIcon },
   ];
 
   return (
@@ -240,19 +256,26 @@ const DealDocumentsTab = ({ dealId, companyId, contactId, showStats = true }) =>
         </div>
       )}
 
-      <CategorySection
-        title="Sales Documents"
-        subtitle={`Customer-facing documents for this ${SCOPE_NOUN[scope] || "deal"}`}
-        defs={SALES_TYPES}
-        docsByType={docsByType}
-        loading={loading}
-        onOpen={openDocType}
-        gridClass="lg:grid-cols-5"
-      />
+      {/* Sales documents don't apply to a vendor — procurement only. */}
+      {!isVendor && (
+        <CategorySection
+          title="Sales Documents"
+          subtitle={`Customer-facing documents for this ${SCOPE_NOUN[scope] || "deal"}`}
+          defs={SALES_TYPES}
+          docsByType={docsByType}
+          loading={loading}
+          onOpen={openDocType}
+          gridClass="lg:grid-cols-5"
+        />
+      )}
 
       <CategorySection
         title="Purchase & Procurement Documents"
-        subtitle={`Organisation-wide procurement records — not associated with this ${SCOPE_NOUN[scope] || "deal"}`}
+        subtitle={
+          isVendor
+            ? "Procurement documents for this vendor"
+            : `Organisation-wide procurement records — not associated with this ${SCOPE_NOUN[scope] || "deal"}`
+        }
         defs={PURCHASE_TYPES}
         docsByType={docsByType}
         loading={loading}
