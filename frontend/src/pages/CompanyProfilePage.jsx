@@ -11,6 +11,7 @@ import { useTopLoadingSignal } from "../components/common/TopLoadingBar";
 import CompanyDealsKanban from "../components/company/CompanyDealsKanban";
 import CompanyContactsTab from "../components/company/CompanyContactsTab";
 import CompanyInvoicesTab from "../components/company/CompanyInvoicesTab";
+import DealDocumentsTab from "../components/deal/DealDocumentsTab";
 import CompanyNotesTab from "../components/company/CompanyNotesTab";
 import CompanyTasksTab from "../components/company/CompanyTasksTab";
 import CompanyMeetingsTab from "../components/company/CompanyMeetingsTab";
@@ -65,6 +66,7 @@ const tabs = [
   "Deals",
   "Contacts",
   "Invoices",
+  "Documents",
   "Notes",
   "Tasks",
   "Meetings",
@@ -1971,6 +1973,9 @@ const CompanyProfilePage = () => {
                 setDeals((prev) => (prev.some((d) => d._id === newDeal._id) ? prev : [...prev, newDeal]))
               }
             />
+          )}
+          {activeTab === "Documents" && (
+            <DealDocumentsTab companyId={id} showStats={showStats} />
           )}
           {activeTab === "Notes" && (
             <CompanyNotesTab

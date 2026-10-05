@@ -8,6 +8,7 @@ import { useParams, Link, useNavigate, useSearchParams, useLocation } from "reac
 import API from "../services/api";
 import BasicDetails from "../components/contact/BasicDetails";
 import CompanyNotesTab from "../components/company/CompanyNotesTab";
+import DealDocumentsTab from "../components/deal/DealDocumentsTab";
 import CompanyCallLogsTab from "../components/company/CompanyCallLogsTab";
 import CompanyCalendar from "../components/company/CompanyCalendar";
 import CompanyMeetingsTab from "../components/company/CompanyMeetingsTab";
@@ -49,7 +50,7 @@ import EditIcon from "../components/common/EditIcon";
 // of its contacts doesn't change how the page works. The tab set is the
 // contact's own — a contact has no sub-contacts, invoices or folders of its
 // own, so those company tabs have no counterpart here.
-const tabs = ["Overview", "Call Logs", "Notes", "Tasks", "Meetings", "Calendar"];
+const tabs = ["Overview", "Call Logs", "Documents", "Notes", "Tasks", "Meetings", "Calendar"];
 
 const newEntryOptions = [
   { label: "New Deal", icon: BriefcaseBusiness, create: "deal" },
@@ -823,6 +824,9 @@ const ContactDetailsPage = () => {
                 isLoading={callLogsLoading}
               />
             </div>
+          )}
+          {activeTab === "Documents" && (
+            <DealDocumentsTab contactId={id} showStats={showStats} />
           )}
           {activeTab === "Notes" && (
             <CompanyNotesTab

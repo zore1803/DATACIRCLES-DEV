@@ -293,30 +293,42 @@ const BasicDetails = ({ deal }) => {
       {
         key: "billed",
         label: "Invoiced so far",
+        signal: "Invoicing",
         hint: "Invoices raised vs. deal value",
         weight: 25,
         ratio: dealValue > 0 ? Math.min(1, totalInvoiced / dealValue) : totalInvoiced > 0 ? 1 : 0,
         detail: dealValue > 0 ? `${Math.round(Math.min(100, (totalInvoiced / dealValue) * 100))}% invoiced` : "No deal value",
+        attention: (r) => (dealValue > 0 && r < 0.7 ? `Only ${Math.round(r * 100)}% invoiced so far` : null),
       },
       {
         key: "collected",
         label: "Payments received",
+        signal: "Collection",
         hint: "Money collected vs. invoiced",
         weight: 30,
         ratio: totalInvoiced > 0 ? totalPaid / totalInvoiced : 0,
         detail: totalInvoiced > 0 ? `${Math.round((totalPaid / totalInvoiced) * 100)}% collected` : "Nothing invoiced",
+        attention: (r) =>
+          totalInvoiced > 0 && r === 0
+            ? "No payment received yet"
+            : totalInvoiced > 0 && r < 0.7
+            ? `Only ${Math.round(r * 100)}% collected so far`
+            : null,
       },
       {
         key: "overdue",
         label: "Overdue payments",
+        signal: "Overdue",
         hint: "Full points when nothing is late",
         weight: 20,
         ratio: totalInvoiced > 0 ? 1 - Math.min(1, overdueAmount / totalInvoiced) : 1,
         detail: overdueAmount > 0 ? `${fmt(overdueAmount)} overdue` : "Nothing overdue",
+        attention: (r) => (overdueAmount > 0 && r < 0.7 ? `${fmt(overdueAmount)} overdue` : null),
       },
       {
         key: "recency",
         label: "Last contact",
+        signal: "Last activity",
         hint: "Full points within 14 days, none after 60",
         weight: 15,
         // Full marks inside a fortnight, decaying to zero at 60 days.
@@ -332,16 +344,24 @@ const BasicDetails = ({ deal }) => {
             : daysSinceTouch === 0
             ? "Today"
             : `${daysSinceTouch} day${daysSinceTouch === 1 ? "" : "s"} ago`,
+        attention: (r) =>
+          daysSinceTouch === null
+            ? "No activity yet"
+            : r < 0.7
+            ? `Last activity was ${daysSinceTouch} day${daysSinceTouch === 1 ? "" : "s"} ago`
+            : null,
       },
       {
         key: "followup",
         label: "Next step planned",
+        signal: "Next step",
         hint: "At least one open task",
         weight: 10,
         ratio: openTasks > 0 ? 1 : 0,
         detail: openTasks > 0 ? `${openTasks} open task${openTasks === 1 ? "" : "s"}` : "No open tasks",
+        attention: (r) => (r === 0 ? "No next step planned" : null),
       },
-    ].map((f) => ({ ...f, points: f.ratio * f.weight }));
+    ].map((f) => ({ ...f, points: f.ratio * f.weight, attention: f.attention(f.ratio) }));
 
     const score = Math.round(factors.reduce((s, f) => s + f.points, 0));
     const band =
@@ -1030,16 +1050,20 @@ const BasicDetails = ({ deal }) => {
               </p>
             </div>
 
-            {/* Breakdown */}
+            {/* Signals — plain CRM language, no point weighting visible here.
+                The 25/30/20/15/10 breakdown that used to sit in this spot
+                moved into "How is this scored?" below for anyone who wants
+                the mechanics; day-to-day this reads as a status summary. */}
             <div className="flex-1 lg:border-l lg:border-gray-100 lg:pl-10">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-5">
                 {dealHealth.factors.map((f) => (
                   <div key={f.key}>
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-[15px] font-semibold text-[#0E121B]">{f.label}</span>
-                      <span className="text-sm font-semibold text-gray-600 flex-shrink-0 tabular-nums">
-                        {Math.round(f.points)} / {f.weight} pts
-                      </span>
+                    <span className="text-[13px] text-gray-500">{f.signal}</span>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      {f.ratio < 0.4 && (
+                        <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: HEALTH_BAD }} />
+                      )}
+                      <span className="text-[15px] font-semibold text-[#0E121B] truncate">{f.detail}</span>
                     </div>
                     <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden mt-2">
                       <div
@@ -1055,25 +1079,61 @@ const BasicDetails = ({ deal }) => {
                         }}
                       />
                     </div>
-                    <div className="flex items-baseline justify-between gap-3 mt-1.5">
-                      <span className="text-[13px] text-gray-500">{f.hint}</span>
-                      <span className="text-[13px] text-gray-700 flex-shrink-0">{f.detail}</span>
-                    </div>
                   </div>
                 ))}
               </div>
 
-              <details className="mt-6 group">
+              {/* Needs attention — only the factors actually dragging the
+                  score down, phrased as next actions rather than metrics. */}
+              {(() => {
+                const items = dealHealth.factors.map((f) => f.attention).filter(Boolean);
+                if (!items.length) {
+                  return (
+                    <div className="mt-6 flex items-center gap-2 text-[13px]" style={{ color: HEALTH_GOOD }}>
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: HEALTH_GOOD }} />
+                      All signals look good — no action needed right now.
+                    </div>
+                  );
+                }
+                return (
+                  <div className="mt-6 bg-amber-50/60 border border-amber-100 rounded-lg px-4 py-3">
+                    <p className="text-[13px] font-semibold" style={{ color: HEALTH_WARN }}>
+                      Needs attention
+                    </p>
+                    <ul className="mt-1.5 space-y-1">
+                      {items.map((item, i) => (
+                        <li key={i} className="text-[13px] text-gray-600 flex items-start gap-1.5">
+                          <span className="mt-[7px] w-1 h-1 rounded-full bg-gray-400 flex-shrink-0" />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })()}
+
+              <details className="mt-5 group">
                 <summary className="text-sm font-medium text-[#0085FF] cursor-pointer select-none list-none">
                   How is this scored?
                 </summary>
-                <div className="mt-2 text-[13px] text-gray-500 leading-relaxed space-y-1">
-                  <p>
+                <div className="mt-3 space-y-4">
+                  {dealHealth.factors.map((f) => (
+                    <div key={f.key}>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-[13px] font-medium text-[#0E121B]">{f.label}</span>
+                        <span className="text-[13px] font-semibold text-gray-600 flex-shrink-0 tabular-nums">
+                          {Math.round(f.points)} / {f.weight} pts
+                        </span>
+                      </div>
+                      <p className="text-[12px] text-gray-500 mt-0.5">{f.hint}</p>
+                    </div>
+                  ))}
+                  <p className="text-[13px] text-gray-500 leading-relaxed">
                     Each area earns points in proportion to how well it is going, up to its
                     maximum. The total is the score: {dealHealth.factors.map((f) => f.weight).join(" + ")} = 100.
                     For example, 85% invoiced earns 0.85 × 25 = 21 points.
                   </p>
-                  <p>
+                  <p className="text-[13px]">
                     <span className="font-medium" style={{ color: HEALTH_GOOD }}>70–100 Healthy</span>
                     {" · "}
                     <span className="font-medium" style={{ color: HEALTH_WARN }}>40–69 Needs attention</span>

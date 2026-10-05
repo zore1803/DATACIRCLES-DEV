@@ -4,6 +4,7 @@ import API from "../../services/api";
 import { formatNumberToIndian } from "../../utils/numberFormatter";
 import StatTile from "../common/StatTile";
 import StatTileSkeleton from "../common/StatTileSkeleton";
+import DocTypeCardSkeleton from "../common/DocTypeCardSkeleton";
 import PdfIcon from "../common/PdfIcon";
 import FilesIcon from "../common/FilesIcon";
 // lucide is the icon set the whole app (sidebar included) already uses; each
@@ -141,6 +142,11 @@ const DocTypeCard = ({ def, rows, onOpen }) => {
 // `gridClass` is a full literal Tailwind class (not built dynamically, so it
 // isn't purged) that sets the desktop column count to the section's card count,
 // so 3 cards fill the same width 5 cards do instead of leaving dead space.
+// Which entity this tab is scoped to, used only for the section subtitles so the
+// copy reads correctly on the deal, company and contact pages ("...for this
+// deal" vs "...for this company").
+const SCOPE_NOUN = { deal: "deal", company: "company", contact: "contact" };
+
 const CategorySection = ({ title, subtitle, defs, docsByType, loading, onOpen, gridClass }) => (
   <div>
     <div className="mb-0.5">
@@ -150,7 +156,7 @@ const CategorySection = ({ title, subtitle, defs, docsByType, loading, onOpen, g
     <div className="h-px bg-[#E5E7EB] mb-4" />
     <div className={`grid grid-cols-2 sm:grid-cols-3 ${gridClass} gap-3`}>
       {loading
-        ? defs.map((d) => <div key={d.key} className="h-[140px] bg-gray-50 border border-gray-200 rounded-xl animate-pulse" />)
+        ? defs.map((d) => <DocTypeCardSkeleton key={d.key} />)
         : defs.map((def) => (
             <DocTypeCard key={def.key} def={def} rows={docsByType[def.key] || []} onOpen={onOpen} />
           ))}
@@ -158,10 +164,18 @@ const CategorySection = ({ title, subtitle, defs, docsByType, loading, onOpen, g
   </div>
 );
 
-const DealDocumentsTab = ({ dealId, showStats = true }) => {
+// `dealId`, `companyId` or `contactId` set the scope — the same cards render on
+// all three (deal, company and contact) pages. Only the deal scope is wired to
+// real data today; company/contact document fetching is intentionally not
+// implemented yet (the scoping endpoints are still being designed), so those
+// pages render the cards in their empty state for UI review. TODO: wire the
+// company/contact fetch once the endpoints are agreed.
+const DealDocumentsTab = ({ dealId, companyId, contactId, showStats = true }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [docsByType, setDocsByType] = useState({});
+
+  const scope = dealId ? "deal" : companyId ? "company" : contactId ? "contact" : null;
 
   // "View documents" leaves the deal and opens that type's own main page
   // (sales docs deep-link to the Accounting tab; the rest have their own page).
@@ -189,11 +203,18 @@ const DealDocumentsTab = ({ dealId, showStats = true }) => {
         if (!cancelled) setLoading(false);
       }
     };
-    if (dealId) fetchAll();
+    if (dealId) {
+      fetchAll();
+    } else {
+      // Company/contact scope: fetch not wired yet — show the cards' empty
+      // state rather than an endless skeleton.
+      setDocsByType({});
+      setLoading(false);
+    }
     return () => {
       cancelled = true;
     };
-  }, [dealId]);
+  }, [dealId, companyId, contactId]);
 
   // Summary is the deal's own (sales) documents — purchase docs are org-wide
   // context, not part of this deal's KPIs.
@@ -221,7 +242,7 @@ const DealDocumentsTab = ({ dealId, showStats = true }) => {
 
       <CategorySection
         title="Sales Documents"
-        subtitle="Customer-facing documents for this deal"
+        subtitle={`Customer-facing documents for this ${SCOPE_NOUN[scope] || "deal"}`}
         defs={SALES_TYPES}
         docsByType={docsByType}
         loading={loading}
@@ -231,7 +252,7 @@ const DealDocumentsTab = ({ dealId, showStats = true }) => {
 
       <CategorySection
         title="Purchase & Procurement Documents"
-        subtitle="Organisation-wide procurement records — not associated with this deal"
+        subtitle={`Organisation-wide procurement records — not associated with this ${SCOPE_NOUN[scope] || "deal"}`}
         defs={PURCHASE_TYPES}
         docsByType={docsByType}
         loading={loading}
