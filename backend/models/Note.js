@@ -65,5 +65,10 @@ const noteSchema = new mongoose.Schema({
   },
 }, { timestamps: true });
 
+// Notes had no indexes: the org-wide notes list and the per-deal notes lookup
+// both scanned the whole collection.
+noteSchema.index({ organization: 1, createdAt: -1 });
+noteSchema.index({ organization: 1, deal: 1 });
+
 module.exports = mongoose.model('Note', noteSchema);
 

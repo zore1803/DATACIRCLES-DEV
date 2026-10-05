@@ -96,4 +96,8 @@ const companySchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+// The Companies list filters by organization with no index before this, so it
+// scanned the whole collection.
+companySchema.index({ organization: 1, createdAt: -1 });
+
 module.exports = mongoose.model('Company', companySchema);

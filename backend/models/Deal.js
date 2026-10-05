@@ -45,4 +45,11 @@ const dealSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+// Hot paths: the Deals list / Dashboard filter by organization (and by user for
+// staff), the company page lists a company's deals. Without these, every one of
+// those queries scans the whole deals collection.
+dealSchema.index({ organization: 1, createdAt: -1 });
+dealSchema.index({ organization: 1, user: 1 });
+dealSchema.index({ organization: 1, company: 1 });
+
 module.exports = mongoose.model("Deal", dealSchema);

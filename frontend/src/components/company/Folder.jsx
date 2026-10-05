@@ -1977,7 +1977,7 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
             )}
 
             {/* Folders List / Grid */}
-            {!isLoading && !foldersLoading && folderViewMode === "grid" && folders.length === 0 ? (
+            {!isLoading && !foldersLoading && folderViewMode === "grid" && folders.length === 0 && inlineEditingId !== "NEW" ? (
               <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
                 {/* The inline "NEW" card lives in the populated-grid branch, which never renders
                     while there are no folders, so this opens the same dialog the list view's does. */}
@@ -2147,7 +2147,7 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                   </div>
                 ))}
               </div>
-            ) : !isLoading && !foldersLoading && folders.length === 0 ? (
+            ) : !isLoading && !foldersLoading && folders.length === 0 && inlineEditingId !== "NEW" ? (
               <div className="flex items-center justify-center w-full min-h-[300px] bg-white border border-[#E1E4EA] rounded-xl">
                 <EmptyState
                   icon={FolderIcon}

@@ -41,4 +41,10 @@ const taskSchema = new mongoose.Schema({
   additionalFields: [additionalFieldSchema],
 }, { timestamps: true });
 
+// Tasks had no indexes: the Tasks list (filter by organization) and the deal/
+// company/contact pages (filter by relatedEntities.entityId) both scanned the
+// whole collection.
+taskSchema.index({ organization: 1, createdAt: -1 });
+taskSchema.index({ organization: 1, 'relatedEntities.entityId': 1 });
+
 module.exports = mongoose.model('Task', taskSchema);

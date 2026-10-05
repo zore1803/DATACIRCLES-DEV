@@ -206,7 +206,10 @@ const DealDocumentsTab = ({ dealId, companyId, contactId, vendorId, showStats = 
   const isVendor = scope === "vendor";
   const isCompany = scope === "company";
   const showSales = !isVendor; // deal, contact, company
-  const showPurchase = isVendor || isCompany; // vendor, company
+  // Deal and Company both show the org-wide Purchase & Procurement cards for
+  // context (purchase docs belong to vendors, not to a deal/company). Contact
+  // stays sales-only.
+  const showPurchase = isVendor || isCompany || scope === "deal";
   const fetchTypes = [
     ...(showSales ? SALES_TYPES : []),
     ...(showPurchase ? PURCHASE_TYPES : []),
@@ -317,7 +320,7 @@ const DealDocumentsTab = ({ dealId, companyId, contactId, vendorId, showStats = 
           subtitle={
             isVendor
               ? "Procurement documents for this vendor"
-              : "Organisation-wide procurement records — not associated with this company"
+              : `Organisation-wide procurement records — not associated with this ${SCOPE_NOUN[scope] || "deal"}`
           }
           defs={PURCHASE_TYPES}
           docsByType={docsByType}

@@ -50,6 +50,16 @@ const FullWidthDocumentPanel = ({
   deals,
   dealOptions,
   onAddDeal,
+  // Direct-link support for quotation/proforma (deal XOR direct Company/Contact).
+  // Passed from CreateInvoicePanel; absent/false for invoice & challan.
+  supportsDirectLink = false,
+  companies = [],
+  contacts = [],
+  companyOptions = [],
+  contactOptions = [],
+  applyDealSelection,
+  applyCompanySelection,
+  applyContactSelection,
   catalogue,
   addItem,
   removeItem,
@@ -88,7 +98,9 @@ const FullWidthDocumentPanel = ({
       <SectionHeader number={sectionNo.details} title={`${docName} Details`} />
       <div className="grid grid-cols-1 @2xl:grid-cols-2 gap-x-6 gap-y-2 w-full">
         <div className="flex flex-col gap-1">
-          <FieldLabel required>Select Deal</FieldLabel>
+          <FieldLabel required={!supportsDirectLink}>
+            Select Deal{supportsDirectLink ? " (optional)" : ""}
+          </FieldLabel>
           <div className="flex items-center gap-2">
             <PickerSelect
               value={form.deal}
@@ -96,10 +108,10 @@ const FullWidthDocumentPanel = ({
               placeholder="Search and select deal"
               icon={Search}
               onSelect={(o) => {
-                // Same behavior as the default view: switching the deal
-                // always replaces the Receiver GSTIN and billing/shipping
-                // address with the new deal's company data, clearing them
-                // to empty when that company doesn't have them saved.
+                // Delegate to the parent so every layout classifies a deal
+                // identically and (for quotation/proforma) derives Company/Contact.
+                if (applyDealSelection) { applyDealSelection(o.value); return; }
+                // Fallback (invoice/challan if no handler passed): original inline logic.
                 const selectedDeal = deals.find((d) => d._id === o.value);
                 const company = selectedDeal?.company;
                 const nextBilling =
@@ -112,8 +124,6 @@ const FullWidthDocumentPanel = ({
                     : emptyAddress();
                 setForm((p) => {
                   const shipping = p.sameAsBilling ? nextBilling : nextShipping;
-                  // Goods: place of supply is the shipping state, so it decides
-                  // CGST+SGST vs IGST — same rule as the other two layouts.
                   const autoType = resolveTransactionType(sellerState, shipping, nextBilling);
                   return {
                     ...p,
@@ -136,6 +146,50 @@ const FullWidthDocumentPanel = ({
             </button>
           </div>
         </div>
+
+        {/* Company + Contact (quotation/proforma only). Read-only & derived when
+            a Deal is set; editable direct links otherwise. */}
+        {supportsDirectLink && (
+          <>
+            <div className="flex flex-col gap-1">
+              <FieldLabel>Company {form.deal ? "(from deal)" : "(optional)"}</FieldLabel>
+              {form.deal ? (
+                <div className={readOnlyClass + " flex items-center truncate"}>
+                  {companies.find((c) => c._id === form.company)?.name
+                    || deals.find((d) => d._id === form.deal)?.company?.name
+                    || "—"}
+                </div>
+              ) : (
+                <PickerSelect
+                  value={form.company}
+                  options={companyOptions}
+                  placeholder="Search and select company"
+                  icon={Search}
+                  onSelect={(o) => applyCompanySelection?.(o.value)}
+                />
+              )}
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <FieldLabel>Contact {form.deal ? "(from deal)" : "(optional)"}</FieldLabel>
+              {form.deal ? (
+                <div className={readOnlyClass + " flex items-center truncate"}>
+                  {contacts.find((c) => c._id === form.contact)?.name
+                    || deals.find((d) => d._id === form.deal)?.contact?.name
+                    || "—"}
+                </div>
+              ) : (
+                <PickerSelect
+                  value={form.contact}
+                  options={contactOptions}
+                  placeholder="Search and select contact"
+                  icon={Search}
+                  onSelect={(o) => applyContactSelection?.(o.value)}
+                />
+              )}
+            </div>
+          </>
+        )}
 
         <div className="flex flex-col gap-1">
           <FieldLabel required>{docName} Date</FieldLabel>

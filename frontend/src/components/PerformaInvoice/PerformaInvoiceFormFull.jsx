@@ -1531,14 +1531,14 @@ const PerformaInvoiceFormFull = ({
           isSliding ? "translate-y-0" : "translate-y-full"
         }`}
       >
-        <form onSubmit={handleSubmit} className="h-full flex flex-col bg-[#F8F9FA] w-full min-h-screen">
+        <form onSubmit={handleSubmit} className="h-full flex flex-col bg-white w-full min-h-screen">
           {/* Section 1: Header */}
           <div className="flex justify-between items-center px-6 py-4 bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
             <div className="flex items-center gap-6">
               <button
                 type="button"
                 onClick={handleClose}
-                className="text-gray-500 hover:text-gray-800 transition-colors flex items-center gap-1"
+                className="inline-flex items-center justify-center h-10 w-10 rounded-full bg-[#F1F1F5] text-[#525866] hover:bg-gray-200 transition-colors flex-shrink-0"
                 aria-label="Close form"
               >
                 <ChevronLeft className="w-5 h-5" />

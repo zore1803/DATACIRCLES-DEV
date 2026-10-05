@@ -150,7 +150,7 @@ const BasicDetails = ({ deal }) => {
       API.get("/invoices",       { params: { deal:   deal._id } }).catch(() => ({ data: [] })),
       API.get(`/tasks/deal/${deal._id}`)                          .catch(() => ({ data: [] })),
       API.get("/meetings",       { params: { dealId: deal._id } }).catch(() => ({ data: {} })),
-      API.get("/notes",          { params: { dealId: deal._id } }).catch(() => ({ data: [] })),
+      API.get(`/notes/deal/${deal._id}`)                          .catch(() => ({ data: [] })),
     ]).then(([invR, taskR, meetR, noteR]) => {
       const invList  = Array.isArray(invR.data)  ? invR.data  : [];
       const taskList = Array.isArray(taskR.data) ? taskR.data : [];
@@ -1012,8 +1012,8 @@ const BasicDetails = ({ deal }) => {
 
           <div className="flex flex-col lg:flex-row lg:items-stretch gap-6 lg:gap-10 mt-6">
             {/* Score */}
-            <div className="flex flex-col items-center justify-center gap-3 lg:w-[220px] flex-shrink-0">
-              <div className="relative w-[160px] h-[92px]">
+            <div className="flex flex-col items-center justify-center gap-3 lg:w-[260px] flex-shrink-0">
+              <div className="relative w-[210px] h-[120px]">
                 <svg viewBox="0 0 100 56" className="w-full h-full">
                   <defs>
                     <linearGradient id="dcHealthArc" x1="0" y1="0" x2="1" y2="0">
@@ -1039,26 +1039,26 @@ const BasicDetails = ({ deal }) => {
                   />
                 </svg>
                 <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
-                  <span className="text-4xl font-bold text-[#0E121B] leading-none">
+                  <span className="text-5xl font-bold text-[#0E121B] leading-none">
                     {dealHealth.score}
                   </span>
                   <span className="text-sm text-gray-500 mt-1">out of 100</span>
                 </div>
               </div>
-              <p className="text-[13px] text-gray-500 text-center leading-snug">
-                Combines billing, payments, overdue amounts, contact and next steps.
-              </p>
             </div>
 
-            {/* Signals — plain CRM language, no point weighting visible here.
-                The 25/30/20/15/10 breakdown that used to sit in this spot
-                moved into "How is this scored?" below for anyone who wants
-                the mechanics; day-to-day this reads as a status summary. */}
+            {/* Signals — plain CRM language: signal, current value, bar. Three
+                columns on the first row, the rest align underneath. */}
             <div className="flex-1 lg:border-l lg:border-gray-100 lg:pl-10">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-5">
                 {dealHealth.factors.map((f) => (
                   <div key={f.key}>
-                    <span className="text-[13px] text-gray-500">{f.signal}</span>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-[13px] text-gray-500">{f.signal}</span>
+                      <span className="text-[12px] font-medium text-gray-500 tabular-nums flex-shrink-0">
+                        {Math.round(f.points)} / {f.weight} pts
+                      </span>
+                    </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       {f.ratio < 0.4 && (
                         <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: HEALTH_BAD }} />
@@ -1082,66 +1082,6 @@ const BasicDetails = ({ deal }) => {
                   </div>
                 ))}
               </div>
-
-              {/* Needs attention — only the factors actually dragging the
-                  score down, phrased as next actions rather than metrics. */}
-              {(() => {
-                const items = dealHealth.factors.map((f) => f.attention).filter(Boolean);
-                if (!items.length) {
-                  return (
-                    <div className="mt-6 flex items-center gap-2 text-[13px]" style={{ color: HEALTH_GOOD }}>
-                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: HEALTH_GOOD }} />
-                      All signals look good — no action needed right now.
-                    </div>
-                  );
-                }
-                return (
-                  <div className="mt-6 bg-amber-50/60 border border-amber-100 rounded-lg px-4 py-3">
-                    <p className="text-[13px] font-semibold" style={{ color: HEALTH_WARN }}>
-                      Needs attention
-                    </p>
-                    <ul className="mt-1.5 space-y-1">
-                      {items.map((item, i) => (
-                        <li key={i} className="text-[13px] text-gray-600 flex items-start gap-1.5">
-                          <span className="mt-[7px] w-1 h-1 rounded-full bg-gray-400 flex-shrink-0" />
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              })()}
-
-              <details className="mt-5 group">
-                <summary className="text-sm font-medium text-[#0085FF] cursor-pointer select-none list-none">
-                  How is this scored?
-                </summary>
-                <div className="mt-3 space-y-4">
-                  {dealHealth.factors.map((f) => (
-                    <div key={f.key}>
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span className="text-[13px] font-medium text-[#0E121B]">{f.label}</span>
-                        <span className="text-[13px] font-semibold text-gray-600 flex-shrink-0 tabular-nums">
-                          {Math.round(f.points)} / {f.weight} pts
-                        </span>
-                      </div>
-                      <p className="text-[12px] text-gray-500 mt-0.5">{f.hint}</p>
-                    </div>
-                  ))}
-                  <p className="text-[13px] text-gray-500 leading-relaxed">
-                    Each area earns points in proportion to how well it is going, up to its
-                    maximum. The total is the score: {dealHealth.factors.map((f) => f.weight).join(" + ")} = 100.
-                    For example, 85% invoiced earns 0.85 × 25 = 21 points.
-                  </p>
-                  <p className="text-[13px]">
-                    <span className="font-medium" style={{ color: HEALTH_GOOD }}>70–100 Healthy</span>
-                    {" · "}
-                    <span className="font-medium" style={{ color: HEALTH_WARN }}>40–69 Needs attention</span>
-                    {" · "}
-                    <span className="font-medium" style={{ color: HEALTH_BAD }}>0–39 At risk</span>
-                  </p>
-                </div>
-              </details>
             </div>
           </div>
         </div>

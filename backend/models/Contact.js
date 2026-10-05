@@ -106,4 +106,8 @@ contactSchema.pre("save", async function (next) {
   }
 });
 
+// The Contacts list filters by organization with no index before this, so it
+// scanned the whole collection.
+contactSchema.index({ organization: 1, createdAt: -1 });
+
 module.exports = mongoose.model("Contact", contactSchema);

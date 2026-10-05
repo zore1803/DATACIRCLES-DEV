@@ -236,6 +236,10 @@ const CreateInvoicePanel = ({
   // Delivery Challan uses the same GST on/off, GSTIN and tax calculation as a Tax Invoice.
   const supportsTax = true;
   const supportsGSTIN = true;
+  // Quotation and Proforma can link directly to a Company/Contact instead of a
+  // Deal (deal XOR direct-link). Invoice (tax) and delivery challan stay
+  // deal-required — their behaviour here is unchanged.
+  const supportsDirectLink = type === "quotation" || type === "performa";
   const docName = docNameFor(type);
   // Document Settings is the single source of truth for the numbering
   // prefix. Each document type's backend expects its own request field name
@@ -256,6 +260,9 @@ const CreateInvoicePanel = ({
     const base = sourceDoc
       ? {
           deal: sourceDoc.deal?._id || sourceDoc.deal || "",
+          // Direct links are only meaningful on deal-less docs (XOR rule).
+          company: sourceDoc.deal ? "" : (sourceDoc.company?._id || sourceDoc.company || ""),
+          contact: sourceDoc.deal ? "" : (sourceDoc.contact?._id || sourceDoc.contact || ""),
           date: sourceDoc.date ? sourceDoc.date.slice(0, 10) : "",
           dueDate: sourceDoc.dueDate ? sourceDoc.dueDate.slice(0, 10) : "",
           receiverGSTIN: sourceDoc.receiverGSTIN || "",
@@ -312,6 +319,8 @@ const CreateInvoicePanel = ({
         }
       : {
           deal: "",
+          company: "",
+          contact: "",
           date: "",
           dueDate: "",
           receiverGSTIN: "",
@@ -350,6 +359,9 @@ const CreateInvoicePanel = ({
     return out;
   })();
   const [catalogue, setCatalogue] = useState([]);
+  // Companies/contacts for the deal-less direct-link pickers (quotation/proforma only).
+  const [companies, setCompanies] = useState([]);
+  const [contacts, setContacts] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [stockErrorMessage, setStockErrorMessage] = useState(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -575,6 +587,14 @@ const CreateInvoicePanel = ({
       }
     })();
   }, [type, showTemplates]);
+
+  // Companies/contacts for the direct-link pickers — only the quotation/proforma
+  // panels need them (invoice/challan stay deal-only).
+  useEffect(() => {
+    if (!supportsDirectLink) return;
+    API.get("/companies").then(r => setCompanies(Array.isArray(r.data) ? r.data : (r.data?.companies || []))).catch(() => {});
+    API.get("/contacts").then(r => setContacts(Array.isArray(r.data) ? r.data : (r.data?.contacts || []))).catch(() => {});
+  }, [supportsDirectLink]);
 
   // The panel is an overlay, not a route. Push a history entry while it's open
   // so the browser Back button closes the panel and stays on Accounting,
@@ -941,7 +961,14 @@ const CreateInvoicePanel = ({
     // instead of a toast — no notification popup, the field itself shows
     // what's wrong.
     const nextErrors = {};
-    if (!form.deal) nextErrors.deal = true;
+    // Invoice/challan require a deal; quotation/proforma require at least one of
+    // Deal/Company/Contact (deal XOR direct-link). Either way a missing link marks
+    // the Deal field red.
+    if (supportsDirectLink) {
+      if (!form.deal && !form.company && !form.contact) nextErrors.deal = true;
+    } else if (!form.deal) {
+      nextErrors.deal = true;
+    }
     if (!form.date) nextErrors.date = true;
     if (isAddressEmpty(form.billingAddress)) nextErrors.billingAddress = true;
     // Optional — only format-checked when the customer actually entered one,
@@ -990,7 +1017,13 @@ const CreateInvoicePanel = ({
     try {
       setSubmitting(true);
       const payload = {
-        deal: form.deal,
+        // Deal XOR direct-link for quotation/proforma; invoice/challan send the
+        // deal exactly as before.
+        deal: supportsDirectLink ? (form.deal || null) : form.deal,
+        ...(supportsDirectLink && {
+          company: form.deal ? null : (form.company || null),
+          contact: form.deal ? null : (form.contact || null),
+        }),
         date: form.date,
         dueDate: form.dueDate,
         status: statusValue,
@@ -1220,6 +1253,13 @@ const CreateInvoicePanel = ({
   const handleSubmit = () => submitInvoice(form.status || "Draft");
 
   const dealOptions = deals.map((d) => ({ value: d._id, label: d.title }));
+  // Direct-link pickers (deal-less quotation/proforma). Contacts narrow to the
+  // chosen company, or show all when none is selected.
+  const companyOptions = companies.map((c) => ({ value: c._id, label: c.name }));
+  const contactOptions = (form.company
+    ? contacts.filter((c) => (c.company?._id || c.company) === form.company)
+    : contacts
+  ).map((c) => ({ value: c._id, label: c.name }));
   // Name the document is billed to: the deal's customer (company, else contact),
   // falling back to the deal's own title when neither is set. Used for the live
   // preview / print so it matches what the saved PDF renders.
@@ -1235,6 +1275,14 @@ const CreateInvoicePanel = ({
   // Selecting a deal, whether picked by the user or preselected by the caller.
   const applyDealSelection = (dealId) => {
     setFieldErrors((prev) => ({ ...prev, deal: false }));
+
+    // Clearing the deal (quotation/proforma only) switches to direct-link mode,
+    // keeping the derived company/contact and addresses so context isn't wiped.
+    if (!dealId && supportsDirectLink) {
+      setForm((p) => ({ ...p, deal: "" }));
+      return;
+    }
+
     // Switching the deal always replaces the Receiver GSTIN
     // and billing/shipping address with whatever the new
     // deal's company has — including clearing them to empty
@@ -1262,11 +1310,78 @@ const CreateInvoicePanel = ({
       return {
         ...p,
         deal: dealId,
+        // Derived from the deal and shown read-only; stored as null on save (XOR).
+        company: company?._id || company || "",
+        contact: selectedDeal?.contact?._id || selectedDeal?.contact || "",
         receiverGSTIN: supportsGSTIN ? company?.gstin || "" : p.receiverGSTIN,
         billingAddress: nextBilling,
         shippingAddress: shipping,
         transactionType: supportsTax && autoType ? autoType : p.transactionType,
       };
+    });
+  };
+
+  // Direct Company pick (deal-less quotation/proforma). Fills address/GST from the
+  // company the way a deal would, and drops a contact outside that company.
+  const applyCompanySelection = (companyId) => {
+    const selectedCompany = companies.find((c) => c._id === companyId);
+    const nextBilling =
+      selectedCompany && !isAddressEmpty(selectedCompany.billingAddress)
+        ? { ...emptyAddress(), ...selectedCompany.billingAddress }
+        : emptyAddress();
+    const nextShipping =
+      selectedCompany && !isAddressEmpty(selectedCompany.shippingAddresses?.[0])
+        ? { ...emptyAddress(), ...selectedCompany.shippingAddresses[0] }
+        : emptyAddress();
+    setFieldErrors((prev) => ({ ...prev, deal: false }));
+    setForm((p) => {
+      const shipping = p.sameAsBilling ? nextBilling : nextShipping;
+      const autoType = resolveTransactionType(orgDetails?.state, shipping, nextBilling);
+      const keepContact =
+        p.contact &&
+        contacts.some(
+          (ct) => ct._id === p.contact && (ct.company?._id || ct.company) === companyId
+        );
+      return {
+        ...p,
+        company: companyId,
+        contact: keepContact ? p.contact : "",
+        receiverGSTIN: supportsGSTIN ? selectedCompany?.gstin || "" : p.receiverGSTIN,
+        billingAddress: nextBilling,
+        shippingAddress: shipping,
+        transactionType: supportsTax && autoType ? autoType : p.transactionType,
+      };
+    });
+  };
+
+  // Direct Contact pick. Adopts the contact's company (and its address/GST) when
+  // no company is chosen yet.
+  const applyContactSelection = (contactId) => {
+    const selectedContact = contacts.find((c) => c._id === contactId);
+    const contactCompanyId = selectedContact?.company?._id || selectedContact?.company || "";
+    setFieldErrors((prev) => ({ ...prev, deal: false }));
+    setForm((p) => {
+      if (!p.company && contactCompanyId) {
+        const selectedCompany = companies.find((c) => c._id === contactCompanyId);
+        const nextBilling =
+          selectedCompany && !isAddressEmpty(selectedCompany.billingAddress)
+            ? { ...emptyAddress(), ...selectedCompany.billingAddress }
+            : p.billingAddress;
+        const nextShipping =
+          selectedCompany && !isAddressEmpty(selectedCompany.shippingAddresses?.[0])
+            ? { ...emptyAddress(), ...selectedCompany.shippingAddresses[0] }
+            : p.shippingAddress;
+        const shipping = p.sameAsBilling ? nextBilling : nextShipping;
+        return {
+          ...p,
+          contact: contactId,
+          company: contactCompanyId,
+          receiverGSTIN: supportsGSTIN ? (selectedCompany?.gstin || p.receiverGSTIN) : p.receiverGSTIN,
+          billingAddress: nextBilling,
+          shippingAddress: shipping,
+        };
+      }
+      return { ...p, contact: contactId };
     });
   };
 
@@ -1661,6 +1776,14 @@ const CreateInvoicePanel = ({
               deals={deals}
               dealOptions={dealOptions}
               onAddDeal={onAddDeal}
+              supportsDirectLink={supportsDirectLink}
+              companies={companies}
+              contacts={contacts}
+              companyOptions={companyOptions}
+              contactOptions={contactOptions}
+              applyDealSelection={applyDealSelection}
+              applyCompanySelection={applyCompanySelection}
+              applyContactSelection={applyContactSelection}
               catalogue={catalogue}
               addItem={addItem}
               updateItem={updateItem}
@@ -1674,7 +1797,9 @@ const CreateInvoicePanel = ({
           <SectionHeader number={sectionNo.details} title={`${docName} Details`} />
           <div className="grid grid-cols-1 @md:grid-cols-2 gap-x-6 gap-y-2 w-full">
             <div className="flex flex-col gap-1" ref={dealFieldRef}>
-              <FieldLabel required>Select Deal</FieldLabel>
+              <FieldLabel required={!supportsDirectLink}>
+                Select Deal{supportsDirectLink ? " (optional)" : ""}
+              </FieldLabel>
               <div className="flex items-center gap-2">
                 <PickerSelect
                   value={form.deal}
@@ -1695,9 +1820,57 @@ const CreateInvoicePanel = ({
                 </button>
               </div>
               {fieldErrors.deal && (
-                <p className="text-xs text-red-600 mt-1">Deal is required</p>
+                <p className="text-xs text-red-600 mt-1">
+                  {supportsDirectLink ? "Select a Deal, Company, or Contact" : "Deal is required"}
+                </p>
               )}
             </div>
+
+            {/* Company + Contact (quotation/proforma only). Read-only & derived
+                when a Deal is set; editable direct links otherwise. */}
+            {supportsDirectLink && (
+              <>
+                <div className="flex flex-col gap-1">
+                  <FieldLabel>Company {form.deal ? "(from deal)" : "(optional)"}</FieldLabel>
+                  {form.deal ? (
+                    <div className="h-[38px] px-3.5 flex items-center text-[13px] border border-[#1F2937]/10 rounded-full bg-gray-50 text-gray-600 truncate">
+                      {companies.find((c) => c._id === form.company)?.name
+                        || deals.find((d) => d._id === form.deal)?.company?.name
+                        || "—"}
+                    </div>
+                  ) : (
+                    <PickerSelect
+                      value={form.company}
+                      options={companyOptions}
+                      placeholder="Search and select company"
+                      icon={SearchIcon}
+                      triggerClassName="h-[38px] rounded-full"
+                      onSelect={(o) => applyCompanySelection(o.value)}
+                    />
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <FieldLabel>Contact {form.deal ? "(from deal)" : "(optional)"}</FieldLabel>
+                  {form.deal ? (
+                    <div className="h-[38px] px-3.5 flex items-center text-[13px] border border-[#1F2937]/10 rounded-full bg-gray-50 text-gray-600 truncate">
+                      {contacts.find((c) => c._id === form.contact)?.name
+                        || deals.find((d) => d._id === form.deal)?.contact?.name
+                        || "—"}
+                    </div>
+                  ) : (
+                    <PickerSelect
+                      value={form.contact}
+                      options={contactOptions}
+                      placeholder="Search and select contact"
+                      icon={SearchIcon}
+                      triggerClassName="h-[38px] rounded-full"
+                      onSelect={(o) => applyContactSelection(o.value)}
+                    />
+                  )}
+                </div>
+              </>
+            )}
 
             <div className="flex flex-col gap-1" ref={dateFieldRef}>
               <FieldLabel required>{docName} Date</FieldLabel>

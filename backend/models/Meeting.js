@@ -343,6 +343,9 @@ meetingSchema.index({ organization: 1, vendor: 1, scheduledAt: -1 });
 meetingSchema.index({ organization: 1, participants: 1, scheduledAt: -1 });
 meetingSchema.index({ organization: 1, createdBy: 1, scheduledAt: -1 });
 meetingSchema.index({ organization: 1, status: 1, scheduledAt: -1 });
+// The deal page filters meetings by linkedDealId; every other relation was
+// already indexed but this one wasn't, so it scanned the collection.
+meetingSchema.index({ organization: 1, linkedDealId: 1, scheduledAt: -1 });
 
 // Virtual for meeting end time
 meetingSchema.virtual("endsAt").get(function () {
