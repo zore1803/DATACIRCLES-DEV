@@ -261,6 +261,19 @@ exports.createMeeting = async (req, res) => {
           .status(404)
           .json({ error: "Contact not found in your organization" });
       }
+      // Optional external participants (other contacts attending). Same
+      // existence check the company branch applies to its participants.
+      if (participants && participants.length > 0) {
+        const participantContacts = await Contact.find({
+          _id: { $in: participants },
+          organization: req.user.organization,
+        });
+        if (participantContacts.length !== participants.length) {
+          return res.status(404).json({
+            error: "One or more participants not found in your organization",
+          });
+        }
+      }
     } else if (linkedTo === "company") {
       linkedEntity = await Company.findOne({
         _id: companyId,
@@ -355,6 +368,9 @@ exports.createMeeting = async (req, res) => {
     // Add the appropriate reference based on linkedTo type
     if (linkedTo === "contact") {
       meetingData.contact = contactId;
+      if (participants && participants.length > 0) {
+        meetingData.participants = participants;
+      }
     } else if (linkedTo === "company") {
       meetingData.company = companyId;
       meetingData.participants = participants;
@@ -881,7 +897,7 @@ exports.updateMeeting = async (req, res) => {
       meeting.participants?.map((p) => p.toString()) || [];
 
     // Validate participants belong to organization if updating
-    if (participants && meeting.linkedTo === "company") {
+    if (participants && (meeting.linkedTo === "company" || meeting.linkedTo === "contact")) {
       const participantUsers = await Contact.find({
         _id: { $in: participants },
         organization: req.user.organization,

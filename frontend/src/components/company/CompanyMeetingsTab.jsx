@@ -2085,6 +2085,11 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
           companyName={companyName}
           initialContactId={contactId}
           contactName={contactName}
+          // Contact page: the contact's company (if any) scopes who can be
+          // added as an external participant; the tab already fetched that
+          // company's contacts, so hand them over instead of refetching.
+          contactCompanyId={contactId ? companyId || null : null}
+          clientContacts={contactId ? users : null}
           initialDealId={dealId}
           dealName={dealName}
           users={staffUsers}

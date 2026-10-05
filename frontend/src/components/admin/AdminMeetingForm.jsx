@@ -592,6 +592,32 @@ const MeetingTypeIcon = ({ type }) => {
   return icons[type] || icons['in-person'];
 };
 
+// Link Deal / Link Invoice option lists, fetched with the narrowest endpoint the
+// opening page allows instead of the organization's whole /deals and /invoices
+// (which the form then filtered down in the browser). Callers with no page
+// context (e.g. the Tasks page) still get the full lists, exactly as before.
+//   deal page    -> that one deal, and its invoices
+//   contact page -> that contact's deals, and invoices of those deals
+//   company page -> that company's deals, and invoices of those deals
+const fetchLinkableDeals = ({ dealId, contactId, companyId }) => {
+  if (dealId) return API.get(`/deals/${dealId}`).then((r) => ({ data: [r.data] }));
+  if (contactId) return API.get("/deals", { params: { contact: contactId } });
+  if (companyId) return API.get("/deals", { params: { company: companyId } });
+  return API.get("/deals");
+};
+
+const fetchLinkableInvoices = ({ dealId, contactId, companyId }) => {
+  if (dealId) return API.get("/invoices", { params: { deal: dealId } });
+  if (contactId) return API.get(`/invoices/contact/${contactId}`);
+  // This endpoint wraps its list as { invoices, summary }; unwrap to a plain array.
+  if (companyId) {
+    return API.get(`/invoices/company/${companyId}`).then((r) => ({
+      data: Array.isArray(r.data) ? r.data : r.data?.invoices || [],
+    }));
+  }
+  return API.get("/invoices");
+};
+
 const AdminMeetingForm = ({
   open,
   mode,
@@ -622,7 +648,14 @@ const AdminMeetingForm = ({
   // this presets that field and shows the deal as a read-only label.
   initialDealId = null,
   dealName = "",
+  // Contact page only: the primary contact's company (null when it has none) and
+  // that company's already-loaded contacts. They scope the external "Client
+  // Contacts" participants; the primary contact itself stays locked above.
+  contactCompanyId = null,
+  clientContacts = null,
 }) => {
+  const clientContactsRef = useRef(clientContacts);
+  clientContactsRef.current = clientContacts;
   const [form, setForm] = useState(initialState);
   useBodyScrollLock(open);
   // Org's MeetingFields definitions — drives the Custom Fields section below.
@@ -702,6 +735,14 @@ const AdminMeetingForm = ({
     }
   }, []);
 
+  // Contact page: use the company's contacts the tab already loaded; only fetch
+  // when they aren't there yet. Never called for a contact with no company.
+  const loadContactPageClientContacts = () => {
+    const preloaded = clientContactsRef.current;
+    if (preloaded && preloaded.length > 0) setCompanyContacts(preloaded);
+    else fetchCompanyContacts(contactCompanyId);
+  };
+
   const fetchMeetingsForDate = useCallback(async (date) => {
     try {
       const startDate = new Date(date);
@@ -773,7 +814,12 @@ const AdminMeetingForm = ({
         API.get("/auth/google/status")
           .then((res) => setGoogleStatus(res.data))
           .catch(() => setGoogleStatus(null));
-        API.get("/deals")
+        const linkScope = {
+          dealId: initialDealId,
+          contactId: initialContactId,
+          companyId: initialCompanyId,
+        };
+        fetchLinkableDeals(linkScope)
           .then((res) => {
             const dealsList = res.data || [];
             setLinkableDeals(dealsList);
@@ -791,7 +837,7 @@ const AdminMeetingForm = ({
             }
           })
           .catch(() => setLinkableDeals([]));
-        API.get("/invoices")
+        fetchLinkableInvoices(linkScope)
           .then((res) => setLinkableInvoices(res.data || []))
           .catch(() => setLinkableInvoices([]));
         API.get("/meeting-fields")
@@ -820,6 +866,8 @@ const AdminMeetingForm = ({
 
         if (initialFormData.linkedTo === "company" && initialFormData.companyId) {
           fetchCompanyContacts(initialFormData.companyId);
+        } else if (initialContactId && contactCompanyId) {
+          loadContactPageClientContacts();
         }
         if (initialFormData.date) {
           fetchMeetingsForDate(new Date(initialFormData.date));
@@ -835,12 +883,17 @@ const AdminMeetingForm = ({
           // the Link Contact field is pre-filled and shown read-only below.
           linkedContactId: initialContactId || null,
           linkedDealId: initialDealId || null,
+          // Contact page: the primary contact attends, so they start selected
+          // under Client Contacts (not a second, separate pick).
+          participants: initialContactId ? [initialContactId] : [],
         };
         setForm(initialFormData);
         setCompanyContacts([]);
 
         if (initialCompanyId) {
           fetchCompanyContacts(initialCompanyId);
+        } else if (initialContactId && contactCompanyId) {
+          loadContactPageClientContacts();
         }
         if (calendarDate) {
           fetchMeetingsForDate(calendarDate);
@@ -855,7 +908,7 @@ const AdminMeetingForm = ({
       setTimeout(() => setShouldRender(false), 300);
       setTimeConflict(null);
     }
-  }, [open, meetingData, mode, calendarDate, fetchMeetingsForDate, fetchCompanyContacts, startInEditMode, initialContactId, initialCompanyId, initialDealId]);
+  }, [open, meetingData, mode, calendarDate, fetchMeetingsForDate, fetchCompanyContacts, startInEditMode, initialContactId, initialCompanyId, initialDealId, contactCompanyId]);
 
   const handleChange = (key, val) => {
     setForm(f => {
@@ -1126,6 +1179,22 @@ const AdminMeetingForm = ({
           (form.participants || []).includes(c._id),
       )
     : companyContacts;
+  // Contact page: external participants are the primary contact's company
+  // contacts (just the primary contact itself when it has no company), plus any
+  // participants a saved meeting already has so they stay visible when editing.
+  const contactPageParticipantOptions = (() => {
+    if (!initialContactId) return [];
+    const base = companyContacts.length > 0
+      ? companyContacts
+      : [{ _id: initialContactId, name: contactName }];
+    const saved = (meetingData?.participants || []).filter((p) => p && typeof p === "object");
+    const seen = new Set();
+    return [...base, ...saved].filter((c) => {
+      if (seen.has(String(c._id))) return false;
+      seen.add(String(c._id));
+      return true;
+    });
+  })();
   const contactPickList = companyContacts.length > 0 ? companyContacts : allContacts;
   const scopedContactPickList = hasLinkedDealSelected
     ? contactPickList.filter((c) => String(c._id) === linkedDealContactId)
@@ -1204,7 +1273,12 @@ const AdminMeetingForm = ({
   // whichever invoice on this deal is newest.
   const handleQuickInvoiceCreated = async () => {
     try {
-      const res = await API.get("/invoices");
+      // Same scope as the initial load, so the option list stays consistent.
+      const res = await fetchLinkableInvoices({
+        dealId: initialDealId,
+        contactId: initialContactId,
+        companyId: initialCompanyId,
+      });
       const list = res.data || [];
       setLinkableInvoices(list);
       const mine = list
@@ -1562,16 +1636,16 @@ const AdminMeetingForm = ({
                 {/* Client Contacts — only a company has its own contact
                     list to pick from; a contact meeting IS the contact,
                     and vendors have no contacts in this model. */}
-                {form.linkedTo === "company" && (
+                {(form.linkedTo === "company" || !!initialContactId) && (
                   <div ref={participantsRef}>
-                    <FormLabel required>Client Contacts</FormLabel>
+                    <FormLabel required={form.linkedTo === "company"}>Client Contacts</FormLabel>
                     <div className="flex items-center gap-3">
                       <div className="flex-1 min-w-0">
                         <MultiSelectDropdown
-                          users={scopedCompanyContacts}
+                          users={initialContactId ? contactPageParticipantOptions : scopedCompanyContacts}
                           selectedUsers={form.participants}
                           onSelectionChange={(participants) => handleChange("participants", participants)}
-                          placeholder={form.companyId ? "Add client contacts" : "Select a company first"}
+                          placeholder={form.companyId || initialContactId ? "Add client contacts" : "Select a company first"}
                           isOpen={openDropdown === "clientContacts"}
                           onOpenChange={(open) => setOpenDropdown(open ? "clientContacts" : null)}
                         />

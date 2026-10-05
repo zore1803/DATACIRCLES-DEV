@@ -32,7 +32,7 @@ import { FormLabel, STATIC_FIELD_CLS, inputCls, textareaCls } from "../common/fo
 // own trigger via plain absolute positioning (not a portal) so it always
 // opens exactly where it visually belongs; a max-height + internal scroll
 // keeps it from ever growing large enough to need repositioning.
-const SearchableEntityDropdown = ({ options, value, onChange, displayKey, placeholder, disabled, onOpenChange }) => {
+const SearchableEntityDropdown = ({ options, value, onChange, displayKey, placeholder, disabled, onOpenChange, emptyText = "No results" }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const selected = options.find((o) => o._id === value);
@@ -124,7 +124,7 @@ const SearchableEntityDropdown = ({ options, value, onChange, displayKey, placeh
                 None
               </button>
               {filtered.length === 0 ? (
-                <p className="px-3 py-2 text-[12px] text-center text-gray-400">No results</p>
+                <p className="px-3 py-2 text-[12px] text-center text-gray-400">{emptyText}</p>
               ) : (
                 filtered.map((o) => (
                   <button
@@ -338,6 +338,11 @@ const CompanyTaskForm = ({
   const [relatedContactId, setRelatedContactId] = useState("");
   const [relatedDealId, setRelatedDealId] = useState("");
 
+  // "New Task" from an individual Contact page: the task belongs to that one
+  // contact, so the Contact is fixed and the Deal picker offers only that
+  // contact's deals. Edits, the company page and the deal page are unaffected.
+  const isContactLockedCreate = !!contactId && !dealId && mode === "create";
+
   const statusOptions = [
     { value: 'Pending', label: 'Pending', icon: Clock, className: 'bg-[#FDF3E6] text-[#EA9927]' },
     { value: 'Completed', label: 'Completed', icon: CheckIcon, className: 'bg-[#E6F7EF] text-[#1FA971]' },
@@ -351,7 +356,10 @@ const CompanyTaskForm = ({
   ];
 
   const fetchCompanyDetails = async () => {
-    if (!companyId) return;
+    if (!companyId) {
+      setCompany(null);
+      return;
+    }
     try {
       const res = await API.get(`/companies/${companyId}`);
       setCompany(res.data);
@@ -361,14 +369,47 @@ const CompanyTaskForm = ({
   };
 
   const fetchRelatedOptions = async () => {
-    if (!companyId) return;
+    // Contact-page "New Task": only this contact's own record (for the locked
+    // field's name) and its deals — no company-wide contact/deal lists.
+    if (isContactLockedCreate) {
+      try {
+        const [ownContact, dealsRes] = await Promise.all([
+          API.get(`/contacts/${contactId}`).catch(() => ({ data: null })),
+          API.get("/deals", { params: { contact: contactId } }),
+        ]);
+        setContacts(ownContact.data ? [ownContact.data] : []);
+        setDeals(dealsRes.data || []);
+      } catch (error) {
+        console.error("Error fetching the contact's deals:", error);
+      }
+      return;
+    }
+    // A contact can have no company, so a contact page with no companyId must
+    // still load its own options (it used to return here and leave both
+    // dropdowns empty). Only a form with neither a company nor a contact has
+    // nothing to scope by.
+    if (!companyId && !contactId) return;
     try {
-      // Company-scoped on the server — only this company's rows are fetched.
-      const [contactsRes, dealsRes] = await Promise.all([
-        API.get("/contacts", { params: { company: companyId } }),
-        API.get("/deals", { params: { company: companyId } }),
+      // Server-scoped: this company's rows when there is a company, otherwise
+      // just this contact's own record and deals.
+      const [byCompany, ownContact, dealsRes] = await Promise.all([
+        companyId
+          ? API.get("/contacts", { params: { company: companyId } })
+          : Promise.resolve({ data: [] }),
+        // The page's own contact must be selectable even when it has no
+        // company (or one that differs from the list above).
+        contactId
+          ? API.get(`/contacts/${contactId}`).catch(() => ({ data: null }))
+          : Promise.resolve({ data: null }),
+        companyId
+          ? API.get("/deals", { params: { company: companyId } })
+          : API.get("/deals", { params: { contact: contactId } }),
       ]);
-      setContacts(contactsRes.data);
+      const contactList = [...(byCompany.data || [])];
+      if (ownContact.data && !contactList.some((c) => String(c._id) === String(ownContact.data._id))) {
+        contactList.push(ownContact.data);
+      }
+      setContacts(contactList);
       setDeals(dealsRes.data);
     } catch (error) {
       console.error("Error fetching related contact/deal options:", error);
@@ -684,7 +725,7 @@ const CompanyTaskForm = ({
               <FormLabel>Related to</FormLabel>
               <div className={`${STATIC_FIELD_CLS} w-full gap-2 bg-gray-50`}>
                 <Building className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                <span className="truncate">{company?.name || "Company Name"}</span>
+                <span className="truncate">{company?.name || (companyId ? "Company Name" : "No company")}</span>
               </div>
             </div>
 
@@ -698,6 +739,13 @@ const CompanyTaskForm = ({
                       {(selectedDealContactId &&
                         contacts.find((c) => String(c._id) === selectedDealContactId)?.name) ||
                         "No contact"}
+                    </span>
+                  </div>
+                ) : isContactLockedCreate ? (
+                  // Contact page: the task is for this contact and can't be moved.
+                  <div className={`${STATIC_FIELD_CLS} w-full bg-gray-50`}>
+                    <span className="truncate">
+                      {contacts.find((c) => String(c._id) === String(contactId))?.name || "Contact"}
                     </span>
                   </div>
                 ) : (
@@ -746,6 +794,7 @@ const CompanyTaskForm = ({
                     onChange={setRelatedDealId}
                     displayKey="_displayTitle"
                     placeholder="None"
+                    emptyText={isContactLockedCreate ? "No deals found" : undefined}
                     disabled={!isEditMode && mode === "view"}
                     onOpenChange={handleDropdownOpenChange}
                   />

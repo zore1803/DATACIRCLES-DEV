@@ -1053,6 +1053,15 @@ function Tasks() {
     if (showTaskForm || showMeetingForm) fetchFormPickerData();
   }, [showTaskForm, showMeetingForm]);
 
+  // Warm the picker data a moment after the list has rendered, off the critical
+  // path, so it is normally ready by the time "New Task"/"New Meeting" is
+  // clicked. Without this the Contact dropdown opened empty on a first click
+  // until the full /contacts download finished.
+  useEffect(() => {
+    const t = setTimeout(fetchFormPickerData, 1500);
+    return () => clearTimeout(t);
+  }, []);
+
   const fetchTasks = async () => {
     try {
       setLoading(true);

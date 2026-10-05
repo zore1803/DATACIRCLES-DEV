@@ -474,18 +474,36 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
     }
   }, [id, contactId, dealId]);
 
+  // The editor's pickers (contacts / deals / invoices) are only needed once the
+  // editor opens, and each is fetched with the narrowest endpoint the page
+  // allows instead of downloading the organization's whole collection and
+  // filtering in the browser:
+  //   company page -> that company's contacts / deals / invoices
+  //   contact page -> that contact (+ its company's contacts), its deals, and
+  //                   the invoices of those deals
+  //   deal page    -> the company's contacts (narrowed to the deal's contact
+  //                   below), that one deal, and its invoices
+  // A failed load clears the "loaded" marker so the next open retries it.
+  const editorDataLoadedFor = useRef(null);
+  const editorDataKey = `${id || ""}|${contactId || ""}|${dealId || ""}`;
+
   const fetchContacts = useCallback(async () => {
     try {
-      const res = await API.get("/contacts");
-      // The page's own contact must be in the list even when it has no company
-      // (or a different one), otherwise its locked chip can't be resolved.
-      const scoped = res.data.filter(
-        (c) => c.company?._id === id || (contactId && String(c._id) === String(contactId)),
-      );
+      const [byCompany, self] = await Promise.all([
+        id ? API.get("/contacts", { params: { company: id } }) : Promise.resolve({ data: [] }),
+        // The page's own contact must be in the list even when it has no company
+        // (or a different one), otherwise its locked chip can't be resolved.
+        contactId ? API.get(`/contacts/${contactId}`) : Promise.resolve({ data: null }),
+      ]);
+      const scoped = [...(byCompany.data || [])];
+      if (self.data && !scoped.some((c) => String(c._id) === String(self.data._id))) {
+        scoped.push(self.data);
+      }
       setContacts(scoped);
       // Returned too, so the editor can link a contact it just created.
       return scoped;
     } catch (err) {
+      editorDataLoadedFor.current = null;
       toast.error("Failed to load contacts");
       return [];
     }
@@ -498,17 +516,14 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
   const fetchDeals = useCallback(async () => {
     if (!id && !contactId && !dealId) return;
     try {
-      const res = await API.get("/deals");
-      setDeals(
-        res.data.filter((d) =>
-          dealId
-            ? String(d._id) === String(dealId)
-            : contactId
-              ? String(d.contact?._id || d.contact) === String(contactId)
-              : String(d.company?._id || d.company) === String(id),
-        ),
-      );
+      const res = dealId
+        ? await API.get(`/deals/${dealId}`).then((r) => ({ data: [r.data] }))
+        : contactId
+          ? await API.get("/deals", { params: { contact: contactId } })
+          : await API.get("/deals", { params: { company: id } });
+      setDeals(res.data || []);
     } catch (err) {
+      editorDataLoadedFor.current = null;
       toast.error("Failed to load deals");
     }
   }, [id, contactId, dealId]);
@@ -516,30 +531,45 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
   const fetchInvoices = useCallback(async () => {
     if (!id && !contactId && !dealId) return [];
     try {
-      const res = await API.get("/invoices");
-      const scoped = res.data.filter((inv) =>
-        dealId
-          ? String(inv.deal?._id || inv.deal) === String(dealId)
-          : contactId
-            ? String(inv.deal?.contact?._id || inv.deal?.contact) === String(contactId)
-            : String(inv.deal?.company?._id || inv.deal?.company) === String(id),
-      );
+      const res = dealId
+        ? await API.get("/invoices", { params: { deal: dealId } })
+        : contactId
+          ? await API.get(`/invoices/contact/${contactId}`)
+          : await API.get(`/invoices/company/${id}`);
+      // The company endpoint wraps its list as { invoices, summary }.
+      const scoped = Array.isArray(res.data) ? res.data : res.data?.invoices || [];
       setInvoices(scoped);
       // Returned as well as stored: the editor links whichever invoice its
       // quick-create shortcut just produced, without waiting for a re-render.
       return scoped;
     } catch (err) {
+      editorDataLoadedFor.current = null;
       toast.error("Failed to load invoices");
       return [];
     }
   }, [id, contactId, dealId]);
 
+  // On mount only the notes themselves are needed to render the table.
   useEffect(() => {
     fetchNotes();
+  }, [fetchNotes]);
+
+  // Moving to another company/contact/deal drops the previous record's lists.
+  useEffect(() => {
+    setContacts([]);
+    setDeals([]);
+    setInvoices([]);
+    editorDataLoadedFor.current = null;
+  }, [editorDataKey]);
+
+  // Load the editor's pickers the first time it opens for this record, in parallel.
+  useEffect(() => {
+    if (!isEditorOpen || editorDataLoadedFor.current === editorDataKey) return;
+    editorDataLoadedFor.current = editorDataKey;
     fetchContacts();
     fetchDeals();
     fetchInvoices();
-  }, [fetchNotes, fetchContacts, fetchDeals, fetchInvoices]);
+  }, [isEditorOpen, editorDataKey, fetchContacts, fetchDeals, fetchInvoices]);
 
   const withContactTagged = (ids) =>
     contactId && !ids.includes(contactId) ? [...ids, contactId] : ids;
