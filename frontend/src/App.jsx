@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/common/ErrorBoundary";
+import PageSkeleton from "./components/common/PageSkeleton";
 import OfflineBanner from "./components/common/OfflineBanner";
 import ResetPassword from "./pages/ResetPassword";
 import {
@@ -18,11 +19,11 @@ import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
 import Contacts from "./pages/Contacts";
 import Deals from "./pages/Deals";
-import Proforma from "./pages/PerformaInvoice";
+const Proforma = lazy(() => import("./pages/PerformaInvoice"));
 import Tasks from "./pages/Tasks";
 import Login from "./pages/UserLogin";
 import Register from "./pages/UserRegister";
-import UserManagement from "./pages/UserManagement";
+const UserManagement = lazy(() => import("./pages/UserManagement"));
 import PrivateRoute from "./components/PrivateRoute";
 import SuperAdminPrivateRoute from "./components/SuperAdminPrivateRoute";
 import Navbar from "./components/Navbar";
@@ -30,48 +31,48 @@ import Header from "./components/Header";
 import { TopLoadingBarProvider } from "./components/common/TopLoadingBar";
 import CompanyProfilePage from "./pages/CompanyProfilePage";
 import DealDetail from "./pages/DealDetail";
-import FormDetailPage from "./pages/FormDetailPage";
-import FormBuilderPage from "./pages/FormBuilderPage";
-import PublicFormPage from "./pages/PublicFormPage";
-import Settings from "./pages/Settings";
-import Profile from "./pages/Profile";
+const FormDetailPage = lazy(() => import("./pages/FormDetailPage"));
+const FormBuilderPage = lazy(() => import("./pages/FormBuilderPage"));
+const PublicFormPage = lazy(() => import("./pages/PublicFormPage"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Profile = lazy(() => import("./pages/Profile"));
 import ContactDetailsPage from "./pages/ContactDetails";
-import Insights from "./pages/Insights";
-import VendorDetailsPageNew from "./pages/VendorDetailsPageNew";
-import VendorsHub from "./pages/VendorsHub";
-import PurchaseOrderPage from "./pages/PurchaseOrderPage";
-import PurchasePage from "./pages/PurchasePage";
-import ProductsServices from "./pages/ProductsServices";
-import Inventory from "./pages/Inventory";
+const Insights = lazy(() => import("./pages/Insights"));
+const VendorDetailsPageNew = lazy(() => import("./pages/VendorDetailsPageNew"));
+const VendorsHub = lazy(() => import("./pages/VendorsHub"));
+const PurchaseOrderPage = lazy(() => import("./pages/PurchaseOrderPage"));
+const PurchasePage = lazy(() => import("./pages/PurchasePage"));
+const ProductsServices = lazy(() => import("./pages/ProductsServices"));
+const Inventory = lazy(() => import("./pages/Inventory"));
 import { SubscriptionProvider, useSubscription } from "./contexts/SubscriptionContext";
 import { Megaphone, X } from "lucide-react";
-import PaymentSuccess from "./pages/PaymentSuccess";
-import SubscriptionPlans from "./components/settings/SubscriptionPlans";
-import SuperAdminLogin from "./pages/SuperAdminLogin";
-import Overview from "./pages/Overview";
-import Tenants from "./pages/Tenants";
-import Users from "./pages/Users";
-import Billing from "./pages/Billing";
-import Analytics from "./pages/Analytics";
-import Support from "./pages/Support";
-import TenantDetails from "./pages/TenantDetails";
-import ContactSupport from "./pages/ContactSupport";
-import BillingDetail from "./pages/BillingDetail";
+const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
+const SubscriptionPlans = lazy(() => import("./components/settings/SubscriptionPlans"));
+const SuperAdminLogin = lazy(() => import("./pages/SuperAdminLogin"));
+const Overview = lazy(() => import("./pages/Overview"));
+const Tenants = lazy(() => import("./pages/Tenants"));
+const Users = lazy(() => import("./pages/Users"));
+const Billing = lazy(() => import("./pages/Billing"));
+const Analytics = lazy(() => import("./pages/Analytics"));
+const Support = lazy(() => import("./pages/Support"));
+const TenantDetails = lazy(() => import("./pages/TenantDetails"));
+const ContactSupport = lazy(() => import("./pages/ContactSupport"));
+const BillingDetail = lazy(() => import("./pages/BillingDetail"));
 import AdminCalendar from "./pages/Calender";
-import Onboarding from "./pages/Onboarding";
-import PlanManagement from "./pages/PlanManagement";
-import Accounting from "./pages/Accounting";
-import PublicDocumentPage from "./pages/PublicDocumentPage";
-import PromotionsAndRewards from "./pages/PromotionsAndRewards";
-import PaymentRepair from "./pages/PaymentRepair";
-import SalesReturn from "./pages/SalesReturn";
-import SalesSubscription from "./pages/SalesSubscription";
-import EInvoicing from "./pages/EInvoicing";
-import PurchaseReturn from "./pages/PurchaseReturn";
-import PaymentsTimeline from "./pages/PaymentsTimeline";
-import Journals from "./pages/Journals";
-import Expenses from "./pages/Expenses";
-import IndirectIncome from "./pages/IndirectIncome";
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+const PlanManagement = lazy(() => import("./pages/PlanManagement"));
+const Accounting = lazy(() => import("./pages/Accounting"));
+const PublicDocumentPage = lazy(() => import("./pages/PublicDocumentPage"));
+const PromotionsAndRewards = lazy(() => import("./pages/PromotionsAndRewards"));
+const PaymentRepair = lazy(() => import("./pages/PaymentRepair"));
+const SalesReturn = lazy(() => import("./pages/SalesReturn"));
+const SalesSubscription = lazy(() => import("./pages/SalesSubscription"));
+const EInvoicing = lazy(() => import("./pages/EInvoicing"));
+const PurchaseReturn = lazy(() => import("./pages/PurchaseReturn"));
+const PaymentsTimeline = lazy(() => import("./pages/PaymentsTimeline"));
+const Journals = lazy(() => import("./pages/Journals"));
+const Expenses = lazy(() => import("./pages/Expenses"));
+const IndirectIncome = lazy(() => import("./pages/IndirectIncome"));
 import ForgotPass from "./components/login/ForgotPass";
 import Verification from "./components/login/Verification";
 import PhoneLogin from "./components/login/PhoneLogin";
@@ -454,6 +455,7 @@ function AppInner() {
                 : undefined
           }
         >
+          <Suspense fallback={<PageSkeleton />}>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
@@ -847,6 +849,7 @@ function AppInner() {
             />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
         </main>
         <ChecklistModal
           showChecklist={showChecklist}

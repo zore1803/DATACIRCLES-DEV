@@ -1151,14 +1151,10 @@ function Companies() {
     }
   }, [searchTerm, filterIndustry]);
 
-  // INITIALIZE: Fetch field names first
+  // INITIALIZE: these three requests don't depend on each other (each catches
+  // its own errors), so they run in parallel instead of one after another.
   useEffect(() => {
-    const initialize = async () => {
-      await fetchCompanyFieldNames(); // Wait for this to complete
-      await fetchUser();
-      await fetchIndustries(); // Fetch industries
-    };
-    initialize();
+    Promise.all([fetchCompanyFieldNames(), fetchUser(), fetchIndustries()]);
   }, []);
 
   // The full contact list is only needed by the bulk-note tagging dropdown, so

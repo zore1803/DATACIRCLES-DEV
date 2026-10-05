@@ -71,6 +71,12 @@ app.use(cors(corsOptions));
 // Explicit OPTIONS handler for all routes
 app.options(/.*/, cors(corsOptions)); // Enable pre-flight for all routes
 
+// gzip JSON/text responses (list endpoints shrink 70-90% over the wire).
+// Mounted before the routes so every API response is covered; tiny payloads
+// (<1KB) and already-compressed types are skipped by the library's defaults.
+const compression = require('compression');
+app.use(compression());
+
 // Needed to read the dc_session cookie (DataCircles application-session layer).
 const cookieParser = require('cookie-parser');
 app.use(cookieParser());
