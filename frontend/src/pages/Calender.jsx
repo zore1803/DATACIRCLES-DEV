@@ -310,11 +310,10 @@ const AdminCalendar = () => {
   const [quickAddPos, setQuickAddPos] = useState(null);
   const [selectedDateForAdd, setSelectedDateForAdd] = useState(null);
 
-  // Entities Data
+  // Entities Data — only the user list is consumed here (detail modals resolve
+  // assignee names from it). Contacts/companies/vendors were removed along with
+  // their now-deleted fetches; nothing on this page rendered them.
   const [users, setUsers] = useState([]);
-  const [contacts, setContacts] = useState([]);
-  const [companies, setCompanies] = useState([]);
-  const [vendors, setVendors] = useState([]);
 
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState("");
@@ -385,17 +384,14 @@ const AdminCalendar = () => {
   }, []);
 
   const fetchEntities = useCallback(async () => {
+    // Only the user list is actually consumed on this page (the meeting/task
+    // detail modals resolve assignee names from it). The contacts/companies/
+    // vendors collections used to be fetched here too but nothing rendered
+    // them — the calendar has no create form of its own — so those three
+    // whole-collection downloads were pure waste and have been removed.
     try {
-      const [u, c, comp, v] = await Promise.all([
-        API.get("/auth/all-user"),
-        API.get("/contacts"),
-        API.get("/companies"),
-        API.get("/vendors")
-      ]);
+      const u = await API.get("/auth/all-user");
       setUsers(u.data.allUsers || []);
-      setContacts(c.data || []);
-      setCompanies(comp.data || []);
-      setVendors(v.data || []);
     } catch (e) {
       console.error("Error fetching entities", e);
     }

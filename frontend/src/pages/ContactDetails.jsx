@@ -217,14 +217,17 @@ const ContactDetailsPage = () => {
     setStatsLoading(true);
 
     const fetchData = async () => {
-      await fetchContactDetails();
       try {
-        const resDeals = await API.get("/deals/");
-        setDeals(resDeals.data.filter((deal) => deal?.contact?._id == id));
-
-        // Use /latest to get the organization's master template, not just the
-        // current user's copy.
-        const resFields = await API.get("/contact-fields/latest");
+        // Contact, its deals (scoped server-side) and the field config are
+        // independent, so they load in parallel.
+        const [, resDeals, resFields] = await Promise.all([
+          fetchContactDetails(),
+          API.get("/deals", { params: { contact: id } }),
+          // Use /latest to get the organization's master template, not just
+          // the current user's copy.
+          API.get("/contact-fields/latest"),
+        ]);
+        setDeals(resDeals.data);
         setContactFieldList(resFields.data?.fields || []);
       } catch (err) {
         console.error("Failed to load contact profile:", err);

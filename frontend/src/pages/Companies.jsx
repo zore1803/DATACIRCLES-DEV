@@ -1157,10 +1157,17 @@ function Companies() {
       await fetchCompanyFieldNames(); // Wait for this to complete
       await fetchUser();
       await fetchIndustries(); // Fetch industries
-      await fetchAllContacts();
     };
     initialize();
   }, []);
+
+  // The full contact list is only needed by the bulk-note tagging dropdown, so
+  // it is loaded the first time that modal opens rather than on page mount.
+  useEffect(() => {
+    if (showBulkNoteModal && allContacts.length === 0) {
+      fetchAllContacts();
+    }
+  }, [showBulkNoteModal]);
 
   const fetchUser = async () => {
     try {

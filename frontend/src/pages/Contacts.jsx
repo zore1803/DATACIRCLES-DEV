@@ -1351,10 +1351,23 @@ function Contacts() {
   }, [searchTerm, activeTab, statusFilter]);
 
   useEffect(() => {
-    fetchCompanies();
+    // Companies are NOT fetched on mount anymore: the create/edit form uses a
+    // remote company picker that loads its own data, and the only other
+    // consumer is the advanced-filter "Company" dropdown, which is loaded
+    // lazily the first time that panel opens (see the showAdvancedFilters
+    // effect below).
     fetchContactFields();
     fetchPermission();
   }, []);
+
+  // Lazy-load the company list the first time the advanced-filter panel opens,
+  // so an org with thousands of companies doesn't pay for that download just
+  // to view the contacts list.
+  useEffect(() => {
+    if (showAdvancedFilters && companies.length === 0) {
+      fetchCompanies();
+    }
+  }, [showAdvancedFilters]);
 
   // Pagination handlers
   const handlePageChange = (newPage) => {
@@ -2306,7 +2319,6 @@ function Contacts() {
       {/* Single shared form for both create and edit contact. */}
       {(showQuickAdd || state?.showAddForm) && (
         <QuickContactForm
-          companies={companies}
           editContact={editContact}
           onContactCreated={() => {
             fetchData();

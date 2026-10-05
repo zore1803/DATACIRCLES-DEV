@@ -670,28 +670,59 @@ const CompanyProfilePage = () => {
 
     const fetchData = async () => {
       try {
-        await fetchCompanyDetails();
-        const resSubsidiaries = await API.get(`/companies/${id}/subsidiaries`);
-        const subsidiaryIds = resSubsidiaries.data.map((sub) => sub._id);
-        setChildCompanies(resSubsidiaries.data || []);
+        // Everything below is independent of everything else, so it all goes
+        // out at once. Contacts and deals are scoped server-side instead of
+        // downloading the whole collection and filtering in the browser.
+        const resSubsidiariesPromise = API.get(`/companies/${id}/subsidiaries`);
+        // Subsidiary contacts are shown on the parent's profile too, so they
+        // are fetched (scoped, in parallel) as soon as the subsidiary list lands.
+        const resSubContactsPromise = resSubsidiariesPromise.then((r) =>
+          Promise.all(
+            (r.data || []).map((sub) =>
+              API.get("/contacts", { params: { company: sub._id } }),
+            ),
+          ),
+        );
         API.get(`/companies/${id}/parent`)
           .then((res) => setParentCompany(res.data || null))
           .catch(() => setParentCompany(null));
-        const resContacts = await API.get("/contacts");
-        const resDeals = await API.get("/deals");
-        const resMeetings = await API.get("/meetings", { params: { companyId: id } });
-        const resTasks = await API.get(`/tasks/company/${id}`);
-        const resFields = await API.get("/company-fields");
-        const resFolders = await API.get("/folders", { params: { companyId: id } });
-        const resCallLogs = await API.get(`/call-logs/company/${id}`).catch(() => ({ data: [] }));
 
+        const [
+          ,
+          resSubsidiaries,
+          resContacts,
+          resSubContacts,
+          resDeals,
+          resMeetings,
+          resTasks,
+          resFields,
+          resFolders,
+          resCallLogs,
+        ] = await Promise.all([
+          fetchCompanyDetails(),
+          resSubsidiariesPromise,
+          API.get("/contacts", { params: { company: id } }),
+          resSubContactsPromise,
+          API.get("/deals", { params: { company: id } }),
+          API.get("/meetings", { params: { companyId: id } }),
+          API.get(`/tasks/company/${id}`),
+          API.get("/company-fields"),
+          API.get("/folders", { params: { companyId: id } }),
+          API.get(`/call-logs/company/${id}`).catch(() => ({ data: [] })),
+        ]);
+
+        setChildCompanies(resSubsidiaries.data || []);
+        const seenContactIds = new Set();
         setContacts(
-          resContacts.data.filter(
-            (c) =>
-              c.company?._id === id || subsidiaryIds.includes(c.company?._id),
-          ),
+          [resContacts.data, ...resSubContacts.map((r) => r.data)]
+            .flat()
+            .filter((c) => {
+              if (!c || seenContactIds.has(c._id)) return false;
+              seenContactIds.add(c._id);
+              return true;
+            }),
         );
-        setDeals(resDeals.data.filter((d) => d.company?._id === id));
+        setDeals(resDeals.data);
         setMeetings(resMeetings.data.meetings);
         setTasks(resTasks.data || []);
         setFolders(resFolders.data || []);

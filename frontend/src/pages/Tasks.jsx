@@ -996,19 +996,15 @@ function Tasks() {
     fetchRelatedData();
   }, []);
 
+  // On mount we only load what the LIST tables themselves need: the users list
+  // (the "Assigned Users" column resolves names from it) and the custom-field
+  // definitions (column config). The task/meeting list endpoints already
+  // populate their related company/contact/deal/vendor refs, so the full
+  // collections of those are needed only by the create/edit form pickers and
+  // are loaded on demand when a form opens (see fetchFormPickerData below).
   const fetchRelatedData = async () => {
     try {
-      const [comp, cont, dl, vend, usr] = await Promise.all([
-        API.get("/companies"),
-        API.get("/contacts"),
-        API.get("/deals"),
-        API.get("/vendors"),
-        API.get("/auth/all-user"),
-      ]);
-      setCompanies(comp.data || []);
-      setContacts(cont.data || []);
-      setDeals(dl.data || []);
-      setVendors(vend.data || []);
+      const usr = await API.get("/auth/all-user");
       setUsers(usr.data?.allUsers || []);
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to load related data");
@@ -1027,6 +1023,35 @@ function Tasks() {
       setMeetingFields([]);
     }
   };
+
+  // Company/Contact/Deal/Vendor pickers for the Task and Meeting forms. Loaded
+  // the first time either form opens, then cached for the rest of the session
+  // so reopening a form never refetches.
+  const formPickerLoadedRef = useRef(false);
+  const fetchFormPickerData = async () => {
+    if (formPickerLoadedRef.current) return;
+    formPickerLoadedRef.current = true;
+    try {
+      const [comp, cont, dl, vend] = await Promise.all([
+        API.get("/companies"),
+        API.get("/contacts"),
+        API.get("/deals"),
+        API.get("/vendors"),
+      ]);
+      setCompanies(comp.data || []);
+      setContacts(cont.data || []);
+      setDeals(dl.data || []);
+      setVendors(vend.data || []);
+    } catch (err) {
+      // Allow a retry on the next form open if this attempt failed.
+      formPickerLoadedRef.current = false;
+      toast.error(err.response?.data?.error || "Failed to load form data");
+    }
+  };
+
+  useEffect(() => {
+    if (showTaskForm || showMeetingForm) fetchFormPickerData();
+  }, [showTaskForm, showMeetingForm]);
 
   const fetchTasks = async () => {
     try {

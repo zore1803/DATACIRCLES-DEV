@@ -852,8 +852,10 @@ const ConfettiCelebration = ({ deal, onClose }) => {
 function Deals() {
   const isSearchOverlayOpen = useSearchOverlayOpen();
   const [deals, setDeals] = useState([]);
-  const [companies, setCompanies] = useState([]);
-  const [contacts, setContacts] = useState([]);
+  // Companies/contacts are NOT fetched here: the QuickDealForm's company and
+  // contact pickers are remote SearchableDropdowns that fetch + resolve their
+  // own data on open, so the whole-collection fetch this page used to do on
+  // mount was dead weight feeding unused props.
   const [form, setForm] = useState({
     title: "",
     amount: "",
@@ -1351,8 +1353,6 @@ function Deals() {
         await Promise.all([
           fetchStatuses(),
           fetchDeals(),
-          fetchCompanies(),
-          fetchContacts(),
           fetchName(),
           fetchPermission(),
           fetchDealFields(),
@@ -1513,48 +1513,6 @@ function Deals() {
     } catch (error) {
       console.error("Error fetching deals:", error);
       toast.error("Failed to fetch deals", {
-        style: {
-          zIndex: 99999,
-          background: "#ffffff",
-          border: "1px solid #e5e7eb",
-          borderRadius: "8px",
-          color: "#374151",
-          padding: "10px",
-          fontSize: "14px",
-          maxWidth: "90vw",
-        },
-      });
-    }
-  };
-
-  const fetchCompanies = async () => {
-    try {
-      const res = await API.get("/companies");
-      setCompanies(res.data);
-    } catch (error) {
-      console.error("Error fetching companies:", error);
-      toast.error("Failed to fetch companies", {
-        style: {
-          zIndex: 99999,
-          background: "#ffffff",
-          border: "1px solid #e5e7eb",
-          borderRadius: "8px",
-          color: "#374151",
-          padding: "10px",
-          fontSize: "14px",
-          maxWidth: "90vw",
-        },
-      });
-    }
-  };
-
-  const fetchContacts = async () => {
-    try {
-      const res = await API.get("/contacts");
-      setContacts(res.data);
-    } catch (error) {
-      console.error("Error fetching contacts:", error);
-      toast.error("Failed to fetch contacts", {
         style: {
           zIndex: 99999,
           background: "#ffffff",
@@ -2709,8 +2667,6 @@ function Deals() {
         {/* Single shared form for both create and edit deal. */}
         {showQuickAdd && (
           <QuickDealForm
-            companies={companies}
-            contacts={contacts}
             initialStatus={initialDealStatus}
             editDeal={editDeal}
             onDealCreated={() => {
