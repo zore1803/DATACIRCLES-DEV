@@ -391,7 +391,7 @@ const Navbar = () => {
 
   const activityChildren = [
     { name: "Tasks and Meetings", href: "/tasks" },
-    { name: "Calendar", href: "/calender" },
+    { name: "Calendar", href: "/calendar" },
   ];
 
   const salesChildren = [
@@ -433,12 +433,14 @@ const Navbar = () => {
     { name: "Payment Repair", href: "/super-admin/payment-repair", icon: Wrench },
   ];
 
+  // Re-run on every route change, not just mount — otherwise a dropdown left
+  // open survives browser Back/Forward and shows out of sync with the page.
   useEffect(() => {
     setSalesOpen(false);
     setProcurementOpen(false);
     setPaymentsOpen(false);
     setActivityOpen(false);
-  }, []);
+  }, [location.pathname]);
 
   const isCurrentPath = (href) => {
     // "/settings/forms" is reachable two ways — the sidebar's own Forms
@@ -453,12 +455,10 @@ const Navbar = () => {
       return location.pathname.startsWith("/settings") && !(onSettingsForms && !cameViaSettingsTile);
     }
     if (location.pathname === href) return true;
-    return (
-      (href === "/companies" && location.pathname.startsWith("/companies/")) ||
-      (href === "/contacts" && location.pathname.startsWith("/contacts/")) ||
-      (href === "/deals" && location.pathname.startsWith("/deals/")) ||
-      (href === "/vendors" && location.pathname.startsWith("/vendors/"))
-    );
+    // Sub-routes (e.g. /inventory/123, /companies/abc) keep their sidebar
+    // item highlighted. The trailing "/" stops /purchase matching /purchase-order,
+    // and "/" itself is excluded so the dashboard doesn't highlight everywhere.
+    return href !== "/" && location.pathname.startsWith(`${href}/`);
   };
 
   const isChildActive = (children) =>
@@ -731,7 +731,12 @@ const Navbar = () => {
                     setIsOpen(false);
                     setHoveredIndex(null);
                   }}
-                  className="block px-3 py-2 text-sm text-gray-900 hover:bg-gray-100 rounded-lg "
+                  className={`block px-3 py-2 text-sm rounded-lg ${
+                    isChildActive([child])
+                      ? "bg-white text-[#0085FF] font-medium"
+                      : "text-gray-900 hover:bg-gray-100"
+                  }`}
+                  aria-current={isChildActive([child]) ? "page" : undefined}
                 >
                   {child.name}
                 </Link>

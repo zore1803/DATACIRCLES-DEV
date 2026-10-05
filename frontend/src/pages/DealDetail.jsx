@@ -52,9 +52,9 @@ const tabs = ["Overview", "Invoices", "Documents", "Notes", "Tasks", "Meetings",
 
 const newEntryOptions = [
   { label: "New Invoice", icon: Receipt, tab: "Invoices", create: "invoice" },
-  { label: "New Notes", icon: StickyNote, tab: "Notes" },
-  { label: "New Task", icon: CheckSquare, tab: "Tasks" },
-  { label: "New Meetings", icon: CalendarIcon, tab: "Meetings" },
+  { label: "New Notes", icon: StickyNote, tab: "Notes", create: "note" },
+  { label: "New Task", icon: CheckSquare, tab: "Tasks", create: "task" },
+  { label: "New Meetings", icon: CalendarIcon, tab: "Meetings", create: "meeting" },
 ];
 
 // Deal status shown next to the title, in the same pill vocabulary the rest of
@@ -647,6 +647,8 @@ function DealDetail() {
               dealName={deal.title}
               companyId={companyId}
               showStats={showStats}
+              autoOpenCreate={pendingCreate === "note"}
+              onAutoOpenCreateConsumed={() => setPendingCreate(null)}
             />
           )}
           {activeTab === "Tasks" && (
@@ -657,6 +659,8 @@ function DealDetail() {
               setTasks={setTasks}
               showStats={showStats}
               isLoading={statsLoading}
+              autoOpenCreate={pendingCreate === "task"}
+              onAutoOpenCreateConsumed={() => setPendingCreate(null)}
             />
           )}
           {activeTab === "Meetings" && (
@@ -669,6 +673,8 @@ function DealDetail() {
               setMeetings={setMeetings}
               showStats={showStats}
               isLoading={statsLoading}
+              autoOpenCreate={pendingCreate === "meeting"}
+              onAutoOpenCreateConsumed={() => setPendingCreate(null)}
             />
           )}
           {activeTab === "Income & Expenses" && <DealFinanceTab dealId={dealId} />}

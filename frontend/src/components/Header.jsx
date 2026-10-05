@@ -937,6 +937,7 @@ const Header = () => {
     "/insights": "Insights",
     "/settings": "Settings",
     "/tasks": "Tasks and Meetings",
+    "/calendar": "Calendar",
     "/calender": "Calendar",
     "/sales-return": "Sales Return",
     "/sales-subscription": "Subscription",
@@ -948,6 +949,10 @@ const Header = () => {
     "/journals": "Journals",
     "/expenses": "Expenses",
     "/indirect-income": "Indirect Income",
+    "/accounting": "Accounting",
+    "/inventory": "Inventory",
+    "/profile": "Profile",
+    "/wallet": "Wallet",
   };
 
   const getBreadcrumb = () => {

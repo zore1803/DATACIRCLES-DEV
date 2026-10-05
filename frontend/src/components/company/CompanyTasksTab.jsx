@@ -131,7 +131,7 @@ const BriefcaseIcon = ({ size = 14, ...props }) => (
 // contact's `companyId`, which the task form needs for its contact/deal
 // pickers) and it scopes itself to that contact's tasks. Same table, filters,
 // bulk strip and form either way.
-export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = [], setTasks, showStats = true, isLoading = false }) {
+export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = [], setTasks, showStats = true, isLoading = false, autoOpenCreate = false, onAutoOpenCreateConsumed }) {
   // Keeps the table box a fixed height ending at the bottom of the screen, so
   // changing rows-per-page scrolls internally instead of growing the page.
   const {
@@ -148,6 +148,17 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
   const [users, setUsers] = useState([]);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+
+  // "New Entry" menu on the deal/company header sets autoOpenCreate and
+  // switches to this tab in the same click — open the task form straight away
+  // instead of leaving the user on an empty tab.
+  useEffect(() => {
+    if (autoOpenCreate) {
+      setEditingTask(null);
+      setShowTaskForm(true);
+      onAutoOpenCreateConsumed?.();
+    }
+  }, [autoOpenCreate, onAutoOpenCreateConsumed]);
   const [selectedTask, setSelectedTask] = useState(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [openRowActionsId, setOpenRowActionsId] = useState(null);

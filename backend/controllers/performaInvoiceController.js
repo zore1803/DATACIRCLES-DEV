@@ -10,6 +10,7 @@ const { getDocumentSettingsForOrganization, resolveDocumentNumber, raiseInvoiceS
 const sendGridMail = require("../utils/sendGridMail");
 const { renderEmail } = require("../utils/emailLayout");
 const { getOwnedDealIds } = require("../utils/ownedCompanies");
+const { resolveDocCustomer } = require("../utils/resolveDocCustomer");
 
 // Utility function to format date as YYYYMMDD
 const formatDate = (date) => {
@@ -27,6 +28,8 @@ const createPerformaInvoice = async (req, res) => {
   try {
     const {
       deal,
+      company,
+      contact,
       date,
       dueDate,
       amount,
@@ -52,8 +55,9 @@ const createPerformaInvoice = async (req, res) => {
       digitalSignature,
     } = req.body;
 
-    // Validate required fields
-    const requiredFields = ["deal", "date", "amount", "status", "discount"];
+    // Validate required fields. Deal is no longer required — a proforma may be
+    // linked to a Deal OR directly to a Company/Contact (deal XOR direct-link).
+    const requiredFields = ["date", "amount", "status", "discount"];
     for (const field of requiredFields) {
       if (!req.body[field]) {
         await session.abortTransaction();
@@ -62,6 +66,15 @@ const createPerformaInvoice = async (req, res) => {
           .status(400)
           .json({ error: `Missing required field: ${field}` });
       }
+    }
+
+    // At least one customer link is required so the document always has an owner.
+    if (!deal && !company && !contact) {
+      await session.abortTransaction();
+      session.endSession();
+      return res
+        .status(400)
+        .json({ error: "Select a Deal, Company, or Contact for this proforma invoice." });
     }
 
     // Validate items
@@ -106,25 +119,24 @@ const createPerformaInvoice = async (req, res) => {
       return res.status(400).json({ error: numErr.message });
     }
 
-    const dealDoc = await Deal.findById(deal).populate('company');
-    let finalBillingAddress = billingAddress;
-    let finalShippingAddress = shippingAddress;
-    let finalReceiverGSTIN = receiverGSTIN;
-
-    if (dealDoc && dealDoc.company) {
-      if (!finalBillingAddress || Object.keys(finalBillingAddress).length === 0) {
-        finalBillingAddress = dealDoc.company.billingAddress || {};
-      }
-      if (!finalShippingAddress || Object.keys(finalShippingAddress).length === 0) {
-        finalShippingAddress = dealDoc.company.shippingAddresses?.[0] || {};
-      }
-      if (!finalReceiverGSTIN) {
-        finalReceiverGSTIN = dealDoc.company.gstin || "";
-      }
-    }
+    // Resolve customer linkage + address/GST with the deal XOR direct-link rule.
+    const {
+      links,
+      billingAddress: finalBillingAddress,
+      shippingAddress: finalShippingAddress,
+      receiverGSTIN: finalReceiverGSTIN,
+    } = await resolveDocCustomer({
+      deal,
+      company,
+      contact,
+      billingAddress,
+      shippingAddress,
+      receiverGSTIN,
+      organization: req.user.organization,
+    });
 
     const performaInvoice = new PerformaInvoice({
-      deal,
+      ...links,
       date,
       dueDate,
       amount,
@@ -219,7 +231,10 @@ const duplicatePerformaInvoice = async (req, res) => {
       : (source.signature ? "upload" : "text");
 
     const duplicate = new PerformaInvoice({
-      deal: source.deal,
+      // Carry over whichever linkage the source used (deal XOR company/contact).
+      deal: source.deal || null,
+      company: source.company || null,
+      contact: source.contact || null,
       date: new Date(),
       amount: source.amount,
       status: "Draft",
@@ -291,7 +306,10 @@ const getAllPerformaInvoices = async (req, res) => {
       }
     }
 
-    const performaInvoices = await PerformaInvoice.find(query).populate("deal");
+    const performaInvoices = await PerformaInvoice.find(query)
+      .populate("deal")
+      .populate("company")
+      .populate("contact");
     res.json(performaInvoices);
   } catch (error) {
     res
@@ -367,6 +385,8 @@ const getAllPerformaInvoicesPaginated = async (req, res) => {
     const [performaInvoices, totalCount] = await Promise.all([
       PerformaInvoice.find(query)
         .populate("deal")
+        .populate("company")
+        .populate("contact")
         .skip(skip)
         .limit(limit)
         .sort(sortObj)
@@ -407,7 +427,10 @@ const getMyPerformaInvoices = async (req, res) => {
     const performaInvoices = await PerformaInvoice.find({
       user: req.user.id,
       organization: req.user.organization,
-    }).populate("deal");
+    })
+      .populate("deal")
+      .populate("company")
+      .populate("contact");
     res.json(performaInvoices);
   } catch (err) {
     res
@@ -426,6 +449,8 @@ const downloadPerformaInvoice = async (req, res) => {
         path: "deal",
         populate: ["contact", "company"],
       })
+      .populate("contact")
+      .populate("company")
       .populate("items.itemId");
 
     if (!performaInvoice) {
@@ -507,6 +532,8 @@ const updatePerformaInvoice = async (req, res) => {
   try {
     const {
       deal,
+      company,
+      contact,
       date,
       dueDate,
       amount,
@@ -529,14 +556,20 @@ const updatePerformaInvoice = async (req, res) => {
       digitalSignature,
     } = req.body;
 
-    // Validate required fields
-    const requiredFields = ["deal", "date", "amount", "status", "discount"];
+    // Deal no longer required (deal XOR direct-link).
+    const requiredFields = ["date", "amount", "status", "discount"];
     for (const field of requiredFields) {
       if (!req.body[field]) {
         return res
           .status(400)
           .json({ error: `Missing required field: ${field}` });
       }
+    }
+
+    if (!deal && !company && !contact) {
+      return res
+        .status(400)
+        .json({ error: "Select a Deal, Company, or Contact for this proforma invoice." });
     }
 
     // Validate items
@@ -551,22 +584,21 @@ const updatePerformaInvoice = async (req, res) => {
       }
     }
 
-    const dealDoc = await Deal.findById(deal).populate('company');
-    let finalBillingAddress = billingAddress;
-    let finalShippingAddress = shippingAddress;
-    let finalReceiverGSTIN = receiverGSTIN;
-
-    if (dealDoc && dealDoc.company) {
-      if (!finalBillingAddress || Object.keys(finalBillingAddress).length === 0) {
-        finalBillingAddress = dealDoc.company.billingAddress || {};
-      }
-      if (!finalShippingAddress || Object.keys(finalShippingAddress).length === 0) {
-        finalShippingAddress = dealDoc.company.shippingAddresses?.[0] || {};
-      }
-      if (!finalReceiverGSTIN) {
-        finalReceiverGSTIN = dealDoc.company.gstin || "";
-      }
-    }
+    // Resolve customer linkage + address/GST with the deal XOR direct-link rule.
+    const {
+      links,
+      billingAddress: finalBillingAddress,
+      shippingAddress: finalShippingAddress,
+      receiverGSTIN: finalReceiverGSTIN,
+    } = await resolveDocCustomer({
+      deal,
+      company,
+      contact,
+      billingAddress,
+      shippingAddress,
+      receiverGSTIN,
+      organization: req.user.organization,
+    });
 
     if (req.ownOnly) {
       const existing = await PerformaInvoice.findOne({
@@ -588,7 +620,7 @@ const updatePerformaInvoice = async (req, res) => {
         organization: req.user.organization,
       },
       {
-        deal,
+        ...links,
         date,
         dueDate,
         amount,
@@ -734,6 +766,8 @@ const sendPerformaInvoiceEmail = async (req, res) => {
       organization: req.user.organization,
     })
       .populate({ path: "deal", populate: ["contact", "company"] })
+      .populate("contact")
+      .populate("company")
       .populate("items.itemId");
 
     if (!pi) {
@@ -744,13 +778,14 @@ const sendPerformaInvoiceEmail = async (req, res) => {
     const orgDetails = await Branding.findOne({ organization: req.user.organization }).sort({ updatedAt: -1 });
     const pdfBuffer = await htmlDocumentPdf(pi, bankDetails, orgDetails, "performa");
 
-    const recipient = req.body.email || pi.deal?.email;
+    // Deal-less proformas fall back to the directly-linked contact.
+    const recipient = req.body.email || pi.deal?.email || pi.contact?.email;
     if (!recipient) {
       return res.status(400).json({ error: "No recipient email address available" });
     }
 
     const companyName = orgDetails?.companyName || "";
-    const contactName = pi.deal?.contactPerson || "Sir/Madam";
+    const contactName = pi.deal?.contactPerson || pi.contact?.name || "Sir/Madam";
     const issueDate = pi.date
       ? new Date(pi.date).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
       : "";

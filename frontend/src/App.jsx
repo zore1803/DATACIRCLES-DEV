@@ -728,6 +728,15 @@ function AppInner() {
               }
             />
             <Route
+              path="/calendar"
+              element={
+                <PrivateRoute>
+                  <AdminCalendar />
+                </PrivateRoute>
+              }
+            />
+            {/* Old misspelled path kept so existing bookmarks/links still work. */}
+            <Route
               path="/calender"
               element={
                 <PrivateRoute>

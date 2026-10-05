@@ -54,8 +54,8 @@ const tabs = ["Overview", "Call Logs", "Documents", "Notes", "Tasks", "Meetings"
 
 const newEntryOptions = [
   { label: "New Deal", icon: BriefcaseBusiness, create: "deal" },
-  { label: "New Notes", icon: StickyNote, tab: "Notes" },
-  { label: "New Task", icon: CheckSquare, tab: "Tasks" },
+  { label: "New Notes", icon: StickyNote, tab: "Notes", create: "note" },
+  { label: "New Task", icon: CheckSquare, tab: "Tasks", create: "task" },
   { label: "New Meetings", icon: CalendarIcon, create: "meeting" },
   { label: "New Call Log", icon: AddCallIcon, tab: "Call Logs" },
 ];
@@ -136,6 +136,8 @@ const ContactDetailsPage = () => {
   const [showStats, setShowStats] = useState(true);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [showNewEntryMenu, setShowNewEntryMenu] = useState(false);
+  // Set by the New Entry menu so the tab it switches to opens its add form.
+  const [pendingCreate, setPendingCreate] = useState(null);
   const [showLastUpdatedTooltip, setShowLastUpdatedTooltip] = useState(false);
   const actionsMenuRef = useRef(null);
   const newEntryRef = useRef(null);
@@ -657,7 +659,10 @@ const ContactDetailsPage = () => {
                         // "add" control.
                         if (option.create === "deal") setShowDealForm(true);
                         else if (option.create === "meeting") setShowMeetingForm(true);
-                        else if (option.tab) setActiveTab(option.tab);
+                        else if (option.tab) {
+                          setPendingCreate(option.create || null);
+                          setActiveTab(option.tab);
+                        }
                         setShowNewEntryMenu(false);
                       }}
                       className="flex items-center gap-1.5 lg:gap-2 w-full px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm font-normal text-gray-700 hover:bg-gray-50 text-left"
@@ -833,6 +838,8 @@ const ContactDetailsPage = () => {
               contactId={id}
               companyId={company?._id}
               showStats={showStats}
+              autoOpenCreate={pendingCreate === "note"}
+              onAutoOpenCreateConsumed={() => setPendingCreate(null)}
             />
           )}
           {activeTab === "Tasks" && (
@@ -843,6 +850,8 @@ const ContactDetailsPage = () => {
               setTasks={setTasks}
               showStats={showStats}
               isLoading={statsLoading}
+              autoOpenCreate={pendingCreate === "task"}
+              onAutoOpenCreateConsumed={() => setPendingCreate(null)}
             />
           )}
           {activeTab === "Meetings" && (

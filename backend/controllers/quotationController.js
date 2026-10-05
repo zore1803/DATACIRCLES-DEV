@@ -10,6 +10,7 @@ const mongoose = require("mongoose");
 const Deal = require("../models/Deal");
 const { getDocumentSettingsForOrganization, resolveDocumentNumber, raiseInvoiceSeriesTo } = require("../utils/documentNumbering");
 const { getOwnedDealIds } = require("../utils/ownedCompanies");
+const { resolveDocCustomer } = require("../utils/resolveDocCustomer");
 
 // A user with own-only permission may only touch quotations they own.
 // record.user may be a raw ObjectId or, if a caller populates it, a User
@@ -45,6 +46,8 @@ exports.createQuotation = async (req, res) => {
   try {
     const {
       deal,
+      company,
+      contact,
       date,
       dueDate,
       amount,
@@ -69,8 +72,9 @@ exports.createQuotation = async (req, res) => {
       reference,
     } = req.body;
 
-    // Validate required fields
-    const requiredFields = ["deal", "date", "amount", "status", "discount"];
+    // Validate required fields. Deal is no longer required — a quotation may be
+    // linked to a Deal OR directly to a Company/Contact (deal XOR direct-link).
+    const requiredFields = ["date", "amount", "status", "discount"];
     for (const field of requiredFields) {
       if (!req.body[field]) {
         await session.abortTransaction();
@@ -79,6 +83,15 @@ exports.createQuotation = async (req, res) => {
           .status(400)
           .json({ error: `Missing required field: ${field}` });
       }
+    }
+
+    // At least one customer link is required so the document always has an owner.
+    if (!deal && !company && !contact) {
+      await session.abortTransaction();
+      session.endSession();
+      return res
+        .status(400)
+        .json({ error: "Select a Deal, Company, or Contact for this quotation." });
     }
 
     // Validate items
@@ -125,25 +138,24 @@ exports.createQuotation = async (req, res) => {
       return res.status(400).json({ error: numErr.message });
     }
 
-    const dealDoc = await Deal.findById(deal).populate('company');
-    let finalBillingAddress = billingAddress;
-    let finalShippingAddress = shippingAddress;
-    let finalReceiverGSTIN = receiverGSTIN;
-
-    if (dealDoc && dealDoc.company) {
-      if (!finalBillingAddress || Object.keys(finalBillingAddress).length === 0) {
-        finalBillingAddress = dealDoc.company.billingAddress || {};
-      }
-      if (!finalShippingAddress || Object.keys(finalShippingAddress).length === 0) {
-        finalShippingAddress = dealDoc.company.shippingAddresses?.[0] || {};
-      }
-      if (!finalReceiverGSTIN) {
-        finalReceiverGSTIN = dealDoc.company.gstin || "";
-      }
-    }
+    // Resolve customer linkage + address/GST with the deal XOR direct-link rule.
+    const {
+      links,
+      billingAddress: finalBillingAddress,
+      shippingAddress: finalShippingAddress,
+      receiverGSTIN: finalReceiverGSTIN,
+    } = await resolveDocCustomer({
+      deal,
+      company,
+      contact,
+      billingAddress,
+      shippingAddress,
+      receiverGSTIN,
+      organization: req.user.organization,
+    });
 
     const quotation = new Quotation({
-      deal,
+      ...links,
       quotationPrefix: finalPrefix,
       quotationNumber,
       reference: reference || "",
@@ -237,7 +249,10 @@ exports.duplicateQuotation = async (req, res) => {
       : (source.signature ? "upload" : "text");
 
     const duplicate = new Quotation({
-      deal: source.deal,
+      // Carry over whichever linkage the source used (deal XOR company/contact).
+      deal: source.deal || null,
+      company: source.company || null,
+      contact: source.contact || null,
       quotationPrefix: finalPrefix,
       quotationNumber: newQuotationNumber,
       reference: source.reference,
@@ -311,7 +326,10 @@ exports.getAllQuotations = async (req, res) => {
       query.$and = andConditions;
     }
 
-    const quotations = await Quotation.find(query).populate("deal");
+    const quotations = await Quotation.find(query)
+      .populate("deal")
+      .populate("company")
+      .populate("contact");
     res.json(quotations);
   } catch (error) {
     res
@@ -378,6 +396,8 @@ exports.getAllQuotationsPaginated = async (req, res) => {
     const [quotations, totalCount] = await Promise.all([
       Quotation.find(query)
         .populate("deal")
+        .populate("company")
+        .populate("contact")
         .skip(skip)
         .limit(limit)
         .sort(sortObj)
@@ -421,6 +441,8 @@ exports.downloadQuotation = async (req, res) => {
         path: "deal",
         populate: ["contact", "company"],
       })
+      .populate("contact")
+      .populate("company")
       .populate("items.itemId");
 
     if (!quotation) {
@@ -484,6 +506,8 @@ exports.updateQuotation = async (req, res) => {
   try {
     const {
       deal,
+      company,
+      contact,
       date,
       dueDate,
       amount,
@@ -505,13 +529,20 @@ exports.updateQuotation = async (req, res) => {
       reference,
     } = req.body;
 
-    const requiredFields = ["deal", "date", "amount", "status", "discount"];
+    // Deal no longer required (deal XOR direct-link).
+    const requiredFields = ["date", "amount", "status", "discount"];
     for (const field of requiredFields) {
       if (!req.body[field]) {
         return res
           .status(400)
           .json({ error: `Missing required field: ${field}` });
       }
+    }
+
+    if (!deal && !company && !contact) {
+      return res
+        .status(400)
+        .json({ error: "Select a Deal, Company, or Contact for this quotation." });
     }
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -525,22 +556,21 @@ exports.updateQuotation = async (req, res) => {
       }
     }
 
-    const dealDoc = await Deal.findById(deal).populate('company');
-    let finalBillingAddress = billingAddress;
-    let finalShippingAddress = shippingAddress;
-    let finalReceiverGSTIN = receiverGSTIN;
-
-    if (dealDoc && dealDoc.company) {
-      if (!finalBillingAddress || Object.keys(finalBillingAddress).length === 0) {
-        finalBillingAddress = dealDoc.company.billingAddress || {};
-      }
-      if (!finalShippingAddress || Object.keys(finalShippingAddress).length === 0) {
-        finalShippingAddress = dealDoc.company.shippingAddresses?.[0] || {};
-      }
-      if (!finalReceiverGSTIN) {
-        finalReceiverGSTIN = dealDoc.company.gstin || "";
-      }
-    }
+    // Resolve customer linkage + address/GST with the deal XOR direct-link rule.
+    const {
+      links,
+      billingAddress: finalBillingAddress,
+      shippingAddress: finalShippingAddress,
+      receiverGSTIN: finalReceiverGSTIN,
+    } = await resolveDocCustomer({
+      deal,
+      company,
+      contact,
+      billingAddress,
+      shippingAddress,
+      receiverGSTIN,
+      organization: req.user.organization,
+    });
 
     if (req.ownOnly) {
       const existing = await Quotation.findOne({
@@ -562,7 +592,7 @@ exports.updateQuotation = async (req, res) => {
         organization: req.user.organization,
       },
       {
-        deal,
+        ...links,
         date,
         dueDate,
         amount,
@@ -636,6 +666,10 @@ exports.sendQuotationEmail = async (req, res) => {
         path: "deal",
         populate: ["contact", "company"],
       })
+      // Direct links for deal-less quotations, so the recipient/greeting can be
+      // resolved from the contact when there is no deal.
+      .populate("contact")
+      .populate("company")
       .populate("items.itemId");
 
     if (!quotation) {
@@ -652,7 +686,8 @@ exports.sendQuotationEmail = async (req, res) => {
     const pdfBuffer = await htmlDocumentPdf(quotation, bankDetails, orgDetails, "quotation");
 
     const companyName = orgDetails?.companyName || "";
-    const contactName = quotation.deal.contactPerson || "Sir/Madam";
+    // Deal-less quotations fall back to the directly-linked contact.
+    const contactName = quotation.deal?.contactPerson || quotation.contact?.name || "Sir/Madam";
     const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "");
     const fmtAmt = (n) => (Number.isFinite(Number(n)) ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 }).format(Number(n)) : "");
     const issueDate = fmtDate(quotation.date);
@@ -672,7 +707,7 @@ exports.sendQuotationEmail = async (req, res) => {
     ].filter((line, i, arr) => !(line === "" && arr[i - 1] === ""));
 
     const mailOptions = {
-      to: quotation.deal.email || req.body.email,
+      to: quotation.deal?.email || quotation.contact?.email || req.body.email,
       replyTo: req.user.email,
       subject: `Quotation ${quotation.quotationNumber}${companyName ? ` from ${companyName}` : ""}`,
       text: bodyLines.join("\n"),
