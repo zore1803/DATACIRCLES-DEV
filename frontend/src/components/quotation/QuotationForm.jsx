@@ -393,6 +393,11 @@ const QuotationForm = ({
     : (defaultTermsFlat || PREDEFINED_TERMS.quotation || "");
   const [form, setForm] = useState({
     deal: "",
+    // Deal XOR direct-link: a quotation links to a Deal OR directly to a
+    // Company/Contact. When a deal is set, company/contact are derived from it
+    // (read-only); when it's cleared, they become independently selectable.
+    company: "",
+    contact: "",
     date: "",
     dueDate: "",
     reference: "",
@@ -436,6 +441,9 @@ const QuotationForm = ({
   const [prefixOptions, setPrefixOptions] = useState(documentTypeSettings?.quote?.prefixes || []);
   const [suffixOptions, setSuffixOptions] = useState(documentTypeSettings?.quote?.suffixes || []);
   const [localDeals, setLocalDeals] = useState(deals);
+  // Companies/contacts for the deal-less direct-link pickers (deal XOR direct-link).
+  const [companies, setCompanies] = useState([]);
+  const [contacts, setContacts] = useState([]);
   const [sellerState, setSellerState] = useState("");
   // "billing" | "shipping" | null -- which field group opened the saved
   // address book (AddressBookDrawer).
@@ -599,6 +607,9 @@ const QuotationForm = ({
       requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
       fetchItems();
       setLocalDeals(deals);
+      // Lists for the direct Company/Contact pickers (used when no deal is chosen).
+      API.get("/companies").then(r => setCompanies(Array.isArray(r.data) ? r.data : (r.data?.companies || []))).catch(() => {});
+      API.get("/contacts").then(r => setContacts(Array.isArray(r.data) ? r.data : (r.data?.contacts || []))).catch(() => {});
       API.get("/branding").then(r => setSellerState((r.data?.state || "").trim().toLowerCase())).catch(() => {});
     } else {
       setIsSliding(false);
@@ -636,6 +647,9 @@ const QuotationForm = ({
     if (sourceData) {
       setForm({
         deal: sourceData.deal?._id || sourceData.deal || "",
+        // Direct links are only meaningful on deal-less documents (XOR rule).
+        company: sourceData.deal ? "" : (sourceData.company?._id || sourceData.company || ""),
+        contact: sourceData.deal ? "" : (sourceData.contact?._id || sourceData.contact || ""),
         date: sourceData.date ? sourceData.date.slice(0, 10) : "",
         dueDate: sourceData.dueDate
           ? sourceData.dueDate.slice(0, 10)
@@ -684,6 +698,8 @@ const QuotationForm = ({
     } else {
       setForm({
         deal: "",
+        company: "",
+        contact: "",
         date: "",
         dueDate: "",
         receiverGSTIN: "",
@@ -1084,6 +1100,16 @@ const QuotationForm = ({
   // manual picker and the preselect below can never drift apart.
   const applyDealSelection = (value, { markDirty = true } = {}) => {
     const selectedDeal = localDeals.find((d) => d._id === value);
+
+    // Clearing the deal switches to direct-link mode. Keep the derived
+    // company/contact (and their addresses) so the customer context isn't wiped —
+    // the user can now edit them directly; on save they become the direct links.
+    if (!value) {
+      setForm((prev) => ({ ...prev, deal: "" }));
+      if (markDirty) setHasUnsavedChanges(true);
+      return;
+    }
+
     const company = selectedDeal?.company;
     const nextBilling =
       company && !isAddressEmpty(company.billingAddress)
@@ -1101,6 +1127,9 @@ const QuotationForm = ({
       return {
         ...prev,
         deal: value,
+        // Derived from the deal and shown read-only; stored as null on save (XOR).
+        company: company?._id || company || "",
+        contact: selectedDeal?.contact?._id || selectedDeal?.contact || "",
         receiverGSTIN: company?.gstin || "",
         billingAddress: nextBilling,
         shippingAddress: shipping,
@@ -1109,6 +1138,76 @@ const QuotationForm = ({
     });
     if (markDirty) setHasUnsavedChanges(true);
   };
+
+  // Direct Company pick (deal-less). Fills address/GST from the company the way a
+  // deal would, and drops a contact that doesn't belong to the chosen company.
+  const applyCompanySelection = (value, { markDirty = true } = {}) => {
+    const selectedCompany = companies.find((c) => c._id === value);
+    const nextBilling =
+      selectedCompany && !isAddressEmpty(selectedCompany.billingAddress)
+        ? { ...emptyAddress(), ...selectedCompany.billingAddress }
+        : emptyAddress();
+    const nextShipping =
+      selectedCompany && !isAddressEmpty(selectedCompany.shippingAddresses?.[0])
+        ? { ...emptyAddress(), ...selectedCompany.shippingAddresses[0] }
+        : emptyAddress();
+    setForm((prev) => {
+      const shipping = prev.sameAsBilling ? nextBilling : nextShipping;
+      const autoType = resolveTransactionType(sellerState, shipping, nextBilling);
+      const keepContact =
+        prev.contact &&
+        contacts.some(
+          (ct) => ct._id === prev.contact && (ct.company?._id || ct.company) === value
+        );
+      return {
+        ...prev,
+        company: value,
+        contact: keepContact ? prev.contact : "",
+        receiverGSTIN: selectedCompany?.gstin || "",
+        billingAddress: nextBilling,
+        shippingAddress: shipping,
+        transactionType: autoType || prev.transactionType,
+      };
+    });
+    if (markDirty) setHasUnsavedChanges(true);
+  };
+
+  // Direct Contact pick (deal-less). If the contact belongs to a company and none
+  // is chosen yet, adopt it (and its address/GST) so the two stay consistent.
+  const applyContactSelection = (value, { markDirty = true } = {}) => {
+    const selectedContact = contacts.find((c) => c._id === value);
+    const contactCompanyId = selectedContact?.company?._id || selectedContact?.company || "";
+    setForm((prev) => {
+      if (!prev.company && contactCompanyId) {
+        const selectedCompany = companies.find((c) => c._id === contactCompanyId);
+        const nextBilling =
+          selectedCompany && !isAddressEmpty(selectedCompany.billingAddress)
+            ? { ...emptyAddress(), ...selectedCompany.billingAddress }
+            : prev.billingAddress;
+        const nextShipping =
+          selectedCompany && !isAddressEmpty(selectedCompany.shippingAddresses?.[0])
+            ? { ...emptyAddress(), ...selectedCompany.shippingAddresses[0] }
+            : prev.shippingAddress;
+        const shipping = prev.sameAsBilling ? nextBilling : nextShipping;
+        return {
+          ...prev,
+          contact: value,
+          company: contactCompanyId,
+          receiverGSTIN: selectedCompany?.gstin || prev.receiverGSTIN,
+          billingAddress: nextBilling,
+          shippingAddress: shipping,
+        };
+      }
+      return { ...prev, contact: value };
+    });
+    if (markDirty) setHasUnsavedChanges(true);
+  };
+
+  // Contacts available to the direct picker: scoped to the chosen company, or all
+  // contacts when no company is selected.
+  const contactOptions = form.company
+    ? contacts.filter((c) => (c.company?._id || c.company) === form.company)
+    : contacts;
 
   // Applies `preselectDealId` to a NEW document. Never overrides a deal already on the
   // form -- in particular one carried over from the split view via formOverride -- except
@@ -1154,8 +1253,10 @@ const QuotationForm = ({
     setIsSubmitting(true);
     const isDraft = statusValue === "Draft";
 
-    if (!form.deal) {
-      toast.error("Deal is required.");
+    // Deal is optional now — a quotation must be linked to a Deal OR directly to a
+    // Company/Contact (deal XOR direct-link).
+    if (!form.deal && !form.company && !form.contact) {
+      toast.error("Select a Deal, Company, or Contact.");
       setIsSubmitting(false);
       return;
     }
@@ -1220,7 +1321,11 @@ const QuotationForm = ({
 
     try {
       const payload = {
-        deal: form.deal,
+        // Deal XOR direct-link: a deal-linked quotation sends only the deal; a
+        // deal-less one sends the direct company/contact (and no deal).
+        deal: form.deal || null,
+        company: form.deal ? null : (form.company || null),
+        contact: form.deal ? null : (form.contact || null),
         date: form.date,
         dueDate: form.dueDate,
         reference: form.reference,
@@ -1290,6 +1395,8 @@ const QuotationForm = ({
       const defaultBankAfterSubmit = banks.find((b) => b.isDefault) || banks[0];
       setForm({
         deal: "",
+        company: "",
+        contact: "",
         date: "",
         dueDate: "",
         reference: "",
@@ -1652,9 +1759,11 @@ const QuotationForm = ({
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
 
-                {/* Select Customer */}
+                {/* Select Deal (optional) — deal XOR direct Company/Contact */}
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Select Deal</label>
+                  <label className="text-sm font-semibold text-gray-700">
+                    Select Deal <span className="font-normal text-gray-400">(optional)</span>
+                  </label>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 min-w-0 bg-blue-50/50 rounded-lg">
                       <SearchableDropdown
@@ -1669,7 +1778,7 @@ const QuotationForm = ({
                           // than carrying over the previous deal's data.
                           applyDealSelection(value);
                         }}
-                        placeholder="Search customers by name, company, GSTIN..."
+                        placeholder="Search deals by name, company, GSTIN..."
                         displayKey="title"
                         valueKey="_id"
                         className="w-full"
@@ -1685,6 +1794,66 @@ const QuotationForm = ({
                       <PlusIcon className="w-4 h-4" />
                     </button>
                   </div>
+                </div>
+
+                {/* Company — derived & read-only when a deal is set; a direct,
+                    optional link otherwise. */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-gray-700">
+                    Company{" "}
+                    <span className="font-normal text-gray-400">
+                      {form.deal ? "(from deal)" : "(optional)"}
+                    </span>
+                  </label>
+                  {form.deal ? (
+                    <div className="w-full h-[38px] px-3.5 flex items-center text-[13px] border border-[#1F2937]/10 rounded-full bg-gray-50 text-gray-600 truncate">
+                      {companies.find((c) => c._id === form.company)?.name
+                        || localDeals.find((d) => d._id === form.deal)?.company?.name
+                        || "—"}
+                    </div>
+                  ) : (
+                    <div className="bg-blue-50/50 rounded-lg">
+                      <SearchableDropdown
+                        options={companies}
+                        value={form.company}
+                        onChange={(value) => applyCompanySelection(value)}
+                        placeholder="Search companies..."
+                        displayKey="name"
+                        valueKey="_id"
+                        className="w-full"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Contact — derived & read-only when a deal is set; filtered by
+                    the selected company otherwise (all contacts when none). */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-gray-700">
+                    Contact{" "}
+                    <span className="font-normal text-gray-400">
+                      {form.deal ? "(from deal)" : "(optional)"}
+                    </span>
+                  </label>
+                  {form.deal ? (
+                    <div className="w-full h-[38px] px-3.5 flex items-center text-[13px] border border-[#1F2937]/10 rounded-full bg-gray-50 text-gray-600 truncate">
+                      {contacts.find((c) => c._id === form.contact)?.name
+                        || localDeals.find((d) => d._id === form.deal)?.contact?.name
+                        || "—"}
+                    </div>
+                  ) : (
+                    <div className="bg-blue-50/50 rounded-lg">
+                      <SearchableDropdown
+                        options={contactOptions}
+                        value={form.contact}
+                        onChange={(value) => applyContactSelection(value)}
+                        placeholder="Search contacts..."
+                        displayKey="name"
+                        valueKey="_id"
+                        className="w-full"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Quotation Date */}

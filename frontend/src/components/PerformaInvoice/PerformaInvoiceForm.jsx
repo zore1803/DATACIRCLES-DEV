@@ -324,6 +324,9 @@ const PerformaInvoiceForm = ({
     : (defaultTermsFlat || PREDEFINED_TERMS.performa || "");
   const [form, setForm] = useState({
     deal: "",
+    // Deal XOR direct-link: link to a Deal OR directly to a Company/Contact.
+    company: "",
+    contact: "",
     date: "",
     dueDate: "",
     receiverGSTIN: "",
@@ -362,6 +365,9 @@ const PerformaInvoiceForm = ({
   const [signaturesLoading, setSignaturesLoading] = useState(false);
   const [showQuickDealForm, setShowQuickDealForm] = useState(false);
   const [localDeals, setLocalDeals] = useState(deals);
+  // Companies/contacts for the deal-less direct-link pickers (deal XOR direct-link).
+  const [companies, setCompanies] = useState([]);
+  const [contacts, setContacts] = useState([]);
   const [sellerState, setSellerState] = useState("");
   const [itemForm, setItemForm] = useState({
     type: "product",
@@ -477,6 +483,9 @@ const PerformaInvoiceForm = ({
       requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
       fetchItems();
       setLocalDeals(deals);
+      // Lists for the direct Company/Contact pickers (used when no deal is chosen).
+      API.get("/companies").then(r => setCompanies(Array.isArray(r.data) ? r.data : (r.data?.companies || []))).catch(() => {});
+      API.get("/contacts").then(r => setContacts(Array.isArray(r.data) ? r.data : (r.data?.contacts || []))).catch(() => {});
       API.get("/branding").then(r => setSellerState((r.data?.state || "").trim().toLowerCase())).catch(() => {});
     } else {
       setIsSliding(false);
@@ -518,6 +527,9 @@ const PerformaInvoiceForm = ({
       const sourceData = editingPerformaInvoice || conversionData;
       const initialForm = {
         deal: sourceData.deal?._id || sourceData.deal || "",
+        // Direct links are only meaningful on deal-less documents (XOR rule).
+        company: sourceData.deal ? "" : (sourceData.company?._id || sourceData.company || ""),
+        contact: sourceData.deal ? "" : (sourceData.contact?._id || sourceData.contact || ""),
         date: sourceData.date
           ? sourceData.date.slice(0, 10)
           : "",
@@ -562,6 +574,8 @@ const PerformaInvoiceForm = ({
     } else {
       const initialForm = {
         deal: "",
+        company: "",
+        contact: "",
         date: "",
         dueDate: "",
         receiverGSTIN: "",
@@ -875,9 +889,10 @@ const PerformaInvoiceForm = ({
     setIsSubmitting(true);
     const isDraft = statusValue === "Draft";
 
-    // Validate required fields
-    if (!form.deal) {
-      toast.error("Deal is required.");
+    // Validate required fields. Deal is optional — a proforma must be linked to a
+    // Deal OR directly to a Company/Contact (deal XOR direct-link).
+    if (!form.deal && !form.company && !form.contact) {
+      toast.error("Select a Deal, Company, or Contact.");
       setIsSubmitting(false);
       return;
     }
@@ -935,7 +950,11 @@ const PerformaInvoiceForm = ({
 
     try {
       const payload = {
-        deal: form.deal,
+        // Deal XOR direct-link: deal-linked sends only the deal; deal-less sends
+        // the direct company/contact (and no deal).
+        deal: form.deal || null,
+        company: form.deal ? null : (form.company || null),
+        contact: form.deal ? null : (form.contact || null),
         date: form.date,
         dueDate: form.dueDate,
         receiverGSTIN: form.receiverGSTIN,
@@ -984,6 +1003,8 @@ const PerformaInvoiceForm = ({
       setHasUnsavedChanges(false);
       setForm({
         deal: "",
+        company: "",
+        contact: "",
         date: "",
         dueDate: "",
         receiverGSTIN: "",
@@ -1193,7 +1214,7 @@ const PerformaInvoiceForm = ({
                 <div className="md:col-span-4 space-y-2">
                   <div className="flex justify-between items-center">
                     <label className="text-sm font-semibold text-gray-700">
-                      Select Deal *
+                      Select Deal <span className="font-normal text-gray-400">(optional)</span>
                     </label>
                     <button
                       type="button"
@@ -1210,9 +1231,24 @@ const PerformaInvoiceForm = ({
                       onChange={(value) => {
                         const selectedDeal = localDeals.find((d) => d._id === value);
                         const company = selectedDeal?.company;
+                        // Clearing the deal switches to direct-link mode, keeping
+                        // the derived company/contact so context isn't wiped.
+                        if (!value) {
+                          setForm((prev) => ({ ...prev, deal: "" }));
+                          setHasUnsavedChanges(true);
+                          return;
+                        }
                         const customerState = (company?.billingAddress?.state || '').trim().toLowerCase();
                         const autoType = (sellerState && customerState && sellerState !== customerState) ? 'inter' : 'intra';
-                        setForm((prev) => ({ ...prev, deal: value, transactionType: autoType }));
+                        setForm((prev) => ({
+                          ...prev,
+                          deal: value,
+                          // Derived from the deal (read-only); stored as null on save (XOR).
+                          company: company?._id || company || "",
+                          contact: selectedDeal?.contact?._id || selectedDeal?.contact || "",
+                          receiverGSTIN: company?.gstin || prev.receiverGSTIN,
+                          transactionType: autoType,
+                        }));
                         setHasUnsavedChanges(true);
                       }}
                       placeholder="Select Deal"
@@ -1221,6 +1257,98 @@ const PerformaInvoiceForm = ({
                       className="w-full"
                     />
                   </div>
+                </div>
+
+                {/* Company — derived & read-only when a deal is set; a direct,
+                    optional link otherwise. */}
+                <div className="md:col-span-4 space-y-2">
+                  <label className="text-sm font-semibold text-gray-700">
+                    Company{" "}
+                    <span className="font-normal text-gray-400">
+                      {form.deal ? "(from deal)" : "(optional)"}
+                    </span>
+                  </label>
+                  {form.deal ? (
+                    <div className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-600 truncate">
+                      {companies.find((c) => c._id === form.company)?.name
+                        || localDeals.find((d) => d._id === form.deal)?.company?.name
+                        || "—"}
+                    </div>
+                  ) : (
+                    <div className="bg-blue-50/50 rounded-lg">
+                      <SearchableDropdown
+                        options={companies}
+                        value={form.company}
+                        onChange={(value) => {
+                          const selectedCompany = companies.find((c) => c._id === value);
+                          setForm((prev) => {
+                            const keepContact =
+                              prev.contact &&
+                              contacts.some(
+                                (ct) => ct._id === prev.contact && (ct.company?._id || ct.company) === value
+                              );
+                            return {
+                              ...prev,
+                              company: value,
+                              contact: keepContact ? prev.contact : "",
+                              receiverGSTIN: selectedCompany?.gstin || "",
+                            };
+                          });
+                          setHasUnsavedChanges(true);
+                        }}
+                        placeholder="Search companies..."
+                        displayKey="name"
+                        valueKey="_id"
+                        className="w-full"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Contact — derived & read-only when a deal is set; filtered by
+                    the selected company otherwise. */}
+                <div className="md:col-span-4 space-y-2">
+                  <label className="text-sm font-semibold text-gray-700">
+                    Contact{" "}
+                    <span className="font-normal text-gray-400">
+                      {form.deal ? "(from deal)" : "(optional)"}
+                    </span>
+                  </label>
+                  {form.deal ? (
+                    <div className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-600 truncate">
+                      {contacts.find((c) => c._id === form.contact)?.name
+                        || localDeals.find((d) => d._id === form.deal)?.contact?.name
+                        || "—"}
+                    </div>
+                  ) : (
+                    <div className="bg-blue-50/50 rounded-lg">
+                      <SearchableDropdown
+                        options={form.company ? contacts.filter((c) => (c.company?._id || c.company) === form.company) : contacts}
+                        value={form.contact}
+                        onChange={(value) => {
+                          const selectedContact = contacts.find((c) => c._id === value);
+                          const contactCompanyId = selectedContact?.company?._id || selectedContact?.company || "";
+                          setForm((prev) => {
+                            if (!prev.company && contactCompanyId) {
+                              const selectedCompany = companies.find((c) => c._id === contactCompanyId);
+                              return {
+                                ...prev,
+                                contact: value,
+                                company: contactCompanyId,
+                                receiverGSTIN: selectedCompany?.gstin || prev.receiverGSTIN,
+                              };
+                            }
+                            return { ...prev, contact: value };
+                          });
+                          setHasUnsavedChanges(true);
+                        }}
+                        placeholder="Search contacts..."
+                        displayKey="name"
+                        valueKey="_id"
+                        className="w-full"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="md:col-span-3 space-y-2">

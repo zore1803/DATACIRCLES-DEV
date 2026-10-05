@@ -238,7 +238,7 @@ const cellText = (colId, doc, tab) => {
     case "number":
       return `#${doc[numberKeyFor(tab)] ?? ""}`;
     case "deal":
-      return doc.deal?.title || "N/A";
+      return doc.deal?.title || doc.company?.name || doc.contact?.name || "N/A";
     case "date":
       return doc.date ? new Date(doc.date).toLocaleDateString() : "N/A";
     case "dueDate":
@@ -1227,7 +1227,7 @@ const Accounting = () => {
     const rows = docs.map((d) =>
       [
         `#${d[numberKeyFor(activeTab)] ?? ""}`,
-        d.deal?.title || "N/A",
+        d.deal?.title || d.company?.name || d.contact?.name || "N/A",
         d.date ? new Date(d.date).toLocaleDateString() : "",
         d.dueDate ? new Date(d.dueDate).toLocaleDateString() : "",
         formatINR(d.amount),
@@ -1538,6 +1538,13 @@ const Accounting = () => {
     if (!sourceDoc) {
       toast.error("Source document not found. Please refresh.");
       return;
+    }
+
+    // Invoices still require a Deal. Converting a deal-less quotation/proforma
+    // opens the invoice form with no deal attached, so prompt the user to pick
+    // one before the invoice can be created (the form enforces it on save).
+    if (convertTargetType === "tax" && !sourceDoc.deal) {
+      toast("This document isn't linked to a Deal. Select a Deal to create the invoice.", { icon: "ℹ️" });
     }
 
     setShowConvertModal(false);
@@ -1958,16 +1965,20 @@ const Accounting = () => {
           </div>
         );
 
-      case "deal":
+      case "deal": {
+        // Deal-less quotations/proformas fall back to their direct Company/Contact.
+        const dealLabel =
+          doc.deal?.title || doc.company?.name || doc.contact?.name || "";
         return (
           <span className="block truncate text-sm text-[#1C1B1F] font-medium">
-            {doc.deal?.title ? (
-              <HighlightText text={doc.deal.title} query={searchQuery} />
+            {dealLabel ? (
+              <HighlightText text={dealLabel} query={searchQuery} />
             ) : (
               "N/A"
             )}
           </span>
         );
+      }
 
       case "date":
         return (
