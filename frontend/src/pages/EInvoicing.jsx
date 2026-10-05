@@ -49,7 +49,7 @@ import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
 import UploadIcon from "../components/common/UploadIcon";
 import EyeIcon from "../components/common/EyeIcon";
 import BulkDeleteModal from "../components/common/BulkDeleteModal";
-import EInvoiceConnectDrawer from "../components/einvoice/EInvoiceConnectDrawer";
+import EInvoiceConnectionDrawer from "../components/einvoice/EInvoiceConnectionDrawer";
 
 const getAncestorZoom = (el) => {
   let z = 1;
@@ -93,7 +93,6 @@ const EMPTY_LIST = [];
 export default function EInvoicing() {
   const isSearchOverlayOpen = useSearchOverlayOpen();
 
-  const [showConnectDrawer, setShowConnectDrawer] = useState(false);
   const [portalConnected, setPortalConnected] = useState(() => {
     try {
       return localStorage.getItem("einvoicing_portal_connected") === "true";
@@ -101,6 +100,15 @@ export default function EInvoicing() {
       return false;
     }
   });
+  const [connectionInfo, setConnectionInfo] = useState(() => {
+    try {
+      const raw = localStorage.getItem("einvoicing_portal_connection");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [showConnectDrawer, setShowConnectDrawer] = useState(false);
 
   const [eInvoices, setEInvoices] = useState(EMPTY_LIST);
   const [loading, setLoading] = useState(false);
@@ -733,11 +741,21 @@ export default function EInvoicing() {
     if (portalConnected) {
       if (!window.confirm("Disconnect from the E-Invoicing Portal?")) return;
       localStorage.setItem("einvoicing_portal_connected", "false");
+      localStorage.removeItem("einvoicing_portal_connection");
       setPortalConnected(false);
+      setConnectionInfo(null);
       toast.success("Disconnected from E-Invoicing Portal");
     } else {
       setShowConnectDrawer(true);
     }
+  };
+
+  const handlePortalConnected = (info) => {
+    localStorage.setItem("einvoicing_portal_connected", "true");
+    localStorage.setItem("einvoicing_portal_connection", JSON.stringify(info));
+    setConnectionInfo(info);
+    setPortalConnected(true);
+    toast.success("E-Invoice portal connected");
   };
 
   const closeRowActions = () => {
@@ -1559,7 +1577,12 @@ export default function EInvoicing() {
         onConfirm={executeBulkDelete}
       />
 
-      {showConnectDrawer && <EInvoiceConnectDrawer onClose={() => setShowConnectDrawer(false)} />}
+      <EInvoiceConnectionDrawer
+        isOpen={showConnectDrawer}
+        onClose={() => setShowConnectDrawer(false)}
+        onConnected={handlePortalConnected}
+        connection={connectionInfo}
+      />
     </div>
   );
 }
