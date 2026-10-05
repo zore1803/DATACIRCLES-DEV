@@ -1613,7 +1613,7 @@ const QuotationForm = ({
                   <>
                   <div className="flex flex-col">
                     <h2 className="text-xl font-bold text-slate-900 flex items-center gap-1 cursor-pointer">
-                      Create Quotation <ChevronDown className="w-5 h-5 text-gray-400" />
+                      Create Quotation
                     </h2>
                   </div>
                 

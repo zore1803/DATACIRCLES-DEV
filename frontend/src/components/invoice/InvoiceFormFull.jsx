@@ -1539,7 +1539,7 @@ const InvoiceFormFull = ({
               <button
                 type="button"
                 onClick={handleClose}
-                className="text-gray-500 hover:text-gray-800 transition-colors flex items-center gap-1"
+                className="inline-flex items-center justify-center h-10 w-10 rounded-full bg-[#F1F1F5] text-[#525866] hover:bg-gray-200 transition-colors flex-shrink-0"
                 aria-label="Close form"
               >
                 <ChevronLeft className="w-5 h-5" />
@@ -1604,8 +1604,8 @@ const InvoiceFormFull = ({
                 ) : (
                   <>
                     <div className="flex flex-col">
-                      <h2 className="text-xl font-medium text-[#1F2937] flex items-center gap-1 cursor-pointer">
-                        Create Invoice <ChevronDown className="w-5 h-5 text-gray-400" />
+                      <h2 className="text-xl font-bold text-slate-900 flex items-center gap-1 cursor-pointer">
+                        Create Invoice
                       </h2>
                     </div>
                     
