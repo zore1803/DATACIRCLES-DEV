@@ -961,6 +961,8 @@ function Deals() {
       { key: "company", label: "Company", visible: true, order: 4, sortable: true },
       { key: "contact", label: "Contact", visible: true, order: 5, sortable: true },
       { key: "dueDate", label: "Due Date", visible: true, order: 6, sortable: false },
+      { key: "createdAt", label: "Created Date", visible: true, order: 7, sortable: true },
+      { key: "updatedAt", label: "Updated Date", visible: true, order: 8, sortable: true },
     ];
 
     if (dealFields && dealFields.length > 0) {
@@ -1009,8 +1011,8 @@ function Deals() {
     }
   };
 
-  // Columns for the bulk "Export selected" dialog — same built-in set and
-  // labels as the page-level Excel/PDF export, then every deal custom field.
+  // Columns offered in the bulk "Export selected" dialog: the table's own
+  // columns, then every deal custom field.
   const exportColumns = useMemo(() => {
     const baseCols = [
       { key: "dealId", label: "Deal ID" },
@@ -1221,9 +1223,9 @@ function Deals() {
       } else if (sortConfig.key === "amount") {
         aValue = parseInt(a.amount || 0);
         bValue = parseInt(b.amount || 0);
-      } else if (sortConfig.key === "updatedAt") {
-        aValue = new Date(a.updatedAt);
-        bValue = new Date(b.updatedAt);
+      } else if (sortConfig.key === "updatedAt" || sortConfig.key === "createdAt") {
+        aValue = new Date(a[sortConfig.key]);
+        bValue = new Date(b[sortConfig.key]);
       } else {
         aValue = a[sortConfig.key] || "";
         bValue = b[sortConfig.key] || "";

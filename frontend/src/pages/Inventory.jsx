@@ -10,8 +10,9 @@ import {
   X, ChevronDown, ChevronUp, EyeOff, Minus,
   ChevronLeft, ChevronRight, Pin, PinOff, Package,
   TrendingDown, Boxes, IndianRupee, Wallet, ArrowRight, Check, ArrowUp, ArrowDown, Layers } from "lucide-react";
-import * as XLSX from "xlsx";
-import { formatINR } from "../utils/clientExport";
+import DownloadIcon from "../components/common/DownloadIcon";
+import { formatINR, fetchAllPages, withCustomFieldColumns } from "../utils/clientExport";
+import ExportModal from "../components/common/ExportModal";
 import BulkActionBar from "../components/common/BulkActionBar";
 import SearchIcon from "../components/common/SearchIcon";
 import SettingsIcon from "../components/common/SettingsIcon";
@@ -240,6 +241,8 @@ export default function Inventory() {
 
   /* three-dot header menu + KPI toggle */
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportScope, setExportScope] = useState("all"); // "all" (⋮ menu) | "selected" (bulk strip)
   const moreMenuRef = useRef(null);
   const [showStats, setShowStats] = useState(true);
 
@@ -397,17 +400,18 @@ export default function Inventory() {
   /* Server sorts by the parent item's own field, which is 0 for variant items —
      re-sort the current page client-side when sorting by a variant-aware column
      so variant items order by their effective (min) price / stock value. */
-  const sortedItems = useMemo(() => {
+  const sortVariantAware = (rows) => {
     const k = sortConfig.key;
-    if (k !== "purchasePrice" && k !== "sellingPrice" && k !== "stockValue") return items;
+    if (k !== "purchasePrice" && k !== "sellingPrice" && k !== "stockValue") return rows;
     const getVal = (row) =>
       k === "stockValue" ? getItemStockValue(row) : getEffectivePrice(row, k);
     const dir = sortConfig.direction === "desc" ? -1 : 1;
-    return [...items].sort((a, b) => (getVal(a) - getVal(b)) * dir);
-  }, [items, sortConfig]);
+    return [...rows].sort((a, b) => (getVal(a) - getVal(b)) * dir);
+  };
+  const sortedItems = useMemo(() => sortVariantAware(items), [items, sortConfig]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filteredItems = useMemo(() => {
-    if (!activeFilters || activeFilters.length === 0) return sortedItems;
+  const applyActiveFilters = (rows) => {
+    if (!activeFilters || activeFilters.length === 0) return rows;
     const valueOf = (row, key) => {
       switch (key) {
         case "item": return row.name;
@@ -419,7 +423,7 @@ export default function Inventory() {
         default: return row[key];
       }
     };
-    return sortedItems.filter((row) =>
+    return rows.filter((row) =>
       activeFilters.every((f) => {
         const raw = valueOf(row, f.column);
         const val = String(raw ?? "").toLowerCase().trim();
@@ -437,7 +441,8 @@ export default function Inventory() {
         }
       })
     );
-  }, [sortedItems, activeFilters]);
+  };
+  const filteredItems = useMemo(() => applyActiveFilters(sortedItems), [sortedItems, activeFilters]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filterColumns = useMemo(() => ([
     { key: "item", label: "Item" },
@@ -688,31 +693,49 @@ export default function Inventory() {
     }
   };
 
-  const handleExportExcel = useCallback((rows) => {
-    const list = Array.isArray(rows) ? rows : [rows];
-    if (!list.length) {
-      toast.error("No items selected for export");
-      return;
+  // Export Data dialog: ⋮ menu (scope "all" — every item matching the search,
+  // stock-status filter and advanced filters, across all pages) or the bulk
+  // strip (scope "selected"). Prices read "Rs." rather than ₹, which the PDF's
+  // built-in font can't draw.
+  const rupees = (text) => String(text ?? "").replace(/₹/g, "Rs.");
+  const baseExportColumns = [
+    { key: "Item", label: "Item", value: (i) => i.name },
+    { key: "Category", label: "Category", value: (i) => i.category },
+    { key: "Current Stock", label: "Current Stock", value: (i) => getItemStock(i) },
+    { key: "Unit", label: "Unit", value: (i) => i.primaryUnit },
+    { key: "Status", label: "Status", value: (i) => stockStatusOf(i).label },
+    { key: "Purchase Price", label: "Purchase Price", value: (i) => rupees(formatItemPrice(i, "purchasePrice")) },
+    { key: "Selling Price", label: "Selling Price", value: (i) => rupees(formatItemPrice(i, "sellingPrice")) },
+    { key: "Stock Value", label: "Stock Value", value: (i) => formatINR(getItemStockValue(i)) },
+  ];
+  // Custom fields on the items currently loaded are offered as extra columns.
+  const exportDialogColumns = withCustomFieldColumns(baseExportColumns, items).map((c) => ({
+    ...c,
+    key: c.key || c.label,
+    isCustomField: !baseExportColumns.some((b) => b.label === c.label),
+  }));
+  const openExport = (scope) => {
+    setExportScope(scope);
+    setShowExportModal(true);
+  };
+  const loadExportRows = async () => {
+    const params = new URLSearchParams();
+    if (sortConfig.key) {
+      params.append("sortBy", sortConfig.key);
+      params.append("sortOrder", sortConfig.direction || "asc");
+    } else {
+      params.append("sortBy", "createdAt");
+      params.append("sortOrder", "desc");
     }
-    const sheet = XLSX.utils.json_to_sheet(
-      list.map((i) => ({
-        Item: i.name || "",
-        Category: i.category || "",
-        "Current Stock": getItemStock(i),
-        Unit: i.primaryUnit || "",
-        Status: stockStatusOf(i).label,
-        "Purchase Price": formatItemPrice(i, "purchasePrice").replace(/^₹/, ""),
-        "Selling Price": formatItemPrice(i, "sellingPrice").replace(/^₹/, ""),
-        "Stock Value": formatINR(getItemStockValue(i)),
-      }))
-    );
-    sheet["!cols"] = [{ wch: 28 }, { wch: 18 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
-    const book = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(book, sheet, "Inventory");
-    const filename = `Inventory_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    XLSX.writeFile(book, filename);
-    toast.success(`Exported ${list.length} item(s) to ${filename}`);
-  }, []);
+    if (debouncedSearch) params.append("search", debouncedSearch);
+    if (stockStatusFilter) params.append("stockStatus", stockStatusFilter);
+    const all = applyActiveFilters(sortVariantAware(await fetchAllPages("/inventory", params, "items")));
+    if (exportScope === "selected") {
+      const wanted = new Set(selectedIds);
+      return all.filter((r) => wanted.has(r._id));
+    }
+    return all;
+  };
 
   /* ── row action menu ─────────────────────────────────────────────── */
   const renderActionMenu = (item) => {
@@ -949,10 +972,7 @@ export default function Inventory() {
             isClosing={bulkStripClosing}
             onSelectAll={handleSelectAllAcrossPages}
             onDeselectAll={() => setSelectedIds([])}
-            onExport={() => {
-              const rows = filteredItems.filter((i) => selectedIds.includes(i._id));
-              handleExportExcel(rows.length > 0 ? rows : filteredItems);
-            }}
+            onExport={() => openExport("selected")}
             onUpdateStatus={() => setShowBulkActions(true)}
             onCancel={() => setSelectedIds([])}
           />
@@ -1039,6 +1059,12 @@ export default function Inventory() {
                   className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                 >
                   <EyeIcon className="w-4 h-4 text-gray-400" /> {showStats ? "Hide KPIs" : "Unhide KPIs"}
+                </button>
+                <button
+                  onClick={() => { openExport("all"); setIsMoreMenuOpen(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <DownloadIcon className="w-4 h-4 text-gray-400" /> Export
                 </button>
 
                 {/* Stock-status filter — moved in here off the toolbar, where its pill-shaped
@@ -1608,6 +1634,19 @@ export default function Inventory() {
       )}
 
       {/* ── Advanced filters ─────────────────────────────────────────── */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        columns={exportDialogColumns}
+        getRows={loadExportRows}
+        summaryText={
+          exportScope === "selected"
+            ? `Exporting ${selectedIds.length} selected record${selectedIds.length === 1 ? "" : "s"}`
+            : "Exporting all records matching the current view"
+        }
+        fileName="Exported_Inventory.csv"
+      />
+
       <AdvancedFilterPanel
         isOpen={showAdvancedFilters}
         onClose={() => setShowAdvancedFilters(false)}

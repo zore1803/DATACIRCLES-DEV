@@ -18,7 +18,14 @@ import toast from "react-hot-toast";
 import FilterIcon from "../components/common/FilterIcon";
 import AdvancedFilterPanel from "../components/common/AdvancedFilterPanel";
 import { toServerDueDateFilter } from "../utils/dueDateFilter";
-import { formatCustomFieldValue } from "../utils/clientExport";
+import {
+  exportClientSide,
+  confirmExport,
+  withCustomFieldColumns,
+  formatExportDate,
+  formatExportDateTime,
+} from "../utils/clientExport";
+import ExportSubmenu from "../components/common/ExportSubmenu";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
 import {
   ChevronUp,
@@ -1563,85 +1570,95 @@ function Tasks() {
     }
   };
 
-  const handleExport = () => {
-    const dataToExport = activeTab === "tasks" ? tasks : meetings;
-    const filename =
-      activeTab === "tasks" ? "tasks_export.xlsx" : "meetings_export.xlsx";
-
-    if (!dataToExport || dataToExport.length === 0) {
-      toast.error("No data to export");
-      return;
+  // Every task / meeting matching the current search and filters, across ALL
+  // pages (the list only ever holds one page). The server caps a page at 100,
+  // so walk the pages; the cap below just guards against a runaway loop.
+  const fetchAllForExport = async () => {
+    const isTasks = activeTab === "tasks";
+    const sort = isTasks ? taskSortConfig : meetingSortConfig;
+    const endpoint = isTasks ? "/tasks/pagination" : "/meetings/pagination";
+    const key = isTasks ? "tasks" : "meetings";
+    const rows = [];
+    for (let page = 1; page <= 200; page++) {
+      const params = new URLSearchParams({
+        page,
+        limit: 100,
+        sortBy: sort.key,
+        sortOrder: sort.direction,
+      });
+      if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
+      if (debouncedFilterStatus) params.append(isTasks ? "status" : "priority", debouncedFilterStatus);
+      if (debouncedUserFilter) params.append("user", debouncedUserFilter);
+      appendServerFilters(params);
+      const res = await API.get(`${endpoint}?${params.toString()}`);
+      rows.push(...(res.data[key] || []));
+      if (!res.data.pagination?.hasNextPage) break;
     }
+    return rows;
+  };
 
-    // Flatten data for export
-    const flatData = dataToExport.map((item) => {
-      const flatItem = { ...item };
+  // ⋮ menu → Export as Excel / PDF (all matching rows), and the bulk strip's
+  // Export (`onlyIds`: just the selected rows). Same columns as the table, plus
+  // every custom field, in the same layout as every other page's export.
+  const handleExportAll = async (format, onlyIds = null) => {
+    if (!confirmExport(format)) return;
+    const isTasks = activeTab === "tasks";
+    const loadingToast = toast.loading("Preparing export...");
+    try {
+      let rows = await fetchAllForExport();
+      if (onlyIds) {
+        const wanted = new Set(onlyIds);
+        rows = rows.filter((r) => wanted.has(r._id));
+      }
+      toast.dismiss(loadingToast);
 
-      // Handle nested objects
-      if (flatItem.relatedEntities && Array.isArray(flatItem.relatedEntities)) {
-        flatItem.relatedEntities = flatItem.relatedEntities
-          .map(
-            (e) =>
-              `${e.entityModel}: ${e.entityId?.name || e.entityId?.title || e.entityId}`,
+      const columns = isTasks
+        ? withCustomFieldColumns(
+            [
+              { label: "Title", value: (t) => t.title },
+              // Plain text (descriptions are stored as HTML) so a re-import keeps it.
+              { label: "Description", value: (t) => String(t.description || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() },
+              { label: "Related To", value: (t) => getRelatedToName(t) },
+              { label: "Company", value: (t) => getCompanyName(t) },
+              { label: "Status", value: (t) => t.status || "Pending" },
+              { label: "Assigned Users", value: (t) => getAssignedUsers(t) },
+              { label: "Priority", value: (t) => t.priority },
+              { label: "Due Date", value: (t) => formatExportDate(t.dueDate) },
+            ],
+            rows,
+            taskFields,
           )
-          .join(", ");
-      }
+        : withCustomFieldColumns(
+            [
+              { label: "Title", value: (m) => m.title },
+              { label: "Date & Time", value: (m) => formatExportDateTime(m.scheduledAt) },
+              { label: "Status", value: (m) => m.status },
+              { label: "Contact", value: (m) => getMeetingEntityName(m) },
+              { label: "Participants", value: (m) => getMeetingParticipants(m) },
+              { label: "URL", value: (m) => m.location },
+            ],
+            rows,
+            meetingFields,
+          );
 
-      if (flatItem.participants && Array.isArray(flatItem.participants)) {
-        flatItem.participants = flatItem.participants
-          .map((p) => p.name || p.email)
-          .join(", ");
-      }
-
-      if (flatItem.users && Array.isArray(flatItem.users)) {
-        flatItem.users = flatItem.users
-          .map((u) => u.name || u.email)
-          .join(", ");
-      }
-
-      // Custom fields are stored as [{key, value}] — give each its own
-      // column instead of letting the sheet print "[object Object]".
-      if (Array.isArray(flatItem.additionalFields)) {
-        flatItem.additionalFields.forEach((f) => {
-          if (!f?.key) return;
-          const col = f.key in flatItem ? `${f.key} (Custom)` : f.key;
-          flatItem[col] = formatCustomFieldValue(f);
-        });
-        delete flatItem.additionalFields;
-      }
-
-      // Format dates
-      if (flatItem.dueDate)
-        flatItem.dueDate = new Date(flatItem.dueDate).toLocaleDateString();
-      if (flatItem.scheduledAt)
-        flatItem.scheduledAt = new Date(flatItem.scheduledAt).toLocaleString();
-      if (flatItem.createdAt)
-        flatItem.createdAt = new Date(flatItem.createdAt).toLocaleDateString();
-      if (flatItem.updatedAt)
-        flatItem.updatedAt = new Date(flatItem.updatedAt).toLocaleDateString();
-
-      // Remove internal fields
-      delete flatItem.__v;
-      delete flatItem._id;
-      delete flatItem.organization;
-
-      return flatItem;
-    });
-
-    const ws = XLSX.utils.json_to_sheet(flatData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-    XLSX.writeFile(wb, filename);
-    toast.success(
-      `${activeTab === "tasks" ? "Tasks" : "Meetings"} exported successfully`,
-    );
+      await exportClientSide(format, {
+        rows,
+        columns,
+        fileNamePrefix: isTasks ? "tasks_export" : "meetings_export",
+        title: isTasks ? "Tasks Report" : "Meetings Report",
+      });
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      toast.error(err.response?.data?.error || "Failed to export");
+    }
   };
 
   // Tasks-only for now: Meeting import isn't wired because the Meeting schema
   // requires a linked company/contact/vendor id per row (see backend
   // models/Meeting.js), which a plain spreadsheet can't safely resolve.
-  // Round-trips against handleExport's own column names (title/description/
-  // dueDate/status) so exporting then re-importing just works.
+  // Round-trips against the Excel/CSV export's column names (Title/
+  // Description/Due Date/Status — the old lowercase title/description/dueDate/
+  // status names are still accepted) so exporting then re-importing just works.
   const handleTaskImportFile = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -1661,20 +1678,34 @@ function Tasks() {
 
       let created = 0;
       let failed = 0;
+      // First non-empty value among the accepted header spellings.
+      const pick = (row, ...keys) => {
+        for (const k of keys) {
+          if (row[k] !== undefined && row[k] !== null && row[k] !== "") return row[k];
+        }
+        return "";
+      };
+      // The export writes dates as DD/MM/YYYY; `new Date("05/10/2026")` would
+      // read that as May 10, so parse that shape explicitly (day first).
+      const parseImportDate = (raw) => {
+        if (!raw) return null;
+        const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(raw).trim());
+        return m ? new Date(+m[3], +m[2] - 1, +m[1]) : new Date(raw);
+      };
+
       for (const row of rows) {
-        const title = String(row.title || row.Task || "").trim();
+        const title = String(pick(row, "title", "Title", "Task")).trim();
         if (!title) {
           failed++;
           continue;
         }
-        const dueDateRaw = row.dueDate || row["Due Date"];
-        const parsedDueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+        const parsedDueDate = parseImportDate(pick(row, "dueDate", "Due Date"));
         try {
           await API.post("/tasks", {
             title,
-            description: String(row.description || "").trim(),
+            description: String(pick(row, "description", "Description")).trim(),
             dueDate: parsedDueDate && !Number.isNaN(parsedDueDate.getTime()) ? parsedDueDate.toISOString() : "",
-            status: String(row.status || "Pending").trim() || "Pending",
+            status: String(pick(row, "status", "Status") || "Pending").trim() || "Pending",
           });
           created++;
         } catch {
@@ -3053,7 +3084,9 @@ function Tasks() {
     don't double up. Only the icons carry each action's colour. */}
 <div className="flex flex-nowrap items-center flex-shrink-0">
               <button
-                onClick={handleExport}
+                onClick={() =>
+                  handleExportAll("excel", activeTab === "tasks" ? selectedTasks : selectedMeetings)
+                }
                 className="h-10 px-4 bg-white border border-gray-300 text-gray-900 text-sm font-medium rounded-l-[25px] hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap"
               >
                 <DownloadIcon className="w-4 h-4 text-green-600" />
@@ -3404,16 +3437,10 @@ function Tasks() {
                   <UploadIcon className="w-4 h-4 text-gray-400" />
                   {taskImportBusy ? "Importing…" : "Import"}
                 </button>
-                <button
-                  onClick={() => {
-                    handleExport();
-                    setIsMoreMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  <DownloadIcon className="w-4 h-4 text-gray-400" />
-                  Export
-                </button>
+                <ExportSubmenu
+                  onExport={(format) => handleExportAll(format)}
+                  onDone={() => setIsMoreMenuOpen(false)}
+                />
                 <button
                   onClick={() => {
                     setShowColumnsPanel(true);

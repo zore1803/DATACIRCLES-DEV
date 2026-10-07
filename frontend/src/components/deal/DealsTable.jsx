@@ -153,6 +153,15 @@ export default function DealsTable({
     setColumnOrder(order);
   };
 
+  // "October 5, 2026" — same format the Due Date column uses.
+  const formatRecordDate = (value) => {
+    if (!value) return "";
+    const d = new Date(value);
+    return Number.isNaN(d.getTime())
+      ? ""
+      : d.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
+  };
+
   const COLUMN_LABELS = {
     dealId: "Deal ID",
     title: "Deal Name",
@@ -161,6 +170,8 @@ export default function DealsTable({
     status: "Stage",
     amount: "Amount",
     dueDate: "Due Date",
+    createdAt: "Created Date",
+    updatedAt: "Updated Date",
   };
 
   const getColumnPreviewValue = (deal, colId) => {
@@ -183,6 +194,9 @@ export default function DealsTable({
           ? new Date(dueDateField.value).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })
           : "-";
       }
+      case "createdAt":
+      case "updatedAt":
+        return formatRecordDate(deal[colId]) || "-";
       default:
         return "-";
     }
@@ -648,6 +662,27 @@ export default function DealsTable({
           );
         },
       }),
+
+      // Created Date / Updated Date — when the deal was added / last changed
+      ...[
+        { id: "createdAt", label: "Created Date" },
+        { id: "updatedAt", label: "Updated Date" },
+      ].map(({ id, label }) =>
+        columnHelper.accessor((row) => row[id], {
+          id,
+          size: 171,
+          header: () => renderHeaderMenu(id, label, CalendarIcon),
+          cell: ({ getValue }) => {
+            const text = formatRecordDate(getValue());
+            if (!text) return <div className="text-sm text-gray-400 truncate">—</div>;
+            return (
+              <div className="text-sm text-gray-600 truncate" title={text}>
+                <HighlightText text={text} query={searchTerm} />
+              </div>
+            );
+          },
+        }),
+      ),
 
     ];
 

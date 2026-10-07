@@ -1,3 +1,5 @@
+import ExportSubmenu from "../components/common/ExportSubmenu";
+import { exportByIds, confirmExport } from "../utils/clientExport";
 import DeleteIcon from "../components/common/DeleteIcon";
 import EmptyState from "../components/common/EmptyState";
 import BulkDeleteModal from "../components/common/BulkDeleteModal";
@@ -1324,6 +1326,35 @@ function Companies() {
     setSelectedCompanies(companies.map((c) => c._id));
   };
 
+  // ⋮ menu → Export as Excel / PDF: every company matching the current search
+  // and filters (not just the loaded page), all columns including custom
+  // fields — the same file the bulk "Export selected" dialog produces.
+  const handleExportAll = async (format) => {
+    if (permission === "readonly") {
+      toast.error("You do not have permission to export companies.");
+      return;
+    }
+    if (!confirmExport(format)) return;
+    try {
+      const params = new URLSearchParams({ allIds: "true" });
+      if (searchTerm.trim()) params.append("search", searchTerm.trim());
+      if (filterIndustry) params.append("industry", filterIndustry);
+      if (activeFilters && activeFilters.length > 0) {
+        params.append("advancedFilters", JSON.stringify(activeFilters));
+      }
+      const res = await API.get(`/companies/pagination?${params.toString()}`);
+      await exportByIds(format, {
+        ids: res.data.ids || [],
+        columns: defaultColumns,
+        exportUrl: "/companies/export-selected",
+        fileNamePrefix: "companies_export",
+        title: "Companies Report",
+      });
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to export companies");
+    }
+  };
+
   // Pagination handlers
   const handlePageChange = (newPage) => {
     if (
@@ -2115,6 +2146,10 @@ function Companies() {
                               <UploadIcon className="w-4 h-4 text-gray-400" />
                               Import
                             </button>
+                            <ExportSubmenu
+                              onExport={handleExportAll}
+                              onDone={() => setIsMoreMenuOpen(false)}
+                            />
                             <Link
                               to="/settings/company-fields"
                               onClick={() => setIsMoreMenuOpen(false)}

@@ -1,3 +1,5 @@
+import ExportSubmenu from "../components/common/ExportSubmenu";
+import { exportByIds, confirmExport } from "../utils/clientExport";
 import DeleteIcon from "../components/common/DeleteIcon";
 import BulkDeleteModal from "../components/common/BulkDeleteModal";
 import { exportRecordsToCSV } from "../utils/exportRecordsToCSV";
@@ -1919,6 +1921,41 @@ function Contacts() {
     setSelectedContacts(contacts.map((c) => c._id));
   };
 
+  // ⋮ menu → Export as Excel / PDF: every contact matching the current tab,
+  // search and filters (not just the loaded page), all columns including
+  // custom fields — the same file the bulk "Export selected" dialog produces.
+  const handleExportAll = async (format) => {
+    if (permission === "readonly") {
+      toast.error("You do not have permission to export contacts.");
+      return;
+    }
+    if (!confirmExport(format)) return;
+    try {
+      const params = new URLSearchParams({ allIds: "true" });
+      if (searchTerm.trim()) params.append("search", searchTerm.trim());
+      if (statusFilter) params.append("stageStatus", statusFilter);
+      if (activeFilters && activeFilters.length > 0) {
+        params.append("advancedFilters", serializeFilters(activeFilters));
+      }
+      const stageByTab = {
+        Leads: "Lead",
+        "Sales Qualified Lead": "Sales Qualified Lead",
+        Customers: "Customer",
+      };
+      if (stageByTab[activeTab]) params.append("lifecycleStage", stageByTab[activeTab]);
+      const res = await API.get(`/contacts/pagination?${params.toString()}`);
+      await exportByIds(format, {
+        ids: res.data.ids || [],
+        columns: defaultColumns,
+        exportUrl: "/contacts/export-selected",
+        fileNamePrefix: "contacts_export",
+        title: "Contacts Report",
+      });
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to export contacts");
+    }
+  };
+
   // Trigger data refetch when filters are applied
   useEffect(() => {
     if (pagination.currentPage === 1) {
@@ -2271,6 +2308,10 @@ function Contacts() {
                       <UploadIcon className="w-4 h-4 text-gray-400" />
                       Import
                     </button>
+                    <ExportSubmenu
+                      onExport={handleExportAll}
+                      onDone={() => setIsMoreMenuOpen(false)}
+                    />
                     <Link
                       to="/settings/forms?module=Contact"
                       onClick={() => setIsMoreMenuOpen(false)}

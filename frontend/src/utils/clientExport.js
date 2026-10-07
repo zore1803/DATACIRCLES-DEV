@@ -1,5 +1,6 @@
 import { autoTable } from "jspdf-autotable";
 import toast from "react-hot-toast";
+import API from "../services/api";
 
 export function formatINR(value) {
   const n = Number(value);
@@ -253,4 +254,71 @@ export async function exportClientSide(format, { rows, columns, fileNamePrefix, 
     console.error("Export failed:", err);
     toast.error("Export failed. Please check your connection and try again.");
   }
+}
+
+// Export a set of records through a module's `/export-selected` endpoint, which
+// returns CSV with the requested columns — custom fields included. Used by the
+// bulk "Export selected" dialog and by the ⋮ menu's "Export as Excel / PDF"
+// (which first looks up every record matching the current search/filters), so
+// both produce identical files. The PDF is the same CSV parsed back into a table.
+//   columns: [{ key, label, isCustomField }]
+// Resolves true on success, false otherwise (a toast has already been shown).
+export async function exportByIds(format, { ids, columns, exportUrl, fileNamePrefix, title }) {
+  if (!ids || ids.length === 0) {
+    toast.error("Nothing to export — the current view is empty.");
+    return false;
+  }
+  const toastId = toast.loading(format === "pdf" ? "Generating PDF file..." : "Generating Excel file...");
+  try {
+    const response = await API.post(
+      exportUrl,
+      {
+        selectedIds: ids,
+        columns: columns.map((c) => ({ key: c.key, label: c.label, isCustomField: !!c.isCustomField })),
+      },
+      { responseType: "blob" },
+    );
+    const text = await new Blob([response.data]).text();
+
+    if (format === "pdf") {
+      const [head = [], ...body] = parseCSV(text);
+      await downloadTablePDF({
+        head: ["#", ...head],
+        body: body.map((row, i) => [i + 1, ...row]),
+        fileNamePrefix,
+        title,
+      });
+    } else {
+      // BOM so Excel reads names/values as UTF-8 rather than guessing a code page.
+      downloadBlob(
+        new Blob(["﻿" + text], { type: "text/csv;charset=utf-8;" }),
+        `${fileNamePrefix}_${new Date().toISOString().split("T")[0]}.csv`,
+      );
+    }
+    toast.success(`Successfully exported ${ids.length} record${ids.length === 1 ? "" : "s"}!`, { id: toastId });
+    return true;
+  } catch (error) {
+    console.error("Export failed:", error);
+    toast.error("Failed to export data", { id: toastId });
+    return false;
+  }
+}
+
+// Every record of a server-paginated list, across ALL pages, for the ⋮ menu's
+// "Export as Excel / PDF". The list screens only ever hold one page, but an
+// export should cover everything matching the current search/filters.
+//   baseParams: URLSearchParams (or plain object) with the list's own filters/sort
+//   dataKey:    the array's key in the response ("items", "vendors", ...)
+export async function fetchAllPages(endpoint, baseParams, dataKey, { limit = 100, maxPages = 200 } = {}) {
+  const rows = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const params = new URLSearchParams(baseParams);
+    params.set("page", String(page));
+    params.set("limit", String(limit));
+    const res = await API.get(`${endpoint}?${params.toString()}`);
+    rows.push(...(res.data[dataKey] || []));
+    const totalPages = res.data.pagination?.totalPages || 1;
+    if (page >= totalPages) break;
+  }
+  return rows;
 }

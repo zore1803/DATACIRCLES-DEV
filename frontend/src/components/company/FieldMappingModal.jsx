@@ -96,7 +96,9 @@ const FieldMappingModal = ({
         
         try {
           return field.label.toLowerCase() === header.toLowerCase() ||
-                 (field.key && field.key.toLowerCase() === header.toLowerCase());
+                 (field.key && field.key.toLowerCase() === header.toLowerCase()) ||
+                 // The Companies export names this column "Location".
+                 (field.key === "address" && header.toLowerCase() === "location");
         } catch (e) {
           return false;
         }

@@ -27,6 +27,8 @@ import BulkActions from "../BulkActions";
 import { useBulkStrip } from "../../hooks/useBulkSelection";
 import useSearchOverlayOpen from "../../hooks/useSearchOverlayOpen";
 import * as XLSX from "xlsx";
+import ExportSubmenu from "../common/ExportSubmenu";
+import { exportClientSide, confirmExport, fetchAllPages, formatINR, formatExportDate } from "../../utils/clientExport";
 import EyeIcon from "../common/EyeIcon";
 import EditIcon from "../common/EditIcon";
 import TableSkeletonRows from "../common/TableSkeletonRows";
@@ -397,17 +399,18 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
     document.addEventListener("mouseup", onUp);
   };
 
-  const sortedRows = useMemo(() => {
+  const sortRows = (list) => {
     const pick = SORT_VALUE[sort.key];
-    if (!pick) return rows;
-    // Copy first - sort mutates, and `rows` is the fetched state.
-    return [...rows].sort((a, b) => {
+    if (!pick) return list;
+    // Copy first - sort mutates, and `list` may be the fetched state.
+    return [...list].sort((a, b) => {
       const av = pick(a);
       const bv = pick(b);
       if (av === bv) return 0;
       return (av > bv ? 1 : -1) * (sort.dir === "asc" ? 1 : -1);
     });
-  }, [rows, sort]);
+  };
+  const sortedRows = useMemo(() => sortRows(rows), [rows, sort]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const allSelected = sortedRows.length > 0 && selectedIds.length === sortedRows.length;
 
@@ -643,31 +646,48 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
     }
   };
 
-  const handleExport = () => {
-    const chosen = selectedIds.length
-      ? sortedRows.filter((r) => selectedIds.includes(r._id))
-      : sortedRows;
-    if (!chosen.length) {
-      toast.error("Nothing to export");
-      return;
+  // Export as Excel / PDF. With rows selected (bulk strip) only those are
+  // exported; otherwise every entry matching the current search, across all
+  // pages (the table only holds one page at a time).
+  const handleExport = async (format) => {
+    // BulkActionBar calls this with the click event, not a format.
+    const fmt = format === "pdf" ? "pdf" : "excel";
+    if (!confirmExport(fmt)) return;
+
+    let chosen;
+    if (selectedIds.length) {
+      chosen = sortedRows.filter((r) => selectedIds.includes(r._id));
+    } else {
+      const loadingToast = toast.loading("Preparing export...");
+      try {
+        const params = new URLSearchParams({ kind });
+        if (searchTerm) params.append("search", searchTerm);
+        chosen = sortRows(await fetchAllPages("/expenses", params, "documents"));
+        toast.dismiss(loadingToast);
+      } catch (err) {
+        toast.dismiss(loadingToast);
+        toast.error("Failed to export");
+        return;
+      }
     }
-    const data = chosen.map((r) => ({
-      Date: formatDate(r.date),
-      Category: r.category || "",
-      Vendor: r.vendor?.companyName || r.vendor?.name || "",
-      Deal: r.deal?.title || "",
-      Notes: r.notes || "",
-      Mode: r.paymentType || "",
-      Bank: r.bankAccount?.bank || "",
-      "Amount (INR)": Number(r.amount) || 0,
-      Currency: r.currency || "INR",
-      "Original Amount": r.foreignAmount ?? "",
-    }));
-    const sheet = XLSX.utils.json_to_sheet(data);
-    const book = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(book, sheet, title);
-    XLSX.writeFile(book, `${title.replace(/\s+/g, "-").toLowerCase()}.xlsx`);
-    toast.success(`Exported ${chosen.length} ${chosen.length === 1 ? "row" : "rows"}`);
+
+    exportClientSide(fmt, {
+      rows: chosen,
+      columns: [
+        { label: "Date", value: (r) => formatExportDate(r.date) },
+        { label: "Category", value: (r) => r.category },
+        { label: "Vendor", value: (r) => r.vendor?.companyName || r.vendor?.name },
+        { label: "Deal", value: (r) => r.deal?.title },
+        { label: "Notes", value: (r) => r.notes },
+        { label: "Mode", value: (r) => r.paymentType },
+        { label: "Bank", value: (r) => r.bankAccount?.bank },
+        { label: "Amount", value: (r) => formatINR(Number(r.amount) || 0) },
+        { label: "Currency", value: (r) => r.currency || "INR" },
+        { label: "Original Amount", value: (r) => r.foreignAmount },
+      ],
+      fileNamePrefix: `${title.replace(/\s+/g, "_").toLowerCase()}_export`,
+      title: `${title} Report`,
+    });
   };
 
   const { visible: stripVisible, closing: stripClosing } = useBulkStrip(selectedIds.length);
@@ -801,15 +821,11 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
                   <SettingsIcon className="w-4 h-4 text-gray-400" />
                   Manage Columns
                 </button>
-                <button
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => { handleExport(); setMoreMenuOpen(false); }}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-[13px] text-[#161618] hover:bg-gray-50 transition-colors"
-                >
-                  <EyeIcon className="w-4 h-4 text-gray-400" />
-                  Export all
-                </button>
+                <ExportSubmenu
+                  itemClassName="px-4"
+                  onExport={handleExport}
+                  onDone={() => setMoreMenuOpen(false)}
+                />
               </div>
             )}
           </div>

@@ -1,3 +1,5 @@
+import ExportSubmenu from "../components/common/ExportSubmenu";
+import { exportByIds, confirmExport } from "../utils/clientExport";
 import HistoryIcon from "../components/common/HistoryIcon";
 import DeleteIcon from "../components/common/DeleteIcon";
 import EmptyState from "../components/common/EmptyState";
@@ -946,6 +948,28 @@ function Vendors() {
   // the current page, rather than clearing it entirely — mirrors
   // Companies.jsx's handleDeselectAllExtra. Use "Cancel" (exitSelectionMode)
   // to clear the selection completely and leave selection mode.
+  // ⋮ menu → Export as Excel / PDF: every vendor matching the current search
+  // and filters (not just the loaded page), all columns including custom
+  // fields — the same file the bulk "Export selected" dialog produces.
+  const handleExportAll = async (format) => {
+    if (!confirmExport(format)) return;
+    try {
+      const params = new URLSearchParams({ allIds: "true" });
+      if (debouncedSearchTerm.trim()) params.append("search", debouncedSearchTerm.trim());
+      if (activeFilters && activeFilters.length > 0) params.append("advancedFilters", JSON.stringify(activeFilters));
+      const res = await API.get(`/vendors/pagination?${params.toString()}`);
+      await exportByIds(format, {
+        ids: res.data.ids || [],
+        columns: exportColumns,
+        exportUrl: "/vendors/export-selected",
+        fileNamePrefix: "vendors_export",
+        title: "Vendors Report",
+      });
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to export vendors");
+    }
+  };
+
   const handleDeselectAllExtra = () => {
     setSelectedVendors(vendors.map((v) => v._id));
   };
@@ -1439,6 +1463,11 @@ function Vendors() {
                   <UploadIcon className="w-4 h-4 text-gray-400" />
                   {showImport ? "Hide Import" : "Import"}
                 </button>
+                <ExportSubmenu
+                  itemClassName="px-4"
+                  onExport={handleExportAll}
+                  onDone={() => setShowMoreMenu(false)}
+                />
                 <button
                   onClick={() => {
                     setShowColumnSettings(true);

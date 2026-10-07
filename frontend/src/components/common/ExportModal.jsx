@@ -5,16 +5,22 @@ import React, { useState, useEffect, useMemo } from "react";
 import { X, CheckSquare, Square } from "lucide-react";
 import toast from "react-hot-toast";
 import SearchIcon from "./SearchIcon";
-import API from "../../services/api"; // Make sure your API instance is imported
-import { downloadTablePDF, parseCSV } from "../../utils/clientExport";
+import { exportByIds, exportClientSide } from "../../utils/clientExport";
 
 export default function ExportModal({
   isOpen,
   onClose,
   columns,
-  selectedIds, 
-  exportUrl, 
+  selectedIds = [],
+  exportUrl,
   fileName = "export.csv",
+  // Client-side mode — for lists with no backend export endpoint. Omit
+  // `exportUrl` and pass `getRows` (async, returns the row objects to export)
+  // with columns shaped { key, label, value: (row) => text }.
+  getRows,
+  // Overrides the "Exporting N selected records" banner, e.g. when the dialog
+  // was opened from the ⋮ menu to export everything matching the view.
+  summaryText,
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCols, setSelectedCols] = useState([]);
@@ -69,58 +75,47 @@ export default function ExportModal({
       }));
 
     setIsExporting(true);
-    const loadingToast = toast.loading(format === "pdf" ? "Generating PDF file..." : "Generating Excel file...");
+    const baseName = fileName.replace(/\.csv$/i, "");
+    const reportTitle = baseName.replace(/^Exported_/, "").replace(/_/g, " ") + " Report";
 
-    try {
-      // ✅ Make POST request to Backend, demanding a 'blob' (file) in return
-      const response = await API.post(
-        exportUrl,
-        {
-          selectedIds: selectedIds, // Send the IDs from all pages
-          columns: colsToExport,
-        },
-        {
-          responseType: "blob", // CRITICAL: Tells axios we are downloading a file, not JSON
-        },
-      );
-
-      if (format === "pdf") {
-        // The endpoint returns CSV; turn it back into a table for the PDF so
-        // Excel and PDF always contain exactly the same columns and values.
-        const text = await new Blob([response.data]).text();
-        const [head = [], ...body] = parseCSV(text);
-        const baseName = fileName.replace(/\.csv$/i, "");
-        await downloadTablePDF({
-          head: ["#", ...head],
-          body: body.map((row, i) => [i + 1, ...row]),
+    if (!exportUrl) {
+      // No endpoint: build the file in the browser from rows the page supplies.
+      const loadingToast = toast.loading(format === "pdf" ? "Generating PDF file..." : "Generating Excel file...");
+      try {
+        const rows = (await getRows?.()) || [];
+        toast.dismiss(loadingToast);
+        if (rows.length === 0) {
+          toast.error("Nothing to export — the current view is empty.");
+          return;
+        }
+        await exportClientSide(format, {
+          rows,
+          columns: columns
+            .filter((c) => selectedCols.includes(c.key))
+            .map((c) => ({ label: c.label, value: c.value })),
           fileNamePrefix: baseName,
-          title: baseName.replace(/^Exported_/, "").replace(/_/g, " ") + " Report",
+          title: reportTitle,
         });
-      } else {
-        // Create a URL for the downloaded file and trigger browser download
-        const blob = new Blob([response.data], {
-          type: "text/csv;charset=utf-8;",
-        });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.setAttribute("download", fileName);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        onClose();
+      } catch (error) {
+        console.error(error);
+        toast.dismiss(loadingToast);
+        toast.error("Failed to export data");
+      } finally {
+        setIsExporting(false);
       }
-
-      toast.success(`Successfully exported ${selectedIds.length} records!`, {
-        id: loadingToast,
-      });
-      onClose();
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to export data", { id: loadingToast });
-    } finally {
-      setIsExporting(false);
+      return;
     }
+
+    const ok = await exportByIds(format, {
+      ids: selectedIds,
+      columns: colsToExport,
+      exportUrl,
+      fileNamePrefix: baseName,
+      title: reportTitle,
+    });
+    setIsExporting(false);
+    if (ok) onClose();
   };
 
   if (!isOpen) return null;
@@ -180,8 +175,8 @@ export default function ExportModal({
           </div>
 
           <div className="flex items-center gap-2 bg-green-50 text-green-700 p-3 rounded-lg text-sm font-medium mb-4 shrink-0 border border-green-200">
-            Exporting {selectedIds.length} selected record
-            {selectedIds.length === 1 ? "" : "s"}
+            {summaryText ||
+              `Exporting ${selectedIds.length} selected record${selectedIds.length === 1 ? "" : "s"}`}
           </div>
 
           <div className="relative mb-4 shrink-0">

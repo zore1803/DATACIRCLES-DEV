@@ -29,7 +29,6 @@ import ItemForm from "../components/item/ItemForm";
 import QuickItemDrawer from "../components/item/QuickItemDrawer";
 import ImportItems from "../components/item/ImportItems";
 import ExportModal from "../components/common/ExportModal";
-import { exportClientSide, formatINR, confirmExport, withCustomFieldColumns } from "../utils/clientExport";
 import ColumnSettingsPanel from "../components/ColumnSettingsPanel";
 import { useColumnSettings } from "../hooks/useColumnSettings";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
@@ -406,6 +405,9 @@ function ProductsServices() {
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  // Set when the dialog is opened from the ⋮ menu: the ids of EVERY record
+  // matching the current view. null = export the rows selected in the table.
+  const [exportAllIds, setExportAllIds] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -421,8 +423,6 @@ function ProductsServices() {
   // Client-side Excel/PDF export — same "no selection required, export what
   // you're currently looking at" flow as Deals.jsx, instead of the
   // selection-gated backend ExportModal.
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const exportButtonRef = useRef(null);
 
   // Double-click-to-type a page number in the pagination bar (mirrors Companies.jsx).
   const [editingPage, setEditingPage] = useState(false);
@@ -539,9 +539,6 @@ function ProductsServices() {
       if (moreMenuRef.current && !moreMenuRef.current.contains(event.target)) {
         setIsMoreMenuOpen(false);
       }
-      if (exportButtonRef.current && !exportButtonRef.current.contains(event.target)) {
-        setShowExportMenu(false);
-      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -600,6 +597,20 @@ function ProductsServices() {
       setSelectedItems(res.data.ids || []);
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to select all rows");
+    }
+  };
+
+  // ⋮ menu → Export: look up every item matching the current search (not
+  // just the loaded page), then open the Export Data dialog on that set.
+  const openExportAll = async () => {
+    try {
+      const params = new URLSearchParams({ allIds: "true" });
+      if (debouncedSearchTerm.trim()) params.append("search", debouncedSearchTerm.trim());
+      const res = await API.get(`/items/pagination?${params.toString()}`);
+      setExportAllIds(res.data.ids || []);
+      setShowExportModal(true);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to prepare export");
     }
   };
 
@@ -711,28 +722,6 @@ function ProductsServices() {
   const handleDelete = async (itemId) => {
     setItemToDelete(itemId);
     setShowDeleteModal(true);
-  };
-
-  // Client-side export — mirrors Deals.jsx's handleExport: confirm, then
-  // Excel (CSV via window.XLSX) or PDF (window.jspdf + autoTable), against
-  // whatever's currently filtered/visible rather than a manual selection.
-  const EXPORT_COLUMNS = [
-    { label: "Name", value: (item) => item.name },
-    { label: "Category", value: (item) => item.category },
-    { label: "Purchase Price", value: (item) => getVariantPriceDisplay(item, "purchasePrice") || formatINR(item.purchasePrice) },
-    { label: "Selling Price", value: (item) => getVariantPriceDisplay(item, "sellingPrice") || formatINR(item.sellingPrice) },
-    { label: "Status", value: (item) => (item.isActive ? "Active" : "Inactive") },
-  ];
-
-  const handleExport = (format) => {
-    if (!confirmExport(format)) return;
-    exportClientSide(format, {
-      rows: filteredItems,
-      // Custom fields stored on the visible items follow the built-in columns.
-      columns: withCustomFieldColumns(EXPORT_COLUMNS, filteredItems),
-      fileNamePrefix: "products_export",
-      title: "Products & Services Report",
-    });
   };
 
   const confirmDelete = async () => {
@@ -1771,7 +1760,7 @@ function ProductsServices() {
             <div className={`${bulkStripClosing ? "animate-slideOutRight" : "animate-slideInLeft"} flex flex-nowrap items-center justify-between gap-4 w-full h-full overflow-x-auto`}>
               <div className="flex flex-nowrap items-center flex-shrink-0">
                 <button
-                  onClick={() => setShowExportModal(true)}
+                  onClick={() => { setExportAllIds(null); setShowExportModal(true); }}
                   className="h-10 px-4 bg-white border border-gray-300 text-gray-900 text-sm font-medium rounded-l-[25px] hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap"
                 >
                   <DownloadIcon className="w-4 h-4 text-green-600" />
@@ -1962,39 +1951,13 @@ function ProductsServices() {
                         <UploadIcon className="w-4 h-4 text-gray-400" />
                         Import
                       </button>
-                      <div className="relative" ref={exportButtonRef}>
-                        <button
-                          onClick={() => setShowExportMenu((prev) => !prev)}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          <DownloadIcon className="w-4 h-4 text-gray-400" />
-                          Export
-                        </button>
-                        {showExportMenu && (
-                          <div className="absolute left-full top-0 ml-1 z-10 w-44 bg-white border border-gray-200 rounded-lg shadow-xl">
-                            <button
-                              onClick={() => {
-                                handleExport("excel");
-                                setShowExportMenu(false);
-                                setIsMoreMenuOpen(false);
-                              }}
-                              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors first:rounded-t-lg flex items-center gap-2"
-                            >
-                              Export as Excel
-                            </button>
-                            <button
-                              onClick={() => {
-                                handleExport("pdf");
-                                setShowExportMenu(false);
-                                setIsMoreMenuOpen(false);
-                              }}
-                              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors last:rounded-b-lg flex items-center gap-2"
-                            >
-                              Export as PDF
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                      <button
+                        onClick={() => { openExportAll(); setIsMoreMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        <DownloadIcon className="w-4 h-4 text-gray-400" />
+                        Export
+                      </button>
                       
                     </div>
                   )}
@@ -2275,9 +2238,10 @@ function ProductsServices() {
 
       <ExportModal
         isOpen={showExportModal}
-        onClose={() => setShowExportModal(false)}
+        onClose={() => { setShowExportModal(false); setExportAllIds(null); }}
         columns={exportColumns}
-        selectedIds={selectedItems}
+        selectedIds={exportAllIds ?? selectedItems}
+        summaryText={exportAllIds ? `Exporting all ${exportAllIds.length} record${exportAllIds.length === 1 ? "" : "s"} matching the current view` : undefined}
         exportUrl="/items/export-selected"
         fileName="Exported_Items.csv"
       />

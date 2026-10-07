@@ -67,7 +67,14 @@ import { hasMinPlan } from "../utils/subscriptionHelpers";
 import UpgradeRequiredModal from "../components/subscription/UpgradeRequiredModal";
 import HighlightText from "../components/common/HighlightText";
 import { formatNumberFixed } from "../utils/numberFormatter";
-import { formatINR } from "../utils/clientExport";
+import {
+  formatINR,
+  exportClientSide,
+  confirmExport,
+  fetchAllPages,
+  formatExportDate,
+} from "../utils/clientExport";
+import ExportSubmenu from "../components/common/ExportSubmenu";
 import { CreateInvoicePanel } from "../components/invoice/CreateInvoicePanel";
 import { CreatePerformaPanel } from "../components/PerformaInvoice/PerformaInvoiceForm";
 import PerformaInvoiceFormFull from "../components/PerformaInvoice/PerformaInvoiceFormFull";
@@ -1243,6 +1250,47 @@ const Accounting = () => {
     toast.success(`Exported ${docs.length} ${docNameFor(activeTab)}${docs.length !== 1 ? "s" : ""}`);
   };
 
+  // ⋮ menu → Export as Excel / PDF: every document on the active tab matching
+  // its current search and status filter, across all pages (the table only
+  // holds one page at a time). Same columns as the table.
+  const handleExportAll = async (format) => {
+    if (!confirmExport(format)) return;
+    const type = activeTab;
+    const tabLabel = TABS.find((t) => t.key === type)?.label || "Documents";
+    const loadingToast = toast.loading("Preparing export...");
+    try {
+      const params = new URLSearchParams();
+      if (sortConfigs[type].key) {
+        params.append("sortBy", sortConfigs[type].key);
+        params.append("sortOrder", sortConfigs[type].direction || "asc");
+      } else {
+        params.append("sortBy", "createdAt");
+        params.append("sortOrder", "desc");
+      }
+      if (debouncedSearchTerms[type].trim()) params.append("search", debouncedSearchTerms[type].trim());
+      if (debouncedFilterStatuses[type]) params.append("status", debouncedFilterStatuses[type]);
+
+      const rows = await fetchAllPages(`/${apiPathFor(type)}/pagination`, params, dataKeyFor(type));
+      toast.dismiss(loadingToast);
+      await exportClientSide(format, {
+        rows,
+        columns: [
+          { label: type === "tax" ? "Invoice ID" : "Document ID", value: (d) => `#${d[numberKeyFor(type)] ?? ""}` },
+          { label: "Deal", value: (d) => d.deal?.title || d.company?.name || d.contact?.name || "N/A" },
+          { label: "Issue Date", value: (d) => formatExportDate(d.date) },
+          { label: "Due Date", value: (d) => formatExportDate(d.dueDate) },
+          { label: "Amount", value: (d) => formatINR(d.amount) },
+          { label: "Status", value: (d) => d.status || "" },
+        ],
+        fileNamePrefix: `${apiPathFor(type)}_export`,
+        title: `${tabLabel} Report`,
+      });
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      toast.error(err.response?.data?.error || "Failed to export");
+    }
+  };
+
   // Bulk update: apply a chosen status to every selected document. Fans out the
   // single-status route in parallel since there's no batch endpoint.
   const confirmBulkUpdate = async () => {
@@ -2364,6 +2412,12 @@ const Accounting = () => {
                     onClick={(e) => e.stopPropagation()}
                     className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg border border-[#E1E4EA] py-1 z-50"
                   >
+                    <ExportSubmenu
+                      itemClassName="px-4"
+                      onExport={handleExportAll}
+                      onDone={() => setShowMoreMenu(false)}
+                    />
+
                     {/* Tab switcher — folded in here on mobile since the pill
                         selector itself is hidden below lg. */}
                     <div className="lg:hidden py-1 border-b border-[#E1E4EA]">

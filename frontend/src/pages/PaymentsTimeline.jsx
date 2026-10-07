@@ -1,3 +1,5 @@
+import ExportSubmenu from "../components/common/ExportSubmenu";
+import { exportClientSide, confirmExport, formatINR, formatExportDate } from "../utils/clientExport";
 import DeleteIcon from "../components/common/DeleteIcon";
 import EmptyState from "../components/common/EmptyState";
 import PdfIcon from "../components/common/PdfIcon";
@@ -608,6 +610,27 @@ export default function PaymentsTimeline() {
     toast.success("Updated selected entries");
     setSelectedIds([]);
     fetchData();
+  };
+
+  /* ── ⋮ menu → Export as Excel / PDF: the entries currently listed ───── */
+  const handleExportAll = (format) => {
+    if (!confirmExport(format)) return;
+    exportClientSide(format, {
+      rows: filteredDocs,
+      columns: [
+        { label: "Transaction ID", value: (i) => i["payment-id"] || i._id },
+        { label: "Party / Entity", value: (i) => i.party },
+        { label: "Amount", value: (i) => formatINR(i.amount ?? 0) },
+        { label: "Direction", value: (i) => (i.direction === "IN" ? "Credit (IN)" : "Debit (OUT)") },
+        { label: "Category", value: (i) => i.category || "Payment" },
+        { label: "Type", value: (i) => i.type || i.paymentType || i.source },
+        { label: "Date", value: (i) => formatExportDate(i.date) },
+        { label: "Bank Account", value: (i) => i.bank },
+        { label: "Notes", value: (i) => i.notes },
+      ],
+      fileNamePrefix: "payments_timeline_export",
+      title: "Payments Timeline Report",
+    });
   };
 
   /* ── Export to Excel function ───────────────────────────────────── */
@@ -1480,6 +1503,10 @@ export default function PaymentsTimeline() {
                   <UploadIcon className="w-4 h-4 text-gray-400" />
                   Import
                 </button>
+                <ExportSubmenu
+                  onExport={handleExportAll}
+                  onDone={() => setIsMoreMenuOpen(false)}
+                />
                 <button
                   onClick={() => { setShowVideoTutorial(true); setIsMoreMenuOpen(false); }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"

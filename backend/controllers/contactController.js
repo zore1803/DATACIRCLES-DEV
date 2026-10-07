@@ -646,6 +646,10 @@ const exportSelectedContacts = async (req, res) => {
         } else if (c.key === 'company') {
           // Special handling for the populated company object
           val = contact.company?.name || "";
+        } else if (c.key === 'status') {
+          // The table's "Status" column is the contact's stageStatus; there is
+          // no `status` field on the document, so this used to export blank.
+          val = contact.stageStatus || "";
         } else {
           val = contact[c.key] || "";
         }

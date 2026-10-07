@@ -41,7 +41,8 @@ import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
 import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
 import BulkActions from "../components/BulkActions";
 import AppToaster from "../components/AppToaster";
-import { exportClientSide, formatINR, confirmExport, formatExportDate } from "../utils/clientExport";
+import { formatINR, formatExportDate, fetchAllPages } from "../utils/clientExport";
+import ExportModal from "../components/common/ExportModal";
 import SalesSubscriptionForm from "../components/salesSubscription/SalesSubscriptionForm";
 import UploadIcon from "../components/common/UploadIcon";
 import {
@@ -129,8 +130,8 @@ const SalesSubscription = () => {
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const moreMenuRef = useRef(null);
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const exportButtonRef = useRef(null);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportScope, setExportScope] = useState("all"); // "all" (⋮ menu) | "selected" (bulk strip)
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [toDelete, setToDelete] = useState(null);
@@ -254,7 +255,6 @@ const SalesSubscription = () => {
   useEffect(() => {
     const onClick = (event) => {
       if (moreMenuRef.current && !moreMenuRef.current.contains(event.target)) setIsMoreMenuOpen(false);
-      if (exportButtonRef.current && !exportButtonRef.current.contains(event.target)) setShowExportMenu(false);
       if (columnMenuRef.current && !columnMenuRef.current.contains(event.target)) setOpenColumnMenuKey(null);
     };
     document.addEventListener("mousedown", onClick);
@@ -467,14 +467,31 @@ const SalesSubscription = () => {
     { label: "Upcoming", value: (s) => formatExportDate(s.nextInvoiceDate) },
     { label: "Status", value: (s) => s.status },
   ];
-  const handleExport = (format) => {
-    if (!confirmExport(format)) return;
-    exportClientSide(format, {
-      rows,
-      columns: EXPORT_COLUMNS,
-      fileNamePrefix: "sales_subscriptions_export",
-      title: "Sales Subscriptions Report",
-    });
+  // Export Data dialog: ⋮ menu (scope "all" — every subscription matching the
+  // search and status filter, across all pages) or the bulk strip (scope
+  // "selected").
+  const EXPORT_DIALOG_COLUMNS = EXPORT_COLUMNS.map((c) => ({ ...c, key: c.label }));
+  const openExport = (scope) => {
+    setExportScope(scope);
+    setShowExportModal(true);
+  };
+  const loadExportRows = async () => {
+    const params = new URLSearchParams();
+    if (sortConfig.key) {
+      params.append("sortBy", sortConfig.key);
+      params.append("sortOrder", sortConfig.direction || "asc");
+    } else {
+      params.append("sortBy", "createdAt");
+      params.append("sortOrder", "desc");
+    }
+    if (debouncedSearch) params.append("search", debouncedSearch);
+    if (statusFilter) params.append("status", statusFilter);
+    const all = await fetchAllPages("/sales-subscriptions/pagination", params, "subscriptions");
+    if (exportScope === "selected") {
+      const wanted = new Set(selected);
+      return all.filter((r) => wanted.has(r._id));
+    }
+    return all;
   };
 
   const subFilterColumns = [
@@ -928,6 +945,19 @@ const SalesSubscription = () => {
         moduleName="Sales Subscriptions"
       />
 
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        columns={EXPORT_DIALOG_COLUMNS}
+        getRows={loadExportRows}
+        summaryText={
+          exportScope === "selected"
+            ? `Exporting ${selected.length} selected record${selected.length === 1 ? "" : "s"}`
+            : "Exporting all records matching the current view"
+        }
+        fileName="Exported_SalesSubscriptions.csv"
+      />
+
       <AdvancedFilterPanel
         isOpen={showAdvancedFilters}
         onClose={() => setShowAdvancedFilters(false)}
@@ -1023,7 +1053,7 @@ const SalesSubscription = () => {
             <div className={`${bulkStripClosing ? "animate-slideOutRight" : "animate-slideInLeft"} flex flex-nowrap items-center justify-between gap-4 w-full h-full overflow-x-auto`}>
               <div className="flex flex-nowrap items-center flex-shrink-0">
                 <button
-                  onClick={() => handleExport("Excel")}
+                  onClick={() => openExport("selected")}
                   className="h-10 px-4 bg-white border border-gray-300 text-gray-900 text-sm font-medium rounded-l-[25px] hover:bg-gray-50 flex items-center gap-2 whitespace-nowrap"
                 >
                   <DownloadIcon className="w-4 h-4 text-green-600" />
@@ -1172,31 +1202,13 @@ const SalesSubscription = () => {
                             <UploadIcon className="w-4 h-4" />
                             Import (soon)
                           </button>
-                          <div className="relative" ref={exportButtonRef}>
-                            <button
-                              onClick={() => setShowExportMenu((prev) => !prev)}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                            >
-                              <DownloadIcon className="w-4 h-4 text-gray-400" />
-                              Export
-                            </button>
-                            {showExportMenu && (
-                              <div className="absolute left-full top-0 ml-1 z-10 w-44 bg-white border border-gray-200 rounded-lg shadow-xl">
-                                <button
-                                  onClick={() => { handleExport("Excel"); setShowExportMenu(false); setIsMoreMenuOpen(false); }}
-                                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors first:rounded-t-lg flex items-center gap-2"
-                                >
-                                  Export as Excel
-                                </button>
-                                <button
-                                  onClick={() => { handleExport("PDF"); setShowExportMenu(false); setIsMoreMenuOpen(false); }}
-                                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors last:rounded-b-lg flex items-center gap-2"
-                                >
-                                  Export as PDF
-                                </button>
-                              </div>
-                            )}
-                          </div>
+                          <button
+                            onClick={() => { openExport("all"); setIsMoreMenuOpen(false); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <DownloadIcon className="w-4 h-4 text-gray-400" />
+                            Export
+                          </button>
                           <button
                             onClick={() => { setShowColumnSettings(true); setIsMoreMenuOpen(false); }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"

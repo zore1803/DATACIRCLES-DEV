@@ -45,7 +45,8 @@ import { useTopLoadingSignal } from "../components/common/TopLoadingBar";
 import VideoTutorialModal from "../components/VideoTutorialModal";
 import { getVideoTutorial } from "../utils/videoTutorials";
 import AppToaster from "../components/AppToaster";
-import { exportClientSide, formatINR, confirmExport, formatExportDate } from "../utils/clientExport";
+import { formatINR, formatExportDate, fetchAllPages } from "../utils/clientExport";
+import ExportModal from "../components/common/ExportModal";
 import ColumnSettingsPanel from "../components/ColumnSettingsPanel";
 import { useColumnSettings } from "../hooks/useColumnSettings";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
@@ -123,15 +124,13 @@ const PurchaseReturn = () => {
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const tableScrollRef = useRef(null);
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const exportButtonRef = useRef(null);
+  const [showExportModal, setShowExportModal] = useState(false);
+  // "all" = ⋮ menu (everything matching the view); "selected" = the bulk strip.
+  const [exportScope, setExportScope] = useState("all");
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (moreMenuRef.current && !moreMenuRef.current.contains(event.target)) {
         setIsMoreMenuOpen(false);
-      }
-      if (exportButtonRef.current && !exportButtonRef.current.contains(event.target)) {
-        setShowExportMenu(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -468,14 +467,29 @@ const PurchaseReturn = () => {
     { label: "Status", value: (p) => p.status },
   ];
 
-  const handleExport = (format) => {
-    if (!confirmExport(format)) return;
-    exportClientSide(format, {
-      rows: filteredReturns,
-      columns: EXPORT_COLUMNS,
-      fileNamePrefix: "purchase_returns_export",
-      title: "Purchase Returns Report",
-    });
+  // Export Data dialog: ⋮ menu (scope "all" — every return matching the search
+  // and filters, across all pages) or the bulk strip (scope "selected").
+  const EXPORT_DIALOG_COLUMNS = EXPORT_COLUMNS.map((c) => ({ ...c, key: c.label }));
+  const openExport = (scope) => {
+    setExportScope(scope);
+    setShowExportModal(true);
+  };
+  const loadExportRows = async () => {
+    const params = new URLSearchParams();
+    if (sortConfig.key) {
+      params.append("sortBy", sortConfig.key);
+      params.append("sortOrder", sortConfig.direction || "asc");
+    } else {
+      params.append("sortBy", "createdAt");
+      params.append("sortOrder", "desc");
+    }
+    if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
+    const all = applyActiveFilters(await fetchAllPages("/purchase-returns/pagination", params, "purchaseReturns"));
+    if (exportScope === "selected") {
+      const wanted = new Set(selectedReturns);
+      return all.filter((r) => wanted.has(r._id));
+    }
+    return all;
   };
 
   const confirmDelete = async () => {
@@ -1130,9 +1144,9 @@ const PurchaseReturn = () => {
     searchTerm,
   ]);
 
-  const filteredReturns = useMemo(() => {
-    if (!activeFilters || activeFilters.length === 0) return purchaseReturns;
-    return purchaseReturns.filter((row) =>
+  const applyActiveFilters = (list) => {
+    if (!activeFilters || activeFilters.length === 0) return list;
+    return list.filter((row) =>
       activeFilters.every((f) => {
         let rawVal;
         if (f.column === "vendor") {
@@ -1155,7 +1169,8 @@ const PurchaseReturn = () => {
         }
       })
     );
-  }, [purchaseReturns, activeFilters]);
+  };
+  const filteredReturns = useMemo(() => applyActiveFilters(purchaseReturns), [purchaseReturns, activeFilters]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const table = useReactTable({
     data: filteredReturns,
@@ -1322,6 +1337,19 @@ const PurchaseReturn = () => {
         onImportSuccess={() => {
           fetchReturns();
         }}
+      />
+
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        columns={EXPORT_DIALOG_COLUMNS}
+        getRows={loadExportRows}
+        summaryText={
+          exportScope === "selected"
+            ? `Exporting ${selectedReturns.length} selected record${selectedReturns.length === 1 ? "" : "s"}`
+            : "Exporting all records matching the current view"
+        }
+        fileName="Exported_PurchaseReturns.csv"
       />
 
       <AdvancedFilterPanel
@@ -1866,7 +1894,7 @@ const PurchaseReturn = () => {
             <div className={`${bulkStripClosing ? "animate-slideOutRight" : "animate-slideInLeft"} flex flex-nowrap items-center justify-between gap-4 w-full h-full overflow-x-auto`}>
               <div className="flex flex-nowrap items-center flex-shrink-0">
                 <button
-                  onClick={() => handleExport("excel")}
+                  onClick={() => openExport("selected")}
                   className="h-10 px-4 bg-white border border-gray-300 text-gray-900 text-sm font-medium rounded-l-[25px] hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap"
                 >
                   <DownloadIcon className="w-4 h-4 text-green-600" />
@@ -2024,31 +2052,13 @@ const PurchaseReturn = () => {
                             <UploadIcon className="w-4 h-4 text-gray-400" />
                             Import
                           </button>
-                          <div className="relative" ref={exportButtonRef}>
-                            <button
-                              onClick={() => setShowExportMenu((prev) => !prev)}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                            >
-                              <DownloadIcon className="w-4 h-4 text-gray-400" />
-                              Export
-                            </button>
-                            {showExportMenu && (
-                              <div className="absolute left-full top-0 ml-1 z-10 w-44 bg-white border border-gray-200 rounded-lg shadow-xl">
-                                <button
-                                  onClick={() => { handleExport("excel"); setShowExportMenu(false); setIsMoreMenuOpen(false); }}
-                                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors first:rounded-t-lg flex items-center gap-2"
-                                >
-                                  Export as Excel
-                                </button>
-                                <button
-                                  onClick={() => { handleExport("pdf"); setShowExportMenu(false); setIsMoreMenuOpen(false); }}
-                                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors last:rounded-b-lg flex items-center gap-2"
-                                >
-                                  Export as PDF
-                                </button>
-                              </div>
-                            )}
-                          </div>
+                          <button
+                            onClick={() => { openExport("all"); setIsMoreMenuOpen(false); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <DownloadIcon className="w-4 h-4 text-gray-400" />
+                            Export
+                          </button>
                           <button
                             onClick={() => { setShowColumnSettings(true); setIsMoreMenuOpen(false); }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
