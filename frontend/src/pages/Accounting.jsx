@@ -1254,7 +1254,7 @@ const Accounting = () => {
   // its current search and status filter, across all pages (the table only
   // holds one page at a time). Same columns as the table.
   const handleExportAll = async (format) => {
-    if (!confirmExport(format)) return;
+    if (!(await confirmExport(format))) return;
     const type = activeTab;
     const tabLabel = TABS.find((t) => t.key === type)?.label || "Documents";
     const loadingToast = toast.loading("Preparing export...");

@@ -1,3 +1,4 @@
+import ExportSubmenu from "../components/common/ExportSubmenu";
 import DeleteIcon from "../components/common/DeleteIcon";
 import EmptyState from "../components/common/EmptyState";
 import BulkDeleteModal from "../components/common/BulkDeleteModal";
@@ -41,7 +42,7 @@ import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
 import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
 import BulkActions from "../components/BulkActions";
 import AppToaster from "../components/AppToaster";
-import { formatINR, formatExportDate, fetchAllPages } from "../utils/clientExport";
+import { formatINR, formatExportDate, fetchAllPages, exportClientSide, confirmExport } from "../utils/clientExport";
 import ExportModal from "../components/common/ExportModal";
 import SalesSubscriptionForm from "../components/salesSubscription/SalesSubscriptionForm";
 import UploadIcon from "../components/common/UploadIcon";
@@ -131,7 +132,6 @@ const SalesSubscription = () => {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const moreMenuRef = useRef(null);
   const [showExportModal, setShowExportModal] = useState(false);
-  const [exportScope, setExportScope] = useState("all"); // "all" (⋮ menu) | "selected" (bulk strip)
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [toDelete, setToDelete] = useState(null);
@@ -467,15 +467,13 @@ const SalesSubscription = () => {
     { label: "Upcoming", value: (s) => formatExportDate(s.nextInvoiceDate) },
     { label: "Status", value: (s) => s.status },
   ];
-  // Export Data dialog: ⋮ menu (scope "all" — every subscription matching the
-  // search and status filter, across all pages) or the bulk strip (scope
-  // "selected").
+  // The bulk strip's Export opens the Export Data dialog for the selected rows
+  // only; the three-dot menu's Export as Excel / PDF exports every row matching
+  // the current search and filters, across all pages.
   const EXPORT_DIALOG_COLUMNS = EXPORT_COLUMNS.map((c) => ({ ...c, key: c.label }));
-  const openExport = (scope) => {
-    setExportScope(scope);
-    setShowExportModal(true);
-  };
-  const loadExportRows = async () => {
+  const openExport = () => setShowExportModal(true);
+
+  const fetchAllMatching = async () => {
     const params = new URLSearchParams();
     if (sortConfig.key) {
       params.append("sortBy", sortConfig.key);
@@ -486,12 +484,30 @@ const SalesSubscription = () => {
     }
     if (debouncedSearch) params.append("search", debouncedSearch);
     if (statusFilter) params.append("status", statusFilter);
-    const all = await fetchAllPages("/sales-subscriptions/pagination", params, "subscriptions");
-    if (exportScope === "selected") {
-      const wanted = new Set(selected);
-      return all.filter((r) => wanted.has(r._id));
+    return await fetchAllPages("/sales-subscriptions/pagination", params, "subscriptions");
+  };
+
+  const loadExportRows = async () => {
+    const wanted = new Set(selected);
+    return (await fetchAllMatching()).filter((r) => wanted.has(r._id));
+  };
+
+  const handleExportAll = async (format) => {
+    if (!(await confirmExport(format))) return;
+    const loadingToast = toast.loading("Preparing export...");
+    try {
+      const rows = await fetchAllMatching();
+      toast.dismiss(loadingToast);
+      await exportClientSide(format, {
+        rows,
+        columns: EXPORT_COLUMNS,
+        fileNamePrefix: "sales_subscriptions_export",
+        title: "Sales Subscriptions Report",
+      });
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      toast.error(err.response?.data?.error || "Failed to export");
     }
-    return all;
   };
 
   const subFilterColumns = [
@@ -950,11 +966,7 @@ const SalesSubscription = () => {
         onClose={() => setShowExportModal(false)}
         columns={EXPORT_DIALOG_COLUMNS}
         getRows={loadExportRows}
-        summaryText={
-          exportScope === "selected"
-            ? `Exporting ${selected.length} selected record${selected.length === 1 ? "" : "s"}`
-            : "Exporting all records matching the current view"
-        }
+        selectedIds={selected}
         fileName="Exported_SalesSubscriptions.csv"
       />
 
@@ -1202,13 +1214,10 @@ const SalesSubscription = () => {
                             <UploadIcon className="w-4 h-4" />
                             Import (soon)
                           </button>
-                          <button
-                            onClick={() => { openExport("all"); setIsMoreMenuOpen(false); }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                          >
-                            <DownloadIcon className="w-4 h-4 text-gray-400" />
-                            Export
-                          </button>
+                          <ExportSubmenu
+                            onExport={handleExportAll}
+                            onDone={() => setIsMoreMenuOpen(false)}
+                          />
                           <button
                             onClick={() => { setShowColumnSettings(true); setIsMoreMenuOpen(false); }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"

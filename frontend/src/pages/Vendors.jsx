@@ -952,7 +952,7 @@ function Vendors() {
   // and filters (not just the loaded page), all columns including custom
   // fields — the same file the bulk "Export selected" dialog produces.
   const handleExportAll = async (format) => {
-    if (!confirmExport(format)) return;
+    if (!(await confirmExport(format))) return;
     try {
       const params = new URLSearchParams({ allIds: "true" });
       if (debouncedSearchTerm.trim()) params.append("search", debouncedSearchTerm.trim());

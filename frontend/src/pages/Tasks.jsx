@@ -1601,7 +1601,7 @@ function Tasks() {
   // Export (`onlyIds`: just the selected rows). Same columns as the table, plus
   // every custom field, in the same layout as every other page's export.
   const handleExportAll = async (format, onlyIds = null) => {
-    if (!confirmExport(format)) return;
+    if (!(await confirmExport(format))) return;
     const isTasks = activeTab === "tasks";
     const loadingToast = toast.loading("Preparing export...");
     try {

@@ -1334,7 +1334,7 @@ function Companies() {
       toast.error("You do not have permission to export companies.");
       return;
     }
-    if (!confirmExport(format)) return;
+    if (!(await confirmExport(format))) return;
     try {
       const params = new URLSearchParams({ allIds: "true" });
       if (searchTerm.trim()) params.append("search", searchTerm.trim());

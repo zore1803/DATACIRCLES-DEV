@@ -907,8 +907,8 @@ export default function EInvoicing() {
     { label: "Invoice Date", value: (r) => formatExportDate(r.date) },
   ];
 
-  const handleExport = (format) => {
-    if (!confirmExport(format)) return;
+  const handleExport = async (format) => {
+    if (!(await confirmExport(format))) return;
     exportClientSide(format, {
       rows: sortedEInvoices,
       columns: EXPORT_COLUMNS,

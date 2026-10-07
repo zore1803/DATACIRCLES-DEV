@@ -23,10 +23,9 @@ export function formatExportDateTime(value) {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("en-IN");
 }
 
-// One confirm prompt for every export menu.
-export function confirmExport(format) {
-  return window.confirm(`Do you want to export as ${format === "excel" ? "Excel" : "PDF"}?`);
-}
+// One confirm prompt for every export menu: an in-app dialog (same look as the
+// Confirm Deletion one) that resolves true/false. Callers: `if (!(await confirmExport(format))) return;`
+export { confirmExport } from "../components/common/ConfirmExportDialog";
 
 // Client-side Excel/PDF export — same approach as Deals.jsx's ExcelExporter/
 // PDFExporter (window.XLSX / window.jspdf loaded from CDN on first use, no

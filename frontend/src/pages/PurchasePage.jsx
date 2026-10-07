@@ -1,3 +1,5 @@
+import { exportClientSide, confirmExport, fetchAllPages, formatINR, formatExportDate } from "../utils/clientExport";
+import ExportSubmenu from "../components/common/ExportSubmenu";
 import DeleteIcon from "../components/common/DeleteIcon";
 import EmptyState from "../components/common/EmptyState";
 import Checkbox from "../components/common/Checkbox";
@@ -119,9 +121,6 @@ const PurchasePage = () => {
   const [selectedPurchase, setSelectedPurchase] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
-  // Set when the dialog is opened from the ⋮ menu: the ids of EVERY record
-  // matching the current view. null = export the rows selected in the table.
-  const [exportAllIds, setExportAllIds] = useState(null);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const searchInputRef = useRef(null);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
@@ -381,20 +380,6 @@ const PurchasePage = () => {
     }
   };
 
-  // ⋮ menu → Export: look up every purchase matching the current search (not
-  // just the loaded page), then open the Export Data dialog on that set.
-  const openExportAll = async () => {
-    try {
-      const params = new URLSearchParams({ allIds: "true" });
-      if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
-      const res = await API.get(`/purchases/pagination?${params.toString()}`);
-      setExportAllIds(res.data.ids || []);
-      setShowExportModal(true);
-    } catch (err) {
-      toast.error(err.response?.data?.error || "Failed to prepare export");
-    }
-  };
-
   const handleDeselectAllExtra = () => {
     setSelectedPurchases(purchases.map((p) => p._id));
   };
@@ -579,6 +564,44 @@ const PurchasePage = () => {
   const handleDelete = (id) => {
     setPurchaseToDelete(id);
     setShowDeleteModal(true);
+  };
+
+  // ⋮ menu → Export as Excel / PDF: every record matching the current search
+  // and filters, across all pages (the table only holds one page). The bulk
+  // strip's Export button opens the Export Data dialog for the selected rows.
+  const EXPORT_COLUMNS = [
+    { label: "Purchase Number", value: (p) => p.purchaseNumber },
+    { label: "Vendor", value: (p) => p.vendor?.name },
+    { label: "Purchase Date", value: (p) => formatExportDate(p.createdAt) },
+    { label: "Grand Total", value: (p) => formatINR(p.grandTotal) },
+    { label: "Status", value: (p) => p.status },
+  ];
+
+  const handleExportAll = async (format) => {
+    if (!(await confirmExport(format))) return;
+    const loadingToast = toast.loading("Preparing export...");
+    try {
+      const params = new URLSearchParams();
+      if (sortConfig.key) {
+        params.append("sortBy", sortConfig.key);
+        params.append("sortOrder", sortConfig.direction || "asc");
+      } else {
+        params.append("sortBy", "createdAt");
+        params.append("sortOrder", "desc");
+      }
+      if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
+      const rows = applyActiveFilters(await fetchAllPages("/purchases/pagination", params, "purchases"));
+      toast.dismiss(loadingToast);
+      await exportClientSide(format, {
+        rows,
+        columns: EXPORT_COLUMNS,
+        fileNamePrefix: "purchases_export",
+        title: "Purchases Report",
+      });
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      toast.error(err.response?.data?.error || "Failed to export");
+    }
   };
 
   const confirmDelete = async () => {
@@ -1335,9 +1358,9 @@ const PurchasePage = () => {
 
   // Client-side advanced filter — applied on top of the server-fetched page so
   // no backend changes are needed; large datasets are still paginated server-side.
-  const filteredPurchases = useMemo(() => {
-    if (!activeFilters || activeFilters.length === 0) return purchases;
-    return purchases.filter((row) =>
+  const applyActiveFilters = (list) => {
+    if (!activeFilters || activeFilters.length === 0) return list;
+    return list.filter((row) =>
       activeFilters.every((f) => {
         let rawVal;
         if (f.column === "vendor") {
@@ -1362,7 +1385,8 @@ const PurchasePage = () => {
         }
       }),
     );
-  }, [purchases, activeFilters]);
+  };
+  const filteredPurchases = useMemo(() => applyActiveFilters(purchases), [purchases, activeFilters]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const table = useReactTable({
     data: filteredPurchases,
@@ -1649,7 +1673,7 @@ const PurchasePage = () => {
             <div className={`${bulkStripClosing ? "animate-slideOutRight" : "animate-slideInLeft"} flex flex-nowrap items-center justify-between gap-4 w-full h-full overflow-x-auto`}>
               <div className="flex flex-nowrap items-center flex-shrink-0">
                 <button
-                  onClick={() => { setExportAllIds(null); setShowExportModal(true); }}
+                  onClick={() => setShowExportModal(true)}
                   className="h-10 px-4 bg-white border border-gray-300 text-gray-900 text-sm font-medium rounded-l-[25px] hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap"
                 >
                   <DownloadIcon className="w-4 h-4 text-green-600" />
@@ -1823,13 +1847,10 @@ const PurchasePage = () => {
                         <UploadIcon className="w-4 h-4 text-gray-400" />
                         Import
                       </button>
-                      <button
-                        onClick={() => { openExportAll(); setIsMoreMenuOpen(false); }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                      >
-                        <DownloadIcon className="w-4 h-4 text-gray-400" />
-                        Export
-                      </button>
+                      <ExportSubmenu
+                        onExport={handleExportAll}
+                        onDone={() => setIsMoreMenuOpen(false)}
+                      />
                       <button
                         onClick={() => {
                           setShowColumnSettings(true);
@@ -2119,10 +2140,9 @@ const PurchasePage = () => {
 
       <ExportModal
         isOpen={showExportModal}
-        onClose={() => { setShowExportModal(false); setExportAllIds(null); }}
+        onClose={() => setShowExportModal(false)}
         columns={exportColumns}
-        selectedIds={exportAllIds ?? selectedPurchases}
-        summaryText={exportAllIds ? `Exporting all ${exportAllIds.length} record${exportAllIds.length === 1 ? "" : "s"} matching the current view` : undefined}
+        selectedIds={selectedPurchases}
         exportUrl="/purchases/export-selected"
         fileName="Exported_Purchases.csv"
       />

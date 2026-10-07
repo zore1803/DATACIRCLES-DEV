@@ -1,3 +1,4 @@
+import ExportSubmenu from "../components/common/ExportSubmenu";
 import DeleteIcon from "../components/common/DeleteIcon";
 import EmptyState from "../components/common/EmptyState";
 import Checkbox from "../components/common/Checkbox";
@@ -45,7 +46,7 @@ import { useTopLoadingSignal } from "../components/common/TopLoadingBar";
 import VideoTutorialModal from "../components/VideoTutorialModal";
 import { getVideoTutorial } from "../utils/videoTutorials";
 import AppToaster from "../components/AppToaster";
-import { formatINR, formatExportDate, fetchAllPages } from "../utils/clientExport";
+import { formatINR, formatExportDate, fetchAllPages, exportClientSide, confirmExport } from "../utils/clientExport";
 import ExportModal from "../components/common/ExportModal";
 import ColumnSettingsPanel from "../components/ColumnSettingsPanel";
 import { useColumnSettings } from "../hooks/useColumnSettings";
@@ -125,8 +126,6 @@ const PurchaseReturn = () => {
   const [showImport, setShowImport] = useState(false);
   const tableScrollRef = useRef(null);
   const [showExportModal, setShowExportModal] = useState(false);
-  // "all" = ⋮ menu (everything matching the view); "selected" = the bulk strip.
-  const [exportScope, setExportScope] = useState("all");
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (moreMenuRef.current && !moreMenuRef.current.contains(event.target)) {
@@ -467,14 +466,13 @@ const PurchaseReturn = () => {
     { label: "Status", value: (p) => p.status },
   ];
 
-  // Export Data dialog: ⋮ menu (scope "all" — every return matching the search
-  // and filters, across all pages) or the bulk strip (scope "selected").
+  // The bulk strip's Export opens the Export Data dialog for the selected rows
+  // only; the three-dot menu's Export as Excel / PDF exports every row matching
+  // the current search and filters, across all pages.
   const EXPORT_DIALOG_COLUMNS = EXPORT_COLUMNS.map((c) => ({ ...c, key: c.label }));
-  const openExport = (scope) => {
-    setExportScope(scope);
-    setShowExportModal(true);
-  };
-  const loadExportRows = async () => {
+  const openExport = () => setShowExportModal(true);
+
+  const fetchAllMatching = async () => {
     const params = new URLSearchParams();
     if (sortConfig.key) {
       params.append("sortBy", sortConfig.key);
@@ -484,12 +482,30 @@ const PurchaseReturn = () => {
       params.append("sortOrder", "desc");
     }
     if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
-    const all = applyActiveFilters(await fetchAllPages("/purchase-returns/pagination", params, "purchaseReturns"));
-    if (exportScope === "selected") {
-      const wanted = new Set(selectedReturns);
-      return all.filter((r) => wanted.has(r._id));
+    return applyActiveFilters(await fetchAllPages("/purchase-returns/pagination", params, "purchaseReturns"));
+  };
+
+  const loadExportRows = async () => {
+    const wanted = new Set(selectedReturns);
+    return (await fetchAllMatching()).filter((r) => wanted.has(r._id));
+  };
+
+  const handleExportAll = async (format) => {
+    if (!(await confirmExport(format))) return;
+    const loadingToast = toast.loading("Preparing export...");
+    try {
+      const rows = await fetchAllMatching();
+      toast.dismiss(loadingToast);
+      await exportClientSide(format, {
+        rows,
+        columns: EXPORT_COLUMNS,
+        fileNamePrefix: "purchase_returns_export",
+        title: "Purchase Returns Report",
+      });
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      toast.error(err.response?.data?.error || "Failed to export");
     }
-    return all;
   };
 
   const confirmDelete = async () => {
@@ -1344,11 +1360,7 @@ const PurchaseReturn = () => {
         onClose={() => setShowExportModal(false)}
         columns={EXPORT_DIALOG_COLUMNS}
         getRows={loadExportRows}
-        summaryText={
-          exportScope === "selected"
-            ? `Exporting ${selectedReturns.length} selected record${selectedReturns.length === 1 ? "" : "s"}`
-            : "Exporting all records matching the current view"
-        }
+        selectedIds={selectedReturns}
         fileName="Exported_PurchaseReturns.csv"
       />
 
@@ -2052,13 +2064,10 @@ const PurchaseReturn = () => {
                             <UploadIcon className="w-4 h-4 text-gray-400" />
                             Import
                           </button>
-                          <button
-                            onClick={() => { openExport("all"); setIsMoreMenuOpen(false); }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                          >
-                            <DownloadIcon className="w-4 h-4 text-gray-400" />
-                            Export
-                          </button>
+                          <ExportSubmenu
+                            onExport={handleExportAll}
+                            onDone={() => setIsMoreMenuOpen(false)}
+                          />
                           <button
                             onClick={() => { setShowColumnSettings(true); setIsMoreMenuOpen(false); }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"

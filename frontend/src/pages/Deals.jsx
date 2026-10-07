@@ -1,3 +1,4 @@
+import useBodyScrollLock from "../hooks/useBodyScrollLock";
 import DeleteIcon from "../components/common/DeleteIcon";
 import BulkDeleteModal from "../components/common/BulkDeleteModal";
 import { exportRecordsToCSV } from "../utils/exportRecordsToCSV";
@@ -164,28 +165,64 @@ const QuickActionDropZone = ({
   );
 };
 
-const DealSettingSidebar = ({ isOpen, onClose, staleDays, setStaleDays }) => {
-  const [days, setDays] = useState(staleDays);
+const STALE_PRESETS = [
+  { value: 0, label: "Off" },
+  { value: 7, label: "7 days" },
+  { value: 14, label: "14 days" },
+  { value: 30, label: "30 days" },
+  { value: 60, label: "60 days" },
+  { value: 90, label: "90 days" },
+];
+const MAX_STALE_DAYS = 3650;
+
+// Small dialog for the one org-wide deal setting: when a deal counts as
+// "stale" (created more than N days ago, shown red; 0 = off). Opened from the
+// three-dot menu (Deal Settings) or the "Stale after..." chip by the title.
+const DealSettingSidebar = ({ isOpen, onClose, staleDays, setStaleDays, deals = [] }) => {
+  useBodyScrollLock(isOpen);
+  const [value, setValue] = useState(String(staleDays));
+  const [saving, setSaving] = useState(false);
+
+  // Re-seed whenever the panel opens (or the saved value changes) so cancelled
+  // edits never linger into the next open.
+  useEffect(() => {
+    if (isOpen) setValue(String(staleDays));
+  }, [isOpen, staleDays]);
 
   useEffect(() => {
-    setDays(staleDays);
-  }, [staleDays]);
+    if (!isOpen) return;
+    const onKey = (e) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isOpen, onClose]);
+
+  const days = Math.min(MAX_STALE_DAYS, Math.max(0, parseInt(value, 10) || 0));
+  const isDirty = days !== staleDays;
+
+  // Same rule the board and table use: created more than `days` ago.
+  const staleCount = useMemo(() => {
+    if (days <= 0) return 0;
+    const now = Date.now();
+    return deals.filter((d) => (now - new Date(d.createdAt).getTime()) / 86400000 > days).length;
+  }, [deals, days]);
 
   const handleSave = async () => {
-    const loadingToast = toast.loading("Updating stale days...");
-
+    setSaving(true);
+    const loadingToast = toast.loading("Saving deal settings...");
     try {
       const res = await API.put("/deal-settings", { staleDays: days });
       setStaleDays(res.data.staleDays);
-      toast.success("Stale days updated successfully", { id: loadingToast });
+      toast.success("Deal settings saved", { id: loadingToast });
       onClose();
     } catch (error) {
       console.error("Error updating stale days:", error);
       if (error.response?.status === 402) {
         toast.error(error.response?.data?.message || "An active subscription is required to make changes.", { id: loadingToast });
       } else {
-        toast.error(error.response?.data?.error || "Failed to update stale days", { id: loadingToast });
+        toast.error(error.response?.data?.error || "Failed to save deal settings", { id: loadingToast });
       }
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -193,49 +230,86 @@ const DealSettingSidebar = ({ isOpen, onClose, staleDays, setStaleDays }) => {
 
   return (
     <div
-      className="fixed inset-0 bg-black/20 flex justify-end z-[100005]"
+      className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[10001] p-4"
       onClick={onClose}
     >
       <div
-        className="bg-white w-80 h-full p-6 shadow-lg overflow-y-auto"
+        className="bg-white rounded-xl shadow-2xl w-full max-w-sm animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-gray-900">Deal Settings</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            <X className="w-6 h-6" />
+        <div className="flex items-center justify-between px-5 pt-4 pb-3">
+          <h2 className="text-base font-bold text-gray-900 font-sf">Deal Settings</h2>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" aria-label="Close">
+            <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Stale after (days):
+
+        <div className="px-5 pb-4">
+          <label htmlFor="stale-days" className="text-sm font-medium text-gray-800 block mb-1.5">
+            Mark deals stale after
           </label>
-          <input
-            type="number"
-            min="0"
-            value={days}
-            onChange={(e) => setDays(parseInt(e.target.value) || 0)}
-            className="border border-gray-300 rounded-lg p-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <p className="mt-2 text-xs text-gray-500">
-            Deals older than this will be highlighted in red.
+          <div className="relative">
+            <input
+              id="stale-days"
+              type="number"
+              inputMode="numeric"
+              min="0"
+              max={MAX_STALE_DAYS}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && isDirty && !saving && handleSave()}
+              className="w-full border border-gray-300 rounded-lg text-sm pl-3 pr-12 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">days</span>
+          </div>
+
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {STALE_PRESETS.map((preset) => (
+              <button
+                key={preset.value}
+                type="button"
+                onClick={() => setValue(String(preset.value))}
+                className={`px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors whitespace-nowrap ${
+                  days === preset.value
+                    ? "bg-blue-600 border-blue-600 text-white"
+                    : "bg-white border-gray-300 text-gray-600 hover:border-blue-400 hover:text-blue-600"
+                }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
+          <p className="mt-3 text-xs text-gray-500">
+            {days <= 0 ? (
+              "Off. Older deals turn red once you set a number."
+            ) : (
+              <>
+                Deals older than {days} {days === 1 ? "day" : "days"} turn red
+                <span className={staleCount > 0 ? "text-red-600 font-medium" : "text-green-600 font-medium"}>
+                  {" "}
+                  · {staleCount} right now
+                </span>
+              </>
+            )}
           </p>
         </div>
-        <div className="flex gap-3">
+
+        <div className="px-5 py-3 border-t border-gray-100 flex justify-end gap-2">
           <button
-            onClick={handleSave}
-            className="bg-blue-600 text-white font-medium text-sm px-4 py-2 rounded-lg hover:bg-blue-700 transition flex-1"
-          >
-            Save
-          </button>
-          <button
+            type="button"
             onClick={onClose}
-            className="bg-gray-200 text-gray-900 font-medium text-sm px-4 py-2 rounded-lg hover:bg-gray-300 transition flex-1"
+            className="px-4 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
           >
             Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!isDirty || saving}
+            className="px-4 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
@@ -2050,7 +2124,7 @@ function Deals() {
     });
   }, []);
 
-  const handleExport = (format) => {
+  const handleExport = async (format) => {
     if (permission === "readonly") {
       toast.error("You do not have permission to export deals.", {
         style: {
@@ -2067,7 +2141,7 @@ function Deals() {
       return;
     }
 
-    if (!confirmExport(format)) return;
+    if (!(await confirmExport(format))) return;
 
     // Built-in columns match the table's labels; every custom field defined for
     // deals follows (plus any stored on the rows). Same set for Excel and PDF.
@@ -2305,6 +2379,15 @@ function Deals() {
               </div>
               <p className="text-[#5B5A64] text-[10px] sm:text-sm m-0 leading-tight truncate">
                 Manage Your Sales Pipeline
+                {/* Quick way into Deal Settings without opening the three-dot menu. */}
+                <button
+                  type="button"
+                  onClick={() => setShowSettings(true)}
+                  title="Change when deals are marked stale"
+                  className="hidden lg:inline-flex items-center ml-2 px-2 py-0.5 rounded-full border border-[#E1E4EA] text-[11px] leading-4 text-[#525866] hover:border-[#0085FF] hover:text-[#0085FF] transition-colors align-middle whitespace-nowrap"
+                >
+                  {staleDays > 0 ? `Stale after ${staleDays}d` : "Stale alerts off"}
+                </button>
               </p>
             </div>
 
@@ -2664,6 +2747,7 @@ function Deals() {
           onClose={() => setShowSettings(false)}
           staleDays={staleDays}
           setStaleDays={setStaleDays}
+          deals={deals}
         />
 
         {quickViewDealId && (

@@ -1,3 +1,4 @@
+import ExportSubmenu from "../components/common/ExportSubmenu";
 import DeleteIcon from "../components/common/DeleteIcon";
 import EmptyState from "../components/common/EmptyState";
 import BulkDeleteModal from "../components/common/BulkDeleteModal";
@@ -54,7 +55,7 @@ import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
 import useBodyScrollLock from "../hooks/useBodyScrollLock";
 import BulkActions from "../components/BulkActions";
 import AppToaster from "../components/AppToaster";
-import { formatINR, formatExportDate, fetchAllPages } from "../utils/clientExport";
+import { formatINR, formatExportDate, fetchAllPages, exportClientSide, confirmExport } from "../utils/clientExport";
 import ExportModal from "../components/common/ExportModal";
 import SalesReturnForm from "../components/salesReturn/SalesReturnForm";
 import SalesReturnPreview from "../components/salesReturn/SalesReturnPreview";
@@ -173,8 +174,6 @@ const SalesReturn = () => {
   const moreMenuRef = useRef(null);
   const [showImport, setShowImport] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
-  // "all" = ⋮ menu (everything matching the view); "selected" = the bulk strip.
-  const [exportScope, setExportScope] = useState("all");
 
   // Share via WhatsApp/Email/SMS, reusing the org's saved Message Templates
   // and Branding so content stays consistent across modules.
@@ -585,14 +584,13 @@ const SalesReturn = () => {
     { label: "Status", value: (r) => r.status },
     { label: "Refund", value: (r) => refundSummary(r) },
   ];
-  // Export Data dialog: ⋮ menu (scope "all" — every return matching the search
-  // and status filter, across all pages) or the bulk strip (scope "selected").
+  // The bulk strip's Export opens the Export Data dialog for the selected rows
+  // only; the three-dot menu's Export as Excel / PDF exports every row matching
+  // the current search and filters, across all pages.
   const EXPORT_DIALOG_COLUMNS = EXPORT_COLUMNS.map((c) => ({ ...c, key: c.label }));
-  const openExport = (scope) => {
-    setExportScope(scope);
-    setShowExportModal(true);
-  };
-  const loadExportRows = async () => {
+  const openExport = () => setShowExportModal(true);
+
+  const fetchAllMatching = async () => {
     const params = new URLSearchParams();
     if (sortConfig.key) {
       params.append("sortBy", sortConfig.key);
@@ -603,12 +601,30 @@ const SalesReturn = () => {
     }
     if (debouncedSearch) params.append("search", debouncedSearch);
     if (statusFilter) params.append("status", statusFilter);
-    const all = await fetchAllPages("/sales-returns/pagination", params, "salesReturns");
-    if (exportScope === "selected") {
-      const wanted = new Set(selected);
-      return all.filter((r) => wanted.has(r._id));
+    return await fetchAllPages("/sales-returns/pagination", params, "salesReturns");
+  };
+
+  const loadExportRows = async () => {
+    const wanted = new Set(selected);
+    return (await fetchAllMatching()).filter((r) => wanted.has(r._id));
+  };
+
+  const handleExportAll = async (format) => {
+    if (!(await confirmExport(format))) return;
+    const loadingToast = toast.loading("Preparing export...");
+    try {
+      const rows = await fetchAllMatching();
+      toast.dismiss(loadingToast);
+      await exportClientSide(format, {
+        rows,
+        columns: EXPORT_COLUMNS,
+        fileNamePrefix: "sales_returns_export",
+        title: "Sales Returns Report",
+      });
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      toast.error(err.response?.data?.error || "Failed to export");
     }
-    return all;
   };
 
   const srFilterColumns = [
@@ -1147,11 +1163,7 @@ const SalesReturn = () => {
         onClose={() => setShowExportModal(false)}
         columns={EXPORT_DIALOG_COLUMNS}
         getRows={loadExportRows}
-        summaryText={
-          exportScope === "selected"
-            ? `Exporting ${selected.length} selected record${selected.length === 1 ? "" : "s"}`
-            : "Exporting all records matching the current view"
-        }
+        selectedIds={selected}
         fileName="Exported_SalesReturns.csv"
       />
 
@@ -1872,13 +1884,10 @@ const SalesReturn = () => {
                             <UploadIcon className="w-4 h-4 text-gray-400" />
                             Import
                           </button>
-                          <button
-                            onClick={() => { openExport("all"); setIsMoreMenuOpen(false); }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                          >
-                            <DownloadIcon className="w-4 h-4 text-gray-400" />
-                            Export
-                          </button>
+                          <ExportSubmenu
+                            onExport={handleExportAll}
+                            onDone={() => setIsMoreMenuOpen(false)}
+                          />
                           <button
                             onClick={() => { setShowColumnSettings(true); setIsMoreMenuOpen(false); }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"

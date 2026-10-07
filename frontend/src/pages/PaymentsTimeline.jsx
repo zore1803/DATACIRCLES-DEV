@@ -613,8 +613,8 @@ export default function PaymentsTimeline() {
   };
 
   /* ── ⋮ menu → Export as Excel / PDF: the entries currently listed ───── */
-  const handleExportAll = (format) => {
-    if (!confirmExport(format)) return;
+  const handleExportAll = async (format) => {
+    if (!(await confirmExport(format))) return;
     exportClientSide(format, {
       rows: filteredDocs,
       columns: [

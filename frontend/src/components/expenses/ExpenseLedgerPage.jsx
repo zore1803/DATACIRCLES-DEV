@@ -652,7 +652,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
   const handleExport = async (format) => {
     // BulkActionBar calls this with the click event, not a format.
     const fmt = format === "pdf" ? "pdf" : "excel";
-    if (!confirmExport(fmt)) return;
+    if (!(await confirmExport(fmt))) return;
 
     let chosen;
     if (selectedIds.length) {

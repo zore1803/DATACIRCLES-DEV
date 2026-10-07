@@ -1,3 +1,4 @@
+import ExportSubmenu from "../components/common/ExportSubmenu";
 import HistoryIcon from "../components/common/HistoryIcon";
 import EmptyState from "../components/common/EmptyState";
 import { resolveLowStockThreshold } from "../utils/variantResolve";
@@ -11,7 +12,7 @@ import {
   ChevronLeft, ChevronRight, Pin, PinOff, Package,
   TrendingDown, Boxes, IndianRupee, Wallet, ArrowRight, Check, ArrowUp, ArrowDown, Layers } from "lucide-react";
 import DownloadIcon from "../components/common/DownloadIcon";
-import { formatINR, fetchAllPages, withCustomFieldColumns } from "../utils/clientExport";
+import { formatINR, fetchAllPages, withCustomFieldColumns, exportClientSide, confirmExport } from "../utils/clientExport";
 import ExportModal from "../components/common/ExportModal";
 import BulkActionBar from "../components/common/BulkActionBar";
 import SearchIcon from "../components/common/SearchIcon";
@@ -242,7 +243,6 @@ export default function Inventory() {
   /* three-dot header menu + KPI toggle */
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
-  const [exportScope, setExportScope] = useState("all"); // "all" (⋮ menu) | "selected" (bulk strip)
   const moreMenuRef = useRef(null);
   const [showStats, setShowStats] = useState(true);
 
@@ -693,10 +693,10 @@ export default function Inventory() {
     }
   };
 
-  // Export Data dialog: ⋮ menu (scope "all" — every item matching the search,
-  // stock-status filter and advanced filters, across all pages) or the bulk
-  // strip (scope "selected"). Prices read "Rs." rather than ₹, which the PDF's
-  // built-in font can't draw.
+  // The bulk strip's Export opens the Export Data dialog for the selected rows;
+  // the three-dot menu's Export as Excel / PDF covers every item matching the
+  // search and filters, across all pages. Prices read "Rs." rather than ₹,
+  // which the PDF's built-in font can't draw.
   const rupees = (text) => String(text ?? "").replace(/₹/g, "Rs.");
   const baseExportColumns = [
     { key: "Item", label: "Item", value: (i) => i.name },
@@ -714,11 +714,9 @@ export default function Inventory() {
     key: c.key || c.label,
     isCustomField: !baseExportColumns.some((b) => b.label === c.label),
   }));
-  const openExport = (scope) => {
-    setExportScope(scope);
-    setShowExportModal(true);
-  };
-  const loadExportRows = async () => {
+  const openExport = () => setShowExportModal(true);
+
+  const fetchAllMatching = async () => {
     const params = new URLSearchParams();
     if (sortConfig.key) {
       params.append("sortBy", sortConfig.key);
@@ -729,12 +727,30 @@ export default function Inventory() {
     }
     if (debouncedSearch) params.append("search", debouncedSearch);
     if (stockStatusFilter) params.append("stockStatus", stockStatusFilter);
-    const all = applyActiveFilters(sortVariantAware(await fetchAllPages("/inventory", params, "items")));
-    if (exportScope === "selected") {
-      const wanted = new Set(selectedIds);
-      return all.filter((r) => wanted.has(r._id));
+    return applyActiveFilters(sortVariantAware(await fetchAllPages("/inventory", params, "items")));
+  };
+
+  const loadExportRows = async () => {
+    const wanted = new Set(selectedIds);
+    return (await fetchAllMatching()).filter((r) => wanted.has(r._id));
+  };
+
+  const handleExportAll = async (format) => {
+    if (!(await confirmExport(format))) return;
+    const loadingToast = toast.loading("Preparing export...");
+    try {
+      const rows = await fetchAllMatching();
+      toast.dismiss(loadingToast);
+      await exportClientSide(format, {
+        rows,
+        columns: withCustomFieldColumns(baseExportColumns, rows),
+        fileNamePrefix: "inventory_export",
+        title: "Inventory Report",
+      });
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      toast.error(err.response?.data?.error || "Failed to export");
     }
-    return all;
   };
 
   /* ── row action menu ─────────────────────────────────────────────── */
@@ -1060,12 +1076,10 @@ export default function Inventory() {
                 >
                   <EyeIcon className="w-4 h-4 text-gray-400" /> {showStats ? "Hide KPIs" : "Unhide KPIs"}
                 </button>
-                <button
-                  onClick={() => { openExport("all"); setIsMoreMenuOpen(false); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  <DownloadIcon className="w-4 h-4 text-gray-400" /> Export
-                </button>
+                <ExportSubmenu
+                  onExport={handleExportAll}
+                  onDone={() => setIsMoreMenuOpen(false)}
+                />
 
                 {/* Stock-status filter — moved in here off the toolbar, where its pill-shaped
                     <select> broke the 40px round-icon rhythm the other list pages share. */}
@@ -1639,11 +1653,7 @@ export default function Inventory() {
         onClose={() => setShowExportModal(false)}
         columns={exportDialogColumns}
         getRows={loadExportRows}
-        summaryText={
-          exportScope === "selected"
-            ? `Exporting ${selectedIds.length} selected record${selectedIds.length === 1 ? "" : "s"}`
-            : "Exporting all records matching the current view"
-        }
+        selectedIds={selectedIds}
         fileName="Exported_Inventory.csv"
       />
 
