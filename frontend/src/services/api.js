@@ -320,6 +320,65 @@ API.interceptors.response.use(
 );
 
 /**
+ * Response Interceptor - No active subscription
+ *
+ * The backend (middlewares/restrictByPlan.js) answers 403 with
+ * { code: "NO_SUBSCRIPTION" } when the organization has no subscription. Any
+ * page can hit that, so send the user to /subscription from here instead of
+ * every page handling it on its own (Dashboard still does, harmlessly).
+ *
+ * Only that exact status + code matches: 401 refresh, CSRF_INVALID and ordinary
+ * permission 403s all pass straight through untouched. The error is always
+ * re-rejected so callers' own catch blocks still run. No redirect while already
+ * on a /subscription page (its own requests could return the same code), and
+ * only once, since several in-flight requests can fail together.
+ */
+let isRedirectingToSubscription = false;
+
+// A page that loads several things at once gets several NO_SUBSCRIPTION
+// failures, and each one's own catch block would show its own error toast
+// (4-5 identical "No subscription found" messages). For a few seconds after
+// the first one, AppToaster hides error toasts (see isNoSubscriptionBurst) and
+// shows ONE friendly notice instead, on the page the user lands on.
+const NO_SUBSCRIPTION_BURST_MS = 3000;
+let noSubscriptionUntil = 0;
+export const isNoSubscriptionBurst = () => Date.now() < noSubscriptionUntil;
+
+// Handed to the next page load through sessionStorage, because the redirect
+// below is a full page load and anything shown before it would vanish.
+export const NO_SUBSCRIPTION_NOTICE_KEY = "dc:no-subscription-notice";
+
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const isNoSubscription =
+      error.response?.status === 403 &&
+      error.response?.data?.code === "NO_SUBSCRIPTION";
+
+    if (isNoSubscription) {
+      noSubscriptionUntil = Date.now() + NO_SUBSCRIPTION_BURST_MS;
+    }
+
+    if (
+      isNoSubscription &&
+      !isRedirectingToSubscription &&
+      !window.location.pathname.startsWith("/subscription")
+    ) {
+      isRedirectingToSubscription = true;
+      try {
+        sessionStorage.setItem(NO_SUBSCRIPTION_NOTICE_KEY, "1");
+      } catch {
+        // Storage can be blocked (private mode); the redirect still works,
+        // the friendly notice is just skipped.
+      }
+      window.location.href = "/subscription";
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+/**
  * Optional: Add request retry logic for network errors
  */
 API.interceptors.response.use(

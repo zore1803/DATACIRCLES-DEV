@@ -341,6 +341,20 @@ const DealPipelineBar = ({ stageEntries, colors, totalDeals }) => {
 
 const Insights = () => {
   const [activeTab, setActiveTab] = useState("overview");
+  // The tab strip scrolls sideways when the 8 tabs don't fit. Keep the active
+  // tab in view inside the strip (only the strip scrolls, never the page) so
+  // switching tabs can't leave neighbours like "Overview" stranded off-screen.
+  const tabStripRef = useRef(null);
+  useEffect(() => {
+    const strip = tabStripRef.current;
+    const btn = strip?.querySelector(`[data-tab-id="${activeTab}"]`);
+    if (!strip || !btn) return;
+    const left = btn.offsetLeft - 8;
+    const right = btn.offsetLeft + btn.offsetWidth + 8;
+    if (left < strip.scrollLeft) strip.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+    else if (right > strip.scrollLeft + strip.clientWidth)
+      strip.scrollTo({ left: right - strip.clientWidth, behavior: "smooth" });
+  }, [activeTab]);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const [dateRange, setDateRange] = useState({
     startDate: "",
@@ -466,7 +480,7 @@ const Insights = () => {
   // can never take Insights down. The date range mirrors the current UI exactly
   // (only sent when both ends are set, matching filteredData), and the browser's
   // IANA timezone is sent so month buckets match the client's local getMonth().
-  const fetchReport = async (range) => {
+  const fetchReport = async (range, activeFilters) => {
     try {
       const params = {
         tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -474,6 +488,15 @@ const Insights = () => {
       if (range?.startDate && range?.endDate) {
         params.startDate = range.startDate;
         params.endDate = range.endDate;
+      }
+      // Phase 2: carry the same status filters the client applies in
+      // filteredData so overviewStats / dailyTrends match the UI when a filter
+      // is active. Only the four the backend understands are sent; "all" is
+      // omitted (the backend treats a missing filter as no filter).
+      if (activeFilters) {
+        ["contactStatus", "dealStage", "purchaseStatus", "poStatus"].forEach((k) => {
+          if (activeFilters[k] && activeFilters[k] !== "all") params[k] = activeFilters[k];
+        });
       }
       const res = await API.get("/insights/report", { params });
       setReport(res.data || null);
@@ -486,9 +509,16 @@ const Insights = () => {
   // Re-fetch the report whenever the date range changes — same trigger the
   // existing client-side filteredData already recomputes on.
   useEffect(() => {
-    fetchReport(dateRange);
+    fetchReport(dateRange, filters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange.startDate, dateRange.endDate]);
+  }, [
+    dateRange.startDate,
+    dateRange.endDate,
+    filters.contactStatus,
+    filters.dealStage,
+    filters.purchaseStatus,
+    filters.poStatus,
+  ]);
 
   const fetchData = async () => {
     try {
@@ -638,73 +668,7 @@ const Insights = () => {
 
   // Generate chart data
   const chartData = useMemo(() => {
-    const {
-      filteredContacts,
-      filteredCompanies,
-      filteredDeals,
-      filteredVendors,
-      filteredPurchaseOrders,
-      filteredPurchases,
-      filteredInvoices,
-    } = filteredData;
-
-    // Monthly trends
-    const monthlyTrends = [];
-    const months = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
-    ];
-
-    months.forEach((month, index) => {
-      const contactsCount = filteredContacts.filter(
-        (item) => new Date(item.createdAt).getMonth() === index
-      ).length;
-
-      const companiesCount = filteredCompanies.filter(
-        (item) => new Date(item.createdAt).getMonth() === index
-      ).length;
-
-      const dealsCount = filteredDeals.filter(
-        (item) => new Date(item.createdAt).getMonth() === index
-      ).length;
-
-      const vendorsCount = filteredVendors.filter(
-        (item) => new Date(item.createdAt).getMonth() === index
-      ).length;
-
-      const purchaseOrdersCount = filteredPurchaseOrders.filter(
-        (item) => new Date(item.createdAt).getMonth() === index
-      ).length;
-
-      const purchasesCount = filteredPurchases.filter(
-        (item) => new Date(item.createdAt).getMonth() === index
-      ).length;
-
-      const invoicesCount = filteredInvoices.filter(
-        (item) => new Date(item.createdAt).getMonth() === index
-      ).length;
-
-      monthlyTrends.push({
-        month,
-        contacts: contactsCount,
-        companies: companiesCount,
-        deals: dealsCount,
-        vendors: vendorsCount,
-        purchaseOrders: purchaseOrdersCount,
-        purchases: purchasesCount,
-        invoices: invoicesCount,
-      });
-    });
+    const { filteredPurchaseOrders, filteredPurchases, filteredInvoices } = filteredData;
 
     // Daily trends — one bucket per calendar day, spanning from the
     // earliest record on file up to today (used by the "Revenue vs Business
@@ -760,7 +724,7 @@ const Insights = () => {
           const d = item.purchaseDate || item.createdAt;
           return d && new Date(d).toDateString() === dayKey;
         })
-        .reduce((sum, item) => sum + (item.totalAmount || 0), 0);
+        .reduce((sum, item) => sum + (item.grandTotal || 0), 0);
 
       const vendorSpends = filteredPurchaseOrders
         .filter((item) => {
@@ -778,152 +742,7 @@ const Insights = () => {
       });
     }
 
-    // Contact status distribution
-    const contactStatusData = [
-      {
-        name: "New",
-        value: filteredContacts.filter((c) => c.stageStatus === "New").length,
-        color: "#3b82f6",
-      },
-      {
-        name: "Contacted",
-        value: filteredContacts.filter((c) => c.stageStatus === "Contacted")
-          .length,
-        color: "#10b981",
-      },
-      {
-        name: "Qualified",
-        value: filteredContacts.filter((c) => c.stageStatus === "Qualified")
-          .length,
-        color: "#f59e0b",
-      },
-      {
-        name: "Won",
-        value: filteredContacts.filter((c) => c.stageStatus === "Won").length,
-        color: "#ef4444",
-      },
-      {
-        name: "Lost",
-        value: filteredContacts.filter((c) => c.stageStatus === "Lost").length,
-        color: "#06b6d4",
-      },
-    ];
-
-    // Purchase Order status distribution
-    const poStatusData = [
-      {
-        name: "Pending",
-        value: filteredPurchaseOrders.filter((po) => po.status === "Pending")
-          .length,
-        color: "#f59e0b",
-      },
-      {
-        name: "Approved",
-        value: filteredPurchaseOrders.filter((po) => po.status === "Approved")
-          .length,
-        color: "#10b981",
-      },
-      {
-        name: "Rejected",
-        value: filteredPurchaseOrders.filter((po) => po.status === "Rejected")
-          .length,
-        color: "#ef4444",
-      },
-      {
-        name: "Delivered",
-        value: filteredPurchaseOrders.filter((po) => po.status === "Delivered")
-          .length,
-        color: "#3b82f6",
-      },
-    ];
-
-    // Purchase status distribution
-    const purchaseStatusData = [
-      {
-        name: "Draft",
-        value: filteredPurchases.filter((p) => p.status === "Draft").length,
-        color: "#f59e0b",
-      },
-      {
-        name: "Pending",
-        value: filteredPurchases.filter((p) => p.status === "Pending").length,
-        color: "#ef4444",
-      },
-      {
-        name: "Paid",
-        value: filteredPurchases.filter((p) => p.status === "Paid").length,
-        color: "#10b981",
-      },
-      {
-        name: "Cancelled",
-        value: filteredPurchases.filter((p) => p.status === "Cancelled").length,
-        color: "#06b6d4",
-      },
-    ];
-
-    // Invoice status distribution
-    const invoiceStatusData = [
-      {
-        name: "Draft",
-        value: filteredInvoices.filter((inv) => inv.status === "Draft").length,
-        color: "#f59e0b",
-      },
-      {
-        name: "Sent",
-        value: filteredInvoices.filter((inv) => inv.status === "Sent").length,
-        color: "#3b82f6",
-      },
-      {
-        name: "Paid",
-        value: filteredInvoices.filter((inv) => inv.status === "Paid").length,
-        color: "#10b981",
-      },
-      {
-        name: "Overdue",
-        value: filteredInvoices.filter((inv) => inv.status === "Overdue")
-          .length,
-        color: "#ef4444",
-      },
-      {
-        name: "Cancelled",
-        value: filteredInvoices.filter((inv) => inv.status === "Cancelled")
-          .length,
-        color: "#06b6d4",
-      },
-    ];
-
-    // Deal values
-    const dealValues = filteredDeals.map((deal) => ({
-      name: deal.title,
-      value: deal.amount || 0,
-      stage: deal.status,
-    }));
-
-    // Purchase values
-    const purchaseValues = filteredPurchases.map((purchase) => ({
-      name: purchase.purchaseNumber,
-      value: purchase.totalAmount || 0,
-      status: purchase.status,
-    }));
-
-    // Invoice values
-    const invoiceValues = filteredInvoices.map((invoice) => ({
-      name: invoice.invoiceNumber,
-      value: invoice.amount || 0,
-      status: invoice.status,
-    }));
-
-    return {
-      monthlyTrends,
-      dailyTrends,
-      contactStatusData,
-      dealValues,
-      poStatusData,
-      purchaseStatusData,
-      purchaseValues,
-      invoiceStatusData,
-      invoiceValues,
-    };
+    return { dailyTrends };
   }, [filteredData]);
 
   // Export functions
@@ -1030,7 +849,7 @@ const Insights = () => {
           purchase.purchaseNumber,
           purchase.vendor?.name || "",
           new Date(purchase.purchaseDate).toLocaleDateString(),
-          `₹${purchase.totalAmount || 0}`,
+          `₹${purchase.grandTotal || 0}`,
           purchase.status || "",
         ]);
         break;
@@ -1098,7 +917,7 @@ const Insights = () => {
           iconClass: color,
           ...(change !== undefined
             ? {
-                subtitle: c.isNew ? `New ${changeLabel}` : (noChange ? "No change" : `${c.pct >= 0 ? "+" : ""}${c.pct}% ${changeLabel}`),
+                subtitle: c.isNew ? (/^new/i.test(changeLabel) ? changeLabel.charAt(0).toUpperCase() + changeLabel.slice(1) : `New ${changeLabel}`) : (noChange ? "No change" : `${c.pct >= 0 ? "+" : ""}${c.pct}% ${changeLabel}`),
                 subtitleIcon: up ? TrendingUp : TrendingDown,
                 subtitleColor: noChange ? "#6B7280" : (up ? "#00C950" : "#E82222"),
               }
@@ -1294,10 +1113,35 @@ const Insights = () => {
       .slice(0, 20);
   }, [deals, tasks, meetings, invoices]);
 
+  // Phase 2: the icon/color for each report activity item, matching the
+  // client-side businessActivity exactly (invoices turn red when overdue).
+  const activityVisualFor = (type, overdue) => {
+    switch (type) {
+      case "deals":
+        return { icon: <Briefcase className="w-4 h-4" />, iconBg: "bg-blue-100 text-blue-600" };
+      case "tasks":
+        return { icon: <CheckSquare className="w-4 h-4" />, iconBg: "bg-green-100 text-green-600" };
+      case "meetings":
+        return { icon: <VideoIcon className="w-4 h-4" />, iconBg: "bg-purple-100 text-purple-600" };
+      case "invoices":
+        return {
+          icon: <PdfIcon className="w-4 h-4" />,
+          iconBg: overdue ? "bg-red-100 text-red-600" : "bg-teal-100 text-teal-600",
+        };
+      default:
+        return { icon: null, iconBg: "" };
+    }
+  };
+  // Prefer the server report's activity feed; fall back to the client-side
+  // businessActivity when the report (or this section) is unavailable.
+  const overviewActivity = Array.isArray(report?.activity)
+    ? report.activity.map((it) => ({ ...it, ...activityVisualFor(it.type, it.overdue) }))
+    : businessActivity;
+
   const filteredActivity =
     activityTab === "all"
-      ? businessActivity
-      : businessActivity.filter((item) => item.type === activityTab);
+      ? overviewActivity
+      : overviewActivity.filter((item) => item.type === activityTab);
 
   const formatActivityDate = (at) => {
     const d = new Date(at);
@@ -1314,9 +1158,18 @@ const Insights = () => {
     return `${datePart} • ${timePart}`;
   };
 
+  // Phase 2: the Overview daily chart prefers the server report's series,
+  // falling back to the client-side chartData.dailyTrends when the report (or
+  // this section) is unavailable. Same row shape either way:
+  // { date, fullDate, revenue, purchases, vendorSpends }.
+  const overviewDailySeries =
+    report?.dailyTrends?.series && report.dailyTrends.series.length
+      ? report.dailyTrends.series
+      : chartData.dailyTrends;
+
   const dailyTrendsRawMax = Math.max(
     1000,
-    ...chartData.dailyTrends.map((d) => (d.revenue || 0) + (d.purchases || 0) + (d.vendorSpends || 0)),
+    ...overviewDailySeries.map((d) => (d.revenue || 0) + (d.purchases || 0) + (d.vendorSpends || 0)),
   );
   // Round up to a "nice" step (multiple of 1000) so 5 evenly-spaced ticks
   // (0, step, 2*step, ...) land on clean numbers AND each one rounds to a
@@ -1328,7 +1181,7 @@ const Insights = () => {
   const formatDailyTrendsTick = (v) => (v === 0 ? "₹0" : `₹${Math.round(v / 1000)}k`);
   // Every 5th day's date label, but always force the last entry (today) in
   // too, so the active/current date is never skipped off the right edge.
-  const dailyTrendsDateTicks = chartData.dailyTrends
+  const dailyTrendsDateTicks = overviewDailySeries
     .map((d) => d.date)
     .filter((_, i, arr) => i % 5 === 0 || i === arr.length - 1);
 
@@ -1346,7 +1199,7 @@ const Insights = () => {
     // container unmounts/remounts on tab switch (losing its scroll
     // position), so scrolling only on data-length change isn't enough to
     // land back on today after navigating away and back.
-  }, [chartData.dailyTrends.length, activeTab]);
+  }, [overviewDailySeries.length, activeTab]);
 
   // Real month-over-month growth: newly-created (or summed-value) records
   // since the start of this month, as a percentage of whatever existed (or
@@ -1378,82 +1231,88 @@ const Insights = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             title="Total Contacts"
-            value={filteredData.filteredContacts.length}
+            value={report?.overviewStats ? report.overviewStats.totalContacts.count : filteredData.filteredContacts.length}
             icon={<TeamIcon className="w-6 h-6" />}
             color="text-blue-600"
             bgColor="bg-blue-50"
-            change={monthOverMonthChange(filteredData.filteredContacts, "createdAt")}
+            change={report?.overviewStats ? report.overviewStats.totalContacts.mom : monthOverMonthChange(filteredData.filteredContacts, "createdAt")}
           />
           <StatCard
             title="Total Companies"
-            value={filteredData.filteredCompanies.length}
+            value={report?.overviewStats ? report.overviewStats.totalCompanies.count : filteredData.filteredCompanies.length}
             icon={<Building className="w-6 h-6" />}
             color="text-green-600"
             bgColor="bg-green-50"
-            change={monthOverMonthChange(filteredData.filteredCompanies, "createdAt")}
+            change={report?.overviewStats ? report.overviewStats.totalCompanies.mom : monthOverMonthChange(filteredData.filteredCompanies, "createdAt")}
           />
           <StatCard
             title="Active Deals"
-            value={filteredData.filteredDeals.length}
+            value={report?.overviewStats ? report.overviewStats.activeDeals.count : filteredData.filteredDeals.length}
             icon={<Briefcase className="w-6 h-6" />}
             color="text-purple-600"
             bgColor="bg-purple-50"
-            change={monthOverMonthChange(filteredData.filteredDeals, "createdAt")}
+            change={report?.overviewStats ? report.overviewStats.activeDeals.mom : monthOverMonthChange(filteredData.filteredDeals, "createdAt")}
           />
           <StatCard
             title="Total Vendors"
-            value={filteredData.filteredVendors.length}
+            value={report?.overviewStats ? report.overviewStats.totalVendors.count : filteredData.filteredVendors.length}
             icon={<UserCheck className="w-6 h-6" />}
             color="text-indigo-600"
             bgColor="bg-indigo-50"
-            change={monthOverMonthChange(filteredData.filteredVendors, "createdAt")}
+            change={report?.overviewStats ? report.overviewStats.totalVendors.mom : monthOverMonthChange(filteredData.filteredVendors, "createdAt")}
           />
           <StatCard
             title="Total Deal Value"
             value={`₹${formatNumberToIndian(
-              filteredData.filteredDeals.reduce(
-                (sum, deal) => sum + (deal.amount || 0),
-                0
-              )
+              report?.overviewStats
+                ? report.overviewStats.totalDealValue.value
+                : filteredData.filteredDeals.reduce(
+                    (sum, deal) => sum + (deal.amount || 0),
+                    0
+                  )
             )}`}
             icon={<IndianRupeeIcon className="w-6 h-6" />}
             color="text-orange-600"
             bgColor="bg-orange-50"
-            change={monthOverMonthChange(filteredData.filteredDeals, "createdAt", "amount")}
+            change={report?.overviewStats ? report.overviewStats.totalDealValue.mom : monthOverMonthChange(filteredData.filteredDeals, "createdAt", "amount")}
           />
           <StatCard
             title="Total Purchases"
             value={`₹${formatNumberToIndian(
-              filteredData.filteredPurchases.reduce(
-                (sum, purchase) => sum + (purchase.totalAmount || 0),
-                0
-              )
+              report?.overviewStats
+                ? report.overviewStats.totalPurchases.value
+                : filteredData.filteredPurchases.reduce(
+                    (sum, purchase) => sum + (purchase.grandTotal || 0),
+                    0
+                  )
             )}`}
             icon={<Package className="w-6 h-6" />}
             color="text-pink-600"
             bgColor="bg-pink-50"
-            change={monthOverMonthChange(filteredData.filteredPurchases, "createdAt", "totalAmount")}
+            change={report?.overviewStats ? report.overviewStats.totalPurchases.mom : monthOverMonthChange(filteredData.filteredPurchases, "createdAt", "grandTotal")}
           />
           <StatCard
             title="Total Invoices"
-            value={filteredData.filteredInvoices.length}
+            value={report?.overviewStats ? report.overviewStats.totalInvoices.count : filteredData.filteredInvoices.length}
             icon={<PdfIcon className="w-4 h-4" />}
             color="text-teal-600"
             bgColor="bg-teal-50"
-            change={monthOverMonthChange(filteredData.filteredInvoices, "createdAt")}
+            change={report?.overviewStats ? report.overviewStats.totalInvoices.mom : monthOverMonthChange(filteredData.filteredInvoices, "createdAt")}
           />
           <StatCard
             title="Total Invoice Value"
             value={`₹${formatNumberToIndian(
-              filteredData.filteredInvoices.reduce(
-                (sum, inv) => sum + (inv.amount || 0),
-                0
-              )
+              report?.overviewStats
+                ? report.overviewStats.totalInvoiceValue.value
+                : filteredData.filteredInvoices.reduce(
+                    (sum, inv) => sum + (inv.amount || 0),
+                    0
+                  )
             )}`}
             icon={<IndianRupeeIcon className="w-6 h-6" />}
             color="text-indigo-600"
             bgColor="bg-indigo-50"
-            change={monthOverMonthChange(filteredData.filteredInvoices, "createdAt", "amount")}
+            change={report?.overviewStats ? report.overviewStats.totalInvoiceValue.mom : monthOverMonthChange(filteredData.filteredInvoices, "createdAt", "amount")}
           />
         </div>
       </div>
@@ -1500,7 +1359,7 @@ const Insights = () => {
               {/* Fixed Y-axis column, mirrors Dashboard's Sales Revenue widget */}
               <div style={{ width: 68, height: "100%", flexShrink: 0 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData.dailyTrends} margin={{ top: 12, right: 0, left: 0, bottom: 8 }}>
+                  <AreaChart data={overviewDailySeries} margin={{ top: 12, right: 0, left: 0, bottom: 8 }}>
                     <XAxis dataKey="date" tick={false} axisLine={false} tickLine={false} />
                     <YAxis
                       domain={[0, dailyTrendsYMax]}
@@ -1526,12 +1385,12 @@ const Insights = () => {
               >
                 <div
                   style={{
-                    minWidth: `${Math.max(100, (chartData.dailyTrends.length / 20) * 100)}%`,
+                    minWidth: `${Math.max(100, (overviewDailySeries.length / 20) * 100)}%`,
                     height: "100%",
                   }}
                 >
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData.dailyTrends} margin={{ top: 12, right: 24, left: 8, bottom: 8 }}>
+                    <AreaChart data={overviewDailySeries} margin={{ top: 12, right: 24, left: 8, bottom: 8 }}>
                       <defs>
                         <linearGradient
                           id="colorRevenue"
@@ -1674,28 +1533,35 @@ const Insights = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {(() => {
           const dealsForStats = filteredData.filteredDeals;
-          const totalDeals = dealsForStats.length;
+          // Overview values come from report.summary when available (it now
+          // honors the Deal Stage filter, so these stay consistent with the
+          // pipeline); the exact client calc remains the fallback.
+          const rptSummary = report?.summary || null;
+          const totalDeals = rptSummary ? rptSummary.totalDeals : dealsForStats.length;
           const wonDeals = dealsForStats.filter((d) => d.status === "Won").length;
           const lostDeals = dealsForStats.filter((d) => d.status === "Lost").length;
           const decidedDeals = wonDeals + lostDeals;
           // Phase 5: prefer the server report for cleanly-covered Overview
           // widgets, falling back to the exact client-side calc when the report
-          // is unavailable/empty. (KPI StatCards above stay fully on the raw
-          // path — their MoM % needs inputs the report doesn't provide.)
-          const rptSummary = report?.summary || null;
+          // is unavailable/empty.
           const winRate = rptSummary
             ? rptSummary.winRate
             : (decidedDeals > 0 ? Math.round((wonDeals / decidedDeals) * 100) : 0);
           const totalDealValue = dealsForStats.reduce((sum, d) => sum + (d.amount || 0), 0);
-          const avgDealSize = totalDeals > 0 ? totalDealValue / totalDeals : 0;
+          const avgDealSize = rptSummary
+            ? rptSummary.avgDealSize
+            : (totalDeals > 0 ? totalDealValue / totalDeals : 0);
 
           const invoicesForStats = filteredData.filteredInvoices;
-          const totalRevenue = invoicesForStats.reduce((sum, inv) => sum + (inv.amount || 0), 0);
-          const collected = invoicesForStats
+          const clientRevenue = invoicesForStats.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+          const clientCollected = invoicesForStats
             .filter((inv) => inv.status === "Paid")
             .reduce((sum, inv) => sum + (inv.amount || 0), 0);
-          const outstanding = totalRevenue - collected;
-          const collectionRate = totalRevenue > 0 ? Math.round((collected / totalRevenue) * 100) : 0;
+          const totalRevenue = rptSummary ? rptSummary.revenue : clientRevenue;
+          const outstanding = rptSummary ? rptSummary.outstanding : clientRevenue - clientCollected;
+          const collectionRate = rptSummary
+            ? rptSummary.collectionRate
+            : (clientRevenue > 0 ? Math.round((clientCollected / clientRevenue) * 100) : 0);
 
           const stageCounts = {};
           dealsForStats.forEach((d) => {
@@ -3120,7 +2986,7 @@ const Insights = () => {
             icon={<Building className="w-6 h-6" />}
             color="text-blue-600"
             change={totalCompaniesChange}
-            changeLabel="growth this month"
+            changeLabel="vs last month"
           />
           <StatCard
             title="Active Companies"
@@ -3128,7 +2994,7 @@ const Insights = () => {
             icon={<Briefcase className="w-6 h-6" />}
             color="text-green-600"
             change={activeCompaniesChange}
-            changeLabel="active deals vs last month"
+            changeLabel="vs last month"
           />
           <StatCard
             title="New This Month"
@@ -3152,7 +3018,7 @@ const Insights = () => {
             icon={<Clock className="w-6 h-6" />}
             color="text-orange-600"
             change={salesCycleChange}
-            changeLabel="faster vs last month"
+            changeLabel="faster"
           />
         </div>
 
@@ -6981,12 +6847,16 @@ const Insights = () => {
           boxSizing: "border-box",
         }}
       >
-        <div className="inline-flex items-center gap-1 h-11 p-1 bg-[#F1F1F5] rounded-full overflow-x-auto max-w-full">
+        <div
+          ref={tabStripRef}
+          className="inline-flex items-center gap-1 h-11 p-1 bg-[#F1F1F5] rounded-full overflow-x-auto max-w-full min-w-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           {tabs.map((tab) => (
             <button
               key={tab.id}
+              data-tab-id={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center justify-center h-9 px-4 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+              className={`flex items-center justify-center h-9 px-2.5 xl:px-4 flex-shrink-0 rounded-full text-[13px] xl:text-sm font-medium whitespace-nowrap transition-colors ${
                 activeTab === tab.id
                   ? "bg-white text-[#0085FF] shadow-sm"
                   : "text-gray-700 hover:text-gray-900"

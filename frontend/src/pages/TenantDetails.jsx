@@ -54,10 +54,17 @@ const formatWalletDateTime = (d) =>
 const OrganizationWalletPanel = ({ organizationId }) => {
   const [wallet, setWallet] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Degrade gracefully when the wallet call fails: without this the render
+  // below ran `wallet.balance.toFixed(2)` on a null wallet and crashed the
+  // whole panel. With it we show an "Unable to load balance" block and the
+  // rest of TenantDetails stays usable.
+  const [walletError, setWalletError] = useState(false);
   const [grant, setGrant] = useState({ amount: "", reason: "" });
   const [granting, setGranting] = useState(false);
 
   const loadWallet = async () => {
+    setLoading(true);
+    setWalletError(false);
     try {
       configureAxios();
       const res = await API.get(`/super-admin/organizations/${organizationId}/wallet`, {
@@ -65,6 +72,7 @@ const OrganizationWalletPanel = ({ organizationId }) => {
       });
       setWallet(res.data);
     } catch (err) {
+      setWalletError(true);
       toast.error(err.response?.data?.error || "Failed to load wallet");
     } finally {
       setLoading(false);
@@ -113,6 +121,19 @@ const OrganizationWalletPanel = ({ organizationId }) => {
         <div className="animate-pulse space-y-3">
           <div className="h-20 bg-gray-100 rounded-lg" />
           <div className="h-32 bg-gray-100 rounded-lg" />
+        </div>
+      ) : walletError || !wallet ? (
+        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+          <p className="text-sm font-medium text-gray-700">Unable to load balance</p>
+          <p className="mt-1 text-xs text-gray-500">
+            The wallet service didn&apos;t respond. The rest of this page is unaffected.
+          </p>
+          <button
+            onClick={loadWallet}
+            className="mt-4 inline-flex items-center px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700"
+          >
+            Retry
+          </button>
         </div>
       ) : (
         <>
