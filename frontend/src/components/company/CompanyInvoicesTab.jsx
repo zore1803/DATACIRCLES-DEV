@@ -187,19 +187,9 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
     justCreatedDealId || (availableDeals.length === 1 ? availableDeals[0]._id : null);
 
   const [showQuickDealForm, setShowQuickDealForm] = useState(false);
-  const [dealFormCompanies, setDealFormCompanies] = useState([]);
-  const [dealFormContacts, setDealFormContacts] = useState([]);
-  // Same lazy load Accounting's onAddDeal does before opening QuickDealForm.
-  const openAddDeal = async () => {
-    if (dealFormCompanies.length === 0 || dealFormContacts.length === 0) {
-      try {
-        const [c, ct] = await Promise.all([API.get("/companies"), API.get("/contacts")]);
-        setDealFormCompanies(c.data || []);
-        setDealFormContacts(ct.data || []);
-      } catch (err) {
-        console.error("Failed to load companies/contacts", err);
-      }
-    }
+  // QuickDealForm searches companies/contacts on the server itself, so nothing
+  // has to be downloaded before it opens.
+  const openAddDeal = () => {
     setShowQuickDealForm(true);
   };
   const handleDealCreated = (newDeal) => {
@@ -1379,8 +1369,6 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
 
       {showQuickDealForm && (
         <QuickDealForm
-          companies={dealFormCompanies}
-          contacts={dealFormContacts}
           initialCompanyId={companyId || ""}
           onDealCreated={handleDealCreated}
           onRequestClose={() => setShowQuickDealForm(false)}

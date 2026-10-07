@@ -612,6 +612,10 @@ function DealDetail() {
           {activeTab === "Overview" && (
             <BasicDetails
               deal={deal}
+              invoices={invoices}
+              tasks={tasks}
+              meetings={meetings}
+              sharedLoading={invoicesLoading || statsLoading}
               onDealUpdate={(updated) => (updated ? setDeal(updated) : fetchData())}
             />
           )}

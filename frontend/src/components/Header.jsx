@@ -1051,15 +1051,14 @@ const Header = () => {
       const fetchData = async () => {
         setIsLoadingData(true);
         try {
-          const [companiesRes, contactsRes, brandingRes, authRes] =
-            await Promise.all([
-              API.get("/companies"),
-              API.get("/contacts"),
-              API.get("/branding"),
-              API.get("/auth/me"),
-            ]);
-          setCompanies(companiesRes.data);
-          setContacts(contactsRes.data);
+          // Only what the header itself renders. The company/contact lists used
+          // to be downloaded here on every page load, but they only feed the
+          // Task and Call Log quick forms — see ensureLists() below, which loads
+          // them when the "+" menu opens.
+          const [brandingRes, authRes] = await Promise.all([
+            API.get("/branding"),
+            API.get("/auth/me"),
+          ]);
           setBranding(brandingRes.data);
           setIsTrialActive(authRes.data.isTrialActive);
           setTrialEnd(authRes.data.trialEnd);
@@ -1234,21 +1233,40 @@ const Header = () => {
     setHoveredMeeting(false);
   };
 
-  const fetchFreshData = async () => {
-    setIsLoadingData(true);
-    try {
-      const [companiesRes, contactsRes] = await Promise.all([
-        API.get("/companies"),
-        API.get("/contacts"),
-      ]);
-      setCompanies(companiesRes.data);
-      setContacts(contactsRes.data);
-    } catch (err) {
-      console.error("Failed to fetch data:", err);
-    } finally {
-      setIsLoadingData(false);
+  // The company/contact lists feed the Task and Call Log quick forms (and the
+  // profile-page breadcrumb, which falls back to a by-id fetch without them).
+  // They load when the "+" menu opens — i.e. when someone is about to use them
+  // — instead of on every page load. One shared in-flight request, and a short
+  // freshness window, so opening the menu and then choosing a form doesn't
+  // download them twice.
+  const listsRef = useRef({ promise: null, at: 0 });
+  const LISTS_FRESH_MS = 30000;
+  const ensureLists = () => {
+    if (listsRef.current.promise) return listsRef.current.promise;
+    if (listsRef.current.at && Date.now() - listsRef.current.at < LISTS_FRESH_MS) {
+      return Promise.resolve();
     }
+    const promise = Promise.all([API.get("/companies"), API.get("/contacts")])
+      .then(([companiesRes, contactsRes]) => {
+        setCompanies(companiesRes.data);
+        setContacts(contactsRes.data);
+        listsRef.current.at = Date.now();
+      })
+      .catch((err) => {
+        console.error("Failed to fetch data:", err);
+      })
+      .finally(() => {
+        listsRef.current.promise = null;
+      });
+    listsRef.current.promise = promise;
+    return promise;
   };
+  const fetchFreshData = ensureLists;
+
+  useEffect(() => {
+    if (isAddMenuOpen && !isSuperAdmin && !isSuperAdminRoute) ensureLists();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAddMenuOpen]);
 
   const handleAddItem = (type) => {
     setIsAddMenuOpen(false);

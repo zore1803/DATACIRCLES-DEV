@@ -1,7 +1,7 @@
 import DeleteIcon from "../common/DeleteIcon";
 import SearchIcon from "../common/SearchIcon";
 import PlusIcon from "../common/PlusIcon";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, ChevronDown } from "lucide-react";
 import API from "../../services/api";
@@ -88,7 +88,11 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
 
   useBodyScrollLock(isSliding);
 
-  const [deals, setDeals] = useState([]);
+  // The customer picker searches Won deals on the server as you type. Only the
+  // SELECTED deal is kept (its company/contact address decides intra vs inter
+  // GST); `hasWonDeals` is a one-row existence check for the empty-state hint.
+  const [selectedDeal, setSelectedDeal] = useState(null);
+  const [hasWonDeals, setHasWonDeals] = useState(null);
   const [dealId, setDealId] = useState("");
   const [dealChangedFlag, setDealChangedFlag] = useState(0);
   // Org's own registered state — compared against the selected customer's
@@ -132,17 +136,12 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
   }, []);
 
   useEffect(() => {
-    API.get("/deals")
-      .then((res) => setDeals(res.data.deals || res.data || []))
-      .catch(() => setDeals([]));
-    API.get("/items")
+    API.get("/deals", { params: { status: "Won", limit: 1 } })
       .then((res) => {
-        const list = res.data?.items || res.data || [];
-        // Both products and services are billable subscription lines (services
-        // just don't move stock), so the whole catalog is kept.
-        setCatalog(Array.isArray(list) ? list : []);
+        const list = res.data.deals || res.data || [];
+        setHasWonDeals(Array.isArray(list) && list.length > 0);
       })
-      .catch(() => setCatalog([]));
+      .catch(() => setHasWonDeals(null));
     API.get("/branding")
       .then((res) => setSellerState((res.data?.state || "").trim().toLowerCase()))
       .catch(() => {});
@@ -150,8 +149,9 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
 
   // Picking a customer auto-decides intra/inter-state. Read-only — the user
   // cannot override the calculated type.
-  const handleDealChange = (id) => {
+  const handleDealChange = (id, option) => {
     setDealId(id);
+    setSelectedDeal(option || null);
     setDealChangedFlag((f) => f + 1);
   };
 
@@ -168,7 +168,7 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
       setResolvedTxnType(null);
       return;
     }
-    const selected = deals.find((d) => d._id === dealId);
+    const selected = selectedDeal?._id === dealId ? selectedDeal : null;
     if (!selected) { setResolvedTxnType(null); return; }
 
     // Build a minimal address object for the util (needs .state at minimum).
@@ -180,7 +180,7 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
     const resolved = resolveTransactionType(sellerState, customerAddr, customerAddr);
     setResolvedTxnType(resolved); // "intra" | "inter" | null
     if (resolved) setTransactionType(resolved);
-  }, [dealChangedFlag, sellerState, deals]);
+  }, [dealChangedFlag, sellerState, selectedDeal]);
 
   useEffect(() => {
     if (!editingSubscription) return;
@@ -220,11 +220,28 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
     setTimeout(() => onRequestClose(), 300);
   };
 
-  const filteredCatalog = useMemo(() => {
-    const q = itemSearch.trim().toLowerCase();
-    if (!q) return catalog.slice(0, 20);
-    return catalog.filter((it) => it.name?.toLowerCase().includes(q)).slice(0, 20);
-  }, [catalog, itemSearch]);
+  // Product/service search runs on the server: nothing is loaded until the
+  // picker opens, then at most 20 matches per keystroke (debounced) — not the
+  // whole catalog. Both products and services are billable subscription lines
+  // (services just don't move stock), so no type filter is applied.
+  const itemRequestRef = useRef(0);
+  useEffect(() => {
+    if (!showItemDropdown) return;
+    const requestId = ++itemRequestRef.current;
+    const q = itemSearch.trim();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await API.get("/items", { params: { limit: 20, ...(q ? { search: q } : {}) } });
+        if (requestId !== itemRequestRef.current) return;
+        const list = res.data?.items || res.data || [];
+        setCatalog(Array.isArray(list) ? list : []);
+      } catch {
+        if (requestId === itemRequestRef.current) setCatalog([]);
+      }
+    }, q ? 250 : 0);
+    return () => clearTimeout(timer);
+  }, [showItemDropdown, itemSearch]);
+  const filteredCatalog = catalog;
 
   const addLine = (item) => {
     setLines((prev) => [
@@ -275,27 +292,21 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
 
   // Only Won deals are eligible customers. An Open deal is still being
   // negotiated and a Lost one never converted — neither should be put on a
-  // recurring billing agreement. Deal statuses are org-configurable, so this
-  // matches the value case-insensitively, the same rule the backend enforces
-  // on create. When editing, the deal already on the subscription is kept in
-  // the list even if its status has since moved off Won, so the dropdown can
-  // still render its own current value instead of showing blank.
-  const wonDeals = useMemo(() => {
-    const eligible = deals.filter((d) => String(d.status || "").trim().toLowerCase() === "won");
-    const currentId = editingSubscription?.deal?._id || editingSubscription?.deal;
-    if (currentId && !eligible.some((d) => d._id === currentId)) {
-      const current = deals.find((d) => d._id === currentId);
-      if (current) return [current, ...eligible];
-    }
-    return eligible;
-  }, [deals, editingSubscription]);
-
-  const dealOptions = wonDeals.map((d) => {
-    const dealTitle = d.title || "Untitled Deal";
-    const customerName = d.company?.name || d.contact?.name || "";
-    const label = customerName ? `${dealTitle} — ${customerName}` : dealTitle;
-    return { _id: d._id, label };
-  });
+  // recurring billing agreement. Deal stages are org-configurable, so the
+  // server matches "Won" case-insensitively, the same rule the backend enforces
+  // on create. When editing, the deal already on the subscription is fetched by
+  // id, so the dropdown can still render its own current value even if its
+  // status has since moved off Won.
+  const dealRemote = {
+    endpoint: "/deals",
+    params: { status: "Won" },
+    map: (d) => {
+      const dealTitle = d.title || "Untitled Deal";
+      const customerName = d.company?.name || d.contact?.name || "";
+      return { ...d, label: customerName ? `${dealTitle} — ${customerName}` : dealTitle };
+    },
+    onSelectedLoaded: setSelectedDeal,
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -399,14 +410,15 @@ const SalesSubscriptionForm = ({ editingSubscription, onRequestClose, onSuccess,
                   Customer / Won Deal <span className="text-[#FF4935]">*</span>
                 </label>
                 <SearchableDropdown
-                  options={dealOptions}
+                  options={[]}
+                  remote={dealRemote}
                   value={dealId}
                   onChange={handleDealChange}
                   placeholder="Search customer or deal…"
                   displayKey="label"
                   compact
                 />
-                {dealOptions.length === 0 ? (
+                {hasWonDeals === false ? (
                   <p className="text-[13px] font-inter text-amber-600 mt-1.5">
                     No eligible customers found. A subscription can only be created for a Won deal.
                   </p>

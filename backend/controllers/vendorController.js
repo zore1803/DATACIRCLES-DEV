@@ -1,5 +1,6 @@
 const { gstinError } = require('../utils/gstinValidation');
 const { formatCustomFieldValue } = require("../utils/exportFormat");
+const { parsePickerLimit } = require("../utils/pickerLimit");
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const Vendor = require("../models/Vendor");
 const Payment = require("../models/Payment");
@@ -44,7 +45,11 @@ exports.getAllVendors = async (req, res) => {
       ];
     }
     
-    const vendors = await Vendor.find(query).lean();
+    let listQuery = Vendor.find(query).lean();
+    // Picker callers pass ?limit= so they never pull the whole collection.
+    const cap = parsePickerLimit(req.query.limit);
+    if (cap) listQuery = listQuery.sort({ name: 1 }).limit(cap);
+    const vendors = await listQuery;
     // Total Given / Got / Net are derived from the Payment ledger, never read
     // from a stored field — see services/partyLedgerService.
     res.json(await partyLedger.attachTotalsToVendors(req.user.organization, vendors));

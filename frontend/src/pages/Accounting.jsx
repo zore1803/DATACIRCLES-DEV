@@ -818,8 +818,6 @@ const Accounting = () => {
   const [preselectInvoiceDealId, setPreselectInvoiceDealId] = useState(null);
   const [conversionData, setConversionData] = useState(null);
   const [showQuickDealForm, setShowQuickDealForm] = useState(false);
-  const [companies, setCompanies] = useState([]);
-  const [contacts, setContacts] = useState([]);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const searchInputRef = useRef(null);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
@@ -1020,10 +1018,23 @@ const Accounting = () => {
   }, [activePage, activeLimit, activeSort.key, activeSort.direction, activeSearch, activeStatusFilter, activeTab]);
 
   useEffect(() => {
-    fetchDeals();
     fetchDocSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The deals list only feeds the deal picker inside the create/edit panel, so
+  // it is downloaded the first time that panel opens — not on every visit to
+  // this page, where it used to compete with the document list for bandwidth.
+  // The forms already cope with it arriving after they open (their deal
+  // pre-selection re-runs when the list changes).
+  const dealsRequestedRef = useRef(false);
+  useEffect(() => {
+    if (showCreatePanel && !dealsRequestedRef.current) {
+      dealsRequestedRef.current = true;
+      fetchDeals();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCreatePanel]);
 
   const fetchDocSettings = useCallback(async () => {
     try {
@@ -1055,6 +1066,7 @@ const Accounting = () => {
       const res = await API.get("/deals");
       setDeals(res.data);
     } catch (err) {
+      dealsRequestedRef.current = false; // let the next panel open retry
       toast.error(err.response?.data?.error || "Failed to load deals");
       console.error("Fetch deals error:", err);
     }
@@ -3072,19 +3084,9 @@ const Accounting = () => {
               // own onExitFullWidth (the minimize button).
             },
             onCreated: () => fetchData(activeTab),
-            onAddDeal: async () => {
-              if (companies.length === 0 || contacts.length === 0) {
-                try {
-                  const [c, ct] = await Promise.all([
-                    API.get("/companies"),
-                    API.get("/contacts"),
-                  ]);
-                  setCompanies(c.data || []);
-                  setContacts(ct.data || []);
-                } catch (err) {
-                  console.error("Failed to load companies/contacts", err);
-                }
-              }
+            // QuickDealForm searches companies/contacts on the server itself, so
+            // nothing needs to be downloaded before it opens.
+            onAddDeal: () => {
               setShowQuickDealForm(true);
             },
           };
@@ -3225,8 +3227,6 @@ const Accounting = () => {
         })()}
         {showQuickDealForm && (
           <QuickDealForm
-            companies={companies}
-            contacts={contacts}
             onDealCreated={(newDeal) => {
               setDeals((prev) => [...prev, newDeal]);
               setShowQuickDealForm(false);

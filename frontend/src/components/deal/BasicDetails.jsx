@@ -115,18 +115,37 @@ const DonutLabel = ({ cx, cy, value, total, label = "collected" }) => (
 
 // ─── main component ──────────────────────────────────────────────────────────
 
-const BasicDetails = ({ deal }) => {
+// `invoices` / `tasks` / `meetings`: the lists DealDetail already loaded for this
+// deal. When all three are passed, this Overview reuses them and only fetches the
+// notes (the one feed the page doesn't load) instead of asking the server for the
+// same data a second time. Without them it fetches everything itself, as before.
+const BasicDetails = ({ deal, invoices: sharedInvoices, tasks: sharedTasks, meetings: sharedMeetings, sharedLoading = false }) => {
+  const hasShared =
+    Array.isArray(sharedInvoices) && Array.isArray(sharedTasks) && Array.isArray(sharedMeetings);
 
   // ── state ───────────────────────────────────────────────────────────────
   const [showStageDrawer, setShowStageDrawer] = useState(false);
 
-  const [activities,        setActivities]        = useState([]);
-  const [activitiesLoading, setActivitiesLoading] = useState(true);
+  const [localActivities,    setActivities]        = useState([]);
+  const [localActivitiesLoading, setActivitiesLoading] = useState(true);
   const [activityFilter,    setActivityFilter]    = useState("All");
   const ACTIVITY_FILTERS = ["All", "Invoices", "Tasks", "Meetings", "Notes"];
 
-  const [invoices, setInvoices] = useState([]);
-  const [tasks,    setTasks]    = useState([]);
+  const [localInvoices, setInvoices] = useState([]);
+  const [localTasks,    setTasks]    = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [notesLoading, setNotesLoading] = useState(true);
+
+  const invoices = hasShared ? sharedInvoices : localInvoices;
+  const tasks    = hasShared ? sharedTasks    : localTasks;
+
+  // Activity feed = invoices + tasks + meetings + notes, newest first.
+  const buildActivities = (invList, taskList, meetList, noteList) => [
+    ...invList.map(i  => ({ type: "invoice", label: `Invoice ${i.invoiceNumber || "#"} created`, amount: i.amount, date: i.createdAt, status: i.status })),
+    ...taskList.map(t  => ({ type: "task",    label: `Task: ${t.title || t.name || "Untitled"}`,                    date: t.createdAt })),
+    ...meetList.map(m  => ({ type: "meeting",  label: `Meeting: ${m.title || m.subject || "Untitled"}`,             date: m.scheduledAt || m.createdAt })),
+    ...noteList.map(n  => ({ type: "note",     label: `Note: ${(n.content || n.body || "").slice(0, 60)}`,          date: n.createdAt })),
+  ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   // Pipeline stages as configured in Settings -> Pipeline (KanbanBoard.statuses),
   // the same list the Deals Kanban board renders as columns. Fetched here so the
@@ -143,8 +162,35 @@ const BasicDetails = ({ deal }) => {
     refreshPipelineStatuses();
   }, []);
 
+  // Shared mode: the page already holds invoices/tasks/meetings, so only notes are fetched.
   useEffect(() => {
-    if (!deal?._id) return;
+    if (!hasShared || !deal?._id) return;
+    let cancelled = false;
+    setNotesLoading(true);
+    API.get(`/notes/deal/${deal._id}`)
+      .catch(() => ({ data: [] }))
+      .then((noteR) => {
+        if (!cancelled) setNotes(Array.isArray(noteR.data) ? noteR.data : []);
+      })
+      .finally(() => {
+        if (!cancelled) setNotesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [deal?._id, hasShared]);
+
+  const sharedActivities = useMemo(() => {
+    if (!hasShared) return [];
+    const meetList = Array.isArray(sharedMeetings) ? sharedMeetings : [];
+    return buildActivities(sharedInvoices, sharedTasks, meetList, notes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasShared, sharedInvoices, sharedTasks, sharedMeetings, notes]);
+
+  const activities = hasShared ? sharedActivities : localActivities;
+  const activitiesLoading = hasShared ? (sharedLoading || notesLoading) : localActivitiesLoading;
+
+  // Standalone mode: no lists were passed in, so fetch everything here.
+  useEffect(() => {
+    if (hasShared || !deal?._id) return;
     setActivitiesLoading(true);
     Promise.all([
       API.get("/invoices",       { params: { deal:   deal._id } }).catch(() => ({ data: [] })),
@@ -158,15 +204,10 @@ const BasicDetails = ({ deal }) => {
       const meetList = Array.isArray(meetRaw)    ? meetRaw    : [];
       const noteList = Array.isArray(noteR.data) ? noteR.data : [];
       setInvoices(invList); setTasks(taskList);
-      const merged = [
-        ...invList.map(i  => ({ type: "invoice", label: `Invoice ${i.invoiceNumber || "#"} created`, amount: i.amount, date: i.createdAt, status: i.status })),
-        ...taskList.map(t  => ({ type: "task",    label: `Task: ${t.title || t.name || "Untitled"}`,                    date: t.createdAt })),
-        ...meetList.map(m  => ({ type: "meeting",  label: `Meeting: ${m.title || m.subject || "Untitled"}`,             date: m.scheduledAt || m.createdAt })),
-        ...noteList.map(n  => ({ type: "note",     label: `Note: ${(n.content || n.body || "").slice(0, 60)}`,          date: n.createdAt })),
-      ].sort((a, b) => new Date(b.date) - new Date(a.date));
-      setActivities(merged);
+      setActivities(buildActivities(invList, taskList, meetList, noteList));
     }).finally(() => setActivitiesLoading(false));
-  }, [deal?._id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deal?._id, hasShared]);
 
   // ── derived ──────────────────────────────────────────────────────────────
   const dealValue       = deal?.amount || 0;

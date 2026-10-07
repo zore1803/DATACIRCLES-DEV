@@ -35,7 +35,6 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
 
   useBodyScrollLock(isSliding);
 
-  const [invoices, setInvoices] = useState([]);
   const [invoiceId, setInvoiceId] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
@@ -69,15 +68,6 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
 
   useEffect(() => {
     requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
-  }, []);
-
-  useEffect(() => {
-    API.get("/invoices")
-      .then((res) => {
-        const list = res.data?.invoices || res.data || [];
-        setInvoices(Array.isArray(list) ? list : []);
-      })
-      .catch(() => setInvoices([]));
   }, []);
 
   // Loads an Invoice's items + already-returned/remaining figures. When
@@ -164,12 +154,18 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
 
   const subtotal = selectedLines.reduce((sum, l) => sum + l.qty * (l.item.unitPrice || 0), 0);
 
-  const invoiceOptions = invoices.map((inv) => ({
-    _id: inv._id,
-    label: `${inv.invoiceNumber} · ${
-      inv.deal?.contact?.name || inv.deal?.company?.name || inv.deal?.title || "Customer"
-    } · ${money(inv.amount)}`,
-  }));
+  // The "Against Invoice" picker searches the server as you type (nothing is
+  // downloaded until it opens), and the one already on a return being edited
+  // is fetched by id, so its label shows even if it isn't in the first results.
+  const invoiceRemote = {
+    endpoint: "/invoices",
+    map: (inv) => ({
+      ...inv,
+      label: `${inv.invoiceNumber} · ${
+        inv.deal?.contact?.name || inv.deal?.company?.name || inv.deal?.title || "Customer"
+      } · ${money(inv.amount)}`,
+    }),
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -269,7 +265,8 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
           <div>
             <FormLabel required>Against Invoice</FormLabel>
             <SearchableDropdown
-              options={invoiceOptions}
+              options={[]}
+              remote={invoiceRemote}
               value={invoiceId}
               onChange={handleInvoiceChange}
               displayKey="label"

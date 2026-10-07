@@ -809,6 +809,10 @@ const ContactDetailsPage = () => {
               contact={contact}
               company={company}
               deals={deals}
+              callLogs={callLogs}
+              tasks={tasks}
+              meetings={meetings}
+              sharedLoading={callLogsLoading || statsLoading}
               contactFieldList={contactFieldList}
               onContactUpdate={handleContactUpdate}
               onDealCreated={handleDealCreated}

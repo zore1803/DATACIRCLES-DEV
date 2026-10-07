@@ -1,4 +1,5 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
+const { parsePickerLimit } = require('../utils/pickerLimit');
 const Invoice = require("../models/Invoice");
 const Counter = require("../models/Counter");
 const htmlDocumentPdf = require("../utils/htmlDocumentPdf");
@@ -405,6 +406,14 @@ const getAllInvoices = async (req, res) => {
         { receiverGSTIN: { $regex: buildFuzzySearchPattern(search), $options: "i" } }, // Added receiverGSTIN to search
         { transactionType: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
       ];
+      // The picker label shows the deal's title, so a search by deal must find it too.
+      const matchingDeals = await Deal.find({
+        organization: req.user.organization,
+        title: { $regex: buildFuzzySearchPattern(search), $options: "i" },
+      }).select("_id").limit(200).lean();
+      if (matchingDeals.length) {
+        query.$or.push({ deal: { $in: matchingDeals.map((d) => d._id) } });
+      }
     }
 
     // own-only: restrict to invoices this user owns, or whose deal belongs
@@ -420,7 +429,11 @@ const getAllInvoices = async (req, res) => {
       }
     }
 
-    const invoices = await Invoice.find(query).populate("deal");
+    let listQuery = Invoice.find(query).populate("deal");
+    // Picker callers pass ?limit= so they never pull the whole collection.
+    const cap = parsePickerLimit(req.query.limit);
+    if (cap) listQuery = listQuery.sort({ createdAt: -1 }).limit(cap);
+    const invoices = await listQuery;
     res.json(invoices);
   } catch (error) {
     res.status(500).json({ message: error.message });

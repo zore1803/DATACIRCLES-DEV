@@ -1,4 +1,5 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
+const { parsePickerLimit } = require('../utils/pickerLimit');
 const Purchase = require("../models/Purchase");
 const Vendor = require("../models/Vendor");
 const PurchaseOrder = require("../models/PurchaseOrder");
@@ -355,13 +356,25 @@ exports.getAllPurchases = async (req, res) => {
         { notes: { $regex: buildFuzzySearchPattern(search), $options: 'i' } },
         { 'items.name': { $regex: buildFuzzySearchPattern(search), $options: 'i' } }
       ];
+      // The picker label shows the vendor's name, so a search by vendor must find it too.
+      const matchingVendors = await Vendor.find({
+        organization: req.user.organization,
+        name: { $regex: buildFuzzySearchPattern(search), $options: 'i' },
+      }).select('_id').limit(200).lean();
+      if (matchingVendors.length) {
+        query.$or.push({ vendor: { $in: matchingVendors.map((v) => v._id) } });
+      }
     }
 
-    const purchases = await Purchase.find(query)
+    let listQuery = Purchase.find(query)
       .populate("vendor", "name email")
       .populate("purchaseOrder", "poNumber vendor")
       .populate("items.itemId", "name description purchasePrice hsnSac gstRate")
       .sort({ createdAt: -1 });
+    // Picker callers pass ?limit= so they never pull the whole collection.
+    const cap = parsePickerLimit(req.query.limit);
+    if (cap) listQuery = listQuery.limit(cap);
+    const purchases = await listQuery;
     res.json(purchases);
   } catch (err) {
     console.error("Error fetching purchases:", err);

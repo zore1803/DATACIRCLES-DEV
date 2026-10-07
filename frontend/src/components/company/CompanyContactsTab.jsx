@@ -657,7 +657,9 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
           initialCompanyId={companyId}
           onContactCreated={async () => {
             try {
-              const res = await API.get("/contacts");
+              // Scoped by the server to this company, instead of downloading every
+              // contact in the organization and filtering here.
+              const res = await API.get("/contacts", { params: { company: companyId } });
               setContacts?.(res.data.filter((c) => c.company?._id === companyId));
               toast.success("Contact created successfully!");
             } catch (err) {

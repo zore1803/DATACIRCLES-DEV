@@ -352,22 +352,26 @@ const VendorDetailsPageNew = () => {
      silently rendering with vendor=null. */
   const fetchVendorDetails = async () => {
     setLoadError(null);
-    try {
-      const resVendor = await API.get(`/vendors/${id}`);
-      setVendor(resVendor.data);
-    } catch (err) {
+    // Everything below is keyed only by the vendor id in the URL, so it all goes
+    // out at once instead of three rounds in a row (vendor, then the four feeds,
+    // then the field template). Only the vendor lookup is fatal.
+    const [vendorRes, paymentsRes, tasksRes, meetingsRes, notesRes, fieldsRes] = await Promise.allSettled([
+      API.get(`/vendors/${id}`),
+      API.get(`/vendors/${id}/payments`),
+      API.get(`/tasks/vendor/${id}`),
+      API.get("/meetings", { params: { vendorId: id } }),
+      API.get(`/vendor-notes/vendor/${id}`),
+      API.get("/vendor-fields/latest"),
+    ]);
+
+    if (vendorRes.status === "rejected") {
+      const err = vendorRes.reason;
       console.error("Failed to load vendor profile:", err.response?.status, err.response?.data || err.message);
       setLoadError(err.response?.status === 404 ? "not_found" : "error");
       setDataLoaded(true);
       return;
     }
-
-    const [paymentsRes, tasksRes, meetingsRes, notesRes] = await Promise.allSettled([
-      API.get(`/vendors/${id}/payments`),
-      API.get(`/tasks/vendor/${id}`),
-      API.get("/meetings", { params: { vendorId: id } }),
-      API.get(`/vendor-notes/vendor/${id}`),
-    ]);
+    setVendor(vendorRes.value.data);
 
     if (paymentsRes.status === "fulfilled") {
       setPayments(paymentsRes.value.data);
@@ -392,12 +396,10 @@ const VendorDetailsPageNew = () => {
     }
     setNotes(notesRes.status === "fulfilled" ? notesRes.value.data || [] : []);
 
-    try {
-      const resFields = await API.get("/vendor-fields/latest");
-      const fieldData = resFields.data?.fields || [];
-      setVendorFieldList(fieldData);
-    } catch (fieldErr) {
-      console.error("Failed to load vendor fields template:", fieldErr);
+    if (fieldsRes.status === "fulfilled") {
+      setVendorFieldList(fieldsRes.value.data?.fields || []);
+    } else {
+      console.error("Failed to load vendor fields template:", fieldsRes.reason);
     }
 
     setDataLoaded(true);
@@ -1274,6 +1276,7 @@ const VendorDetailsPageNew = () => {
                   )}
                   {activeTab === "Notes" && (
                     <NoteSection
+                      initialVendor={vendor}
                       showKPIs={showKPI}
                       autoOpenCreate={pendingCreate === "note"}
                       onAutoOpenCreateConsumed={() => setPendingCreate(null)}
@@ -1282,6 +1285,7 @@ const VendorDetailsPageNew = () => {
                   {activeTab === "Tasks" && (
                     <VendorTasksTable
                       vendorId={id}
+                      initialVendorName={vendor?.name || ""}
                       showKPIs={showKPI}
                       autoOpenCreate={pendingCreate === "task"}
                       onAutoOpenCreateConsumed={() => setPendingCreate(null)}

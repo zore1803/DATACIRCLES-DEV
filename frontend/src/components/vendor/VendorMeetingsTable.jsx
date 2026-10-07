@@ -140,23 +140,28 @@ const VendorMeetingsTable = ({ vendorId, showKPIs = true, autoOpenCreate = false
 
   useEffect(() => {
     const fetchData = async () => {
-      try {
-        setLoading(true);
-        await refetchMeetings();
-        setError(null);
-      } catch (err) {
+      setLoading(true);
+      // The meetings and the participant list don't depend on each other, so
+      // they load together. Only the meetings are fatal.
+      const [meetingsResult, usersResult] = await Promise.allSettled([
+        refetchMeetings(),
+        API.get("/auth/all-user"),
+      ]);
+
+      if (meetingsResult.status === "rejected") {
+        const err = meetingsResult.reason;
         setError("Failed to load meetings");
         console.error("Error fetching meetings:", err);
         toast.error(err.response?.data?.error || "Failed to load meetings.");
         setLoading(false);
         return;
       }
+      setError(null);
 
-      try {
-        const usersResponse = await API.get("/auth/all-user");
-        setUsers(usersResponse.data?.allUsers || []);
-      } catch (err) {
-        console.error("Error fetching users for participants:", err);
+      if (usersResult.status === "fulfilled") {
+        setUsers(usersResult.value.data?.allUsers || []);
+      } else {
+        console.error("Error fetching users for participants:", usersResult.reason);
       }
 
       setLoading(false);

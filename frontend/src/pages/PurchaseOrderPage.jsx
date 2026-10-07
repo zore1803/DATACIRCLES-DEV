@@ -161,7 +161,6 @@ const SingleSelectDropdown = ({ options, value, onChange, disabled, variant = "p
 
 const PurchaseOrderPage = () => {
   const isSearchOverlayOpen = useSearchOverlayOpen();
-  const [vendors, setVendors] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editingPO, setEditingPO] = useState(null);
@@ -444,18 +443,8 @@ const PurchaseOrderPage = () => {
   ]);
 
   useEffect(() => {
-    fetchVendors();
     fetchShareSettings();
   }, []);
-
-  const fetchVendors = async () => {
-    try {
-      const res = await API.get("/vendors");
-      setVendors(res.data.vendors || res.data || []);
-    } catch {
-      toast.error("Failed to load vendors");
-    }
-  };
 
   // Same org-wide message templates + branding Accounting.jsx's share flow
   // pulls from (Settings -> Message Templates / Branding) — reused as-is so
@@ -1585,7 +1574,6 @@ const PurchaseOrderPage = () => {
       {showForm && (
         <PurchaseOrderForm
           editingPO={editingPO}
-          vendors={vendors}
           onRequestClose={() => {
             setShowForm(false);
             setEditingPO(null);

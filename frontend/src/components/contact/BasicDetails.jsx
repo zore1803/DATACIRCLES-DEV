@@ -1456,16 +1456,63 @@ const ContactCalendar = ({ activity, loading, onNavigateTab }) => {
   );
 };
 
-const BasicDetails = ({ contact, company, deals, onContactUpdate, onDealCreated, onNavigateTab }) => {
-  // Real contact activity, fetched here (the same per-type endpoints the
-  // Call Logs / Notes / Tasks / Meetings tabs use) to back the Engagement
-  // Overview and Recent Activity sections. Failures degrade to empty lists so
-  // one bad endpoint can't blank the whole overview.
-  const [activity, setActivity] = useState({ calls: [], meetings: [], tasks: [], notes: [] });
-  const [activityLoading, setActivityLoading] = useState(true);
+// `callLogs` / `tasks` / `meetings`: the lists ContactDetails already loaded for this
+// contact. When all three are passed, this Overview reuses them and only fetches the
+// notes (the one feed the page doesn't load) instead of asking the server for the same
+// data a second time. Without them (e.g. the quick view) it fetches everything itself.
+const BasicDetails = ({
+  contact,
+  company,
+  deals,
+  callLogs: sharedCalls,
+  tasks: sharedTasks,
+  meetings: sharedMeetings,
+  sharedLoading = false,
+  onContactUpdate,
+  onDealCreated,
+  onNavigateTab,
+}) => {
+  const hasShared =
+    Array.isArray(sharedCalls) && Array.isArray(sharedTasks) && Array.isArray(sharedMeetings);
 
+  // Real contact activity, used by the Engagement Overview and Recent Activity
+  // sections. Failures degrade to empty lists so one bad endpoint can't blank
+  // the whole overview.
+  const [localActivity, setActivity] = useState({ calls: [], meetings: [], tasks: [], notes: [] });
+  const [localActivityLoading, setActivityLoading] = useState(true);
+  const [notes, setNotes] = useState([]);
+  const [notesLoading, setNotesLoading] = useState(true);
+
+  // Shared mode: only the notes are fetched here.
   useEffect(() => {
-    if (!contact?._id) return;
+    if (!hasShared || !contact?._id) return;
+    let cancelled = false;
+    setNotesLoading(true);
+    API.get(`/notes/contact/${contact._id}`)
+      .catch(() => ({ data: [] }))
+      .then((noteR) => {
+        if (cancelled) return;
+        const noteRaw = noteR.data?.notes ?? noteR.data;
+        setNotes(Array.isArray(noteRaw) ? noteRaw : []);
+      })
+      .finally(() => {
+        if (!cancelled) setNotesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [contact?._id, hasShared]);
+
+  const sharedActivity = useMemo(
+    () => ({ calls: sharedCalls || [], tasks: sharedTasks || [], meetings: sharedMeetings || [], notes }),
+    [sharedCalls, sharedTasks, sharedMeetings, notes],
+  );
+  const activity = hasShared ? sharedActivity : localActivity;
+  const activityLoading = hasShared ? sharedLoading || notesLoading : localActivityLoading;
+
+  // Standalone mode: nothing was passed in, so fetch all four feeds here.
+  useEffect(() => {
+    if (hasShared || !contact?._id) return;
     let cancelled = false;
     setActivityLoading(true);
     Promise.all([
@@ -1481,8 +1528,8 @@ const BasicDetails = ({ contact, company, deals, onContactUpdate, onDealCreated,
         const meetRaw = meetR.data?.meetings ?? meetR.data;
         const meetings = Array.isArray(meetRaw) ? meetRaw : [];
         const noteRaw = noteR.data?.notes ?? noteR.data;
-        const notes = Array.isArray(noteRaw) ? noteRaw : [];
-        setActivity({ calls, meetings, tasks: tasksList, notes });
+        const notesList = Array.isArray(noteRaw) ? noteRaw : [];
+        setActivity({ calls, meetings, tasks: tasksList, notes: notesList });
       })
       .finally(() => {
         if (!cancelled) setActivityLoading(false);
@@ -1490,7 +1537,7 @@ const BasicDetails = ({ contact, company, deals, onContactUpdate, onDealCreated,
     return () => {
       cancelled = true;
     };
-  }, [contact?._id]);
+  }, [contact?._id, hasShared]);
 
   return (
     <div className="space-y-4">

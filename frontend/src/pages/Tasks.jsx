@@ -1050,22 +1050,26 @@ function Tasks() {
   // collections of those are needed only by the create/edit form pickers and
   // are loaded on demand when a form opens (see fetchFormPickerData below).
   const fetchRelatedData = async () => {
-    try {
-      const usr = await API.get("/auth/all-user");
-      setUsers(usr.data?.allUsers || []);
-    } catch (err) {
-      toast.error(err.response?.data?.error || "Failed to load related data");
+    // The users list and the two field-definition lists don't depend on each
+    // other, so all three go out together (they used to run users first, then
+    // the fields — two round trips in a row for no reason).
+    const [usersResult, fieldsResult] = await Promise.allSettled([
+      API.get("/auth/all-user"),
+      Promise.all([API.get("/task-fields"), API.get("/meeting-fields")]),
+    ]);
+
+    if (usersResult.status === "fulfilled") {
+      setUsers(usersResult.value.data?.allUsers || []);
+    } else {
+      toast.error(usersResult.reason?.response?.data?.error || "Failed to load related data");
     }
     // Custom field definitions fail silently — an org with none defined is
     // the normal case, not an error worth a toast.
-    try {
-      const [tf, mf] = await Promise.all([
-        API.get("/task-fields"),
-        API.get("/meeting-fields"),
-      ]);
+    if (fieldsResult.status === "fulfilled") {
+      const [tf, mf] = fieldsResult.value;
       setTaskFields(tf.data?.fields || []);
       setMeetingFields(mf.data?.fields || []);
-    } catch {
+    } else {
       setTaskFields([]);
       setMeetingFields([]);
     }

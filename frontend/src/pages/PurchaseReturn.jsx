@@ -97,7 +97,6 @@ const getAncestorZoom = (el) => {
 
 const PurchaseReturn = () => {
   const isSearchOverlayOpen = useSearchOverlayOpen();
-  const [vendors, setVendors] = useState([]);
   const [purchaseReturns, setPurchaseReturns] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editingReturn, setEditingReturn] = useState(null);
@@ -334,17 +333,7 @@ const PurchaseReturn = () => {
   }, [pagination.currentPage, pagination.limit, sortConfig, debouncedSearchTerm]);
 
   useEffect(() => {
-    fetchVendors();
   }, []);
-
-  const fetchVendors = async () => {
-    try {
-      const res = await API.get("/vendors");
-      setVendors(res.data.vendors || res.data || []);
-    } catch {
-      toast.error("Failed to load vendors");
-    }
-  };
 
   // Latest-request guard, same as Vendors.jsx: every fetch takes an id, and a response is only
   // applied if no newer fetch has started since. Without it an older, slower response (a
@@ -1837,7 +1826,6 @@ const PurchaseReturn = () => {
       {showForm && (
         <PurchaseReturnForm
           editingReturn={editingReturn}
-          vendors={vendors}
           onRequestClose={() => {
             setShowForm(false);
             setEditingReturn(null);

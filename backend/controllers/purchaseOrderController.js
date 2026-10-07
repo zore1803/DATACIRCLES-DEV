@@ -1,4 +1,5 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
+const { parsePickerLimit } = require('../utils/pickerLimit');
 const PurchaseOrder = require("../models/PurchaseOrder");
 const Purchase = require("../models/Purchase");
 const Vendor = require("../models/Vendor");
@@ -187,8 +188,22 @@ exports.createPurchaseOrder = async (req, res) => {
 // Get All Purchase Orders
 exports.getAllPurchaseOrders = async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, vendor, convertible } = req.query;
     let query = { organization: req.user.organization };
+
+    // Optional narrowing used by the Purchase form's PO picker, so it never has
+    // to download every PO and filter in the browser: one vendor's POs, and
+    // (convertible=true) only those that can still become a Purchase — Approved
+    // or Delivered and not already linked to a Purchase.
+    if (vendor) query.vendor = String(vendor);
+    if (convertible === "true") {
+      query.status = { $in: ["Approved", "Delivered"] };
+      const converted = await Purchase.distinct("purchaseOrder", {
+        organization: req.user.organization,
+        purchaseOrder: { $ne: null },
+      });
+      if (converted.length) query._id = { $nin: converted };
+    }
 
     if (req.ownOnly) {
       query.user = req.user._id;
@@ -201,9 +216,21 @@ exports.getAllPurchaseOrders = async (req, res) => {
         { paymentTerms: { $regex: buildFuzzySearchPattern(search), $options: 'i' } },
         { notes: { $regex: buildFuzzySearchPattern(search), $options: 'i' } }
       ];
+      // The picker label shows the vendor's name, so a search by vendor must find it too.
+      const matchingVendors = await Vendor.find({
+        organization: req.user.organization,
+        name: { $regex: buildFuzzySearchPattern(search), $options: 'i' },
+      }).select('_id').limit(200).lean();
+      if (matchingVendors.length) {
+        query.$or.push({ vendor: { $in: matchingVendors.map((v) => v._id) } });
+      }
     }
     
-    const purchaseOrders = await PurchaseOrder.find(query).populate("vendor");
+    let listQuery = PurchaseOrder.find(query).populate("vendor");
+    // Picker callers pass ?limit= so they never pull the whole collection.
+    const cap = parsePickerLimit(req.query.limit);
+    if (cap) listQuery = listQuery.sort({ createdAt: -1 }).limit(cap);
+    const purchaseOrders = await listQuery;
     await attachConvertedPurchaseInfo(purchaseOrders, req.user.organization);
     res.json(purchaseOrders);
   } catch (err) {

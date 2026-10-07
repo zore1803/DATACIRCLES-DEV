@@ -199,7 +199,6 @@ const ItemSearchSelect = ({ value, onSelect, onAddNew, error = null }) => {
 
 const PurchaseOrderForm = ({
   editingPO,
-  vendors,
   onRequestClose,
   onSuccess,
   onError,
@@ -270,7 +269,10 @@ const PurchaseOrderForm = ({
   // InvoiceFormFull.jsx uses to resolve intra vs inter for a customer.
   const [sellerState, setSellerState] = useState("");
 
-  const [localVendors, setLocalVendors] = useState(vendors || []);
+  // The vendor picker searches the server as you type (no full vendor list is
+  // downloaded). Only the SELECTED vendor is kept here — its address state
+  // decides CGST+SGST vs IGST below.
+  const [selectedVendor, setSelectedVendor] = useState(null);
   const [showQuickVendorForm, setShowQuickVendorForm] = useState(false);
 
   useEffect(() => {
@@ -300,21 +302,20 @@ const PurchaseOrderForm = ({
     } else if (initialVendorId) {
       setVendorId(initialVendorId);
     }
-    setLocalVendors(vendors);
     API.get("/branding").then((r) => setSellerState((r.data?.state || "").trim())).catch(() => {});
-  }, [editingPO, vendors, initialVendorId]);
+  }, [editingPO, initialVendorId]);
 
   // Vendor state vs. the org's own state decides CGST+SGST (same state) or
   // IGST (different state) — the user never picks this manually. Re-runs
-  // whenever the vendor selection or the vendor list itself changes (e.g.
-  // right after "+ Add new vendor" hands back a freshly created vendor).
+  // whenever the selected vendor changes (including right after "+ Add new
+  // vendor" hands back a freshly created one). Waits until the selected
+  // vendor's record has actually loaded.
   useEffect(() => {
-    if (!vendorId) return;
-    const vendor = localVendors.find((v) => v._id === vendorId);
-    const vendorState = vendor?.address?.state || "";
+    if (!vendorId || selectedVendor?._id !== vendorId) return;
+    const vendorState = selectedVendor?.address?.state || "";
     const resolved = resolveTransactionType(sellerState, { state: vendorState }, { state: vendorState });
     if (resolved) setTransactionType(resolved);
-  }, [vendorId, localVendors, sellerState]);
+  }, [vendorId, selectedVendor, sellerState]);
 
   const handleClose = () => {
     setIsOpen(false);
@@ -539,9 +540,13 @@ const PurchaseOrderForm = ({
             <FormLabel required>Select Vendor</FormLabel>
             <div className="flex items-center gap-2">
               <SearchableDropdown
-                options={localVendors}
+                options={[]}
                 value={vendorId}
-                onChange={setVendorId}
+                onChange={(id, option) => {
+                  setVendorId(id);
+                  setSelectedVendor(option || null);
+                }}
+                remote={{ endpoint: "/vendors", onSelectedLoaded: setSelectedVendor }}
                 placeholder="Choose Vendor"
                 displayKey="name"
                 valueKey="_id"
@@ -838,7 +843,7 @@ const PurchaseOrderForm = ({
       {showQuickVendorForm && (
         <QuickVendorForm
           onVendorCreated={(vendor) => {
-            setLocalVendors([...localVendors, vendor]);
+            setSelectedVendor(vendor);
             setVendorId(vendor._id);
             setShowQuickVendorForm(false);
           }}

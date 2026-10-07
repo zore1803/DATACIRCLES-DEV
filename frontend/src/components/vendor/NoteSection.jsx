@@ -526,10 +526,12 @@ const NoteEditor = ({
 };
 
 // Main NoteSection Component
-const NoteSection = ({ showKPIs = true, autoOpenCreate = false, onAutoOpenCreateConsumed }) => {
+// `initialVendor`: the profile page already has the vendor record, so passing it here
+// saves this tab a duplicate GET /vendors/:id.
+const NoteSection = ({ initialVendor = null, showKPIs = true, autoOpenCreate = false, onAutoOpenCreateConsumed }) => {
   const { id: vendorId } = useParams();
   const [notes, setNotes] = useState([]);
-  const [vendor, setVendor] = useState(null);
+  const [vendor, setVendor] = useState(initialVendor);
   const [noteTitle, setNoteTitle] = useState("");
   const [noteContent, setNoteContent] = useState("");
   const [editingNoteId, setEditingNoteId] = useState(null);
@@ -576,9 +578,15 @@ const NoteSection = ({ showKPIs = true, autoOpenCreate = false, onAutoOpenCreate
     }
   }, [vendorId]);
 
+  // Follow the profile when it switches to another vendor.
+  useEffect(() => {
+    if (initialVendor) setVendor(initialVendor);
+  }, [initialVendor]);
+
   useEffect(() => {
     fetchNotes();
-    fetchVendor();
+    if (!initialVendor) fetchVendor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchNotes, fetchVendor]);
 
   const handleAddOrUpdateNote = async () => {

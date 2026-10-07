@@ -1492,7 +1492,9 @@ export default function CompanyDealsKanban({
 
   const handleDealCreated = async () => {
     try {
-      const res = await API.get("/deals");
+      // Scoped by the server to this company, instead of downloading every deal
+      // in the organization and filtering here.
+      const res = await API.get("/deals", { params: { company: companyId } });
       setDeals(res.data.filter((d) => d.company?._id === companyId));
     } catch (err) {
       toast.error("Failed to refresh deals list.");

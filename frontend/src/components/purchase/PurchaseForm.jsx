@@ -213,7 +213,6 @@ const ItemSearchSelect = ({ value, onSelect, onAddNew, error = null }) => {
 
 const PurchaseForm = ({
   editingPurchase,
-  vendors,
   onRequestClose,
   onSuccess,
   onError,
@@ -238,8 +237,16 @@ const PurchaseForm = ({
   // Opens the Purchase Order quick drawer from the "no PO for this vendor"
   // empty state, pre-filled with the currently selected vendor.
   const [showQuickPOForm, setShowQuickPOForm] = useState(false);
-  const [localVendors, setLocalVendors] = useState(vendors || []);
+  // The vendor picker searches the server as you type (no full vendor list is
+  // downloaded). Only the SELECTED vendor is kept — its address state decides
+  // CGST+SGST vs IGST below.
+  const [selectedVendor, setSelectedVendor] = useState(null);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
+  // Which vendor ("" = none picked) the current purchaseOrders list was fetched
+  // for, so the "no purchase order" empty state never flashes while a new
+  // vendor's POs are still loading.
+  const [posLoadedFor, setPosLoadedFor] = useState(null);
+  const poRequestRef = useRef(0);
 
   // Form State
   const [vendorId, setVendorId] = useState("");
@@ -318,28 +325,37 @@ const PurchaseForm = ({
   // InvoiceFormFull.jsx/PurchaseOrderForm.jsx use to resolve intra vs inter.
   const [sellerState, setSellerState] = useState("");
 
-  // Fetch POs. Kept as a component-level function (not buried in the effect)
-  // so it can be re-run after a new PO is created from the empty-state drawer.
+  // Fetch the POs that can be linked, scoped by the SERVER to the selected vendor
+  // (or the latest ones when no vendor is picked yet) instead of downloading
+  // every PO and filtering here. An Approved or Delivered PO can be converted
+  // to a Purchase (enforced server-side too, in purchaseController.js) — a
+  // Pending/Rejected one shouldn't even be selectable. Already-converted POs
+  // are excluded too — picking one would just 400 on save. Kept as a
+  // component-level function so it can be re-run after a new PO is created
+  // from the empty-state drawer.
   const fetchPOs = async () => {
+    const requestId = ++poRequestRef.current;
+    const forVendor = vendorId || "";
     try {
-      const res = await API.get("/purchase-orders");
+      const res = await API.get("/purchase-orders", {
+        params: { convertible: "true", limit: 100, ...(forVendor ? { vendor: forVendor } : {}) },
+      });
+      if (requestId !== poRequestRef.current) return;
       const all = res.data.purchaseOrders || res.data || [];
-      // An Approved or Delivered PO can be converted to a Purchase
-      // (enforced server-side too, in purchaseController.js) — a Pending/
-      // Rejected one shouldn't even be selectable here. Already-converted
-      // POs are excluded too — picking one would just 400 on save.
       setPurchaseOrders(
         all.filter(
           (po) => (po.status === "Approved" || po.status === "Delivered") && !po.convertedPurchase
         )
       );
+      setPosLoadedFor(forVendor);
     } catch (err) {
       console.error("Failed to fetch POs", err);
     }
   };
   useEffect(() => {
     fetchPOs();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendorId]);
 
   // Load the org's Purchase numbering config (prefix/suffix options + the next
   // auto number) so the header can show and let the user pick them, exactly
@@ -375,7 +391,6 @@ const PurchaseForm = ({
 
   useEffect(() => {
     requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
-    setLocalVendors(vendors);
 
     if (editingPurchase) {
       setVendorId(editingPurchase.vendor?._id || editingPurchase.vendor || "");
@@ -407,20 +422,19 @@ const PurchaseForm = ({
       setGstRate(editingPurchase.gstRate || 0);
     }
     API.get("/branding").then((r) => setSellerState((r.data?.state || "").trim())).catch(() => {});
-  }, [editingPurchase, vendors]);
+  }, [editingPurchase]);
 
   // Vendor state vs. the org's own state decides CGST+SGST (same state) or
   // IGST (different state) — the user never picks this manually. Skipped
   // while a PO is linked (loadPurchaseOrder above already inherits that PO's
-  // own transactionType directly), and re-runs whenever the vendor selection
-  // or vendor list itself changes.
+  // own transactionType directly), and re-runs whenever the selected vendor
+  // changes. Waits until the selected vendor's record has actually loaded.
   useEffect(() => {
-    if (!vendorId || selectedPO) return;
-    const vendor = localVendors.find((v) => v._id === vendorId);
-    const vendorState = vendor?.address?.state || "";
+    if (!vendorId || selectedPO || selectedVendor?._id !== vendorId) return;
+    const vendorState = selectedVendor?.address?.state || "";
     const resolved = resolveTransactionType(sellerState, { state: vendorState }, { state: vendorState });
     if (resolved) setTransactionType(resolved);
-  }, [vendorId, localVendors, sellerState, selectedPO]);
+  }, [vendorId, selectedVendor, sellerState, selectedPO]);
 
   const handleClose = () => {
     setIsOpen(false);
@@ -696,9 +710,13 @@ const PurchaseForm = ({
               <FormLabel required>Select Vendor</FormLabel>
               <div className="flex items-center gap-2">
                 <SearchableDropdown
-                  options={localVendors}
+                  options={[]}
                   value={vendorId}
-                  onChange={setVendorId}
+                  onChange={(id, option) => {
+                    setVendorId(id);
+                    setSelectedVendor(option || null);
+                  }}
+                  remote={{ endpoint: "/vendors", onSelectedLoaded: setSelectedVendor }}
                   placeholder="Select Vendor"
                   displayKey="name"
                   valueKey="_id"
@@ -720,7 +738,7 @@ const PurchaseForm = ({
 
             <div>
               <FormLabel>Link to Purchase Order (Optional)</FormLabel>
-              {vendorId && vendorPOs.length === 0 ? (
+              {vendorId && posLoadedFor === vendorId && vendorPOs.length === 0 ? (
                 // Vendor picked but it has no linkable PO — say so, and offer a
                 // "+" that opens the Purchase Order quick drawer pre-filled with
                 // this vendor. Once created, fetchPOs (in onSuccess) refreshes
@@ -1087,7 +1105,7 @@ const PurchaseForm = ({
       {showQuickVendorForm && (
         <QuickVendorForm
           onVendorCreated={(vendor) => {
-            setLocalVendors([...localVendors, vendor]);
+            setSelectedVendor(vendor);
             setVendorId(vendor._id);
             setShowQuickVendorForm(false);
           }}
@@ -1097,7 +1115,6 @@ const PurchaseForm = ({
 
       {showQuickPOForm && (
         <PurchaseOrderForm
-          vendors={localVendors}
           initialVendorId={vendorId}
           onRequestClose={() => setShowQuickPOForm(false)}
           onSuccess={() => {

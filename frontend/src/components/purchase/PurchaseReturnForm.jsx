@@ -86,7 +86,6 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
     return () => { cancelled = true; };
   }, [isEditing]);
 
-  const [purchases, setPurchases] = useState([]);
   const [purchaseId, setPurchaseId] = useState("");
   const [vendorInfo, setVendorInfo] = useState(null); // { _id, name, email, phone }
   const [purchaseNumber, setPurchaseNumber] = useState("");
@@ -127,12 +126,6 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
 
   useEffect(() => {
     requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
-  }, []);
-
-  useEffect(() => {
-    API.get("/purchases")
-      .then((res) => setPurchases(Array.isArray(res.data) ? res.data : []))
-      .catch(() => setPurchases([]));
   }, []);
 
   // Loads a Purchase's items + already-returned/remaining figures. When
@@ -229,10 +222,16 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
   const sgstAmount   = isIntra  ? totalTax / 2 : 0;
   const igstAmount   = !isIntra ? totalTax     : 0;
 
-  const purchaseOptions = purchases.map((p) => ({
-    _id: p._id,
-    label: `${p.purchaseNumber} · ${p.vendor?.name || "Unknown vendor"} · ${money(p.grandTotal)}`,
-  }));
+  // The "Against Purchase" picker searches the server as you type (nothing is
+  // downloaded until it opens), and the one already on a return being edited
+  // is fetched by id, so its label shows even if it isn't in the first results.
+  const purchaseRemote = {
+    endpoint: "/purchases",
+    map: (p) => ({
+      ...p,
+      label: `${p.purchaseNumber} · ${p.vendor?.name || "Unknown vendor"} · ${money(p.grandTotal)}`,
+    }),
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -342,7 +341,8 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
           <div>
             <FormLabel required>Against Purchase</FormLabel>
             <SearchableDropdown
-              options={purchaseOptions}
+              options={[]}
+              remote={purchaseRemote}
               value={purchaseId}
               onChange={handlePurchaseChange}
               displayKey="label"

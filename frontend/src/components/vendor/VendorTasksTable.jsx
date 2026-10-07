@@ -68,7 +68,9 @@ const formatDate = (iso) =>
     ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : "—";
 
-const VendorTasksTable = ({ vendorId, showKPIs = true, autoOpenCreate = false, onAutoOpenCreateConsumed }) => {
+// `initialVendorName`: the profile page already has the vendor, so passing its name
+// here saves this tab a duplicate GET /vendors/:id.
+const VendorTasksTable = ({ vendorId, initialVendorName = "", showKPIs = true, autoOpenCreate = false, onAutoOpenCreateConsumed }) => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -77,7 +79,11 @@ const VendorTasksTable = ({ vendorId, showKPIs = true, autoOpenCreate = false, o
   const [users, setUsers] = useState([]);
   const [selectedTask, setSelectedTask] = useState(null);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [vendorName, setVendorName] = useState("");
+  const [vendorName, setVendorName] = useState(initialVendorName);
+  // Follow the profile when it switches to another vendor.
+  useEffect(() => {
+    if (initialVendorName) setVendorName(initialVendorName);
+  }, [initialVendorName]);
 
   const [search, setSearch] = useState("");
   const [selectedFilters, setSelectedFilters] = useState({});
@@ -158,30 +164,35 @@ const VendorTasksTable = ({ vendorId, showKPIs = true, autoOpenCreate = false, o
         return;
       }
 
-      try {
-        setLoading(true);
-        await refetchTasks();
-        setError(null);
-      } catch (err) {
+      setLoading(true);
+      // The tasks, the assignable users and (if the page didn't hand it down)
+      // the vendor's name are independent, so they load together rather than
+      // one after another. Only the tasks are fatal.
+      const [tasksResult, usersResult, vendorResult] = await Promise.allSettled([
+        refetchTasks(),
+        API.get("/auth/all-user"),
+        initialVendorName ? Promise.resolve(null) : API.get(`/vendors/${vendorId}`),
+      ]);
+
+      if (tasksResult.status === "rejected") {
         setError("Failed to load tasks");
-        console.error("Error fetching tasks:", err);
+        console.error("Error fetching tasks:", tasksResult.reason);
         toast.error("Failed to load tasks.");
         setLoading(false);
         return;
       }
+      setError(null);
 
-      try {
-        const usersResponse = await API.get("/auth/all-user");
-        setUsers(usersResponse.data?.allUsers || []);
-      } catch (err) {
-        console.error("Error fetching users for task assignment:", err);
+      if (usersResult.status === "fulfilled") {
+        setUsers(usersResult.value.data?.allUsers || []);
+      } else {
+        console.error("Error fetching users for task assignment:", usersResult.reason);
       }
 
-      try {
-        const vendorResponse = await API.get(`/vendors/${vendorId}`);
-        setVendorName(vendorResponse.data?.name || "");
-      } catch (err) {
-        console.error("Error fetching vendor name:", err);
+      if (vendorResult.status === "fulfilled") {
+        if (vendorResult.value) setVendorName(vendorResult.value.data?.name || "");
+      } else {
+        console.error("Error fetching vendor name:", vendorResult.reason);
       }
 
       setLoading(false);

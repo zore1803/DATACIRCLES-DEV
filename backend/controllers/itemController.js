@@ -1,4 +1,5 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
+const { parsePickerLimit } = require("../utils/pickerLimit");
 const { formatCustomFieldValue } = require("../utils/exportFormat");
 const Item = require("../models/Item");
 const StockMovement = require("../models/StockMovement");
@@ -325,9 +326,13 @@ const getAllItems = async (req, res) => {
       }
     }
 
-    const items = await Item.find(query)
+    let listQuery = Item.find(query)
       .populate("user", "name email")
       .sort({ createdAt: -1 });
+    // Picker callers pass ?limit= so they never pull the whole catalog.
+    const cap = parsePickerLimit(req.query.limit);
+    if (cap) listQuery = listQuery.limit(cap);
+    const items = await listQuery;
     res.json(items);
   } catch (err) {
     console.error("Error fetching items:", err);

@@ -1,4 +1,4 @@
-const { buildFuzzySearchPattern } = require('../utils/searchRegex');
+const { buildFuzzySearchPattern, escapeRegex } = require('../utils/searchRegex');
 const { formatCustomFieldValue, formatExportDate } = require("../utils/exportFormat");
 const { parsePickerLimit } = require('../utils/pickerLimit');
 // controllers/dealController.js (updated to handle field types)
@@ -10,6 +10,8 @@ const sendGridMail = require("../utils/sendGridMail");
 const NotificationSettings = require("../models/NotificationSettings");
 const EmailTemplate = require("../models/EmailTemplate");
 const User = require("../models/User");
+const Company = require("../models/Company");
+const Contact = require("../models/Contact");
 const Branding = require("../models/Branding");
 const { renderEmail } = require("../utils/emailLayout");
 const { getOwnedCompanyIds } = require("../utils/ownedCompanies");
@@ -100,7 +102,7 @@ const createDeal = async (req, res) => {
 
 const getAllDeals = async (req, res) => {
   try {
-    const { search, contact, company } = req.query;
+    const { search, contact, company, status } = req.query;
     let query = { organization: req.user.organization };
 
     const preAndConditions = [];
@@ -118,15 +120,26 @@ const getAllDeals = async (req, res) => {
 
     if (contact) query.contact = contact;
     if (company) query.company = company;
+    // Exact (case-insensitive) stage match — deal stages are org-configurable.
+    if (status) {
+      query.status = { $regex: `^${escapeRegex(String(status).trim())}$`, $options: "i" };
+    }
 
     if (search) {
-      preAndConditions.push({
-        $or: [
-          { title: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-          { status: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-          { "additionalFields.value": { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        ],
-      });
+      const searchOr = [
+        { title: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
+        { status: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
+        { "additionalFields.value": { $regex: buildFuzzySearchPattern(search), $options: "i" } },
+      ];
+      // Pickers label a deal "Title — Customer", so a search by the customer's
+      // name must find it too.
+      const [matchingCompanies, matchingContacts] = await Promise.all([
+        Company.find({ organization: req.user.organization, name: { $regex: buildFuzzySearchPattern(search), $options: "i" } }).select("_id").limit(200).lean(),
+        Contact.find({ organization: req.user.organization, name: { $regex: buildFuzzySearchPattern(search), $options: "i" } }).select("_id").limit(200).lean(),
+      ]);
+      if (matchingCompanies.length) searchOr.push({ company: { $in: matchingCompanies.map((c) => c._id) } });
+      if (matchingContacts.length) searchOr.push({ contact: { $in: matchingContacts.map((c) => c._id) } });
+      preAndConditions.push({ $or: searchOr });
     }
 
     if (preAndConditions.length > 0) {

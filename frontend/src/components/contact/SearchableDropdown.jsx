@@ -29,6 +29,13 @@ const SearchableDropdown = ({
   // (debounced) and returns at most REMOTE_LIMIT rows. The currently selected
   // record is fetched by id, so editing keeps its label even when it isn't in
   // the first page of results. Without it, `options` is used exactly as before.
+  // Optional `remote.onSelectedLoaded(record)` is called when the selected
+  // record has been fetched by id (e.g. while editing), for callers that need
+  // more than its label — such as a vendor's address for GST.
+  //
+  // `onChange(value, option)` also hands back the chosen record as a second
+  // argument (undefined when the selection is cleared); existing callers that
+  // only read `value` are unaffected.
   remote = null,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -43,6 +50,8 @@ const SearchableDropdown = ({
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [selectedRemote, setSelectedRemote] = useState(null);
   const requestIdRef = useRef(0);
+  const onSelectedLoadedRef = useRef(remote?.onSelectedLoaded);
+  onSelectedLoadedRef.current = remote?.onSelectedLoaded;
 
   // Search while open. The request id guards against a slow earlier response
   // overwriting a newer one.
@@ -80,7 +89,10 @@ const SearchableDropdown = ({
     let cancelled = false;
     API.get(`${remoteEndpoint}/${value}`)
       .then((res) => {
-        if (!cancelled) setSelectedRemote(toDisplayOption(res.data));
+        if (cancelled) return;
+        const record = toDisplayOption(res.data);
+        setSelectedRemote(record);
+        onSelectedLoadedRef.current?.(record);
       })
       .catch(() => {
         if (!cancelled) setSelectedRemote(null);
@@ -115,7 +127,10 @@ const SearchableDropdown = ({
   }, []);
 
   const handleSelect = (option) => {
-    onChange(option[valueKey]);
+    // Remember the record just picked so the by-id effect above doesn't fetch
+    // it again to learn its label.
+    if (remoteEndpoint) setSelectedRemote(option);
+    onChange(option[valueKey], option);
     setIsOpen(false);
     setSearchTerm("");
   };
