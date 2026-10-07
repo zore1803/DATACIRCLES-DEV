@@ -29,7 +29,7 @@ import ItemForm from "../components/item/ItemForm";
 import QuickItemDrawer from "../components/item/QuickItemDrawer";
 import ImportItems from "../components/item/ImportItems";
 import ExportModal from "../components/common/ExportModal";
-import { exportClientSide, formatINR } from "../utils/clientExport";
+import { exportClientSide, formatINR, confirmExport, withCustomFieldColumns } from "../utils/clientExport";
 import ColumnSettingsPanel from "../components/ColumnSettingsPanel";
 import { useColumnSettings } from "../hooks/useColumnSettings";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
@@ -608,7 +608,7 @@ function ProductsServices() {
   };
 
   // Column list handed to the shared ExportModal — same shape Vendors/Companies use.
-  const exportColumns = [
+  const baseExportColumns = [
     { key: "name", label: "Name" },
     { key: "type", label: "Type" },
     { key: "description", label: "Description" },
@@ -622,6 +622,29 @@ function ProductsServices() {
     { key: "variants", label: "Variants" },
     { key: "isActive", label: "Status" },
   ];
+  // Custom fields stored on the loaded items (the page doesn't fetch the
+  // field definitions) follow the built-in columns.
+  const exportColumns = (() => {
+    const names = [];
+    const seen = new Set();
+    items.forEach((it) =>
+      (it.additionalFields || []).forEach((f) => {
+        if (f.key && !seen.has(f.key)) {
+          seen.add(f.key);
+          names.push(f.key);
+        }
+      }),
+    );
+    const baseLabels = new Set(baseExportColumns.map((c) => c.label));
+    return [
+      ...baseExportColumns,
+      ...names.map((name) => ({
+        key: name,
+        label: baseLabels.has(name) ? `${name} (Custom)` : name,
+        isCustomField: true,
+      })),
+    ];
+  })();
 
   // Reset to page 1 when search/filter changes
   const skipInitialReset = useRef(true);
@@ -702,10 +725,11 @@ function ProductsServices() {
   ];
 
   const handleExport = (format) => {
-    if (!window.confirm(`Do you want to export in ${format}?`)) return;
+    if (!confirmExport(format)) return;
     exportClientSide(format, {
       rows: filteredItems,
-      columns: EXPORT_COLUMNS,
+      // Custom fields stored on the visible items follow the built-in columns.
+      columns: withCustomFieldColumns(EXPORT_COLUMNS, filteredItems),
       fileNamePrefix: "products_export",
       title: "Products & Services Report",
     });

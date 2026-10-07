@@ -45,7 +45,7 @@ import VideoTutorialModal from "../components/VideoTutorialModal";
 import { getVideoTutorial } from "../utils/videoTutorials";
 import AppToaster from "../components/AppToaster";
 import ExportModal from "../components/common/ExportModal";
-import { exportClientSide, formatINR } from "../utils/clientExport";
+import { exportClientSide, formatINR, confirmExport, formatExportDate } from "../utils/clientExport";
 import ColumnSettingsPanel from "../components/ColumnSettingsPanel";
 import { useColumnSettings } from "../hooks/useColumnSettings";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
@@ -576,13 +576,13 @@ const PurchasePage = () => {
   const EXPORT_COLUMNS = [
     { label: "Purchase Number", value: (p) => p.purchaseNumber },
     { label: "Vendor", value: (p) => p.vendor?.name },
-    { label: "Purchase Date", value: (p) => new Date(p.createdAt).toLocaleDateString() },
+    { label: "Purchase Date", value: (p) => formatExportDate(p.createdAt) },
     { label: "Grand Total", value: (p) => formatINR(p.grandTotal) },
     { label: "Status", value: (p) => p.status },
   ];
 
   const handleExport = (format) => {
-    if (!window.confirm(`Do you want to export in ${format}?`)) return;
+    if (!confirmExport(format)) return;
     exportClientSide(format, {
       rows: filteredPurchases,
       columns: EXPORT_COLUMNS,

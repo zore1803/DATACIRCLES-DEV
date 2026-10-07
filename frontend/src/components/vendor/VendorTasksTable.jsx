@@ -22,7 +22,7 @@ import { useBulkSelection, useBulkStrip } from "../../hooks/useBulkSelection";
 import { useTopLoadingSignal } from "../common/TopLoadingBar";
 import toast from "react-hot-toast";
 import HighlightText from "../common/HighlightText";
-import { exportToCSV } from "../../utils/exportToCSV";
+import { exportClientSide, withCustomFieldColumns, formatExportDate } from "../../utils/clientExport";
 import EyeIcon from "../common/EyeIcon";
 import EditIcon from "../common/EditIcon";
 
@@ -261,21 +261,24 @@ const VendorTasksTable = ({ vendorId, showKPIs = true, autoOpenCreate = false, o
   });
   const { visible: stripVisible, closing: stripClosing } = useBulkStrip(selectedItems.length);
 
-  const handleExportSelected = () => {
-    const dataToExport = tasks
-      .filter((t) => selectedItems.includes(t._id))
-      .map((t) => ({
-        "Title": t.title || "",
-        "Description": stripHtml(t.description || ""),
-        "Status": t.status || "",
-        "Priority": t.priority || "",
-        "Due Date": t.dueDate ? new Date(t.dueDate).toLocaleDateString() : "",
-        "Assigned To": getTaskFieldValue(t, "assignedTo"),
-      }));
-    if (dataToExport.length === 0) return;
-    const headers = Object.keys(dataToExport[0]).join(",");
-    const rows = dataToExport.map(row => Object.values(row).map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
-    exportToCSV([headers, ...rows], `tasks_export_${new Date().toISOString().split("T")[0]}.csv`);
+  const handleExportSelected = (format = "excel") => {
+    const rows = tasks.filter((t) => selectedItems.includes(t._id));
+    exportClientSide(format, {
+      rows,
+      columns: withCustomFieldColumns(
+        [
+          { label: "Title", value: (t) => t.title },
+          { label: "Description", value: (t) => stripHtml(t.description || "") },
+          { label: "Status", value: (t) => t.status },
+          { label: "Priority", value: (t) => t.priority },
+          { label: "Due Date", value: (t) => formatExportDate(t.dueDate) },
+          { label: "Assigned To", value: (t) => getTaskFieldValue(t, "assignedTo") },
+        ],
+        rows,
+      ),
+      fileNamePrefix: "tasks_export",
+      title: "Tasks Report",
+    });
   };
 
   const handleBulkDelete = () => {
@@ -591,6 +594,7 @@ const VendorTasksTable = ({ vendorId, showKPIs = true, autoOpenCreate = false, o
           onSelectAll={() => selectAll(filteredTasks)}
           onDeselectAll={clearSelection}
           onExport={handleExportSelected}
+          exportFormats={["excel", "pdf"]}
           onCancel={clearSelection}
           onDelete={handleBulkDelete}
           isDeleting={isDeleting}

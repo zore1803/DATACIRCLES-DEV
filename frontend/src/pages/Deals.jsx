@@ -16,6 +16,13 @@ import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
 import API from "../services/api";
 import { useTopLoadingSignal } from "../components/common/TopLoadingBar";
 import { formatNumberToIndian } from "../utils/numberFormatter";
+import {
+  exportClientSide,
+  confirmExport,
+  formatINR,
+  formatExportDate,
+  withCustomFieldColumns,
+} from "../utils/clientExport";
 import FilterIcon from "../components/common/FilterIcon";
 import AdvancedFilterPanel from "../components/common/AdvancedFilterPanel";
 import { applyAdvancedFilters } from "../utils/advancedFilters";
@@ -40,7 +47,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useNavigate, Link, useLocation } from "react-router-dom";
-import { autoTable } from "jspdf-autotable";
 import QuickDealForm from "../components/deal/QuickDealForm";
 import ImportDeals from "../components/deal/ImportDeals";
 import BulkActions from "../components/BulkActions";
@@ -106,98 +112,6 @@ const loadingMessages = [
 // Select a random message
 const randomMessage =
   loadingMessages[Math.floor(Math.random() * loadingMessages.length)];
-
-// Export strategies following Open/Closed principle
-class ExcelExporter {
-  static export(deals) {
-    const data = deals?.map((deal) => ({
-      Title: deal.title || "",
-      Amount: deal.amount ? `Rs.${formatNumberToIndian(parseFloat(String(deal.amount).replace(/,/g, '')) || 0)}` : "",
-      Status: deal.status || "",
-      Company: deal.company?.name || "N/A",
-      Contact: deal.contact?.name || "N/A",
-      "Created Date": new Date(deal.createdAt).toLocaleDateString(),
-      "Updated Date": new Date(deal.updatedAt).toLocaleDateString(),
-    }));
-
-    // Generate CSV content
-    const ws = window.XLSX?.utils.json_to_sheet(data);
-    const csv = window.XLSX?.utils.sheet_to_csv(ws, {
-      FS: ",", // Field separator (comma)
-      RS: "\n", // Row separator (newline)
-      forceQuotes: true, // Enclose all fields in quotes to handle special characters
-      blankrows: false, // Skip blank rows
-    });
-
-    // Create a downloadable CSV file
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute(
-      "download",
-      `deals_export_${new Date().toISOString().split("T")[0]}.csv`
-    );
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-}
-
-class PDFExporter {
-  static export(deals) {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-
-    doc.setFontSize(18);
-    doc.text("Deals Report", 14, 20);
-
-    const tableColumn = [
-      "#",
-      "Title",
-      "Amount",
-      "Status",
-      "Company",
-      "Contact",
-    ];
-    const tableRows = [];
-
-    deals.forEach((deal, index) => {
-      const dealData = [
-        index + 1,
-        deal.title || "—",
-        `Rs.${formatNumberToIndian(parseFloat(String(deal.amount || 0).replace(/,/g, '')) || 0)}`,
-        deal.status || "—",
-        deal.company?.name || "—",
-        deal.contact?.name || "—",
-      ];
-      tableRows.push(dealData);
-    });
-
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 30,
-      styles: {
-        fontSize: 10,
-        cellPadding: 3,
-        overflow: "linebreak",
-      },
-      headStyles: {
-        fillColor: [52, 144, 220],
-        textColor: 255,
-        fontStyle: "bold",
-      },
-      alternateRowStyles: {
-        fillColor: [245, 245, 245],
-      },
-      margin: { top: 30 },
-    });
-
-    doc.save(`deals_report_${new Date().toISOString().split("T")[0]}.pdf`);
-  }
-}
 
 const QuickActionDropZone = ({
   status,
@@ -1095,23 +1009,31 @@ function Deals() {
     }
   };
 
-  // Columns specifically mapped for the Export Modal
+  // Columns for the bulk "Export selected" dialog — same built-in set and
+  // labels as the page-level Excel/PDF export, then every deal custom field.
   const exportColumns = useMemo(() => {
     const baseCols = [
-      { key: "title", label: "Deal Title", visible: true },
-      { key: "amount", label: "Amount", visible: true },
-      { key: "status", label: "Stage", visible: true },
-      { key: "company", label: "Company", visible: true },
-      { key: "contact", label: "Contact", visible: true },
+      { key: "dealId", label: "Deal ID" },
+      { key: "title", label: "Deal Title" },
+      { key: "amount", label: "Amount" },
+      { key: "status", label: "Stage" },
+      { key: "company", label: "Company" },
+      { key: "contact", label: "Contact" },
+      { key: "dueDate", label: "Due Date" },
+      { key: "createdAt", label: "Created Date" },
+      { key: "updatedAt", label: "Updated Date" },
     ];
 
-    // Add custom fields
-    const customCols = (dealFields || []).map((field) => ({
-      key: field.name || field,
-      label: field.name || field,
-      visible: false, // Hidden by default in export
-      isCustomField: true,
-    }));
+    const baseLabels = new Set(baseCols.map((c) => c.label));
+    const customCols = (dealFields || [])
+      .map((field) => field.name || field)
+      // "Expected Close Date" is already the Due Date column above.
+      .filter((name) => name !== "Expected Close Date")
+      .map((name) => ({
+        key: name,
+        label: baseLabels.has(name) ? `${name} (Custom)` : name,
+        isCustomField: true,
+      }));
 
     return [...baseCols, ...customCols];
   }, [dealFields]);
@@ -2143,31 +2065,46 @@ function Deals() {
       return;
     }
 
-    if (!window.confirm(`Do you want to export in ${format}?`)) {
-      return;
-    }
+    if (!confirmExport(format)) return;
 
-    if (format === "excel") {
-      if (!window.XLSX) {
-        const script = document.createElement("script");
-        script.src =
-          "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-        script.onload = () => ExcelExporter.export(filteredDeals);
-        document.head.appendChild(script);
-      } else {
-        ExcelExporter.export(filteredDeals);
-      }
-    } else if (format === "pdf") {
-      if (!window.jspdf) {
-        const script = document.createElement("script");
-        script.src =
-          "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
-        script.onload = () => PDFExporter.export(filteredDeals);
-        document.head.appendChild(script);
-      } else {
-        PDFExporter.export(filteredDeals);
-      }
-    }
+    // Built-in columns match the table's labels; every custom field defined for
+    // deals follows (plus any stored on the rows). Same set for Excel and PDF.
+    const baseColumns = [
+      { label: "Deal ID", value: (d) => `DL-${String(d._id).slice(-5).toUpperCase()}` },
+      { label: "Deal Title", value: (d) => d.title },
+      {
+        label: "Amount",
+        value: (d) => {
+          const n = parseFloat(String(d.amount ?? "").replace(/,/g, ""));
+          return Number.isNaN(n) ? "" : formatINR(n);
+        },
+      },
+      { label: "Stage", value: (d) => d.status },
+      { label: "Company", value: (d) => d.company?.name },
+      { label: "Contact", value: (d) => d.contact?.name },
+      {
+        label: "Due Date",
+        value: (d) =>
+          formatExportDate(d.additionalFields?.find((f) => f.key === "Expected Close Date")?.value),
+      },
+      { label: "Created Date", value: (d) => formatExportDate(d.createdAt) },
+      { label: "Updated Date", value: (d) => formatExportDate(d.updatedAt) },
+    ];
+    // "Expected Close Date" is already the Due Date column above.
+    const dealExportColumns = withCustomFieldColumns(
+      baseColumns,
+      sortedTableDeals,
+      dealFields,
+      ["Expected Close Date"],
+    );
+
+    // Same column set for Excel and PDF, in the order the table shows rows.
+    exportClientSide(format, {
+      rows: sortedTableDeals,
+      columns: dealExportColumns,
+      fileNamePrefix: "deals_export",
+      title: "Deals Report",
+    });
   };
 
   const clearFilters = () => {

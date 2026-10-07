@@ -6,6 +6,7 @@ import { X, CheckSquare, Square } from "lucide-react";
 import toast from "react-hot-toast";
 import SearchIcon from "./SearchIcon";
 import API from "../../services/api"; // Make sure your API instance is imported
+import { downloadTablePDF, parseCSV } from "../../utils/clientExport";
 
 export default function ExportModal({
   isOpen,
@@ -18,6 +19,7 @@ export default function ExportModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCols, setSelectedCols] = useState([]);
   const [isExporting, setIsExporting] = useState(false);
+  const [format, setFormat] = useState("excel"); // "excel" (CSV) | "pdf"
 
   // When modal opens, select all visible columns by default
   useEffect(() => {
@@ -26,6 +28,7 @@ export default function ExportModal({
         columns.map((c) => c.key),
       );
       setSearchQuery("");
+      setFormat("excel");
     }
   }, [isOpen, columns]);
 
@@ -66,7 +69,7 @@ export default function ExportModal({
       }));
 
     setIsExporting(true);
-    const loadingToast = toast.loading("Generating Excel file...");
+    const loadingToast = toast.loading(format === "pdf" ? "Generating PDF file..." : "Generating Excel file...");
 
     try {
       // ✅ Make POST request to Backend, demanding a 'blob' (file) in return
@@ -81,18 +84,32 @@ export default function ExportModal({
         },
       );
 
-      // Create a URL for the downloaded file and trigger browser download
-      const blob = new Blob([response.data], {
-        type: "text/csv;charset=utf-8;",
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", fileName);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      if (format === "pdf") {
+        // The endpoint returns CSV; turn it back into a table for the PDF so
+        // Excel and PDF always contain exactly the same columns and values.
+        const text = await new Blob([response.data]).text();
+        const [head = [], ...body] = parseCSV(text);
+        const baseName = fileName.replace(/\.csv$/i, "");
+        await downloadTablePDF({
+          head: ["#", ...head],
+          body: body.map((row, i) => [i + 1, ...row]),
+          fileNamePrefix: baseName,
+          title: baseName.replace(/^Exported_/, "").replace(/_/g, " ") + " Report",
+        });
+      } else {
+        // Create a URL for the downloaded file and trigger browser download
+        const blob = new Blob([response.data], {
+          type: "text/csv;charset=utf-8;",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", fileName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
 
       toast.success(`Successfully exported ${selectedIds.length} records!`, {
         id: loadingToast,
@@ -126,7 +143,7 @@ export default function ExportModal({
                 Export Data
               </h2>
               <p className="text-xs text-gray-500">
-                Select columns for Excel export
+                Select columns and a format to export
               </p>
             </div>
           </div>
@@ -140,6 +157,28 @@ export default function ExportModal({
 
         {/* Content */}
         <div className="p-6 flex-1 flex flex-col overflow-hidden">
+          <div className="flex gap-2 mb-4 shrink-0" role="radiogroup" aria-label="Export format">
+            {[
+              { value: "excel", label: "Excel" },
+              { value: "pdf", label: "PDF" },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                role="radio"
+                aria-checked={format === opt.value}
+                onClick={() => setFormat(opt.value)}
+                className={`flex-1 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                  format === opt.value
+                    ? "bg-green-600 text-white border-green-600"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           <div className="flex items-center gap-2 bg-green-50 text-green-700 p-3 rounded-lg text-sm font-medium mb-4 shrink-0 border border-green-200">
             Exporting {selectedIds.length} selected record
             {selectedIds.length === 1 ? "" : "s"}
@@ -218,7 +257,7 @@ export default function ExportModal({
               className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-2"
             >
               <DownloadIcon className="w-4 h-4" />
-              {isExporting ? "Exporting..." : "Export to Excel"}
+              {isExporting ? "Exporting..." : format === "pdf" ? "Export to PDF" : "Export to Excel"}
             </button>
           </div>
         </div>

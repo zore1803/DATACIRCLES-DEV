@@ -52,7 +52,7 @@ import VideoTutorialModal from "../components/VideoTutorialModal";
 import { getVideoTutorial } from "../utils/videoTutorials";
 import AppToaster from "../components/AppToaster";
 import ExportModal from "../components/common/ExportModal";
-import { exportClientSide, formatINR } from "../utils/clientExport";
+import { exportClientSide, formatINR, confirmExport, formatExportDate } from "../utils/clientExport";
 import ColumnSettingsPanel from "../components/ColumnSettingsPanel";
 import { useColumnSettings } from "../hooks/useColumnSettings";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
@@ -608,14 +608,14 @@ const PurchaseOrderPage = () => {
   const EXPORT_COLUMNS = [
     { label: "PO Number", value: (po) => po.poNumber },
     { label: "Vendor", value: (po) => po.vendor?.name },
-    { label: "Order Date", value: (po) => new Date(po.createdAt).toLocaleDateString() },
+    { label: "Order Date", value: (po) => formatExportDate(po.createdAt) },
     { label: "Total Amount", value: (po) => formatINR(po.totalAmount) },
     { label: "Payment Terms", value: (po) => po.paymentTerms },
     { label: "Status", value: (po) => po.status },
   ];
 
   const handleExport = (format) => {
-    if (!window.confirm(`Do you want to export in ${format}?`)) return;
+    if (!confirmExport(format)) return;
     exportClientSide(format, {
       rows: filteredPurchaseOrders,
       columns: EXPORT_COLUMNS,

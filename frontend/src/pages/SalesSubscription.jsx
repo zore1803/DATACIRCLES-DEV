@@ -41,7 +41,7 @@ import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
 import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
 import BulkActions from "../components/BulkActions";
 import AppToaster from "../components/AppToaster";
-import { exportClientSide, formatINR } from "../utils/clientExport";
+import { exportClientSide, formatINR, confirmExport, formatExportDate } from "../utils/clientExport";
 import SalesSubscriptionForm from "../components/salesSubscription/SalesSubscriptionForm";
 import UploadIcon from "../components/common/UploadIcon";
 import {
@@ -461,14 +461,14 @@ const SalesSubscription = () => {
     { label: "Customer", value: (s) => customerOf(s) },
     { label: "Amount", value: (s) => formatINR(s.amount) },
     { label: "Repeat", value: (s) => intervalLabel(s.billingInterval) },
-    { label: "Start Date", value: (s) => (s.startDate ? new Date(s.startDate).toLocaleDateString() : "") },
-    { label: "End Date", value: (s) => (s.endDate ? new Date(s.endDate).toLocaleDateString() : "No end date") },
+    { label: "Start Date", value: (s) => formatExportDate(s.startDate) },
+    { label: "End Date", value: (s) => formatExportDate(s.endDate) || "No end date" },
     { label: "No. Of Invoices", value: (s) => s.invoiceCount ?? 0 },
-    { label: "Upcoming", value: (s) => (s.nextInvoiceDate ? new Date(s.nextInvoiceDate).toLocaleDateString() : "") },
+    { label: "Upcoming", value: (s) => formatExportDate(s.nextInvoiceDate) },
     { label: "Status", value: (s) => s.status },
   ];
   const handleExport = (format) => {
-    if (!window.confirm(`Export in ${format}?`)) return;
+    if (!confirmExport(format)) return;
     exportClientSide(format, {
       rows,
       columns: EXPORT_COLUMNS,

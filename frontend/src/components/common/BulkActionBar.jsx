@@ -1,7 +1,8 @@
 import DeleteIcon from "./DeleteIcon";
 import DownloadIcon from "./DownloadIcon";
 import SelectAllIcon from "./SelectAllIcon";
-import React from 'react';
+import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Edit2,
   ListChecks,
@@ -20,6 +21,10 @@ import {
  * Every action is optional; a button only renders when its handler is supplied,
  * so each list shows exactly the actions it actually supports.
  *
+ * `exportFormats` (e.g. ["excel", "pdf"]) is opt-in: when given, the Export
+ * button opens a small Excel / PDF picker and calls `onExport(format)`. Without
+ * it, Export calls `onExport()` straight away, exactly as before.
+ *
  * `isClosing` drives the exit animation. Pair it with `useBulkStrip()` from
  * hooks/useBulkSelection — the strip has to stay mounted for one animation beat
  * after the selection empties, or the slide-out never plays.
@@ -30,6 +35,7 @@ const BulkActionBar = ({
   onSelectAll,
   onDeselectAll,
   onExport,
+  exportFormats,
   onAddNote,
   onAddTask,
   onDelete,
@@ -47,8 +53,18 @@ const BulkActionBar = ({
   // onto its neighbour (-ml-px) so touching borders don't double into a seam.
   // Every action is optional — a button renders only when its handler exists —
   // so the first/last rounding is computed from what actually renders.
+  const [showFormatPicker, setShowFormatPicker] = useState(false);
+  const hasFormatPicker = Array.isArray(exportFormats) && exportFormats.length > 0;
+  const FORMAT_LABELS = { excel: 'Excel', pdf: 'PDF' };
+
   const leftButtons = [
-    onExport && { key: 'export', label: 'Export', Icon: DownloadIcon, iconClass: 'text-green-600', onClick: onExport },
+    onExport && {
+      key: 'export',
+      label: 'Export',
+      Icon: DownloadIcon,
+      iconClass: 'text-green-600',
+      onClick: hasFormatPicker ? () => setShowFormatPicker(true) : onExport,
+    },
     onAddNote && { key: 'note', label: 'Add Note', Icon: StickyNote, iconClass: 'text-emerald-600', onClick: onAddNote },
     onAddTask && { key: 'task', label: 'Add Task', Icon: ListChecks, iconClass: 'text-indigo-600', onClick: onAddTask },
     onUpdateStatus && { key: 'update', label: 'Bulk Update', Icon: Edit2, iconClass: 'text-blue-600', onClick: onUpdateStatus },
@@ -115,6 +131,45 @@ const BulkActionBar = ({
           </button>
         )}
       </div>
+
+      {showFormatPicker &&
+        createPortal(
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[10000] p-4"
+            onClick={() => setShowFormatPicker(false)}
+          >
+            <div
+              className="bg-white rounded-xl shadow-2xl w-full max-w-xs p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-base font-bold text-gray-900">Export {selectedCount} selected</h3>
+              <p className="text-xs text-gray-500 mt-1 mb-4">Choose a format</p>
+              <div className="flex gap-2">
+                {exportFormats.map((fmt) => (
+                  <button
+                    key={fmt}
+                    type="button"
+                    onClick={() => {
+                      setShowFormatPicker(false);
+                      onExport(fmt);
+                    }}
+                    className="flex-1 py-2.5 text-sm font-medium rounded-lg border border-gray-300 text-gray-800 hover:bg-green-600 hover:text-white hover:border-green-600 transition-colors"
+                  >
+                    {FORMAT_LABELS[fmt] || fmt}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFormatPicker(false)}
+                className="w-full mt-3 py-2 text-sm text-gray-500 hover:text-gray-700"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };

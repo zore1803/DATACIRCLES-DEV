@@ -1,4 +1,5 @@
 const { gstinError } = require('../utils/gstinValidation');
+const { formatCustomFieldValue } = require("../utils/exportFormat");
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const Vendor = require("../models/Vendor");
 const Payment = require("../models/Payment");
@@ -652,7 +653,7 @@ exports.exportSelectedVendors = async (req, res) => {
 
           if (c.isCustomField) {
             const field = vendor.additionalFields?.find((f) => f.key === c.key);
-            val = field ? field.value : "";
+            val = formatCustomFieldValue(field);
           } else if (c.key === "address") {
             // Address is a subdocument; flatten it to one readable cell.
             val = [

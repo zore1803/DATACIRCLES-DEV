@@ -43,7 +43,7 @@ import StatTileSkeleton from "../common/StatTileSkeleton";
 import Skeleton from "../common/Skeleton";
 import BulkActionBar from "../common/BulkActionBar";
 import { useBulkSelection, useBulkStrip } from "../../hooks/useBulkSelection";
-import { exportToCSV } from "../../utils/exportToCSV";
+import { exportClientSide, withCustomFieldColumns, formatExportDate } from "../../utils/clientExport";
 import { bulkDelete } from "../../utils/bulkOperations";
 import BulkDeleteModal from "../common/BulkDeleteModal";
 import useFillToBottom from "../../hooks/useFillToBottom";
@@ -709,17 +709,23 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
     setListPage(page);
   };
 
-  const handleExportSelected = () => {
-    const dataToExport = tasks.filter(t => selectedItems.includes(t._id)).map(t => ({
-      "Task": t.title || "",
-      "Assigned to": getTaskAssignees(t).map(u => u.name).join(", "),
-      "Status": t.status === "Completed" ? "Completed" : "In-Progress",
-      "Priority": t.priority || "",
-      "Due Date": t.dueDate ? new Date(t.dueDate).toLocaleDateString() : "",
-    }));
-    const headers = Object.keys(dataToExport[0] || {}).join(",");
-    const rows = dataToExport.map(row => Object.values(row).map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
-    exportToCSV([headers, ...rows], `tasks_export_${new Date().toISOString().split("T")[0]}.csv`);
+  const handleExportSelected = (format = "excel") => {
+    const rows = tasks.filter((t) => selectedItems.includes(t._id));
+    exportClientSide(format, {
+      rows,
+      columns: withCustomFieldColumns(
+        [
+          { label: "Task", value: (t) => t.title },
+          { label: "Assigned to", value: (t) => getTaskAssignees(t).map((u) => u.name).join(", ") },
+          { label: "Status", value: (t) => (t.status === "Completed" ? "Completed" : "In-Progress") },
+          { label: "Priority", value: (t) => t.priority },
+          { label: "Due Date", value: (t) => formatExportDate(t.dueDate) },
+        ],
+        rows,
+      ),
+      fileNamePrefix: "tasks_export",
+      title: "Tasks Report",
+    });
   };
 
   const handleBulkDelete = async () => {
@@ -852,6 +858,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
           onSelectAll={handleSelectAllAcrossPages}
           onDeselectAll={clearSelection}
           onExport={handleExportSelected}
+          exportFormats={["excel", "pdf"]}
           onUpdateStatus={() => setShowBulkStatusModal(true)}
           onDelete={() => setShowBulkDeleteModal(true)}
           onCancel={clearSelection}

@@ -42,7 +42,7 @@ import SettingsIcon from "../components/common/SettingsIcon";
 import AdvancedFilterPanel from "../components/common/AdvancedFilterPanel";
 import ColumnSettingsPanel from "../components/ColumnSettingsPanel";
 import { useColumnSettings } from "../hooks/useColumnSettings";
-import { exportClientSide, formatINR } from "../utils/clientExport";
+import { exportClientSide, formatINR, confirmExport, formatExportDate } from "../utils/clientExport";
 import HighlightText from "../components/common/HighlightText";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
 import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
@@ -903,15 +903,12 @@ export default function EInvoicing() {
     { label: "Status", value: (r) => r.status || "" },
     { label: "IRN", value: (r) => r.irn || "" },
     { label: "Ack No.", value: (r) => r.ackNo || "" },
-    { label: "Ack Date", value: (r) => (r.ackDate ? new Date(r.ackDate).toLocaleDateString("en-IN") : "") },
-    { label: "Invoice Date", value: (r) => (r.date ? new Date(r.date).toLocaleDateString("en-IN") : "") },
+    { label: "Ack Date", value: (r) => formatExportDate(r.ackDate) },
+    { label: "Invoice Date", value: (r) => formatExportDate(r.date) },
   ];
 
   const handleExport = (format) => {
-    if (sortedEInvoices.length === 0) {
-      toast.error("Nothing to export — the current view is empty.");
-      return;
-    }
+    if (!confirmExport(format)) return;
     exportClientSide(format, {
       rows: sortedEInvoices,
       columns: EXPORT_COLUMNS,

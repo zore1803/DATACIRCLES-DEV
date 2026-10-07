@@ -45,7 +45,7 @@ import { useTopLoadingSignal } from "../components/common/TopLoadingBar";
 import VideoTutorialModal from "../components/VideoTutorialModal";
 import { getVideoTutorial } from "../utils/videoTutorials";
 import AppToaster from "../components/AppToaster";
-import { exportClientSide, formatINR } from "../utils/clientExport";
+import { exportClientSide, formatINR, confirmExport, formatExportDate } from "../utils/clientExport";
 import ColumnSettingsPanel from "../components/ColumnSettingsPanel";
 import { useColumnSettings } from "../hooks/useColumnSettings";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
@@ -462,14 +462,14 @@ const PurchaseReturn = () => {
   const EXPORT_COLUMNS = [
     { label: "Return Number", value: (p) => p.returnNumber },
     { label: "Vendor", value: (p) => p.vendor?.name },
-    { label: "Return Date", value: (p) => new Date(p.returnDate || p.createdAt).toLocaleDateString() },
+    { label: "Return Date", value: (p) => formatExportDate(p.returnDate || p.createdAt) },
     { label: "Grand Total", value: (p) => formatINR(p.grandTotal) },
     { label: "Mode", value: (p) => p.mode },
     { label: "Status", value: (p) => p.status },
   ];
 
   const handleExport = (format) => {
-    if (!window.confirm(`Do you want to export in ${format}?`)) return;
+    if (!confirmExport(format)) return;
     exportClientSide(format, {
       rows: filteredReturns,
       columns: EXPORT_COLUMNS,

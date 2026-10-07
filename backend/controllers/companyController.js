@@ -1,4 +1,5 @@
 const Company = require('../models/Company');
+const { formatCustomFieldValue } = require("../utils/exportFormat");
 const Contact = require('../models/Contact');
 const Deal = require('../models/Deal');
 const Meeting = require('../models/Meeting');
@@ -443,7 +444,7 @@ const exportSelectedCompanies = async (req, res) => {
         if (c.isCustomField) {
           // Extract custom field value
           const field = company.additionalFields?.find(f => f.key === c.key);
-          val = field ? field.value : "";
+          val = formatCustomFieldValue(field);
         } else {
           // Extract standard field value
           val = company[c.key] || "";

@@ -1,4 +1,5 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
+const { formatCustomFieldValue } = require("../utils/exportFormat");
 const { parsePickerLimit } = require('../utils/pickerLimit');
 // controllers/contactController.js (updated to handle field types)
 const Contact = require("../models/Contact");
@@ -641,7 +642,7 @@ const exportSelectedContacts = async (req, res) => {
         
         if (c.isCustomField) {
           const field = contact.additionalFields?.find(f => f.key === c.key);
-          val = field ? field.value : "";
+          val = formatCustomFieldValue(field);
         } else if (c.key === 'company') {
           // Special handling for the populated company object
           val = contact.company?.name || "";

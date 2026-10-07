@@ -1,4 +1,5 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
+const { formatCustomFieldValue, formatExportDate } = require("../utils/exportFormat");
 const { parsePickerLimit } = require('../utils/pickerLimit');
 // controllers/dealController.js (updated to handle field types)
 const Deal = require("../models/Deal");
@@ -650,11 +651,20 @@ const exportSelectedDeals = async (req, res) => {
 
           if (c.isCustomField) {
             const field = deal.additionalFields?.find((f) => f.key === c.key);
-            val = field ? field.value : "";
+            val = formatCustomFieldValue(field);
           } else if (c.key === "company") {
             val = deal.company?.name || "";
           } else if (c.key === "contact") {
             val = deal.contact?.name || "";
+          } else if (c.key === "dealId") {
+            // Same "DL-XXXXX" id the Deals table shows.
+            val = `DL-${String(deal._id).slice(-5).toUpperCase()}`;
+          } else if (c.key === "dueDate") {
+            // Due Date is stored as the "Expected Close Date" custom field.
+            const due = deal.additionalFields?.find((f) => f.key === "Expected Close Date");
+            val = formatExportDate(due?.value);
+          } else if (c.key === "createdAt" || c.key === "updatedAt") {
+            val = formatExportDate(deal[c.key]);
           } else {
             val = deal[c.key] || "";
           }

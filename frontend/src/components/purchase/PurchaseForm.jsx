@@ -768,15 +768,15 @@ const PurchaseForm = ({
           <div>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-900">Items</h3>
-              <div className="relative" ref={addMenuRef}>
+              <div className="relative flex-shrink-0" ref={addMenuRef}>
                 <button
                   type="button"
                   onClick={() => setShowAddMenu((v) => !v)}
-                  className="flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium text-xs transition-colors"
+                  className="flex items-center gap-1 flex-shrink-0 whitespace-nowrap text-blue-600 hover:text-blue-700 font-medium text-xs transition-colors"
                 >
-                  <PlusIcon className="w-4 h-4" />
+                  <PlusIcon className="w-4 h-4 flex-shrink-0" />
                   Add Item
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAddMenu ? "rotate-180" : ""}`} />
+                  <ChevronDown className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${showAddMenu ? "rotate-180" : ""}`} />
                 </button>
                 {showAddMenu && (
                   <div className="absolute right-0 mt-1.5 w-56 bg-white border border-gray-100 rounded-xl shadow-xl z-50 py-1 animate-in fade-in zoom-in duration-150">

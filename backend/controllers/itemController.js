@@ -1,4 +1,5 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
+const { formatCustomFieldValue } = require("../utils/exportFormat");
 const Item = require("../models/Item");
 const StockMovement = require("../models/StockMovement");
 
@@ -722,7 +723,7 @@ const exportSelectedItems = async (req, res) => {
 
           if (c.isCustomField) {
             const field = item.additionalFields?.find((f) => f.key === c.key);
-            val = field ? field.value : "";
+            val = formatCustomFieldValue(field);
           } else if (c.key === "variants") {
             // Variants is an array subdocument; flatten to one readable cell.
             val = (item.variants || []).map((v) => v.name).filter(Boolean).join(", ");

@@ -568,9 +568,9 @@ const PurchaseOrderForm = ({
               <button
                 type="button"
                 onClick={addItem}
-                className="flex items-center gap-1 text-[#0085FF] hover:text-blue-700 font-medium text-xs transition-colors"
+                className="flex items-center gap-1 flex-shrink-0 whitespace-nowrap text-[#0085FF] hover:text-blue-700 font-medium text-xs transition-colors"
               >
-                <PlusIcon className="w-4 h-4" />
+                <PlusIcon className="w-4 h-4 flex-shrink-0" />
                 Add Another Item
               </button>
             </div>

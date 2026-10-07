@@ -24,7 +24,7 @@ import { useBulkSelection, useBulkStrip } from "../../hooks/useBulkSelection";
 import { useTopLoadingSignal } from "../common/TopLoadingBar";
 import toast from "react-hot-toast";
 import HighlightText from "../common/HighlightText";
-import { exportToCSV } from "../../utils/exportToCSV";
+import { exportClientSide, withCustomFieldColumns, formatExportDateTime } from "../../utils/clientExport";
 import EyeIcon from "../common/EyeIcon";
 import EditIcon from "../common/EditIcon";
 
@@ -235,20 +235,23 @@ const VendorMeetingsTable = ({ vendorId, showKPIs = true, autoOpenCreate = false
   });
   const { visible: stripVisible, closing: stripClosing } = useBulkStrip(selectedItems.length);
 
-  const handleExportSelected = () => {
-    const dataToExport = meetings
-      .filter((m) => selectedItems.includes(m._id))
-      .map((m) => ({
-        "Title": m.title || "",
-        "Description": stripHtml(m.description || ""),
-        "Platform": m.platform || "",
-        "Duration (min)": m.duration || "",
-        "Scheduled At": m.scheduledAt ? new Date(m.scheduledAt).toLocaleString() : "",
-      }));
-    if (dataToExport.length === 0) return;
-    const headers = Object.keys(dataToExport[0]).join(",");
-    const rows = dataToExport.map(row => Object.values(row).map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
-    exportToCSV([headers, ...rows], `meetings_export_${new Date().toISOString().split("T")[0]}.csv`);
+  const handleExportSelected = (format = "excel") => {
+    const rows = meetings.filter((m) => selectedItems.includes(m._id));
+    exportClientSide(format, {
+      rows,
+      columns: withCustomFieldColumns(
+        [
+          { label: "Title", value: (m) => m.title },
+          { label: "Description", value: (m) => stripHtml(m.description || "") },
+          { label: "Platform", value: (m) => m.platform },
+          { label: "Duration (min)", value: (m) => m.duration },
+          { label: "Scheduled At", value: (m) => formatExportDateTime(m.scheduledAt) },
+        ],
+        rows,
+      ),
+      fileNamePrefix: "meetings_export",
+      title: "Meetings Report",
+    });
   };
 
   const handleBulkDelete = () => {
@@ -588,6 +591,7 @@ const VendorMeetingsTable = ({ vendorId, showKPIs = true, autoOpenCreate = false
           onSelectAll={() => selectAll(filteredMeetings)}
           onDeselectAll={clearSelection}
           onExport={handleExportSelected}
+          exportFormats={["excel", "pdf"]}
           onCancel={clearSelection}
           onDelete={handleBulkDelete}
           isDeleting={isDeleting}

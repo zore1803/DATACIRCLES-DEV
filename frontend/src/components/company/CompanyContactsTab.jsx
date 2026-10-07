@@ -23,7 +23,7 @@ import StatTileSkeleton from "../common/StatTileSkeleton";
 import Skeleton from "../common/Skeleton";
 import BulkActionBar from "../common/BulkActionBar";
 import { useBulkSelection, useBulkStrip } from "../../hooks/useBulkSelection";
-import { exportToCSV } from "../../utils/exportToCSV";
+import { exportClientSide, withCustomFieldColumns } from "../../utils/clientExport";
 import { bulkDelete } from "../../utils/bulkOperations";
 import BulkDeleteModal from "../common/BulkDeleteModal";
 import { EditablePaginationButtons } from "../common/EditablePaginationButtons";
@@ -488,17 +488,24 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
     setCurrentPage(page);
   };
 
-  const handleExportSelected = () => {
-    const dataToExport = contacts.filter(c => selectedItems.includes(c._id)).map(c => ({
-      "Contact Name": c.name || "",
-      "Email": c.email || "",
-      "Phone": c.phone || "",
-      "Role": getContactFieldValue(c, "role"),
-      "Interaction": getContactFieldValue(c, "status"),
-    }));
-    const headers = Object.keys(dataToExport[0] || {}).join(",");
-    const rows = dataToExport.map(row => Object.values(row).map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
-    exportToCSV([headers, ...rows], `contacts_export_${new Date().toISOString().split("T")[0]}.csv`);
+  const handleExportSelected = (format = "excel") => {
+    const rows = contacts.filter((c) => selectedItems.includes(c._id));
+    exportClientSide(format, {
+      rows,
+      // Built-in columns, then any custom fields stored on the selected contacts.
+      columns: withCustomFieldColumns(
+        [
+          { label: "Contact Name", value: (c) => c.name },
+          { label: "Email", value: (c) => c.email },
+          { label: "Phone", value: (c) => c.phone },
+          { label: "Role", value: (c) => getContactFieldValue(c, "role") },
+          { label: "Interaction", value: (c) => getContactFieldValue(c, "status") },
+        ],
+        rows,
+      ),
+      fileNamePrefix: "contacts_export",
+      title: "Contacts Report",
+    });
   };
 
   const handleBulkDelete = async () => {
@@ -579,6 +586,7 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
           onSelectAll={handleSelectAllAcrossPages}
           onDeselectAll={clearSelection}
           onExport={handleExportSelected}
+          exportFormats={["excel", "pdf"]}
           onDelete={() => setShowBulkDeleteModal(true)}
           onCancel={clearSelection}
         />

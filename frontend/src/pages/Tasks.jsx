@@ -18,6 +18,7 @@ import toast from "react-hot-toast";
 import FilterIcon from "../components/common/FilterIcon";
 import AdvancedFilterPanel from "../components/common/AdvancedFilterPanel";
 import { toServerDueDateFilter } from "../utils/dueDateFilter";
+import { formatCustomFieldValue } from "../utils/clientExport";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
 import {
   ChevronUp,
@@ -1596,6 +1597,17 @@ function Tasks() {
         flatItem.users = flatItem.users
           .map((u) => u.name || u.email)
           .join(", ");
+      }
+
+      // Custom fields are stored as [{key, value}] — give each its own
+      // column instead of letting the sheet print "[object Object]".
+      if (Array.isArray(flatItem.additionalFields)) {
+        flatItem.additionalFields.forEach((f) => {
+          if (!f?.key) return;
+          const col = f.key in flatItem ? `${f.key} (Custom)` : f.key;
+          flatItem[col] = formatCustomFieldValue(f);
+        });
+        delete flatItem.additionalFields;
       }
 
       // Format dates

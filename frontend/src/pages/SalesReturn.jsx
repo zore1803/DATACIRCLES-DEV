@@ -54,7 +54,7 @@ import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
 import useBodyScrollLock from "../hooks/useBodyScrollLock";
 import BulkActions from "../components/BulkActions";
 import AppToaster from "../components/AppToaster";
-import { exportClientSide, formatINR } from "../utils/clientExport";
+import { exportClientSide, formatINR, confirmExport, formatExportDate } from "../utils/clientExport";
 import SalesReturnForm from "../components/salesReturn/SalesReturnForm";
 import SalesReturnPreview from "../components/salesReturn/SalesReturnPreview";
 import ImportSalesReturns from "../components/salesReturn/ImportSalesReturns";
@@ -581,13 +581,13 @@ const SalesReturn = () => {
     { label: "SR Number", value: (r) => r.returnNumber },
     { label: "Invoice", value: (r) => invoiceOf(r) },
     { label: "Customer", value: (r) => customerOf(r) },
-    { label: "Return Date", value: (r) => new Date(r.returnDate || r.createdAt).toLocaleDateString() },
+    { label: "Return Date", value: (r) => formatExportDate(r.returnDate || r.createdAt) },
     { label: "Amount", value: (r) => formatINR(r.grandTotal) },
     { label: "Status", value: (r) => r.status },
     { label: "Refund", value: (r) => refundSummary(r) },
   ];
   const handleExport = (format) => {
-    if (!window.confirm(`Export in ${format}?`)) return;
+    if (!confirmExport(format)) return;
     exportClientSide(format, {
       rows,
       columns: EXPORT_COLUMNS,

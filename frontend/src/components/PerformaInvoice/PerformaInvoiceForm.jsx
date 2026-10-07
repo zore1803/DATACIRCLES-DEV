@@ -1743,10 +1743,10 @@ const PerformaInvoiceForm = ({
                 <button
                   type="button"
                   onClick={handleAddItem}
-                  className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium p-2 rounded-lg hover:bg-blue-50 transition-all duration-200"
+                  className="flex items-center gap-2 flex-shrink-0 whitespace-nowrap text-blue-600 hover:text-blue-700 font-medium p-2 rounded-lg hover:bg-blue-50 transition-all duration-200"
                   aria-label="Add another item"
                 >
-                  <PlusIcon className="w-4 h-4" />
+                  <PlusIcon className="w-4 h-4 flex-shrink-0" />
                   Add Another Item
                 </button>
               </div>

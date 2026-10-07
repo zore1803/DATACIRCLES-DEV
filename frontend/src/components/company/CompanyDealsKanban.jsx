@@ -1,4 +1,5 @@
 import CalendarClockIcon from "../common/CalendarClockIcon";
+import { exportClientSide, withCustomFieldColumns, formatExportDate } from "../../utils/clientExport";
 import EmptyState from "../common/EmptyState";
 import DeleteIcon from "../common/DeleteIcon";
 import BulkDeleteModal from "../common/BulkDeleteModal";
@@ -1074,29 +1075,24 @@ export default function CompanyDealsKanban({
     }
   };
 
-  const handleExportSelectedDeals = () => {
+  const handleExportSelectedDeals = (format = "excel") => {
     const rows = deals.filter((d) => selectedDeals.includes(d._id));
-    const header = ["Deal ID", "Deal Name", "Contact", "Stage", "Amount", "Last Updated"];
-    const csvRows = rows.map((d) =>
-      [
-        `DL-${d._id.slice(-5).toUpperCase()}`,
-        d.title || "",
-        d.contact?.name || "",
-        d.status || "",
-        d.amount || 0,
-        d.updatedAt ? new Date(d.updatedAt).toLocaleDateString("en-IN") : "",
-      ]
-        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-        .join(","),
-    );
-    const csv = [header.join(","), ...csvRows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "deals-export.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+    exportClientSide(format, {
+      rows,
+      columns: withCustomFieldColumns(
+        [
+          { label: "Deal ID", value: (d) => `DL-${String(d._id).slice(-5).toUpperCase()}` },
+          { label: "Deal Name", value: (d) => d.title },
+          { label: "Contact", value: (d) => d.contact?.name },
+          { label: "Stage", value: (d) => d.status },
+          { label: "Amount", value: (d) => d.amount || 0 },
+          { label: "Last Updated", value: (d) => formatExportDate(d.updatedAt) },
+        ],
+        rows,
+      ),
+      fileNamePrefix: "deals_export",
+      title: "Deals Report",
+    });
   };
 
   const [colWidths, setColWidths] = useState({
@@ -1545,6 +1541,7 @@ export default function CompanyDealsKanban({
           // two-tier behaviour: step back down to just the current page's rows.
           onDeselectAll={viewMode === "board" ? () => setSelectedDeals([]) : handleDeselectAllExtra}
           onExport={handleExportSelectedDeals}
+          exportFormats={["excel", "pdf"]}
           onUpdateStatus={() => setShowBulkStatusModal(true)}
           onDelete={() => setShowBulkDeleteModal(true)}
           onCancel={() => setSelectedDeals([])}

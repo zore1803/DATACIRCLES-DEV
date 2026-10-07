@@ -35,7 +35,7 @@ import StatTile from "../common/StatTile";
 import StatTileSkeleton from "../common/StatTileSkeleton";
 import BulkActionBar from "../common/BulkActionBar";
 import { useBulkSelection, useBulkStrip } from "../../hooks/useBulkSelection";
-import { exportToCSV } from "../../utils/exportToCSV";
+import { exportClientSide, withCustomFieldColumns, formatExportDateTime } from "../../utils/clientExport";
 import { bulkDelete } from "../../utils/bulkOperations";
 import BulkDeleteModal from "../common/BulkDeleteModal";
 import useFillToBottom from "../../hooks/useFillToBottom";
@@ -634,17 +634,23 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
     setListPage(page);
   };
 
-  const handleExportSelected = () => {
-    const dataToExport = meetings.filter(m => selectedItems.includes(m._id)).map(m => ({
-      "Meeting Title": m.title || "",
-      "Type": MEETING_TYPE_LABELS[m.meetingType] || m.meetingType || "General",
-      "Date & Time": m.scheduledAt ? new Date(m.scheduledAt).toLocaleString() : "",
-      "Duration": m.duration || "",
-      "Status": MEETING_STATUS_LABELS[m.status] || m.status || "Scheduled",
-    }));
-    const headers = Object.keys(dataToExport[0] || {}).join(",");
-    const rows = dataToExport.map(row => Object.values(row).map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
-    exportToCSV([headers, ...rows], `meetings_export_${new Date().toISOString().split("T")[0]}.csv`);
+  const handleExportSelected = (format = "excel") => {
+    const rows = meetings.filter((m) => selectedItems.includes(m._id));
+    exportClientSide(format, {
+      rows,
+      columns: withCustomFieldColumns(
+        [
+          { label: "Meeting Title", value: (m) => m.title },
+          { label: "Type", value: (m) => MEETING_TYPE_LABELS[m.meetingType] || m.meetingType || "General" },
+          { label: "Date & Time", value: (m) => formatExportDateTime(m.scheduledAt) },
+          { label: "Duration", value: (m) => m.duration },
+          { label: "Status", value: (m) => MEETING_STATUS_LABELS[m.status] || m.status || "Scheduled" },
+        ],
+        rows,
+      ),
+      fileNamePrefix: "meetings_export",
+      title: "Meetings Report",
+    });
   };
 
   const handleBulkDelete = async () => {
@@ -804,6 +810,7 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
           onSelectAll={handleSelectAllAcrossPages}
           onDeselectAll={clearSelection}
           onExport={handleExportSelected}
+          exportFormats={["excel", "pdf"]}
           onUpdateStatus={() => setShowBulkStatusModal(true)}
           onDelete={() => setShowBulkDeleteModal(true)}
           onCancel={clearSelection}
