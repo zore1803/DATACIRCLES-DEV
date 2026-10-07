@@ -39,7 +39,7 @@ import {
   Pin,
   PinOff,
   List,
-  ArrowUp, ArrowDown } from "lucide-react";
+  ArrowUp, ArrowDown, CalendarDays } from "lucide-react";
 import StarIcon from "../components/common/StarIcon";
 import EmptyState from "../components/common/EmptyState";
 import API from "../services/api";
@@ -599,6 +599,25 @@ function Contacts() {
 
     return baseColumns;
   }, [contactFieldList]);
+
+  // Filter-only columns: "Created At" is filterable but isn't a table column.
+  const filterColumns = useMemo(() => {
+    const createdAtColumn = {
+      key: "createdAt",
+      label: "Created At",
+      type: "date",
+      icon: CalendarDays,
+      visible: false,
+    };
+    // Place it after the built-in columns, above any custom fields.
+    const firstCustom = defaultColumns.findIndex((c) => c.isCustomField);
+    const at = firstCustom === -1 ? defaultColumns.length : firstCustom;
+    return [
+      ...defaultColumns.slice(0, at),
+      createdAtColumn,
+      ...defaultColumns.slice(at),
+    ];
+  }, [defaultColumns]);
 
   // Use column settings hook
   const { columns, saveColumns, getVisibleColumns } = useColumnSettings(
@@ -1784,6 +1803,17 @@ function Contacts() {
     }
   };
 
+  // Date filters are day-based; send the browser's UTC offset so the server
+  // computes "today" in the user's timezone, not the server's.
+  const serializeFilters = (filters) =>
+    JSON.stringify(
+      filters.map((f) =>
+        f.column === "createdAt"
+          ? { ...f, tzOffset: new Date().getTimezoneOffset() }
+          : f,
+      ),
+    );
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -1810,7 +1840,7 @@ function Contacts() {
       }
 
       if (activeFilters && activeFilters.length > 0) {
-        params.append("advancedFilters", JSON.stringify(activeFilters));
+        params.append("advancedFilters", serializeFilters(activeFilters));
       }
 
       if (activeTab !== "All") {
@@ -1863,7 +1893,7 @@ function Contacts() {
       if (searchTerm.trim()) params.append("search", searchTerm.trim());
       if (statusFilter) params.append("stageStatus", statusFilter);
       if (activeFilters && activeFilters.length > 0) {
-        params.append("advancedFilters", JSON.stringify(activeFilters));
+        params.append("advancedFilters", serializeFilters(activeFilters));
       }
       if (activeTab !== "All") {
         switch (activeTab) {
@@ -2855,7 +2885,7 @@ function Contacts() {
       <AdvancedFilterPanel
         isOpen={showAdvancedFilters}
         onClose={() => setShowAdvancedFilters(false)}
-        columns={defaultColumns} // Your useMemo default columns handles custom fields perfectly
+        columns={filterColumns}
         filters={activeFilters}
         setFilters={setActiveFilters}
         onApply={(newFilters) => setActiveFilters(newFilters)}

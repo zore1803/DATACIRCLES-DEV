@@ -19,6 +19,7 @@ const { isZoomConfigured, createZoomMeeting } = require("../services/zoomService
 const { processAdditionalFields } = require("../services/fieldCoercionService");
 const { isGoogleConfigured, createGoogleMeetEvent } = require("../services/googleMeetService");
 const { getOwnedCompanyIds } = require("../utils/ownedCompanies");
+const { parseDateRangeFilter, parseAdvancedFiltersParam } = require("../utils/dateRangeFilter");
 
 // Parses a search term as a calendar date so free-text search can match the
 // "Date & Time" column, which the UI renders as D/M/YYYY (toLocaleDateString).
@@ -1604,6 +1605,20 @@ exports.getMeetingsPaginated = async (req, res) => {
         $lt: nextDay,
       };
     }
+
+    // Advanced filter (date presets / custom range). The browser resolves the
+    // range in the user's timezone — same helper the Tasks filters use.
+    const advancedRules = parseAdvancedFiltersParam(req.query.advancedFilters);
+    if (advancedRules === null) {
+      return res.status(400).json({ error: "Invalid advancedFilters" });
+    }
+    advancedRules.forEach((rule) => {
+      if (!rule || rule.column !== "dueDate") return;
+      const { range } = parseDateRangeFilter(rule);
+      if (range) {
+        query.$and = [...(query.$and || []), { scheduledAt: range }];
+      }
+    });
 
     // own-only: restrict to meetings this user created, or meetings under a
     // company this user owns (Company.owner) — same widening as

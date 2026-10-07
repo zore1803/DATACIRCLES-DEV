@@ -256,6 +256,40 @@ const getAllContactsPaginated = async (req, res) => {
         let condition = {};
         const isBaseField = baseFields.includes(column);
 
+        // Created At — day-based comparison in the user's timezone
+        // (tzOffset = JS getTimezoneOffset(), minutes UTC is ahead of local).
+        if (column === "createdAt") {
+          if (operator === "is_empty") {
+            andConditions.push({ createdAt: { $in: [null] } });
+            return;
+          }
+          if (operator === "is_not_empty") {
+            andConditions.push({ createdAt: { $ne: null } });
+            return;
+          }
+          const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+          if (!m) return;
+          const offsetMs = (parseInt(filter.tzOffset, 10) || 0) * 60000;
+          const dayStart = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]) + offsetMs);
+          const nextDayStart = new Date(dayStart.getTime() + 86400000);
+          if (operator === "is") {
+            condition.createdAt = { $gte: dayStart, $lt: nextDayStart };
+          } else if (operator === "is_not") {
+            condition.$or = [
+              { createdAt: { $lt: dayStart } },
+              { createdAt: { $gte: nextDayStart } },
+            ];
+          } else if (operator === "greater_than") {
+            condition.createdAt = { $gte: nextDayStart };
+          } else if (operator === "less_than") {
+            condition.createdAt = { $lt: dayStart };
+          } else {
+            return;
+          }
+          andConditions.push(condition);
+          return;
+        }
+
         const getOperatorQuery = (op, val) => {
           switch (op) {
             case "is":

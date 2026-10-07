@@ -1,4 +1,6 @@
+const mongoose = require("mongoose");
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
+const { parseDateRangeFilter, parseAdvancedFiltersParam } = require("../utils/dateRangeFilter");
 const Task = require("../models/Task");
 const User = require("../models/User");
 const Company = require("../models/Company");
@@ -381,6 +383,55 @@ const getAllTasksPaginated = async (req, res) => {
       end.setUTCHours(23, 59, 59, 999);
 
       query.dueDate = { $gte: start, $lte: end };
+    }
+
+    // Advanced filters (global Tasks page filter panel). Each rule is ANDed.
+    // Due Date arrives pre-resolved to a from/to range by the browser — see
+    // utils/dateRangeFilter.js — so presets match the individual Tasks tab.
+    const advancedRules = parseAdvancedFiltersParam(req.query.advancedFilters);
+    if (advancedRules === null) {
+      return res.status(400).json({ error: "Invalid advancedFilters" });
+    }
+    const advancedConditions = [];
+    const ENTITY_MODELS = { company: "Company", contact: "Contact", deal: "Deal" };
+    const isId = (v) => typeof v === "string" && mongoose.Types.ObjectId.isValid(v);
+    advancedRules.forEach((rule) => {
+      if (!rule || !rule.column) return;
+      const negate = rule.operator === "is_not";
+      switch (rule.column) {
+        case "dueDate": {
+          const { range, excludeCompleted } = parseDateRangeFilter(rule);
+          if (range) advancedConditions.push({ dueDate: range });
+          if (range && excludeCompleted) advancedConditions.push({ status: { $ne: "Completed" } });
+          break;
+        }
+        case "status":
+        case "priority":
+          if (rule.value) {
+            advancedConditions.push({ [rule.column]: negate ? { $ne: rule.value } : rule.value });
+          }
+          break;
+        case "assignee":
+          if (isId(rule.value)) {
+            advancedConditions.push({ users: negate ? { $ne: rule.value } : rule.value });
+          }
+          break;
+        case "company":
+        case "contact":
+        case "deal":
+          if (isId(rule.value)) {
+            const link = {
+              $elemMatch: { entityId: rule.value, entityModel: ENTITY_MODELS[rule.column] },
+            };
+            advancedConditions.push({ relatedEntities: negate ? { $not: link } : link });
+          }
+          break;
+        default:
+          break;
+      }
+    });
+    if (advancedConditions.length > 0) {
+      query.$and = query.$and ? [...query.$and, ...advancedConditions] : advancedConditions;
     }
 
     // own-only: restrict to tasks this user is assigned to or created.

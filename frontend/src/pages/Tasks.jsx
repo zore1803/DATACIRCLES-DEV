@@ -17,6 +17,7 @@ import { useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import FilterIcon from "../components/common/FilterIcon";
 import AdvancedFilterPanel from "../components/common/AdvancedFilterPanel";
+import { toServerDueDateFilter } from "../utils/dueDateFilter";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
 import {
   ChevronUp,
@@ -611,24 +612,67 @@ function Tasks() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
   const [userFilter, setUserFilter] = useState("");
-  const [dateFilter, setDateFilter] = useState("");
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [editingPage, setEditingPage] = useState(false);
   const [pageInput, setPageInput] = useState("");
   const [activeAdvancedFilters, setActiveAdvancedFilters] = useState([]);
-  // Backend only supports exact-day matching on dueDate for tasks/meetings
-  // pagination (no generic per-field querying yet), so this panel is scoped
-  // to that one field rather than offering columns it can't actually filter.
-  const advancedFilterColumns = [{ key: "dueDate", label: "Due Date (YYYY-MM-DD)" }];
+
+  // Tasks can be filtered by due date (presets + custom range), status,
+  // priority, assignee and the company / contact / deal they're linked to.
+  // Meetings only by date. The Due Date rule uses the same helper as the
+  // individual Tasks tab (utils/dueDateFilter.js), so a preset means the same
+  // thing on both pages.
+  const taskFilterColumns = useMemo(() => {
+    const isOps = ["is", "is_not"];
+    return [
+      { key: "dueDate", label: "Due Date", type: "dateRange" },
+      { key: "status", label: "Status", type: "select", operators: isOps, options: ["Pending", "In Progress", "Completed"] },
+      {
+        key: "priority",
+        label: "Priority",
+        type: "select",
+        operators: isOps,
+        options: [
+          { value: "low", label: "Low" },
+          { value: "medium", label: "Medium" },
+          { value: "high", label: "High" },
+        ],
+      },
+      { key: "assignee", label: "Assignee", type: "select", operators: isOps, options: users.map((u) => ({ value: u._id, label: u.name })) },
+      { key: "company", label: "Company", type: "select", operators: isOps, options: companies.map((c) => ({ value: c._id, label: c.name })) },
+      { key: "contact", label: "Contact", type: "select", operators: isOps, options: contacts.map((c) => ({ value: c._id, label: c.name })) },
+      { key: "deal", label: "Deal", type: "select", operators: isOps, options: deals.map((d) => ({ value: d._id, label: d.title })) },
+    ];
+  }, [users, companies, contacts, deals]);
+  const meetingFilterColumns = [{ key: "dueDate", label: "Date", type: "dateRange" }];
+  const advancedFilterColumns = activeTab === "tasks" ? taskFilterColumns : meetingFilterColumns;
+
+  // Resolved at request time (not when the rule is applied) so "Today" /
+  // "Overdue" stay correct if the page is left open past midnight.
+  const buildServerFilters = () =>
+    activeAdvancedFilters
+      .map((f) =>
+        f.column === "dueDate"
+          ? toServerDueDateFilter(f.value)
+          : { column: f.column, operator: f.operator, value: f.value },
+      )
+      .filter(Boolean);
+  const appendServerFilters = (params) => {
+    const serverFilters = buildServerFilters();
+    if (serverFilters.length > 0) params.append("advancedFilters", JSON.stringify(serverFilters));
+  };
   const applyAdvancedTaskFilters = (newFilters) => {
     setActiveAdvancedFilters(newFilters);
-    const dueDateFilter = newFilters.find((f) => f.column === "dueDate");
-    setDateFilter(dueDateFilter?.value || "");
   };
+
+  // Tasks and Meetings offer different filter columns, so rules built on one
+  // tab must not leak into the other.
+  useEffect(() => {
+    setActiveAdvancedFilters((prev) => (prev.length ? [] : prev));
+  }, [activeTab]);
 
   // Debounced states
   const [debouncedUserFilter, setDebouncedUserFilter] = useState("");
-  const [debouncedDateFilter, setDebouncedDateFilter] = useState("");
 
   const location = useLocation();
   const { state } = location;
@@ -949,11 +993,6 @@ function Tasks() {
     return () => clearTimeout(timer);
   }, [userFilter]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedDateFilter(dateFilter), 300);
-    return () => clearTimeout(timer);
-  }, [dateFilter]);
-
   // Reset selection on filter/search/tab change
   useEffect(() => {
     exitSelectionMode();
@@ -962,7 +1001,7 @@ function Tasks() {
     } else {
       setMeetingPagination((prev) => ({ ...prev, currentPage: 1 }));
     }
-  }, [debouncedSearchTerm, debouncedFilterStatus, activeTab]);
+  }, [debouncedSearchTerm, debouncedFilterStatus, activeTab, activeAdvancedFilters]);
 
   // Fetch data based on active tab
   useEffect(() => {
@@ -982,7 +1021,7 @@ function Tasks() {
     debouncedSearchTerm,
     debouncedFilterStatus,
     debouncedUserFilter,
-    debouncedDateFilter,
+    activeAdvancedFilters,
   ]);
 
   // Kanban has its own unfiltered/unpaginated data source (see
@@ -1050,8 +1089,8 @@ function Tasks() {
   };
 
   useEffect(() => {
-    if (showTaskForm || showMeetingForm) fetchFormPickerData();
-  }, [showTaskForm, showMeetingForm]);
+    if (showTaskForm || showMeetingForm || showMobileFilters) fetchFormPickerData();
+  }, [showTaskForm, showMeetingForm, showMobileFilters]);
 
   // Warm the picker data a moment after the list has rendered, off the critical
   // path, so it is normally ready by the time "New Task"/"New Meeting" is
@@ -1074,7 +1113,7 @@ function Tasks() {
       if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
       if (debouncedFilterStatus) params.append("status", debouncedFilterStatus);
       if (debouncedUserFilter) params.append("user", debouncedUserFilter);
-      if (debouncedDateFilter) params.append("dueDate", debouncedDateFilter);
+      appendServerFilters(params);
 
       const res = await API.get(`/tasks/pagination?${params.toString()}`);
       setTasks(res.data.tasks || []);
@@ -1116,8 +1155,7 @@ function Tasks() {
       if (debouncedFilterStatus)
         params.append("priority", debouncedFilterStatus);
       if (debouncedUserFilter) params.append("user", debouncedUserFilter);
-      if (debouncedDateFilter)
-        params.append("scheduledAt", debouncedDateFilter);
+      appendServerFilters(params);
 
       const res = await API.get(`/meetings/pagination?${params.toString()}`);
       setMeetings(res.data.meetings || []);
@@ -1145,7 +1183,7 @@ function Tasks() {
         if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
         if (debouncedFilterStatus) params.append("status", debouncedFilterStatus);
         if (debouncedUserFilter) params.append("user", debouncedUserFilter);
-        if (debouncedDateFilter) params.append("dueDate", debouncedDateFilter);
+        appendServerFilters(params);
         const res = await API.get(`/tasks/pagination?${params.toString()}`);
         setSelectedTasks(res.data.ids || []);
       } else {
@@ -1153,7 +1191,7 @@ function Tasks() {
         if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
         if (debouncedFilterStatus) params.append("priority", debouncedFilterStatus);
         if (debouncedUserFilter) params.append("user", debouncedUserFilter);
-        if (debouncedDateFilter) params.append("scheduledAt", debouncedDateFilter);
+        appendServerFilters(params);
         const res = await API.get(`/meetings/pagination?${params.toString()}`);
         setSelectedMeetings(res.data.ids || []);
       }
@@ -4005,7 +4043,11 @@ function Tasks() {
         setFilters={setActiveAdvancedFilters}
         onApply={applyAdvancedTaskFilters}
         title={activeTab === "tasks" ? "Filter Tasks" : "Filter Meetings"}
-        subtitle="Find items due on a specific date"
+        subtitle={
+          activeTab === "tasks"
+            ? "Combine due date, status, priority, assignee and more"
+            : "Find meetings by date"
+        }
         emptyStateText="Add a rule to narrow down the list."
       />
 

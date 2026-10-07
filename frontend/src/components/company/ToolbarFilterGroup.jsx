@@ -27,6 +27,13 @@ export default function ToolbarFilterGroup({
   getFieldValue,
   selected = {},
   onApply,
+  // Optional: render a bespoke control for a column instead of the multi-select
+  // dropdown (e.g. the Due Date presets), keyed by column key. Such a control
+  // owns its own state, so the caller reports how many it has active
+  // (`extraSelectionCount`, for the Reset button) and how to clear them.
+  customControls = {},
+  extraSelectionCount = 0,
+  onResetExtra,
 }) {
   const { valuesByColumn } = useColumnFilterDraft({
     isOpen,
@@ -57,7 +64,8 @@ export default function ToolbarFilterGroup({
     onApply(Object.fromEntries(Object.entries(updated).filter(([, arr]) => arr && arr.length > 0)));
   };
 
-  const hasSelection = Object.values(selected).some((arr) => arr && arr.length > 0);
+  const hasSelection =
+    extraSelectionCount > 0 || Object.values(selected).some((arr) => arr && arr.length > 0);
 
   return (
     <div
@@ -74,20 +82,25 @@ export default function ToolbarFilterGroup({
       <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 lg:gap-3 lg:w-max">
         {columns.map((col) => (
           <div key={col.key} className="w-full sm:w-[calc(33.333%-0.5rem)] lg:w-[170px]">
-            <FilterDropdown
-              compact
-              label={col.label}
-              placeholder={col.placeholder}
-              options={valuesByColumn[col.key] || []}
-              selected={selected[col.key] || []}
-              onToggle={(val) => toggle(col.key, val)}
-            />
+            {customControls[col.key] || (
+              <FilterDropdown
+                compact
+                label={col.label}
+                placeholder={col.placeholder}
+                options={valuesByColumn[col.key] || []}
+                selected={selected[col.key] || []}
+                onToggle={(val) => toggle(col.key, val)}
+              />
+            )}
           </div>
         ))}
         {hasSelection && (
           <button
             type="button"
-            onClick={() => onApply({})}
+            onClick={() => {
+              onApply({});
+              onResetExtra?.();
+            }}
             // Same pill as the header's "New Entry" button (white, full radius, hairline border),
             // at the strip's 44px height so it lines up with the dropdowns beside it.
             className="flex-shrink-0 h-[44px] px-5 bg-white border border-[#E1E4EA] rounded-full text-sm font-medium text-[#1F2937] hover:bg-gray-50 transition-colors whitespace-nowrap"

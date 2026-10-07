@@ -6,6 +6,11 @@ import FilterIcon from "./FilterIcon";
 
 import SearchIcon from "./SearchIcon";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import {
+  DUE_DATE_PRESETS,
+  emptyDueDateFilter,
+  isDueDateFilterActive,
+} from "../../utils/dueDateFilter";
 
 const OPERATOR_LABELS = {
   contains: "Contains",
@@ -30,7 +35,25 @@ const OPERATORS_BY_TYPE = {
   number: ["is", "is_not", "greater_than", "less_than", "in", "not_in", "is_empty", "is_not_empty"],
   date: ["is", "is_not", "greater_than", "less_than", "is_empty", "is_not_empty"],
   select: ["is", "is_not", "in", "not_in", "is_empty", "is_not_empty"],
+  // Due Date presets + Custom Range: one implicit condition ("is within"), so
+  // the Condition dropdown is hidden and the value is a {preset, from, to}
+  // object. Date maths lives in utils/dueDateFilter.js.
+  dateRange: ["is"],
 };
+
+// A column can narrow its own condition list (e.g. Assignee: only Is / Is not)
+// via `operators`, instead of inheriting every operator for its type.
+const getAvailableOps = (colDef, colType) => {
+  const typeOps = OPERATORS_BY_TYPE[colType];
+  if (!Array.isArray(colDef?.operators)) return typeOps;
+  const allowed = colDef.operators.filter((op) => typeOps.includes(op));
+  return allowed.length > 0 ? allowed : typeOps;
+};
+
+// Options may be plain strings or {value, label} (when the stored value is an
+// id but the user should see a name).
+const optValue = (opt) => (opt !== null && typeof opt === "object" ? opt.value : opt);
+const optLabel = (opt) => (opt !== null && typeof opt === "object" ? opt.label : opt);
 
 // A column declares its own `type` (used already by custom fields); an
 // untyped column with an enumerable `options` list is treated as `select`
@@ -38,8 +61,7 @@ const OPERATORS_BY_TYPE = {
 // defaults to `text` — the safe default for the many columns across the app
 // that don't declare a type at all today.
 const getColumnType = (colDef) => {
-  if (colDef?.type && OPERATORS_BY_TYPE[colDef.type]) return colDef.type;
-  if (colDef?.options && colDef.options.length > 0) return "select";
+  if (colDef?.type && OPERATORS_BY_TYPE[colDef.type]) return colDef.type;  if (colDef?.options && colDef.options.length > 0) return "select";
   return "text";
 };
 
@@ -260,12 +282,18 @@ export default function AdvancedFilterPanel({
           // new type's first/default operator rather than silently keeping
           // one that no longer applies. Value is always cleared too, so a
           // stale free-text value never persists onto a dropdown/tag field.
-          const newType = getColumnType(getColumnDef(value));
-          const validOps = OPERATORS_BY_TYPE[newType];
+          const newDef = getColumnDef(value);
+          const newType = getColumnType(newDef);
+          const validOps = getAvailableOps(newDef, newType);
           if (!validOps.includes(updated.operator)) {
             updated.operator = validOps[0];
           }
-          updated.value = isMultiValueOperator(updated.operator) ? [] : "";
+          updated.value =
+            newType === "dateRange"
+              ? emptyDueDateFilter()
+              : isMultiValueOperator(updated.operator)
+                ? []
+                : "";
         }
 
         if (field === "operator") {
@@ -290,12 +318,29 @@ export default function AdvancedFilterPanel({
   };
 
   const isFilterValueFilled = (f) => {
+    if (getColumnType(getColumnDef(f.column)) === "dateRange") {
+      return isDueDateFilterActive(f.value);
+    }
     if (isNoValueOperator(f.operator)) return true;
     if (Array.isArray(f.value)) return f.value.length > 0;
     return String(f.value ?? "").trim() !== "";
   };
 
   const handleApply = () => {
+    // A custom range whose From is after To is flagged inline on the rule;
+    // don't apply it silently.
+    const hasReversedRange = localFilters.some((f) => {
+      const v = f.value;
+      return (
+        getColumnType(getColumnDef(f.column)) === "dateRange" &&
+        v?.preset === "custom" &&
+        v.from &&
+        v.to &&
+        v.from > v.to
+      );
+    });
+    if (hasReversedRange) return;
+
     const validFilters = localFilters
       .filter((f) => f.column && f.operator && isFilterValueFilled(f))
       .map((f) => {
@@ -373,7 +418,15 @@ export default function AdvancedFilterPanel({
             localFilters.map((filter) => {
               const colDef = getColumnDef(filter.column);
               const colType = getColumnType(colDef);
-              const availableOps = OPERATORS_BY_TYPE[colType];
+              const availableOps = getAvailableOps(colDef, colType);
+              const isDateRange = colType === "dateRange";
+              const rangeValue = isDateRange ? filter.value || emptyDueDateFilter() : null;
+              const rangeInvalid =
+                isDateRange &&
+                rangeValue.preset === "custom" &&
+                rangeValue.from &&
+                rangeValue.to &&
+                rangeValue.from > rangeValue.to;
               const isValueDisabled = isNoValueOperator(filter.operator);
               const isMultiValue = isMultiValueOperator(filter.operator);
 
@@ -405,6 +458,7 @@ export default function AdvancedFilterPanel({
                     </div>
 
                     <div className="flex gap-2">
+                      {!isDateRange && (
                       <div className="w-[45%]">
                         <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">
                           Condition
@@ -423,12 +477,61 @@ export default function AdvancedFilterPanel({
                           ))}
                         </select>
                       </div>
+                      )}
 
-                      <div className="w-[55%]">
+                      <div className={isDateRange ? "w-full" : "w-[55%]"}>
                         <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">
                           Value
                         </label>
-                        {isValueDisabled ? (
+                        {isDateRange ? (
+                          <div className="space-y-2">
+                            <select
+                              value={rangeValue.preset || ""}
+                              onChange={(e) =>
+                                updateFilter(filter.id, "value", {
+                                  ...rangeValue,
+                                  preset: e.target.value,
+                                })
+                              }
+                              className="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            >
+                              <option value="">Select...</option>
+                              {DUE_DATE_PRESETS.map((p) => (
+                                <option key={p.value} value={p.value}>{p.label}</option>
+                              ))}
+                            </select>
+                            {rangeValue.preset === "custom" && (
+                              <div className="flex gap-2">
+                                <label className="flex-1 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                                  From
+                                  <input
+                                    type="date"
+                                    value={rangeValue.from || ""}
+                                    onChange={(e) =>
+                                      updateFilter(filter.id, "value", { ...rangeValue, from: e.target.value })
+                                    }
+                                    className="mt-1 w-full border border-gray-300 rounded-lg text-sm font-normal normal-case tracking-normal text-gray-800 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                  />
+                                </label>
+                                <label className="flex-1 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                                  To
+                                  <input
+                                    type="date"
+                                    value={rangeValue.to || ""}
+                                    min={rangeValue.from || undefined}
+                                    onChange={(e) =>
+                                      updateFilter(filter.id, "value", { ...rangeValue, to: e.target.value })
+                                    }
+                                    className="mt-1 w-full border border-gray-300 rounded-lg text-sm font-normal normal-case tracking-normal text-gray-800 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                  />
+                                </label>
+                              </div>
+                            )}
+                            {rangeInvalid && (
+                              <p className="text-xs text-red-500">"From" must be on or before "To".</p>
+                            )}
+                          </div>
+                        ) : isValueDisabled ? (
                           <div className="w-full bg-gray-50 border border-gray-200 rounded-lg flex items-center px-3 py-2 text-sm text-gray-400 italic">
                             N/A
                           </div>
@@ -445,7 +548,7 @@ export default function AdvancedFilterPanel({
                           // "Contains ..." against a closed option list would
                           // just be picking one option anyway, so those still
                           // fall through to the type-appropriate input below.
-                          if (opts && opts.length > 0 && (filter.operator === "is" || filter.operator === "is_not")) {
+                          if (colType !== "date" && opts && opts.length > 0 && (filter.operator === "is" || filter.operator === "is_not")) {
                             return (
                               <select
                                 value={filter.value}
@@ -456,7 +559,7 @@ export default function AdvancedFilterPanel({
                               >
                                 <option value="">Select...</option>
                                 {opts.map((opt) => (
-                                  <option key={opt} value={opt}>{opt}</option>
+                                  <option key={optValue(opt)} value={optValue(opt)}>{optLabel(opt)}</option>
                                 ))}
                               </select>
                             );

@@ -4,6 +4,12 @@ import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { DATE_RANGES, getDateRangeLabel } from "../../utils/dateBuckets";
+import {
+  emptyDueDateFilter,
+  isDueDateFilterActive,
+  matchesDueDateFilter,
+} from "../../utils/dueDateFilter";
+import DueDateFilterPill from "../common/DueDateFilterPill";
 import { createPortal } from "react-dom";
 import { getAncestorZoom } from "../../utils/domUtils";
 import { getPinnedBoundaryOverlayStyle } from "../../utils/pinnedColumnShadow";
@@ -581,6 +587,10 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
   };
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [selectedFilters, setSelectedFilters] = useState({});
+  // Due Date presets / Custom Range — kept apart from selectedFilters because
+  // it's a single {preset, from, to} choice, not a list of ticked values.
+  const [dueDateFilter, setDueDateFilter] = useState(emptyDueDateFilter);
+  const dueDateFilterCount = isDueDateFilterActive(dueDateFilter) ? 1 : 0;
 
   const [listPage, setListPage] = useState(1);
   const [listLimit, setListLimit] = useState(10);
@@ -651,8 +661,9 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
       const q = searchTerm.toLowerCase();
       result = result.filter((t) => getTaskSearchText(t).includes(q));
     }
-    return applyColumnFilters(result, selectedFilters, getTaskFieldValue);
-  }, [tasks, searchTerm, selectedFilters]);
+    result = applyColumnFilters(result, selectedFilters, getTaskFieldValue);
+    return result.filter((t) => matchesDueDateFilter(t, dueDateFilter));
+  }, [tasks, searchTerm, selectedFilters, dueDateFilter]);
 
   const sortedTasks = useMemo(() => {
     if (!sortConfig.key) return filteredTasks;
@@ -873,6 +884,23 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
             getFieldValue={getTaskFieldValue}
             selected={selectedFilters}
             onApply={setSelectedFilters}
+            customControls={{
+              dueDate: (
+                <DueDateFilterPill
+                  label="Due Date"
+                  value={dueDateFilter}
+                  onChange={(next) => {
+                    setDueDateFilter(next);
+                    setListPage(1);
+                  }}
+                />
+              ),
+            }}
+            extraSelectionCount={dueDateFilterCount}
+            onResetExtra={() => {
+              setDueDateFilter(emptyDueDateFilter());
+              setListPage(1);
+            }}
           />
           <button
             onClick={() => setShowFilterPanel((open) => !open)}
@@ -881,14 +909,14 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
               }`}
             style={{
               height: "44px",
-              borderColor: showFilterPanel || Object.values(selectedFilters).flat().length > 0 ? "#0085FF" : "#E1E4EA",
+              borderColor: showFilterPanel || Object.values(selectedFilters).flat().length + dueDateFilterCount > 0 ? "#0085FF" : "#E1E4EA",
             }}
           >
             <FilterIcon size={16} />
             Filter
-            {Object.values(selectedFilters).flat().length > 0 && (
+            {Object.values(selectedFilters).flat().length + dueDateFilterCount > 0 && (
               <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full ring-2 ring-white">
-                {Object.values(selectedFilters).flat().length}
+                {Object.values(selectedFilters).flat().length + dueDateFilterCount}
               </span>
             )}
           </button>
