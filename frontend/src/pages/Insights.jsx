@@ -5,6 +5,7 @@ import VideoIcon from "../components/common/VideoIcon";
 import CellphoneIcon from "../components/common/CellphoneIcon";
 import DownloadIcon from "../components/common/DownloadIcon";
 import React, { useEffect, useState, useMemo, useRef } from "react";
+import { useTopLoadingSignal } from "../components/common/TopLoadingBar";
 import logo from "/DataCircles.png";
 import { formatNumberToIndian } from "../utils/numberFormatter";
 import {
@@ -364,8 +365,21 @@ const Insights = () => {
   const [purchases, setPurchases] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [meetings, setMeetings] = useState([]);
+  // Server-side analytics report (GET /api/insights/report). Phase 5 wires this
+  // in additively: it is fetched alongside the existing requests and re-fetched
+  // whenever the date range changes, carrying the browser's IANA timezone so the
+  // report's calendar-month buckets line up with the client's local getMonth().
+  // The legacy requests below are intentionally still active — every collection
+  // still feeds Insights widgets the report does not yet cover (activity feed,
+  // daily Revenue-vs-Spends, status distributions, funnel/velocity/industry,
+  // etc.), so none can be removed until those widgets are migrated too.
+  const [report, setReport] = useState(null);
   const [activityTab, setActivityTab] = useState("all");
   const [loading, setLoading] = useState(false);
+  // Drive the top-edge progress bar from the page's real loading state, the same
+  // 1:1 mapping every other page uses — the Insights skeleton alone never
+  // signaled the shared bar, so it was missing here.
+  useTopLoadingSignal(loading);
   const [expandedRows, setExpandedRows] = useState([]);
   const [selectedUser, setSelectedUser] = React.useState("all");
   const [kanbanStatuses, setKanbanStatuses] = useState(null);
@@ -446,6 +460,35 @@ const Insights = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Fetch the server-side report. Additive and resilient: a failure leaves
+  // `report` null and the page keeps working off the existing requests, so this
+  // can never take Insights down. The date range mirrors the current UI exactly
+  // (only sent when both ends are set, matching filteredData), and the browser's
+  // IANA timezone is sent so month buckets match the client's local getMonth().
+  const fetchReport = async (range) => {
+    try {
+      const params = {
+        tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      };
+      if (range?.startDate && range?.endDate) {
+        params.startDate = range.startDate;
+        params.endDate = range.endDate;
+      }
+      const res = await API.get("/insights/report", { params });
+      setReport(res.data || null);
+    } catch (error) {
+      console.warn("Insights report fetch failed (page falls back to client analytics):", error?.response?.status || error?.message);
+      setReport(null);
+    }
+  };
+
+  // Re-fetch the report whenever the date range changes — same trigger the
+  // existing client-side filteredData already recomputes on.
+  useEffect(() => {
+    fetchReport(dateRange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange.startDate, dateRange.endDate]);
 
   const fetchData = async () => {
     try {
@@ -1635,7 +1678,14 @@ const Insights = () => {
           const wonDeals = dealsForStats.filter((d) => d.status === "Won").length;
           const lostDeals = dealsForStats.filter((d) => d.status === "Lost").length;
           const decidedDeals = wonDeals + lostDeals;
-          const winRate = decidedDeals > 0 ? Math.round((wonDeals / decidedDeals) * 100) : 0;
+          // Phase 5: prefer the server report for cleanly-covered Overview
+          // widgets, falling back to the exact client-side calc when the report
+          // is unavailable/empty. (KPI StatCards above stay fully on the raw
+          // path — their MoM % needs inputs the report doesn't provide.)
+          const rptSummary = report?.summary || null;
+          const winRate = rptSummary
+            ? rptSummary.winRate
+            : (decidedDeals > 0 ? Math.round((wonDeals / decidedDeals) * 100) : 0);
           const totalDealValue = dealsForStats.reduce((sum, d) => sum + (d.amount || 0), 0);
           const avgDealSize = totalDeals > 0 ? totalDealValue / totalDeals : 0;
 
@@ -1652,37 +1702,50 @@ const Insights = () => {
             const stage = d.status || "Unknown";
             stageCounts[stage] = (stageCounts[stage] || 0) + 1;
           });
-          const stageEntries = Object.entries(stageCounts).sort((a, b) => b[1] - a[1]);
+          // Deal Pipeline — prefer report.pipeline (already sorted desc by count),
+          // else the client stageCounts.
+          const stageEntries = Array.isArray(report?.pipeline) && report.pipeline.length
+            ? report.pipeline.map((p) => [p.stage, p.count])
+            : Object.entries(stageCounts).sort((a, b) => b[1] - a[1]);
           const pipelineStageColors = ["#0085FF", "#0C4FCD", "#2E7D32", "#D97706", "#E82222", "#00C950"];
 
           // Monthly Invoiced / Collected / Outstanding for the Revenue &
           // Collections chart — 12 buckets by calendar month (all years
           // merged into one, same convention as the earlier monthlyTrends).
           const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-          const revenueCollectionsData = monthLabels.map((label, idx) => {
-            const monthInvoices = invoicesForStats.filter((inv) => {
-              const d = inv.date || inv.createdAt;
-              return d && new Date(d).getMonth() === idx;
-            });
-            const invoiced = monthInvoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
-            const monthCollected = monthInvoices
-              .filter((inv) => inv.status === "Paid")
-              .reduce((sum, inv) => sum + (inv.amount || 0), 0);
-            return {
-              month: label,
-              invoiced,
-              collected: monthCollected,
-              outstanding: invoiced - monthCollected,
-            };
-          });
+          // Revenue & Collections — prefer report.revenueByMonth (same 12-month,
+          // year-merged shape: { month, invoiced, collected, outstanding }), else
+          // the client calc.
+          const revenueCollectionsData = Array.isArray(report?.revenueByMonth) && report.revenueByMonth.length
+            ? report.revenueByMonth
+            : monthLabels.map((label, idx) => {
+                const monthInvoices = invoicesForStats.filter((inv) => {
+                  const d = inv.date || inv.createdAt;
+                  return d && new Date(d).getMonth() === idx;
+                });
+                const invoiced = monthInvoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+                const monthCollected = monthInvoices
+                  .filter((inv) => inv.status === "Paid")
+                  .reduce((sum, inv) => sum + (inv.amount || 0), 0);
+                return {
+                  month: label,
+                  invoiced,
+                  collected: monthCollected,
+                  outstanding: invoiced - monthCollected,
+                };
+              });
 
-          const openDeals = totalDeals - wonDeals - lostDeals;
+          // Sales Performance — prefer report.summary Won/Lost/Total, else client.
+          const spWon = rptSummary ? rptSummary.wonDeals : wonDeals;
+          const spLost = rptSummary ? rptSummary.lostDeals : lostDeals;
+          const spTotal = rptSummary ? rptSummary.totalDeals : totalDeals;
+          const openDeals = Math.max(0, spTotal - spWon - spLost);
           const salesPerformanceData = [
-            { name: "Won", value: wonDeals, color: "#00C950" },
-            { name: "Lost", value: lostDeals, color: "#E82222" },
+            { name: "Won", value: spWon, color: "#00C950" },
+            { name: "Lost", value: spLost, color: "#E82222" },
             { name: "Open", value: openDeals, color: "#0085FF" },
           ];
-          const hasAnyDeals = totalDeals > 0;
+          const hasAnyDeals = spTotal > 0;
 
           return (
             <>

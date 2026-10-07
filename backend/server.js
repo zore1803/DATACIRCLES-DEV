@@ -123,6 +123,12 @@ app.use('/api/deals', dealRoutes);
 const taskRoutes = require('./routes/taskRoutes');
 app.use('/api/tasks', taskRoutes);
 
+const dashboardRoutes = require('./routes/dashboardRoutes');
+app.use('/api/dashboard', dashboardRoutes);
+
+const insightsRoutes = require('./routes/insightsRoutes');
+app.use('/api/insights', insightsRoutes);
+
 const systemSettingsRoutes = require('./routes/systemSettingsRoutes');
 app.use('/api/system-settings', systemSettingsRoutes);
 

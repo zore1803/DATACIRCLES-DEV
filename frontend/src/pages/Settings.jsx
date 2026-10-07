@@ -407,8 +407,8 @@ const Settings = () => {
     {
       id: "system-defaults",
       icon: <SettingsIcon className="w-4 h-4" />,
-      label: "System Defaults",
-      description: "Manage custom task statuses and note types",
+      label: "Status Configuration",
+      description: "Configure task statuses, note types, and meeting types for your workspace",
       color: "text-slate-600",
       bgColor: "bg-slate-50",
       borderColor: "border-slate-200",

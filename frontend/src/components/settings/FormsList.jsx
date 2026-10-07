@@ -69,6 +69,7 @@ import Checkbox from "../common/Checkbox";
 import EmptyState from "../common/EmptyState";
 import HighlightText from "../common/HighlightText";
 import TableSkeletonRows from "../common/TableSkeletonRows";
+import { useTopLoadingSignal } from "../common/TopLoadingBar";
 import BulkDeleteModal from "../common/BulkDeleteModal";
 import ExportModal from "../common/ExportModal";
 import AdvancedFilterPanel from "../common/AdvancedFilterPanel";
@@ -276,6 +277,10 @@ const FormsList = () => {
 
   const [forms, setForms] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Signal the shared top-edge progress bar while loading — same 1:1 mapping the
+  // other pages use. The Forms list showed a table skeleton but never drove the
+  // bar, so it was missing here (matching the Insights fix).
+  useTopLoadingSignal(loading);
   // Classified failure state — a bare "Access denied" string can't distinguish "you're out of
   // plan" from "you lack permission" from "server is down", and each of those needs a different
   // UI (upgrade card vs. contact-admin vs. retry). `type` drives which card renders; `message`/

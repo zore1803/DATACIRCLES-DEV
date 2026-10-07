@@ -9,7 +9,7 @@ import { createColumnHelper } from "@tanstack/react-table";
 import { ResponsiveContainer, ComposedChart, XAxis, YAxis, Area, Line, CartesianGrid, Tooltip } from "recharts";
 import { formatNumberToIndian } from "../utils/numberFormatter";
 import CrmHealthGauge from "../components/dashboard/CrmHealthGauge";
-import { TrendingUp, TrendingDown, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Pin, PinOff, EyeOff, X, CheckSquare, Building2, Users, ListChecks, ArrowUp, ArrowDown } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Pin, PinOff, EyeOff, X, CheckSquare, Building2, Users, ListChecks, ArrowUp, ArrowDown } from "lucide-react";
 import VideoIcon from "../components/common/VideoIcon";
 import FilterIcon from "../components/common/FilterIcon";
 import DataTable from "../components/common/DataTable";
@@ -766,8 +766,9 @@ function Dashboard() {
     invoiceSearchTerm,
   ]);
 
-  const [companies, setCompanies] = useState([]);
-  const [contacts, setContacts] = useState([]);
+  // companies/contacts are no longer stored client-side — the Dashboard reads
+  // their counts/trends/engagement from /api/dashboard/stats (see dashboardStats
+  // below) instead of downloading the full collections.
   const [totalClients, setTotalClients] = useState(0);
   const [totalContacts, setTotalContacts] = useState(0);
   const [activeDeals, setActiveDeals] = useState(0);
@@ -775,22 +776,35 @@ function Dashboard() {
   const [totalMeetings, setTotalMeetings] = useState(0);
 
   const [averageDealSize, setAverageDealSize] = useState(0);
+
+  // Server-side aggregates for the two collections the Dashboard no longer
+  // downloads in full (companies, contacts). These used to be derived from the
+  // whole /companies and /contacts arrays purely for counts, trend arrows and
+  // the contact-engagement health metric — never to render rows. See
+  // /api/dashboard/stats (dashboardController.js).
+  const [dashboardStats, setDashboardStats] = useState(null);
+
+  // Mirrors getMonthOverMonthChange's return ({ pct, up }) but from
+  // pre-counted current/previous totals instead of an array, so the trend
+  // arrows read identically to the old client-side calculation.
+  const momFromCounts = (current, previous) => {
+    if (previous === 0) return { current, previous, pct: current > 0 ? 100 : 0, up: true };
+    const change = ((current - previous) / previous) * 100;
+    return { current, previous, pct: Math.abs(Math.round(change)), up: change >= 0 };
+  };
+
   // CRM Health card — every figure is measured from this org's own records.
   // A metric with nothing to measure reports 0 rather than a flattering
   // default, so an empty CRM reads as empty.
   const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 
   const crmHealthMetrics = useMemo(() => {
-    // Engagement: contacts that are actually attached to a deal, vs all of them.
-    const contactIdsOnDeals = new Set(
-      (deals || [])
-        .map((d) => d.contact?._id || d.contact)
-        .filter(Boolean)
-        .map(String)
-    );
-    const engagedContacts = (contacts || []).filter((c) =>
-      contactIdsOnDeals.has(String(c._id))
-    ).length;
+    // Engagement: contacts attached to a deal, vs all of them. Both figures now
+    // come from /api/dashboard/stats (computed server-side with the exact same
+    // intersection the client used), so the Dashboard no longer downloads the
+    // whole contacts collection just to measure this.
+    const engagedContacts = dashboardStats?.contacts?.engaged || 0;
+    const totalContactsForHealth = dashboardStats?.contacts?.total || 0;
 
     // Tasks: completed vs every task on record.
     const completedTasks = (allTasks || []).filter(
@@ -816,13 +830,13 @@ function Dashboard() {
     ).length;
 
     return [
-      { label: "Contact Engagement", value: pct(engagedContacts, (contacts || []).length) },
+      { label: "Contact Engagement", value: pct(engagedContacts, totalContactsForHealth) },
       { label: "Task Completion", value: pct(completedTasks, (allTasks || []).length) },
       { label: "Deal Activity", value: pct(activeDeals, (deals || []).length) },
       { label: "Meeting Completion", value: pct(completedMeetings, pastMeetings.length) },
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contacts, deals, allTasks, allMeetings]);
+  }, [dashboardStats, deals, allTasks, allMeetings]);
 
   // Pipeline Snapshot (Card Two). Deal has amount, status and timestamps —
   // no close-date field — so every figure below is derived from those three.
@@ -1405,46 +1419,65 @@ function Dashboard() {
         // rejection without ever reaching the setXxx calls below. Each request now succeeds or
         // fails on its own; a failed one just keeps that section at its empty default instead
         // of taking every other section down with it.
-        const [
-          companiesRes,
-          contactsRes,
-          dealsRes,
-          tasksRes,
-          invoicesRes,
-          meetingRes,
-        ] = await Promise.allSettled([
-          API.get("/companies"),
-          API.get("/contacts"),
-          API.get("/deals/dashboard-deals"),
-          API.get("/tasks"), // ⬅️ staff can now access this
-          API.get("/invoices"), // ⬅️ filtered automatically
-          API.get("/meetings/dashboard"), // ⬅️ staff gets own meetings
-        ]).then((results) =>
-          results.map((r) => (r.status === "fulfilled" ? r.value : { data: [] }))
-        );
+        // /companies and /contacts are no longer downloaded in full: the page
+        // only ever used them for counts, the month-over-month trend arrows and
+        // the contact-engagement health metric (never to render rows). Those
+        // aggregates now come from /api/dashboard/stats. The month boundaries
+        // are computed here in browser-local time — the exact bucketing
+        // getMonthOverMonthChange used — and sent to the backend so trend counts
+        // are identical. deals/tasks/invoices/meetings are still fetched because
+        // the page genuinely renders their charts, recent lists and the invoice
+        // table.
+        const nowForBounds = new Date();
+        const monthBounds = {
+          thisMonthStart: new Date(nowForBounds.getFullYear(), nowForBounds.getMonth(), 1).toISOString(),
+          nextMonthStart: new Date(nowForBounds.getFullYear(), nowForBounds.getMonth() + 1, 1).toISOString(),
+          lastMonthStart: new Date(nowForBounds.getFullYear(), nowForBounds.getMonth() - 1, 1).toISOString(),
+        };
 
-        const allInvoices = invoicesRes.data;
+        // allSettled, not all: these endpoints are independently permission-gated
+        // per org (an org without the Invoices or Tasks module enabled 403s on
+        // just that one), so one rejecting must not take the whole page down.
+        // Each request succeeds or fails on its own; a failed one keeps that
+        // section at its empty default. /dashboard/stats itself degrades
+        // per-module server-side, so its own failure just yields zeroed stats.
+        const [statsRes, dealsRes, tasksRes, invoicesRes, meetingRes] =
+          await Promise.allSettled([
+            API.get("/dashboard/stats", { params: monthBounds }),
+            API.get("/deals/dashboard-deals"),
+            API.get("/tasks"), // ⬅️ staff can now access this
+            API.get("/invoices"), // ⬅️ filtered automatically
+            API.get("/meetings/dashboard"), // ⬅️ staff gets own meetings
+          ]);
+        const dataOf = (r, fallback) =>
+          r.status === "fulfilled" ? r.value.data : fallback;
 
-        setDeals(dealsRes.data);
-        setCompanies(companiesRes.data);
-        setContacts(contactsRes.data);
-        setTotalClients(companiesRes.data.length);
-        setTotalContacts(contactsRes.data.length);
-        setActiveDeals(dealsRes.data.filter((d) => d.status === "Open").length);
+        const stats = dataOf(statsRes, null) || {
+          companies: { total: 0, thisMonth: 0, lastMonth: 0 },
+          contacts: { total: 0, thisMonth: 0, lastMonth: 0, engaged: 0 },
+        };
+        setDashboardStats(stats);
 
-        const allTasksData = tasksRes.data;
-        setTasks(
-          allTasksData.filter((t) => t.status === "Pending").slice(0, 3)
-        );
+        const dealsData = dataOf(dealsRes, []);
+        const allTasksData = dataOf(tasksRes, []);
+        const allInvoices = dataOf(invoicesRes, []);
+        const meetingData = dataOf(meetingRes, []);
+
+        setDeals(dealsData);
+        setTotalClients(stats.companies?.total || 0);
+        setTotalContacts(stats.contacts?.total || 0);
+        setActiveDeals(dealsData.filter((d) => d.status === "Open").length);
+
+        setTasks(allTasksData.filter((t) => t.status === "Pending").slice(0, 3));
         setAllTasks(allTasksData);
         setTotalTasks(allTasksData.length);
 
-        setAllMeetings(meetingRes.data);
-        setMeetings(meetingRes.data.slice(0, 3));
-        setTotalMeetings(meetingRes.data.length);
+        setAllMeetings(meetingData);
+        setMeetings(meetingData.slice(0, 3));
+        setTotalMeetings(meetingData.length);
 
         setInvoices(allInvoices);
-        setAverageDealSize(calculateAverageDealAmount(dealsRes.data));
+        setAverageDealSize(calculateAverageDealAmount(dealsData));
         setInvoiceStats(calculateInvoiceStats(allInvoices));
       } catch (err) {
         console.log(err);
@@ -1518,10 +1551,10 @@ function Dashboard() {
           style={{ gap: 16, marginTop: 24 }}
         >
           {[
-            { icon: TotalIncomeIcon, label: "Total Invoices Issued", value: `₹${Math.round(invoiceStats.total).toLocaleString("en-IN")}`, trend: `${invoiceKpiTrends.total.pct}% this month`, trendUp: invoiceKpiTrends.total.up },
-            { icon: RevenueGeneratedIcon, label: "Paid Invoices", value: `₹${Math.round(invoiceStats.accepted).toLocaleString("en-IN")}`, trend: `${invoiceKpiTrends.paid.pct}% this month`, trendUp: invoiceKpiTrends.paid.up },
-            { icon: TotalDealsClosedIcon, label: "Pending Invoices", value: `₹${Math.round(invoiceStats.sent).toLocaleString("en-IN")}`, trend: `${invoiceKpiTrends.pending.pct}% this month`, trendUp: invoiceKpiTrends.pending.up },
-            { icon: DealValueOvertimeIcon, label: "Due Invoices", value: `₹${Math.round(invoiceStats.due).toLocaleString("en-IN")}`, trend: `${invoiceKpiTrends.due.pct}% this month`, trendUp: invoiceKpiTrends.due.up },
+            { icon: TotalIncomeIcon, label: "Total Invoices Issued", value: `₹${Math.round(invoiceStats.total).toLocaleString("en-IN")}`, trend: `${invoiceKpiTrends.total.pct}% this month`, trendUp: invoiceKpiTrends.total.up, trendNeutral: invoiceKpiTrends.total.pct === 0 },
+            { icon: RevenueGeneratedIcon, label: "Paid Invoices", value: `₹${Math.round(invoiceStats.accepted).toLocaleString("en-IN")}`, trend: `${invoiceKpiTrends.paid.pct}% this month`, trendUp: invoiceKpiTrends.paid.up, trendNeutral: invoiceKpiTrends.paid.pct === 0 },
+            { icon: TotalDealsClosedIcon, label: "Pending Invoices", value: `₹${Math.round(invoiceStats.sent).toLocaleString("en-IN")}`, trend: `${invoiceKpiTrends.pending.pct}% this month`, trendUp: invoiceKpiTrends.pending.up, trendNeutral: invoiceKpiTrends.pending.pct === 0 },
+            { icon: DealValueOvertimeIcon, label: "Due Invoices", value: `₹${Math.round(invoiceStats.due).toLocaleString("en-IN")}`, trend: `${invoiceKpiTrends.due.pct}% this month`, trendUp: invoiceKpiTrends.due.up, trendNeutral: invoiceKpiTrends.due.pct === 0 },
           ].map((kpi, i) => (
             // fetchData's Promise.all is now allSettled (see the effect above), so `loading`
             // clears promptly and reliably regardless of which individual endpoints 403 — safe
@@ -1534,8 +1567,9 @@ function Dashboard() {
                 tile={{
                   ...kpi,
                   subtitle: kpi.trend,
-                  subtitleIcon: kpi.trendUp ? TrendingUp : TrendingDown,
-                  subtitleColor: kpi.trendUp ? "#00C950" : "#E82222",
+                  // A flat 0% is neutral (grey, flat line), not positive growth.
+                  subtitleIcon: kpi.trendNeutral ? Minus : kpi.trendUp ? TrendingUp : TrendingDown,
+                  subtitleColor: kpi.trendNeutral ? "#99A0AE" : kpi.trendUp ? "#00C950" : "#E82222",
                 }}
               />
             )
@@ -2198,10 +2232,10 @@ function Dashboard() {
           className="grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:items-stretch lg:gap-4 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8"
         >
           {[
-            { icon: TotalIncomeIcon, label: "Total Income", value: `₹${Math.round(overviewKpis.totalIncome).toLocaleString("en-IN")}`, trend: `${overviewKpis.totalIncomeTrend.pct}% this month`, trendUp: overviewKpis.totalIncomeTrend.up },
-            { icon: RevenueGeneratedIcon, label: "Revenue Generated", value: `₹${Math.round(overviewKpis.revenueGenerated).toLocaleString("en-IN")}`, trend: `${overviewKpis.revenueGeneratedTrend.pct}% this month`, trendUp: overviewKpis.revenueGeneratedTrend.up },
-            { icon: TotalDealsClosedIcon, label: "Total Deals Closed", value: `${overviewKpis.dealsClosedCount}`, trend: `${overviewKpis.dealsClosedTrend.pct}% this month`, trendUp: overviewKpis.dealsClosedTrend.up },
-            { icon: DealValueOvertimeIcon, label: "Deal Value Overtime", value: `₹${Math.round(overviewKpis.dealValue).toLocaleString("en-IN")}`, trend: `${overviewKpis.dealValueTrend.pct}% this month`, trendUp: overviewKpis.dealValueTrend.up },
+            { icon: TotalIncomeIcon, label: "Total Income", value: `₹${Math.round(overviewKpis.totalIncome).toLocaleString("en-IN")}`, trend: `${overviewKpis.totalIncomeTrend.pct}% this month`, trendUp: overviewKpis.totalIncomeTrend.up, trendNeutral: overviewKpis.totalIncomeTrend.pct === 0 },
+            { icon: RevenueGeneratedIcon, label: "Revenue Generated", value: `₹${Math.round(overviewKpis.revenueGenerated).toLocaleString("en-IN")}`, trend: `${overviewKpis.revenueGeneratedTrend.pct}% this month`, trendUp: overviewKpis.revenueGeneratedTrend.up, trendNeutral: overviewKpis.revenueGeneratedTrend.pct === 0 },
+            { icon: TotalDealsClosedIcon, label: "Total Deals Closed", value: `${overviewKpis.dealsClosedCount}`, trend: `${overviewKpis.dealsClosedTrend.pct}% this month`, trendUp: overviewKpis.dealsClosedTrend.up, trendNeutral: overviewKpis.dealsClosedTrend.pct === 0 },
+            { icon: DealValueOvertimeIcon, label: "Deal Value Overtime", value: `₹${Math.round(overviewKpis.dealValue).toLocaleString("en-IN")}`, trend: `${overviewKpis.dealValueTrend.pct}% this month`, trendUp: overviewKpis.dealValueTrend.up, trendNeutral: overviewKpis.dealValueTrend.pct === 0 },
           ].map((kpi, i) => (
             // fetchData's Promise.all is now allSettled (see the effect above), so `loading`
             // clears promptly and reliably regardless of which individual endpoints 403 — safe
@@ -2214,8 +2248,9 @@ function Dashboard() {
                 tile={{
                   ...kpi,
                   subtitle: kpi.trend,
-                  subtitleIcon: kpi.trendUp ? TrendingUp : TrendingDown,
-                  subtitleColor: kpi.trendUp ? "#00C950" : "#E82222",
+                  // A flat 0% is neutral (grey, flat line), not positive growth.
+                  subtitleIcon: kpi.trendNeutral ? Minus : kpi.trendUp ? TrendingUp : TrendingDown,
+                  subtitleColor: kpi.trendNeutral ? "#99A0AE" : kpi.trendUp ? "#00C950" : "#E82222",
                 }}
               />
             )
@@ -2235,16 +2270,24 @@ function Dashboard() {
             );
           }).length;
           const pendingTasks = allTasks.filter((t) => t.status === "Pending");
-          const companiesTrend = getMonthOverMonthChange(companies, "createdAt", null);
-          const contactsTrend = getMonthOverMonthChange(contacts, "createdAt", null);
+          // Companies/contacts trends come from the server aggregate now (same
+          // browser-local month boundaries, same formula as getMonthOverMonthChange).
+          const companiesTrend = momFromCounts(
+            dashboardStats?.companies?.thisMonth || 0,
+            dashboardStats?.companies?.lastMonth || 0
+          );
+          const contactsTrend = momFromCounts(
+            dashboardStats?.contacts?.thisMonth || 0,
+            dashboardStats?.contacts?.lastMonth || 0
+          );
           const meetingsTrend = getMonthOverMonthChange(allMeetings, "scheduledAt", null);
           const pendingTasksTrend = getMonthOverMonthChange(pendingTasks, "createdAt", null);
 
           const crmKpis = [
-            { icon: Building2, label: "Total Companies", value: totalClients, trend: `${companiesTrend.pct}% this month`, trendUp: companiesTrend.up },
-            { icon: Users, label: "Total Contacts", value: totalContacts, trend: `${contactsTrend.pct}% this month`, trendUp: contactsTrend.up },
-            { icon: VideoIcon, label: "Meetings Today", value: meetingsTodayCount, trend: `${meetingsTrend.pct}% this month`, trendUp: meetingsTrend.up },
-            { icon: ListChecks, label: "Pending Tasks", value: pendingTasksCount, trend: `${pendingTasksTrend.pct}% this month`, trendUp: pendingTasksTrend.up },
+            { icon: Building2, label: "Total Companies", value: totalClients, trend: `${companiesTrend.pct}% this month`, trendUp: companiesTrend.up, trendNeutral: companiesTrend.pct === 0 },
+            { icon: Users, label: "Total Contacts", value: totalContacts, trend: `${contactsTrend.pct}% this month`, trendUp: contactsTrend.up, trendNeutral: contactsTrend.pct === 0 },
+            { icon: VideoIcon, label: "Meetings Today", value: meetingsTodayCount, trend: `${meetingsTrend.pct}% this month`, trendUp: meetingsTrend.up, trendNeutral: meetingsTrend.pct === 0 },
+            { icon: ListChecks, label: "Pending Tasks", value: pendingTasksCount, trend: `${pendingTasksTrend.pct}% this month`, trendUp: pendingTasksTrend.up, trendNeutral: pendingTasksTrend.pct === 0 },
           ];
 
           return (
@@ -2261,8 +2304,9 @@ function Dashboard() {
                     tile={{
                       ...kpi,
                       subtitle: kpi.trend,
-                      subtitleIcon: kpi.trendUp ? TrendingUp : TrendingDown,
-                      subtitleColor: kpi.trendUp ? "#00C950" : "#E82222",
+                      // A flat 0% is neutral (grey, flat line), not positive growth.
+                      subtitleIcon: kpi.trendNeutral ? Minus : kpi.trendUp ? TrendingUp : TrendingDown,
+                      subtitleColor: kpi.trendNeutral ? "#99A0AE" : kpi.trendUp ? "#00C950" : "#E82222",
                     }}
                   />
                 )
@@ -2407,9 +2451,12 @@ function Dashboard() {
             <div className="flex flex-row items-stretch self-stretch" style={{ gap: 8, height: 40 }}>
               {pipelineSnapshot.map((m, i) => {
                 // "Lost" going up is bad news, so its arrow and colour are
-                // inverted rather than painting any rise green.
-                const good = m.invert ? m.delta <= 0 : m.delta >= 0;
-                const colour = good ? "#00C950" : "#F60000";
+                // inverted rather than painting any rise green. A flat 0% is
+                // neutral — grey with a flat line — not green/up, so "No change"
+                // no longer reads as positive growth.
+                const neutral = m.delta === 0;
+                const good = m.invert ? m.delta < 0 : m.delta > 0;
+                const colour = neutral ? "#99A0AE" : good ? "#00C950" : "#F60000";
                 return (
                   <Fragment key={m.label}>
                     {i > 0 && (
@@ -2431,13 +2478,15 @@ function Dashboard() {
                         </span>
                       </div>
                       <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 4 }}>
-                        {m.delta >= 0 ? (
+                        {neutral ? (
+                          <Minus size={12} style={{ color: colour }} />
+                        ) : m.delta > 0 ? (
                           <TrendingUp size={12} style={{ color: colour }} />
                         ) : (
                           <TrendingDown size={12} style={{ color: colour }} />
                         )}
                         <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 10, lineHeight: "120%", color: colour }}>
-                          {m.delta.isNew ? "New" : (m.delta.pct === 0 ? "No change" : `${Math.abs(m.delta.pct)}%`)}
+                          {neutral ? "No change" : `${Math.abs(m.delta)}%`}
                         </span>
                       </div>
                     </div>

@@ -1,8 +1,7 @@
 import DeleteIcon from "../common/DeleteIcon";
-import PdfIcon from "../common/PdfIcon";
 import PlusIcon from "../common/PlusIcon";
 import React, { useState, useEffect } from "react";
-import { Lock, Loader2, Timer, Settings2, X, Check, CalendarDays } from "lucide-react";
+import { Lock, X, Check } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import EditIcon from "../common/EditIcon";
@@ -104,6 +103,7 @@ function SystemDefaultsSettings() {
 
   const handleRemoveTaskStatus = (status) => {
     if (DEFAULT_TASK_STATUSES.includes(status)) return; // double check
+    if (!window.confirm(`Delete status "${status}"? This cannot be undone.`)) return;
     const updated = taskStatuses.filter(s => s !== status);
     updateTaskStatuses(updated);
   };
@@ -122,6 +122,7 @@ function SystemDefaultsSettings() {
 
   const handleRemoveNoteType = (type) => {
     if (DEFAULT_NOTE_TYPES.includes(type)) return;
+    if (!window.confirm(`Delete note type "${type}"? This cannot be undone.`)) return;
     const updated = noteTypes.filter(t => t !== type);
     updateNoteTypes(updated);
   };
@@ -166,6 +167,7 @@ function SystemDefaultsSettings() {
 
   const handleRemoveMeetingType = (type) => {
     if (DEFAULT_MEETING_TYPES.includes(type)) return;
+    if (!window.confirm(`Delete meeting type "${type}"? This cannot be undone.`)) return;
     const updated = meetingTypes.filter(t => t !== type);
     updateMeetingTypes(updated);
   };
@@ -253,7 +255,7 @@ function SystemDefaultsSettings() {
               <thead className="bg-[#F5F7FA] border-b border-[#E1E4EA]">
                 <tr>
                   <th className="px-4 py-3 text-sm font-bold text-[#525866]">Status</th>
-                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Type</th>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Kind</th>
                   <th className="px-4 py-3 text-sm font-bold text-[#525866] text-right">Actions</th>
                 </tr>
               </thead>
@@ -262,7 +264,7 @@ function SystemDefaultsSettings() {
                   const isDefault = DEFAULT_TASK_STATUSES.includes(status);
                   const isEditing = editingTaskIndex === index;
                   return (
-                    <tr key={index} className="group hover:bg-[#F5F7FA] transition-colors border-b border-[#E1E4EA] last:border-b-0">
+                    <tr key={status} className="group hover:bg-[#F5F7FA] transition-colors border-b border-[#E1E4EA] last:border-b-0">
                       <td className="px-4 py-3">
                         {isEditing ? (
                           <input
@@ -281,8 +283,8 @@ function SystemDefaultsSettings() {
                       </td>
                       <td className="px-4 py-3">
                         {isDefault ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-gray-900">
-                            <Lock className="w-3 h-3" /> System default
+                          <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                            <Lock className="w-3 h-3" /> Built-in
                           </span>
                         ) : (
                           <span className="text-xs text-[#0085FF]">Custom</span>
@@ -364,7 +366,7 @@ function SystemDefaultsSettings() {
               <thead className="bg-[#F5F7FA] border-b border-[#E1E4EA]">
                 <tr>
                   <th className="px-4 py-3 text-sm font-bold text-[#525866]">Note Type</th>
-                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Type</th>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Kind</th>
                   <th className="px-4 py-3 text-sm font-bold text-[#525866] text-right">Actions</th>
                 </tr>
               </thead>
@@ -373,7 +375,7 @@ function SystemDefaultsSettings() {
                   const isDefault = DEFAULT_NOTE_TYPES.includes(type);
                   const isEditing = editingNoteIndex === index;
                   return (
-                    <tr key={index} className="group hover:bg-[#F5F7FA] transition-colors border-b border-[#E1E4EA] last:border-b-0">
+                    <tr key={type} className="group hover:bg-[#F5F7FA] transition-colors border-b border-[#E1E4EA] last:border-b-0">
                       <td className="px-4 py-3">
                         {isEditing ? (
                           <input
@@ -392,8 +394,8 @@ function SystemDefaultsSettings() {
                       </td>
                       <td className="px-4 py-3">
                         {isDefault ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-gray-900">
-                            <Lock className="w-3 h-3" /> System default
+                          <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                            <Lock className="w-3 h-3" /> Built-in
                           </span>
                         ) : (
                           <span className="text-xs text-[#0085FF]">Custom</span>
@@ -475,7 +477,7 @@ function SystemDefaultsSettings() {
               <thead className="bg-[#F5F7FA] border-b border-[#E1E4EA]">
                 <tr>
                   <th className="px-4 py-3 text-sm font-bold text-[#525866]">Meeting Type</th>
-                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Type</th>
+                  <th className="px-4 py-3 text-sm font-bold text-[#525866]">Kind</th>
                   <th className="px-4 py-3 text-sm font-bold text-[#525866] text-right">Actions</th>
                 </tr>
               </thead>
@@ -484,7 +486,7 @@ function SystemDefaultsSettings() {
                   const isDefault = DEFAULT_MEETING_TYPES.includes(type);
                   const isEditing = editingMeetingIndex === index;
                   return (
-                    <tr key={index} className="group hover:bg-[#F5F7FA] transition-colors border-b border-[#E1E4EA] last:border-b-0">
+                    <tr key={type} className="group hover:bg-[#F5F7FA] transition-colors border-b border-[#E1E4EA] last:border-b-0">
                       <td className="px-4 py-3">
                         {isEditing ? (
                           <input
@@ -503,8 +505,8 @@ function SystemDefaultsSettings() {
                       </td>
                       <td className="px-4 py-3">
                         {isDefault ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-gray-900">
-                            <Lock className="w-3 h-3" /> System default
+                          <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                            <Lock className="w-3 h-3" /> Built-in
                           </span>
                         ) : (
                           <span className="text-xs text-[#0085FF]">Custom</span>
