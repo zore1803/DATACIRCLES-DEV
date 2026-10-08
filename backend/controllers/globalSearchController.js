@@ -6,14 +6,14 @@ const Vendor = require("../models/Vendor");
 const Note = require("../models/Note");
 const Invoice = require("../models/Invoice");
 const { cacheGetOrSet } = require("../cacheHelper");
+const { globalSearchKey } = require("../utils/cacheKeys");
 
 exports.globalSearch = async (req, res) => {
   try {
     const { search, lifecycleStage, stageStatus } = req.query;
     const orgId = req.user.organization;
-    const cacheKey = `globalSearch:v2:${orgId}:${search || ""}:${
-      lifecycleStage || ""
-    }:${stageStatus || ""}`;
+    // Versioned, URI-encoded key built in utils/cacheKeys.js (shared with the other caches).
+    const cacheKey = globalSearchKey({ org: orgId, search, lifecycleStage, stageStatus });
 
     const data = await cacheGetOrSet(cacheKey, 60, async () => {
       // Build queries for each collection
@@ -95,7 +95,9 @@ exports.globalSearch = async (req, res) => {
           Deal.find(dealQuery)
             .populate("company")
             .populate("contact")
-            .populate("user"),
+            // Only what a result row can show — never the full User document, which
+            // carries the password hash and reset token (and this response is cached).
+            .populate("user", "name email"),
           Vendor.find(vendorQuery),
           // Notes carry no display name of their own beyond title/body, so the
           // company comes along to label the row in the search panel.

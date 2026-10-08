@@ -26,6 +26,7 @@ const restrictByPlan = require("../middlewares/restrictByPlan");
 const checkPermission = require("../middlewares/checkPermission");
 const { getOwnedCompanyIds } = require("../utils/ownedCompanies");
 const { cacheGetOrSet } = require("../cacheHelper");
+const { dashboardStatsKey } = require("../utils/cacheKeys");
 
 const DASHBOARD_STATS_TTL_SECONDS = 60;
 
@@ -113,15 +114,14 @@ const getStats = async (req, res) => {
     // Redis cache (60s). The key carries every input that can change the
     // response: tenant, user (drives ownOnly + permission/plan gating), role
     // (drives the deal scope) and the three resolved month boundaries.
-    const cacheKey = [
-      "dashboard:stats",
-      String(org),
-      String(userId),
-      req.user.role || "none",
-      thisMonthStart.toISOString(),
-      nextMonthStart.toISOString(),
-      lastMonthStart.toISOString(),
-    ].join(":");
+    const cacheKey = dashboardStatsKey({
+      org,
+      userId,
+      role: req.user.role,
+      thisMonthStart,
+      nextMonthStart,
+      lastMonthStart,
+    });
 
     const stats = await cacheGetOrSet(cacheKey, DASHBOARD_STATS_TTL_SECONDS, async () => {
       const [companies, contacts] = await Promise.all([

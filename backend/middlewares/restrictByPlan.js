@@ -94,8 +94,10 @@ const perModuleLimitModels = {
   forms: [FormDefinition],
 };
 
-// Cache to reduce database queries — caches PlanConfig.features per
-// organization, since plan features change rarely.
+// Cache to reduce database queries — caches PlanConfig.features per PLAN
+// (keyed by planName), since plan features change rarely. It is keyed by plan,
+// not organization, so an org that upgrades/downgrades immediately resolves to the
+// new plan's entry; the subscription's planName is read fresh on every request.
 const planFeaturesCache = new Map();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
@@ -176,8 +178,8 @@ module.exports = (moduleName, actionType, options = {}) => async (req, res, next
       });
     }
 
-    // Fetch plan features (cached per-org, since these change rarely)
-    const cacheKey = `plan_features_${organization}`;
+    // Fetch plan features (cached per plan, since these change rarely)
+    const cacheKey = `plan_features_${subscription.planName}`;
     let planLimits = planFeaturesCache.get(cacheKey)?.features;
     const cachedAt = planFeaturesCache.get(cacheKey)?.timestamp;
 
@@ -377,6 +379,13 @@ setInterval(() => {
 
 // Call this whenever a PlanConfig document is updated (e.g. from the
 // super-admin UI) so stale cached features don't linger for up to 5 min.
-module.exports.clearOrgCache = (organizationId) => {
-  planFeaturesCache.delete(`plan_features_${organizationId}`);
+// Pass a planId to drop just that plan, or nothing to drop every plan.
+module.exports.clearPlanCache = (planId) => {
+  if (planId) planFeaturesCache.delete(`plan_features_${planId}`);
+  else planFeaturesCache.clear();
 };
+
+// Deprecated: the cache is no longer per-organization, so there is nothing
+// org-specific to clear. Kept (nothing calls it) so an old caller can't break; it
+// clears every plan, which is always safe.
+module.exports.clearOrgCache = () => module.exports.clearPlanCache();

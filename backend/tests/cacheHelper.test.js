@@ -152,6 +152,51 @@ test('falsy-but-real results (0, false, empty object/array) ARE cached', async (
   }
 });
 
+// ───────────────────── Redis down / unresponsive ─────────────────────
+
+test('client not ready (isReady=false): Redis is skipped entirely, fetchFn once, no queued commands', async () => {
+  const redis = makeFakeRedis();
+  redis.isReady = false;
+  let calls = 0;
+  const out = await withClient(redis)('k', 60, async () => (calls++, { a: 1 }));
+  assert.deepEqual(out, { a: 1 });
+  assert.equal(calls, 1);
+  assert.equal(redis.gets, 0, 'must not queue a GET on a disconnected client');
+  assert.equal(redis.sets.length, 0, 'must not queue a SETEX either');
+});
+
+test('a Redis GET that never answers is abandoned after the timeout; fetchFn runs once', async () => {
+  const redis = makeFakeRedis();
+  redis.get = () => new Promise(() => {}); // never settles, like a stalled connection
+  let calls = 0;
+  const cache = createCacheGetOrSet(() => redis, { commandTimeoutMs: 30 });
+  const t0 = Date.now();
+  const out = await quiet(() => cache('k', 60, async () => (calls++, { a: 1 })));
+  assert.deepEqual(out, { a: 1 });
+  assert.equal(calls, 1);
+  assert.ok(Date.now() - t0 < 1000, 'must not wait on the stalled Redis');
+});
+
+test('a Redis SETEX that never answers does not delay or fail the response', async () => {
+  const redis = makeFakeRedis();
+  redis.setEx = () => new Promise(() => {});
+  let calls = 0;
+  const cache = createCacheGetOrSet(() => redis, { commandTimeoutMs: 30 });
+  const t0 = Date.now();
+  const out = await quiet(() => cache('k', 60, async () => (calls++, { a: 1 })));
+  assert.deepEqual(out, { a: 1 });
+  assert.equal(calls, 1);
+  assert.ok(Date.now() - t0 < 1000);
+});
+
+test('a late rejection from an abandoned Redis command does not crash the process', async () => {
+  const redis = makeFakeRedis();
+  redis.get = () => new Promise((_, reject) => setTimeout(() => reject(new Error('late failure')), 80));
+  const cache = createCacheGetOrSet(() => redis, { commandTimeoutMs: 20 });
+  await quiet(() => cache('k', 60, async () => ({ a: 1 })));
+  await new Promise((r) => setTimeout(r, 150)); // would raise unhandledRejection if not handled
+});
+
 // ───────────────────────────── Insights ─────────────────────────────
 
 const completeReport = () => ({
@@ -229,7 +274,7 @@ test('Dashboard: the real getStats caches its result under a tenant+user scoped 
   assert.equal(fakeForControllers.sets.length, 1, 'result stored once');
   const { key, ttl } = fakeForControllers.sets[0];
   assert.equal(ttl, 60);
-  assert.match(key, new RegExp(`^dashboard:stats:${orgA}:${userA._id}:admin:`));
+  assert.match(key, new RegExp(`^dashboard:stats:v1:${orgA}:${userA._id}:admin:`));
 
   const second = await quiet(() => call(userA));
   assert.deepEqual(second.body, first.body);
@@ -240,4 +285,51 @@ test('Dashboard: the real getStats caches its result under a tenant+user scoped 
   assert.equal(fakeForControllers.sets.length, 2);
   assert.notEqual(fakeForControllers.sets[1].key, key);
   assert.ok(fakeForControllers.sets[1].key.includes(String(orgB)));
+});
+
+// ───────────────────────── Global search (cached) ─────────────────────────
+
+const { globalSearch } = require('../controllers/globalSearchController');
+const Company = require('../models/Company');
+const Deal = require('../models/Deal');
+
+const searchCall = async (user, query) => {
+  const res = { statusCode: 200, body: undefined };
+  res.status = (c) => ((res.statusCode = c), res);
+  res.json = (b) => ((res.body = b), res);
+  await quiet(() => globalSearch({ user, query }, res));
+  return res;
+};
+
+test('Global search: neither the response nor the value cached in Redis contains a user password hash', async () => {
+  const HASH = '$2b$10$FAKEHASHFORTESTINGONLYabcdefghijklmnopqrstuvwxyz0123';
+  const org = new mongoose.Types.ObjectId();
+  const owner = await new User({ name: 'Owner', email: 'o@x.test', organization: org, role: 'admin', password: HASH, passwordResetToken: 'RESETTOKEN123' }).save({ validateBeforeSave: false });
+  const co = await new Company({ name: 'Zeta Corp', organization: org }).save({ validateBeforeSave: false });
+  await new Deal({ title: 'Zeta deal', amount: 1, organization: org, user: owner._id, company: co._id, createdBy: owner._id }).save({ validateBeforeSave: false });
+
+  fakeForControllers.store.clear();
+  const res = await searchCall({ _id: owner._id, role: 'admin', organization: org, permissions: [] }, { search: 'zeta' });
+  assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+  assert.equal(res.body.deals.length, 1, 'the deal is found');
+  assert.equal(res.body.deals[0].user.name, 'Owner', 'the owner is still shown');
+  const sent = JSON.stringify(res.body);
+  const cached = [...fakeForControllers.store.values()].join('');
+  for (const secret of [HASH, 'RESETTOKEN123']) {
+    assert.ok(!sent.includes(secret), 'response must not include ' + secret);
+    assert.ok(!cached.includes(secret), 'Redis value must not include ' + secret);
+  }
+});
+
+test('Global search: a ":" inside a query part cannot make two different queries share a cache key', async () => {
+  const org = new mongoose.Types.ObjectId();
+  const u = await new User({ name: 'U', email: 'u@x.test', organization: org, role: 'admin' }).save({ validateBeforeSave: false });
+  const user = { _id: u._id, role: 'admin', organization: org, permissions: [] };
+  fakeForControllers.store.clear();
+  // Joined with ":" and not encoded, both of these would be  <org>:Acme:Lead:New:
+  await searchCall(user, { search: 'Acme', lifecycleStage: 'Lead:New' });
+  await searchCall(user, { search: 'Acme:Lead', lifecycleStage: 'New' });
+  const keys = [...fakeForControllers.store.keys()].filter((k) => k.startsWith('global-search:'));
+  assert.equal(keys.length, 2, 'two different queries must produce two different keys');
+  assert.ok(keys.every((k) => k.startsWith(`global-search:v3:${org}:`)), 'keys stay prefixed by the org');
 });

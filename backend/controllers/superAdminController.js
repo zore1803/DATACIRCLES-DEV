@@ -2242,12 +2242,11 @@ const updatePlan = async (req, res) => {
 
     await plan.save();
 
-    // Invalidate restrictByPlan's per-org cache for every affected org so the
-    // new limits take effect on their very next request rather than after the 5 min TTL.
+    // restrictByPlan caches plan features per plan, so dropping this one entry makes
+    // the new limits take effect for every affected org on their very next request
+    // rather than after the 5 min TTL.
+    restrictByPlan.clearPlanCache(planId);
     const affectedSubscriptions = await Subscription.find({ planName: planId }).select('organization');
-    for (const sub of affectedSubscriptions) {
-      restrictByPlan.clearOrgCache(sub.organization.toString());
-    }
 
     res.json({
       message: `Plan '${planId}' updated successfully`,

@@ -45,6 +45,7 @@ const restrictByPlan = require("../middlewares/restrictByPlan");
 const checkPermission = require("../middlewares/checkPermission");
 const { getOwnedCompanyIds, getOwnedDealIds } = require("../utils/ownedCompanies");
 const { cacheGetOrSet } = require("../cacheHelper");
+const { insightsReportKey } = require("../utils/cacheKeys");
 
 const INSIGHTS_REPORT_TTL_SECONDS = 60;
 
@@ -165,19 +166,7 @@ const getReport = async (req, res) => {
     // user (drives ownOnly + the per-user Activity tasks), role, the validated date
     // range, tz and the four status filters. Validation above runs on every request
     // (errors are never cached); gating still runs inside the cached computation.
-    const cacheKey = [
-      "insights:report",
-      String(org),
-      String(userId),
-      req.user.role || "none",
-      range ? range.start.toISOString() : "all",
-      range ? range.end.toISOString() : "all",
-      tz,
-      statusFilters.contactStatus || "all",
-      statusFilters.dealStage || "all",
-      statusFilters.purchaseStatus || "all",
-      statusFilters.poStatus || "all",
-    ].join(":");
+    const cacheKey = insightsReportKey({ org, userId, role: req.user.role, range, tz, statusFilters });
 
     // A report with any failed (null) section is returned to this caller but NOT
     // cached, so one transient failure can't pin every request to a degraded report
