@@ -11,6 +11,7 @@ import QuickVendorForm from "../vendor/QuickVendorForm";
 import PurchaseOrderForm from "../purchaseOrder/PurchaseOrderForm";
 import DocumentNumberHeader from "../common/DocumentNumberHeader";
 import API from "../../services/api";
+import { itemPickerParams, itemsFromResponse, ITEM_PICKER_DEBOUNCE_MS } from "../../utils/itemPicker";
 import toast from "react-hot-toast";
 import { formatNumberFixed } from "../../utils/numberFormatter";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
@@ -68,11 +69,27 @@ const ItemSearchSelect = ({ value, onSelect, onAddNew, error = null }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Items are searched on the server: one small page of active items when the picker opens, then
+  // at most ITEM_PICKER_LIMIT matches per (debounced) search — never the whole catalog.
+  // `itemsRequestRef` makes the newest request win, so a slow earlier search can't overwrite newer
+  // results, and a response that lands after the picker is gone is ignored.
+  const itemsRequestRef = useRef(0);
+  const searchTimerRef = useRef(null);
+  useEffect(
+    () => () => {
+      clearTimeout(searchTimerRef.current);
+      itemsRequestRef.current += 1;
+    },
+    []
+  );
+
   const fetchItems = async (search = "") => {
+    const requestId = ++itemsRequestRef.current;
     try {
       setLoading(true);
-      const res = await API.get(`/items?search=${search}`);
-      const transformedItems = res.data
+      const res = await API.get("/items", { params: itemPickerParams(search) });
+      if (requestId !== itemsRequestRef.current) return; // a newer search superseded this one
+      const transformedItems = itemsFromResponse(res)
         .filter((item) => item.isActive)
         .flatMap((item) => {
           if (item.variants && item.variants.length > 0) {
@@ -109,18 +126,21 @@ const ItemSearchSelect = ({ value, onSelect, onAddNew, error = null }) => {
         });
       setItems(transformedItems);
     } catch (error) {
+      if (requestId !== itemsRequestRef.current) return; // a newer search is in charge now
       console.error("Error fetching items:", error);
       toast.error("Failed to fetch items");
     } finally {
-      setLoading(false);
+      if (requestId === itemsRequestRef.current) setLoading(false);
     }
   };
 
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchTerm(value);
+    clearTimeout(searchTimerRef.current);
     if (value.length >= 2 || value === "") {
-      fetchItems(value);
+      setLoading(true);
+      searchTimerRef.current = setTimeout(() => fetchItems(value), ITEM_PICKER_DEBOUNCE_MS);
     }
   };
 

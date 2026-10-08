@@ -1370,7 +1370,10 @@ exports.unlinkGoogleAccount = async (req, res) => {
     if (!user.auth0Id || !user.auth0Id.startsWith("google-oauth2|")) {
       return res.status(400).json({ error: "No Google account is linked" });
     }
-    if (!user.password && !user.phone) {
+    // req.user never carries the password (it is `select: false`), so look the flag up
+    // separately instead of reading it off the request's user.
+    const hasPassword = !!(await User.findById(user._id).select("+password").lean())?.password;
+    if (!hasPassword && !user.phone) {
       return res.status(400).json({
         error: "Add a phone number or set a password before disconnecting Google, so you can still sign in.",
       });
@@ -1913,7 +1916,8 @@ exports.forgotPassword = async (req, res) => {
   const normalizedEmail = email.trim().toLowerCase();
 
   try {
-    const user = await User.findOne({ email: normalizedEmail });
+    // `+password` because the check below is "does this account have a local password at all".
+    const user = await User.findOne({ email: normalizedEmail }).select("+password");
 
     // Always return the same generic message to prevent email enumeration
     if (!user) {
@@ -2425,7 +2429,9 @@ exports.login = async (req, res, next) => {
     const searchCondition = email ? { email } : { phone };
 
     // 2. Find user and populate organization if needed
-    const user = await User.findOne(searchCondition).populate("organization");
+    // password is `select: false` on the schema, so ask for it explicitly: this is the
+    // one place that compares it.
+    const user = await User.findOne(searchCondition).select("+password").populate("organization");
 
     if (!user) {
       return res.status(401).json({

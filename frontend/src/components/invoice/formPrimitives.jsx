@@ -291,6 +291,9 @@ export const AddressFieldsGroup = ({ label, value, onChange, disabled = false, r
 
 /* Small searchable select used for the Deal and Item pickers. Kept local so
    the panel doesn't inherit behaviour from the older form's dropdowns. */
+// How long PickerSelect waits after the last keystroke before asking the server (onSearch).
+const REMOTE_SEARCH_DEBOUNCE_MS = 250;
+
 export const PickerSelect = ({
   value,
   options,
@@ -309,9 +312,25 @@ export const PickerSelect = ({
   // inputs are taller and more rounded than the item-row pickers this was
   // originally written for).
   triggerClassName = "h-10 rounded-lg",
+  // Optional server-side search for a list too big to hold in `options`. When given, typing
+  // queries the server — `await onSearch(query)` must resolve to an array of
+  // { value, label, ... } options — debounced, with the newest request winning, INSTEAD of
+  // filtering `options` locally. `options` is what shows while the box is empty. Callers that
+  // don't pass it behave exactly as before.
+  onSearch,
+  // Label to show for `value` when it isn't among `options` (e.g. `options` is only the first
+  // page of a large list). Without it the raw value is shown, as before.
+  selectedLabel,
 }) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [remote, setRemote] = useState(null); // latest server results for `query` (null = none yet)
+  const [searching, setSearching] = useState(false);
+  const searchRequestRef = useRef(0);
+  // Held in a ref so a parent that passes a new function every render can't restart the search
+  // (and, if the search updates the parent, loop forever).
+  const onSearchRef = useRef(onSearch);
+  onSearchRef.current = onSearch;
   const [dropdownStyle, setDropdownStyle] = useState({});
   const wrapRef = useRef(null);
   const dropdownRef = useRef(null);
@@ -384,15 +403,46 @@ export const PickerSelect = ({
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
+  // Server-side search: run it a moment after the last keystroke; an older response that lands
+  // after a newer request was made is ignored.
+  const remoteSearchOn = !!onSearch;
+  useEffect(() => {
+    if (!remoteSearchOn) return undefined;
+    const q = query.trim();
+    const requestId = ++searchRequestRef.current;
+    if (!q) {
+      setRemote(null);
+      setSearching(false);
+      return undefined;
+    }
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await onSearchRef.current(q);
+        if (requestId === searchRequestRef.current) setRemote(Array.isArray(results) ? results : []);
+      } catch {
+        if (requestId === searchRequestRef.current) setRemote([]);
+      } finally {
+        if (requestId === searchRequestRef.current) setSearching(false);
+      }
+    }, REMOTE_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [query, remoteSearchOn]);
+
   const matched = options.find((o) => o.value === value);
   // Falling back to the raw value keeps a custom or legacy entry visible in
   // the trigger instead of silently reading as empty.
-  const selected = matched || (value ? { value, label: value } : null);
-  const filtered = query
-    ? options.filter((o) =>
-      o.label.toLowerCase().includes(query.toLowerCase())
-    )
-    : options;
+  const selected =
+    matched ||
+    (value ? { value, label: selectedLabel !== undefined && selectedLabel !== null && selectedLabel !== "" ? selectedLabel : value } : null);
+  const showingRemote = remoteSearchOn && query.trim() !== "";
+  const filtered = showingRemote
+    ? remote || []
+    : query
+      ? options.filter((o) =>
+        o.label.toLowerCase().includes(query.toLowerCase())
+      )
+      : options;
 
   return (
     <div ref={wrapRef} className="relative w-full min-w-0">
@@ -435,7 +485,9 @@ export const PickerSelect = ({
           )}
           <div className="overflow-y-auto flex-1">
             {filtered.length === 0 && !(allowCustom && query.trim()) && (
-              <p className="px-3 py-3 text-sm text-gray-400">No results</p>
+              <p className="px-3 py-3 text-sm text-gray-400">
+                {showingRemote && (searching || remote === null) ? "Searching…" : "No results"}
+              </p>
             )}
             {allowCustom && query.trim() &&
               !options.some((o) => o.label.toLowerCase() === query.trim().toLowerCase()) && (

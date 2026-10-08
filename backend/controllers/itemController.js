@@ -1,6 +1,7 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const { parsePickerLimit } = require("../utils/pickerLimit");
 const { formatCustomFieldValue } = require("../utils/exportFormat");
+const mongoose = require("mongoose");
 const Item = require("../models/Item");
 const StockMovement = require("../models/StockMovement");
 const { SERVER_AUDIT_FIELDS, stripServerFields } = require("../utils/safeBody");
@@ -289,6 +290,20 @@ const createItem = async (req, res) => {
   }
 };
 
+// Picker mode (?picker=true) is for dropdowns that only need enough to show and add a line:
+// it leaves out the heavy parts of an item that no dropdown reads (image URL lists, custom
+// field values) and skips the user populate. Everything else is returned unchanged, so a
+// caller that switches to picker mode gets the same fields it used before.
+const PICKER_EXCLUDE = "-images -variants.images -additionalFields -__v";
+const MAX_PICKER_IDS = 100;
+
+// ?ids=a,b,c -> the valid ObjectIds (an item id OR a variant id), capped. null = not requested.
+const parseIdsParam = (raw) => {
+  if (raw === undefined) return null;
+  const list = String(raw).split(",").map((v) => v.trim()).filter(Boolean);
+  return list.filter((v) => mongoose.isValidObjectId(v)).slice(0, MAX_PICKER_IDS);
+};
+
 const getAllItems = async (req, res) => {
   try {
     const { search, category, type, isActive, gstRate } = req.query;
@@ -333,9 +348,22 @@ const getAllItems = async (req, res) => {
       }
     }
 
-    let listQuery = Item.find(query)
-      .populate("user", "name email")
-      .sort({ createdAt: -1 });
+    // ?ids= : fetch specific items (an item id, or the id of one of its variants) — how a form
+    // re-loads the products already on a saved document without downloading the catalog.
+    // Combined with AND so it composes with search / isActive / own-only above.
+    const ids = parseIdsParam(req.query.ids);
+    if (ids) {
+      if (ids.length === 0) return res.json([]);
+      query = { $and: [query, { $or: [{ _id: { $in: ids } }, { "variants._id": { $in: ids } }] }] };
+    }
+
+    const pickerMode = req.query.picker === "true";
+    let listQuery = Item.find(query).sort({ createdAt: -1 });
+    if (pickerMode) {
+      listQuery = listQuery.select(PICKER_EXCLUDE).lean();
+    } else {
+      listQuery = listQuery.populate("user", "name email");
+    }
     // Picker callers pass ?limit= so they never pull the whole catalog.
     const cap = parsePickerLimit(req.query.limit);
     if (cap) listQuery = listQuery.limit(cap);

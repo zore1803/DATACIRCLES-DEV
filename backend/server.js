@@ -106,8 +106,13 @@ app.use(requestContext);
 const subscriptionRoutes = require("./routes/subscription");
 app.use("/api/subscription", subscriptionRoutes)
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.raw({ type: 'application/json', limit: '50mb' }));
+// JSON request-body limits: 1MB by default, larger only for the exact bulk-import / signature
+// routes listed in middlewares/bodyLimits.js. An oversized body gets a friendly 413 from the
+// handler mounted right after the parsers; every other error still reaches the handler below.
+const { jsonBodyParser, rawBodyParser, payloadTooLargeHandler } = require('./middlewares/bodyLimits');
+app.use(jsonBodyParser);
+app.use(rawBodyParser);
+app.use(payloadTooLargeHandler);
 // Drop $-prefixed keys from parsed JSON bodies so they can't become Mongo operators.
 app.use(require('./middlewares/stripDollarKeys'));
 app.use('/uploads', express.static('uploads'));

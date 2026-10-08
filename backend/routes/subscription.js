@@ -7,14 +7,43 @@ const userSyncMiddleware = require('../middlewares/userSync');
 const adminMiddleware = require('../middlewares/admin');
 const couponController = require('../controllers/couponController');
 
+const { jsonBodyParser, payloadTooLargeHandler, KINDS } = require('../middlewares/bodyLimits');
+
 const requireAuth = [authMiddleware, userSyncMiddleware];
 
+// The webhook is public and is read here BEFORE its signature is checked, so the body has to be
+// bounded first: without a cap anyone could stream an endless body into this string. Razorpay
+// events are a few KB; 1MB is generous. Tunable via WEBHOOK_MAX_BODY_BYTES.
+const WEBHOOK_MAX_BODY_BYTES = Number(process.env.WEBHOOK_MAX_BODY_BYTES) || 1024 * 1024;
+
+const rejectOversizedWebhook = (req, res) => {
+  console.warn(`[body-limit] 413 "POST /api/subscription/webhook" content-length=${req.headers['content-length'] || 'unknown'} limit=webhook`);
+  const message = KINDS.default.message;
+  res.set('Connection', 'close');
+  res.status(413).json({ success: false, message, error: message, code: 'PAYLOAD_TOO_LARGE' });
+  // Stop reading once the answer is on its way, so a client that keeps streaming can't hold the socket.
+  res.on('finish', () => req.destroy());
+};
+
 const rawBodyMiddleware = (req, res, next) => {
+  const declared = Number(req.headers['content-length']);
+  if (declared > WEBHOOK_MAX_BODY_BYTES) return rejectOversizedWebhook(req, res);
+
   req.rawBody = '';
+  let received = 0;
+  let tooLarge = false;
   req.on('data', (chunk) => {
+    if (tooLarge) return;
+    received += chunk.length;
+    if (received > WEBHOOK_MAX_BODY_BYTES) {
+      tooLarge = true;
+      req.rawBody = '';
+      return rejectOversizedWebhook(req, res);
+    }
     req.rawBody += chunk.toString();
   });
   req.on('end', () => {
+    if (tooLarge) return;
     try {
       // Parse the raw body to populate req.body for convenience
       req.body = JSON.parse(req.rawBody || '{}');
@@ -27,7 +56,10 @@ const rawBodyMiddleware = (req, res, next) => {
 };
 
 router.post('/webhook', rawBodyMiddleware, subscriptionController.handleWebhook);
-router.use(express.json({ limit: '50mb' }));
+// Billing actions carry a handful of fields: use the shared limits (1MB default) and the
+// shared friendly 413 instead of a private 50MB parser.
+router.use(jsonBodyParser);
+router.use(payloadTooLargeHandler);
 
 // Existing routes...
 router.get('/plans', subscriptionController.getPlans);

@@ -16,6 +16,7 @@ import {
   Inbox,
 } from "lucide-react";
 import API from "../../services/api";
+import { itemPickerParams, itemsFromResponse, ITEM_PICKER_DEBOUNCE_MS } from "../../utils/itemPicker";
 import QuickItemDrawer from "../item/QuickItemDrawer";
 import TemplateDrawer from "../invoice/TemplateDrawer";
 import { AddressFieldsGroup, emptyAddress, isAddressEmpty, SectionHeader } from "../invoice/formPrimitives";
@@ -171,7 +172,7 @@ const ItemSearchSelect = ({
       clearTimeout(debounceTimeout.current);
       debounceTimeout.current = setTimeout(() => {
         Promise.resolve(fetchItems(search)).finally(() => setLoading(false));
-      }, 300);
+      }, ITEM_PICKER_DEBOUNCE_MS);
     },
     [fetchItems]
   );
@@ -534,10 +535,22 @@ const DeliveryChallanFormFull = ({
     /^[0-9]{2}[A-Z0-9]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Z]{1}[0-9A-Z]{1}$/;
 
   // Fetch items and variants
+  // Items are searched on the server: one small page of active items on open, then at most
+  // ITEM_PICKER_LIMIT matches per search — never the whole catalog. `itemsRequestRef` makes the
+  // newest request win, so a slow earlier search can't overwrite newer results. The limit is
+  // raised by the number of lines already on the bill, because those are hidden from the list.
+  const itemsRequestRef = useRef(0);
+  const billItemCountRef = useRef(0);
+  // Only lines that carry a product are hidden from the list (see excludeIds).
+  billItemCountRef.current = form.items.filter((i) => i._id).length;
   const fetchItems = useCallback(async (search = "") => {
+    const requestId = ++itemsRequestRef.current;
     try {
-      const res = await API.get(`/items?search=${search}&includeVariants=true`);
-      const itemsWithVariants = res.data
+      const res = await API.get("/items", {
+        params: itemPickerParams(search, { alreadyPicked: billItemCountRef.current }),
+      });
+      if (requestId !== itemsRequestRef.current) return; // a newer search superseded this one
+      const itemsWithVariants = itemsFromResponse(res)
         .filter((item) => item.isActive)
         .flatMap((item) => {
           // Same variant-only logic as PurchaseForm.jsx/PurchaseOrderForm.jsx:
@@ -595,6 +608,7 @@ const DeliveryChallanFormFull = ({
         });
       setItems(itemsWithVariants);
     } catch (error) {
+      if (requestId !== itemsRequestRef.current) return; // a newer search is in charge now
       console.error("Error fetching items:", error);
       toast.error("Failed to fetch items.");
     }

@@ -6,7 +6,7 @@ import { resolveDiscount } from "../../utils/variantResolve";
 import DeleteIcon from "../common/DeleteIcon";
 import PlusIcon from "../common/PlusIcon";
 import SearchIcon from "../common/SearchIcon";
-import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -22,6 +22,7 @@ import {
   Inbox,
 } from "lucide-react";
 import API from "../../services/api";
+import { itemPickerParams, itemsByIdsParams, itemsFromResponse, ITEM_PICKER_DEBOUNCE_MS } from "../../utils/itemPicker";
 import QuickItemDrawer from "../item/QuickItemDrawer";
 import toast from "react-hot-toast";
 import { PREDEFINED_NOTES, PREDEFINED_TERMS } from "../../utils/documentDefaultText";
@@ -358,7 +359,23 @@ const CreateInvoicePanel = ({
     out.summary = pad(n++);
     return out;
   })();
+  // `catalogue` is only the FIRST PAGE of products (what the row pickers list while their search
+  // box is empty) - the catalog is never downloaded in full. Products found by searching, and the
+  // products already on a saved document's lines, are kept in `catalogueExtra`; `catalogueLookup`
+  // is both together and is what every lookup ("is this line a catalogue product?", "which row did
+  // the user pick?") must use.
   const [catalogue, setCatalogue] = useState([]);
+  const [catalogueExtra, setCatalogueExtra] = useState([]);
+  const [catalogueReady, setCatalogueReady] = useState(false);
+  // Line product ids being loaded right now, so those lines don't flash into free-text mode.
+  const [pendingLineIds, setPendingLineIds] = useState(() => new Set());
+  const requestedLineIdsRef = useRef(new Set());
+  const catalogueLookup = useMemo(() => {
+    const byId = new Map();
+    catalogue.forEach((c) => byId.set(c._id, c));
+    catalogueExtra.forEach((c) => { if (!byId.has(c._id)) byId.set(c._id, c); });
+    return [...byId.values()];
+  }, [catalogue, catalogueExtra]);
   // Companies/contacts for the deal-less direct-link pickers (quotation/proforma only).
   const [companies, setCompanies] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -460,6 +477,10 @@ const CreateInvoicePanel = ({
   const [quickAddQty, setQuickAddQty] = useState(1);
   const [quickAddSearch, setQuickAddSearch] = useState("");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  // Quick-add suggestions come from the server as the user types (see the effect below).
+  const [quickAddResults, setQuickAddResults] = useState([]);
+  const [quickAddSearching, setQuickAddSearching] = useState(false);
+  const quickAddRequestRef = useRef(0);
   const [showQuickItemDrawer, setShowQuickItemDrawer] = useState(false);
 
   const saveDocNumber = async () => {
@@ -682,18 +703,101 @@ const CreateInvoicePanel = ({
         ];
       });
 
+  // Remember product rows found by a search / id lookup (newest copy wins).
+  const rememberCatalogueRows = (rows) => {
+    if (!rows.length) return;
+    setCatalogueExtra((prev) => {
+      const byId = new Map(prev.map((c) => [c._id, c]));
+      rows.forEach((c) => byId.set(c._id, c));
+      return [...byId.values()];
+    });
+  };
+
+  // Server search: at most ITEM_PICKER_LIMIT active products matching `term`.
+  const searchCatalogueRows = async (term) => {
+    const res = await API.get("/items", { params: itemPickerParams(term) });
+    const rows = buildCatalogue(itemsFromResponse(res));
+    rememberCatalogueRows(rows);
+    return rows;
+  };
+
+  // First page only - a small, fixed-size request however large the catalog is.
+  const loadFirstCataloguePage = async () => {
+    const res = await API.get("/items", { params: itemPickerParams("") });
+    return buildCatalogue(itemsFromResponse(res));
+  };
+
   useEffect(() => {
-    const fetchItems = async () => {
+    let cancelled = false;
+    (async () => {
       try {
-        const res = await API.get("/items?search=&includeVariants=true");
-        const flattened = buildCatalogue(res.data);
-        setCatalogue(flattened);
+        const firstPage = await loadFirstCataloguePage();
+        if (!cancelled) setCatalogue(firstPage);
       } catch (err) {
         console.error("Fetch items error:", err);
+      } finally {
+        if (!cancelled) setCatalogueReady(true);
       }
-    };
-    fetchItems();
+    })();
+    return () => { cancelled = true; };
+    // Runs once on open; the helper it calls is a plain function, not state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Lines that already carry a product (a saved document being edited) may point at products
+  // outside the first page. Load exactly those, by id, so each line keeps behaving as a catalogue
+  // line. A product that is no longer active simply isn't returned, and its line stays free text.
+  useEffect(() => {
+    if (!catalogueReady) return;
+    const missing = [...new Set(form.items.map((i) => i._id).filter(Boolean))].filter(
+      (id) => !catalogueLookup.some((c) => c._id === id) && !requestedLineIdsRef.current.has(id)
+    );
+    const params = itemsByIdsParams(missing);
+    if (!params) return;
+    missing.forEach((id) => requestedLineIdsRef.current.add(id));
+    setPendingLineIds((prev) => new Set([...prev, ...missing]));
+    (async () => {
+      try {
+        const res = await API.get("/items", { params });
+        rememberCatalogueRows(buildCatalogue(itemsFromResponse(res)));
+      } catch (err) {
+        console.error("Fetch line products error:", err);
+      } finally {
+        setPendingLineIds((prev) => {
+          const next = new Set(prev);
+          missing.forEach((id) => next.delete(id));
+          return next;
+        });
+      }
+    })();
+  }, [form.items, catalogueReady, catalogueLookup]);
+
+  // Quick-add suggestions: server search ~250 ms after the last keystroke; the newest request wins.
+  useEffect(() => {
+    const q = quickAddSearch.trim();
+    const requestId = ++quickAddRequestRef.current;
+    // Empty box, or a suggestion was just picked (its text was filled in) -> nothing to search.
+    if (!q || quickAddId) {
+      setQuickAddSearching(false);
+      if (!q) setQuickAddResults([]);
+      return undefined;
+    }
+    setQuickAddSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const rows = await searchCatalogueRows(q);
+        if (requestId === quickAddRequestRef.current) setQuickAddResults(rows);
+      } catch {
+        if (requestId === quickAddRequestRef.current) setQuickAddResults([]);
+      } finally {
+        if (requestId === quickAddRequestRef.current) setQuickAddSearching(false);
+      }
+    }, ITEM_PICKER_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // Re-runs only when the typed text / picked suggestion changes (searchCatalogueRows is a plain
+    // function that would otherwise restart the debounce on every render).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickAddSearch, quickAddId]);
 
   useEffect(() => {
     const loadDocSettings = async () => {
@@ -845,19 +949,33 @@ const CreateInvoicePanel = ({
     }));
   };
 
-  const handleAddToBill = () => {
+  const handleAddToBill = async () => {
     const searchText = quickAddSearch.trim();
     if (!quickAddId && !searchText) return toast.error("Please enter or select a product.");
 
     // Resolve catalogue item: explicit selection → exact match → single partial match
     let resolvedId = quickAddId;
+    // Products to look in. The loaded catalogue is only one page, so text typed without picking a
+    // suggestion is first looked up on the server (a "Item - Variant" label is also searched by
+    // its item part, since the server matches item and variant names separately).
+    let pool = catalogueLookup;
     if (!resolvedId && searchText) {
+      try {
+        const terms = [searchText];
+        if (searchText.includes(" - ")) terms.push(searchText.split(" - ")[0].trim());
+        const found = (await Promise.all(terms.filter(Boolean).map((t) => searchCatalogueRows(t)))).flat();
+        const byId = new Map(pool.map((c) => [c._id, c]));
+        found.forEach((c) => byId.set(c._id, c));
+        pool = [...byId.values()];
+      } catch (err) {
+        console.error("Product lookup failed; using the products already loaded:", err);
+      }
       const lower = searchText.toLowerCase();
-      const exact = catalogue.find((c) => c.displayName.toLowerCase() === lower);
+      const exact = pool.find((c) => c.displayName.toLowerCase() === lower);
       if (exact) {
         resolvedId = exact._id;
       } else {
-        const partial = catalogue.filter((c) =>
+        const partial = pool.filter((c) =>
           c.displayName.toLowerCase().includes(lower)
         );
         if (partial.length === 1) resolvedId = partial[0]._id;
@@ -866,7 +984,7 @@ const CreateInvoicePanel = ({
 
     let newItem;
     if (resolvedId) {
-      const picked = catalogue.find((c) => c._id === resolvedId);
+      const picked = pool.find((c) => c._id === resolvedId);
       if (!picked) return toast.error("Product not found in catalogue.");
       // Only a Tax Invoice actually moves stock, so only it can be blocked by
       // availability. A Quotation/Pro Forma/Delivery Challan may quote goods
@@ -1868,6 +1986,9 @@ const CreateInvoicePanel = ({
               applyCompanySelection={applyCompanySelection}
               applyContactSelection={applyContactSelection}
               catalogue={catalogue}
+              catalogueLookup={catalogueLookup}
+              searchCatalogue={searchCatalogueRows}
+              pendingCatalogueIds={pendingLineIds}
               addItem={addItem}
               updateItem={updateItem}
               stripHtml={stripHtml}
@@ -2194,7 +2315,7 @@ const CreateInvoicePanel = ({
                     setQuickAddSearch(val);
                     // Clear selected ID only when the user edits the text
                     // (i.e. the new text no longer equals the selected item's name)
-                    const selected = catalogue.find((c) => c._id === quickAddId);
+                    const selected = catalogueLookup.find((c) => c._id === quickAddId);
                     if (!selected || val !== selected.displayName) setQuickAddId(null);
                     setQuickAddOpen(true);
                   }}
@@ -2215,9 +2336,7 @@ const CreateInvoicePanel = ({
                 )}
                 {/* Suggestions dropdown */}
                 {quickAddOpen && quickAddSearch.trim() && (() => {
-                  const results = catalogue
-                    .filter((c) => c.displayName.toLowerCase().includes(quickAddSearch.toLowerCase()))
-                    .slice(0, 8);
+                  const results = quickAddResults.slice(0, 8);
                   return results.length > 0 ? (
                     <div className="absolute z-50 left-0 right-0 top-[calc(100%+4px)] bg-white border border-[#E1E4EA] rounded-lg shadow-lg overflow-hidden">
                       {results.map((item) => (
@@ -2238,7 +2357,7 @@ const CreateInvoicePanel = ({
                     </div>
                   ) : (
                     <div className="absolute z-50 left-0 right-0 top-[calc(100%+4px)] bg-white border border-[#E1E4EA] rounded-lg shadow-lg px-3 py-2 text-[12px] text-[#99A0AE]">
-                      No products found.
+                      {quickAddSearching ? "Searching…" : "No products found."}
                     </div>
                   );
                 })()}
@@ -2792,8 +2911,7 @@ const CreateInvoicePanel = ({
           onClose={() => setShowQuickItemDrawer(false)}
           onSaved={async () => {
             try {
-              const res = await API.get("/items?search=&includeVariants=true");
-              setCatalogue(buildCatalogue(res.data));
+              setCatalogue(await loadFirstCataloguePage());
             } catch (err) { console.error(err); }
             setShowQuickItemDrawer(false);
           }}

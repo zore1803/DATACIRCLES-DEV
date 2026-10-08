@@ -30,6 +30,11 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
+      // Secret: never returned by a query, populate(), lean() or toJSON() unless the
+      // caller opts in with `.select("+password")` (only login / forgot-password /
+      // unlink-Google do). Without this every `populate("user")` that forgot a field
+      // list shipped the hash to the browser.
+      select: false,
       // Phone-authenticated users never get an auth0Id (authController.js
       // deliberately keeps the temp-phone sub out of it, looking them up by
       // `phone` instead) — without this, every phone signup/join failed
@@ -111,8 +116,10 @@ const userSchema = new mongoose.Schema(
       },
     },
     permissions: [permissionSchema],
-    passwordResetToken: { type: String },
-    passwordResetExpires: { type: Date },
+    // Secrets, same rule as `password`: hidden unless explicitly selected. Queries can
+    // still FILTER on them (resetPassword looks the user up by token).
+    passwordResetToken: { type: String, select: false },
+    passwordResetExpires: { type: Date, select: false },
   },
   { timestamps: true },
 );

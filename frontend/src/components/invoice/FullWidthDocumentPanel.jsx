@@ -61,6 +61,16 @@ const FullWidthDocumentPanel = ({
   applyCompanySelection,
   applyContactSelection,
   catalogue,
+  // `catalogue` is only the first page of products (the default list). These three let a line
+  // find and search the REST of the catalog without it being downloaded:
+  //  - catalogueLookup: every product row loaded so far (first page + searches + lines' own
+  //    products); used to decide whether a line is a catalogue product and to read the picked row.
+  //  - searchCatalogue(term): server search -> product rows.
+  //  - pendingCatalogueIds: line product ids still being loaded, so their rows don't flash into
+  //    free-text mode while that happens.
+  catalogueLookup,
+  searchCatalogue,
+  pendingCatalogueIds,
   addItem,
   removeItem,
   updateItem,
@@ -462,7 +472,10 @@ const FullWidthDocumentPanel = ({
               // Show PickerSelect when: item has an _id that matches the catalogue,
               // OR when the item has no name yet (blank row ready for selection),
               // OR when the user clicked "Search" to switch back (name was cleared).
-              const inCatalogue = !item.name || (item._id && catalogue.some((c) => c._id === item._id));
+              const lookup = catalogueLookup || catalogue;
+              const inCatalogue =
+                !item.name ||
+                (item._id && (lookup.some((c) => c._id === item._id) || pendingCatalogueIds?.has(item._id)));
               return (
                 <React.Fragment key={index}>
                   <tr className="border-t border-[#E1E4EA] align-top">
@@ -471,10 +484,16 @@ const FullWidthDocumentPanel = ({
                       {inCatalogue ? (
                         <PickerSelect
                           value={item._id}
-                          options={catalogue.map((c) => ({ value: c._id, label: c.displayName }))}
+                          options={catalogue.map((c) => ({ value: c._id, label: c.displayName, row: c }))}
+                          selectedLabel={item.name}
+                          onSearch={
+                            searchCatalogue
+                              ? async (q) => (await searchCatalogue(q)).map((c) => ({ value: c._id, label: c.displayName, row: c }))
+                              : undefined
+                          }
                           placeholder="Search items or variants"
                           onSelect={(o) => {
-                            const picked = catalogue.find((c) => c._id === o.value);
+                            const picked = o.row || lookup.find((c) => c._id === o.value);
                             if (!picked) return;
                             updateItem(index, {
                               _id: picked._id,
