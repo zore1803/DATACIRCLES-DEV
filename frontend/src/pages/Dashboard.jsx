@@ -1480,10 +1480,7 @@ function Dashboard() {
         setAverageDealSize(calculateAverageDealAmount(dealsData));
         setInvoiceStats(calculateInvoiceStats(allInvoices));
       } catch (err) {
-        console.log(err);
-        if (err.response?.data?.code == "NO_SUBSCRIPTION") {
-          navigate("/subscription");
-        }
+        // NO_SUBSCRIPTION is redirected centrally by the interceptor in services/api.js.
         console.error("Dashboard error:", err);
         setError("Failed to load dashboard data");
       } finally {

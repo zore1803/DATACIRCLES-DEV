@@ -16,17 +16,18 @@
 
 
 // models/redisClient.js (CommonJS version)
-//const { createClient } = require("redis");
-//require("dotenv").config();
+const { createClient } = require("redis");
+require("dotenv").config();
 
-//const redisClient = createClient({
- // url: process.env.REDIS_URL,
-//});
+const redisClient = createClient({
+  url: process.env.REDIS_URL,
+});
 
-//redisClient.on("error", (err) => console.error("Redis Client Error", err));
+redisClient.on("error", (err) => console.error("Redis Client Error", err));
+redisClient.on("ready", () => console.log("Redis connected and ready"));
 
-//(async () => {
-  //if (!redisClient.isOpen) await redisClient.connect();
-//})();
+(async () => {
+  if (!redisClient.isOpen) await redisClient.connect();
+})();
 
-//module.exports = redisClient; // Change export default to module.exports
+module.exports = redisClient; // Change export default to module.exports

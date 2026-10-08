@@ -10,6 +10,7 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
 import { createPortal } from "react-dom";
 import API from "../services/api";
+import { showApiError } from "../utils/apiError";
 import { useTopLoadingSignal } from "../components/common/TopLoadingBar";
 import QuickTaskForm from "../components/Task/QuickTaskForm";
 import AdminMeetingForm from "../components/admin/AdminMeetingForm";
@@ -1096,7 +1097,7 @@ function Tasks() {
     } catch (err) {
       // Allow a retry on the next form open if this attempt failed.
       formPickerLoadedRef.current = false;
-      toast.error(err.response?.data?.error || "Failed to load form data");
+      showApiError(err, "Failed to load form data");
     }
   };
 
@@ -1134,7 +1135,7 @@ function Tasks() {
         ...res.data.pagination,
       }));
     } catch (err) {
-      toast.error(err.response?.data?.error || "Failed to load tasks");
+      showApiError(err, "Failed to load tasks");
       setTasks([]);
     } finally {
       setLoading(false);
@@ -1149,7 +1150,7 @@ function Tasks() {
       const res = await API.get("/tasks/all-tasks");
       setKanbanTasks(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
-      toast.error(err.response?.data?.error || "Failed to load tasks");
+      showApiError(err, "Failed to load tasks");
       setKanbanTasks([]);
     }
   };
@@ -1176,7 +1177,7 @@ function Tasks() {
         ...res.data.pagination,
       }));
     } catch (err) {
-      toast.error(err.response?.data?.error || "Failed to load meetings");
+      showApiError(err, "Failed to load meetings");
       setMeetings([]);
     } finally {
       setLoading(false);

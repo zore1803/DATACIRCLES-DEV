@@ -17,6 +17,7 @@ import { useTopLoadingSignal } from "../components/common/TopLoadingBar";
 import Skeleton from "../components/common/Skeleton";
 import { createPortal } from "react-dom";
 import API from "../services/api";
+import { showApiError } from "../utils/apiError";
 import { Link } from "react-router-dom";
 import logo from "/DataCircles.png";
 import FilterIcon from "../components/common/FilterIcon";
@@ -1290,10 +1291,8 @@ function Companies() {
       if (err.response?.status === 402) {
         // Subscription state is already shown via the persistent
         // header banner/pill — don't pile on a redundant toast here.
-      } else if (err.response && err.response.status === 403) {
-        toast.error(err.response.data.error || "Access denied", { id: "companies-load-error" });
       } else {
-        toast.error("Failed to load companies", { id: "companies-load-error" });
+        showApiError(err, "Failed to load companies");
       }
       setCompanies([]);
     } finally {

@@ -1,7 +1,9 @@
 require('dotenv').config();
+require('./redisClient');
 
 const dns = require('dns');
 dns.setServers(['8.8.8.8', '8.8.4.4']);
+dns.promises.setServers(['8.8.8.8', '8.8.4.4']);
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -29,6 +31,20 @@ const axios = require('axios');
 const app = express();
 
 console.log("JWT Secret Check:", process.env.SUPER_ADMIN_JWT_SECRET ? "LOADED" : "MISSING");
+
+// Security headers (nosniff, frame protection, HSTS, referrer policy, and no
+// X-Powered-By). Two defaults are relaxed on purpose:
+//  - CSP is off: this is a JSON API (the SPA is served from Vercel/Netlify), and
+//    a CSP here would only break the Swagger UI at /api/doc.
+//  - Cross-Origin-Resource-Policy is cross-origin: the frontend lives on another
+//    origin and loads /uploads files (images, PDFs) from this server.
+const helmet = require('helmet');
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }),
+);
 
 // Enhanced CORS configuration
 // ALLOWED_ORIGINS (comma-separated) lets a new deploy target (e.g. a fresh

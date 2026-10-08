@@ -45,6 +45,7 @@ import {
 import StarIcon from "../components/common/StarIcon";
 import EmptyState from "../components/common/EmptyState";
 import API from "../services/api";
+import { showApiError } from "../utils/apiError";
 import ContactFolder from "../components/contact/ContactFolder";
 import ProfilePicture from "../components/contact/ProfilePicture";
 import BulkActions from "../components/BulkActions";
@@ -1878,7 +1879,7 @@ function Contacts() {
       }
     } catch (err) {
       console.error("Error fetching contacts:", err);
-      toast.error(err.response?.data?.error || "Failed to load contacts");
+      showApiError(err, "Failed to load contacts");
       setContacts([]);
     } finally {
       setLoading(false);

@@ -1833,6 +1833,12 @@ const Insights = () => {
   );
 
   const renderContactsReport = () => {
+    // Server-side report.contacts is the source of truth. The raw-data
+    // calculations below are kept UNCHANGED, ONLY as a fallback for when that
+    // section is unavailable (report fetch failed / section errored on the server).
+    const cr = report?.contacts || null;
+
+    const lg = cr ? null : (() => {
     // Calculate metrics
     const totalContacts = filteredData.filteredContacts.length;
     const contactsWithPhone = filteredData.filteredContacts.filter(
@@ -1953,6 +1959,17 @@ const Insights = () => {
         ? { pct: Math.round(((lostContactsThisMonth - lostContactsLastMonth) / lostContactsLastMonth) * 100), isNew: false }
         : { pct: 0, isNew: lostContactsThisMonth > 0 };
 
+    return {
+      totalContacts, contactsWithDeals, wonContacts, lostContacts, contactsThisMonth,
+      totalContactsChange, newContactsChange, contactsWithDealsChange, wonContactsChange, lostContactsChange,
+      statusDistribution,
+    };
+    })();
+
+    const {
+      totalContacts, contactsWithDeals, wonContacts, lostContacts, contactsThisMonth,
+      totalContactsChange, newContactsChange, contactsWithDealsChange, wonContactsChange, lostContactsChange,
+    } = cr || lg;
 
     return (
       <div className="space-y-6">
@@ -2010,7 +2027,9 @@ const Insights = () => {
           // reuses stageStatus as the closest available breakdown of "where
           // contacts stand" until a real acquisition-source field is added.
           const sourceColors = ["#0085FF", "#34C759", "#8E62EF", "#2A2726", "#E7E4E3", "#D97706", "#EC4899"];
-          const sourceEntries = Object.entries(statusDistribution).sort((a, b) => b[1] - a[1]);
+          const sourceEntries = cr
+            ? cr.statusEntries
+            : Object.entries(lg.statusDistribution).sort((a, b) => b[1] - a[1]);
           const sourceData = sourceEntries.map(([status, count], idx) => ({
             name: status,
             value: count,
@@ -2026,8 +2045,8 @@ const Insights = () => {
           todayForHeatmap.setHours(0, 0, 0, 0);
           const mondayOffset = (todayForHeatmap.getDay() + 6) % 7; // days since this week's Monday
           const currentWeekMonday = new Date(todayForHeatmap.getTime() - mondayOffset * 24 * 60 * 60 * 1000);
-          const impactGrid = Array.from({ length: impactWeeks }, () => Array(7).fill(0));
-          filteredData.filteredDeals
+          const impactGrid = cr ? cr.impactGrid : Array.from({ length: impactWeeks }, () => Array(7).fill(0));
+          (cr ? [] : filteredData.filteredDeals)
             .filter((d) => d.contact && d.createdAt)
             .forEach((d) => {
               const createdAt = new Date(d.createdAt);
@@ -2053,12 +2072,17 @@ const Insights = () => {
           // Contact Commercial Impact: deals tied to a contact, their KPI
           // rollups, and a scatter of each deal (month created x amount)
           // colored by outcome.
-          const dealsWithContact = filteredData.filteredDeals.filter((d) => d.contact);
-          const pipelineInfluenced = dealsWithContact.reduce((sum, d) => sum + (d.amount || 0), 0);
+          const dealsWithContact = cr ? [] : filteredData.filteredDeals.filter((d) => d.contact);
+          const pipelineInfluenced = cr
+            ? cr.pipelineInfluenced
+            : dealsWithContact.reduce((sum, d) => sum + (d.amount || 0), 0);
           const wonDealsWithContact = dealsWithContact.filter((d) => d.status === "Won");
-          const revenueWon = wonDealsWithContact.reduce((sum, d) => sum + (d.amount || 0), 0);
-          const avgDealInfluenced =
-            dealsWithContact.length > 0 ? pipelineInfluenced / dealsWithContact.length : 0;
+          const revenueWon = cr
+            ? cr.revenueWon
+            : wonDealsWithContact.reduce((sum, d) => sum + (d.amount || 0), 0);
+          const avgDealInfluenced = cr
+            ? cr.avgDealInfluenced
+            : dealsWithContact.length > 0 ? pipelineInfluenced / dealsWithContact.length : 0;
           const formatCr = (v) => {
             if (v >= 1e7) return `₹${(v / 1e7).toFixed(1)} Cr`;
             if (v >= 1e5) return `₹${(v / 1e5).toFixed(1)} L`;
@@ -2066,14 +2090,16 @@ const Insights = () => {
             return `₹${Math.round(v)}`;
           };
           const dealsForScatter = dealsWithContact.filter((d) => d.createdAt);
-          const scatterAmountMax = Math.max(1, ...dealsForScatter.map((d) => d.amount || 0));
+          const scatterAmountMax = cr ? cr.scatterAmountMax : Math.max(1, ...dealsForScatter.map((d) => d.amount || 0));
           const valueTierColor = (amount) => {
             const ratio = amount / scatterAmountMax;
             if (ratio > 0.66) return { fill: "#148FFF", tier: "High Value" };
             if (ratio > 0.33) return { fill: "#FFA908", tier: "Medium Value" };
             return { fill: "#8E62EF", tier: "Low Value" };
           };
-          const scatterPoints = dealsForScatter.map((d) => {
+          const scatterPoints = cr
+            ? cr.scatterPoints.map((p) => ({ ...p, ...valueTierColor(p.amount) }))
+            : dealsForScatter.map((d) => {
             const { fill, tier } = valueTierColor(d.amount || 0);
             const createdDate = new Date(d.createdAt);
             const daysInMonth = new Date(
@@ -2348,8 +2374,15 @@ const Insights = () => {
         {(() => {
           const dayMs = 24 * 60 * 60 * 1000;
           const nowTs = Date.now();
+          // With report.contacts present the raw-data fallback below runs over
+          // empty inputs (and its results are replaced by the report's).
+          const srcContacts = cr ? [] : filteredData.filteredContacts;
+          const srcDeals = cr ? [] : filteredData.filteredDeals;
+          const srcInvoices = cr ? [] : filteredData.filteredInvoices;
+          const srcMeetings = cr ? [] : meetings;
+          const srcTasks = cr ? [] : tasks;
           const dealsByContactId = {};
-          filteredData.filteredDeals.forEach((d) => {
+          srcDeals.forEach((d) => {
             const cid = d.contact?._id || d.contact;
             if (!cid) return;
             if (!dealsByContactId[cid]) dealsByContactId[cid] = [];
@@ -2357,7 +2390,7 @@ const Insights = () => {
           });
 
           // Card 1: Contact Alerts — real, computed from contacts + their deals.
-          const contactsWithAnyDeal = filteredData.filteredContacts.filter(
+          const contactsWithAnyDeal = srcContacts.filter(
             (c) => dealsByContactId[c._id]?.length > 0,
           );
           const coldContacts = contactsWithAnyDeal.filter((c) =>
@@ -2369,21 +2402,21 @@ const Insights = () => {
             (sum, c) => sum + dealsByContactId[c._id].reduce((s, d) => s + (d.amount || 0), 0),
             0,
           );
-          const followUpContacts = filteredData.filteredContacts.filter(
+          const followUpContacts = srcContacts.filter(
             (c) => c.stageStatus === "Contacted" || c.stageStatus === "New",
           );
           const followUpPipeline = followUpContacts.reduce(
             (sum, c) => sum + (dealsByContactId[c._id] || []).reduce((s, d) => s + (d.amount || 0), 0),
             0,
           );
-          const noOwnerContacts = filteredData.filteredContacts.filter((c) => !c.user);
+          const noOwnerContacts = srcContacts.filter((c) => !c.user);
           const noOwnerPipeline = noOwnerContacts.reduce(
             (sum, c) => sum + (dealsByContactId[c._id] || []).reduce((s, d) => s + (d.amount || 0), 0),
             0,
           );
           // Contacts with at least one overdue invoice on a linked deal.
           const overdueInvoicesByContactId = {};
-          filteredData.filteredInvoices
+          srcInvoices
             .filter((inv) => inv.status === "Overdue" && inv.deal?.contact)
             .forEach((inv) => {
               const cid = inv.deal.contact?._id || inv.deal.contact;
@@ -2391,7 +2424,7 @@ const Insights = () => {
               if (!overdueInvoicesByContactId[cid]) overdueInvoicesByContactId[cid] = [];
               overdueInvoicesByContactId[cid].push(inv);
             });
-          const overdueContacts = filteredData.filteredContacts.filter(
+          const overdueContacts = srcContacts.filter(
             (c) => overdueInvoicesByContactId[c._id]?.length > 0,
           );
           const overduePipeline = Object.values(overdueInvoicesByContactId)
@@ -2409,44 +2442,52 @@ const Insights = () => {
             sessionStorage.setItem("insightsContactIdFilter", JSON.stringify(ids));
             window.location.href = "/contacts";
           };
+          const alerts = cr
+            ? cr.alerts
+            : {
+                cold: { ids: coldContacts.map((c) => c._id), pipeline: coldPipeline },
+                followUp: { ids: followUpContacts.map((c) => c._id), pipeline: followUpPipeline },
+                noOwner: { ids: noOwnerContacts.map((c) => c._id), pipeline: noOwnerPipeline },
+                overdue: { ids: overdueContacts.map((c) => c._id), pipeline: overduePipeline },
+              };
           const alertRows = [
             {
               icon: <AlertCircle className="w-4 h-4" />,
               iconBg: "#FCCCCD",
               iconColor: "#DF120B",
-              title: `${coldContacts.length} Contacts going cold`,
-              subtitle: `${formatCrAlert(coldPipeline)} associated pipeline has had no activity for 30+ days`,
-              onClick: () => reviewContacts(coldContacts.map((c) => c._id)),
+              title: `${alerts.cold.ids.length} Contacts going cold`,
+              subtitle: `${formatCrAlert(alerts.cold.pipeline)} associated pipeline has had no activity for 30+ days`,
+              onClick: () => reviewContacts(alerts.cold.ids),
             },
             {
               icon: <Clock className="w-4 h-4" />,
               iconBg: "rgba(255, 204, 0, 0.15)",
               iconColor: "#D4BF00",
-              title: `${followUpContacts.length} Contacts awaiting follow-up`,
-              subtitle: `${formatCrAlert(followUpPipeline)} associated pipeline still in early stages`,
-              onClick: () => reviewContacts(followUpContacts.map((c) => c._id)),
+              title: `${alerts.followUp.ids.length} Contacts awaiting follow-up`,
+              subtitle: `${formatCrAlert(alerts.followUp.pipeline)} associated pipeline still in early stages`,
+              onClick: () => reviewContacts(alerts.followUp.ids),
             },
             {
               icon: <TeamIcon className="w-4 h-4" />,
               iconBg: "rgba(0, 133, 255, 0.1)",
               iconColor: "#0085FF",
-              title: `${noOwnerContacts.length} Contacts with no owner`,
-              subtitle: `${formatCrAlert(noOwnerPipeline)} associated pipeline is unassigned`,
-              onClick: () => reviewContacts(noOwnerContacts.map((c) => c._id)),
+              title: `${alerts.noOwner.ids.length} Contacts with no owner`,
+              subtitle: `${formatCrAlert(alerts.noOwner.pipeline)} associated pipeline is unassigned`,
+              onClick: () => reviewContacts(alerts.noOwner.ids),
             },
             {
               icon: <PdfIcon className="w-4 h-4" />,
               iconBg: "#FCCCCD",
               iconColor: "#DF120B",
-              title: `${overdueContacts.length} Contacts with overdue invoices`,
-              subtitle: `${formatCrAlert(overduePipeline)} in overdue invoice value`,
-              onClick: () => reviewContacts(overdueContacts.map((c) => c._id)),
+              title: `${alerts.overdue.ids.length} Contacts with overdue invoices`,
+              subtitle: `${formatCrAlert(alerts.overdue.pipeline)} in overdue invoice value`,
+              onClick: () => reviewContacts(alerts.overdue.ids),
             },
           ];
 
           // Card 2: Contacts by Industry (via linked company), with pipeline value.
           const industryGroups = {};
-          filteredData.filteredContacts.forEach((c) => {
+          srcContacts.forEach((c) => {
             const industry = c.company?.industry || "Unspecified";
             if (!industryGroups[industry]) industryGroups[industry] = { count: 0, pipeline: 0 };
             industryGroups[industry].count += 1;
@@ -2455,16 +2496,18 @@ const Insights = () => {
               0,
             );
           });
-          const industryEntries = Object.entries(industryGroups)
-            .sort((a, b) => b[1].count - a[1].count)
-            .slice(0, 4);
+          const industryEntries = cr
+            ? cr.industryEntries
+            : Object.entries(industryGroups)
+                .sort((a, b) => b[1].count - a[1].count)
+                .slice(0, 4);
           const industryMaxCount = Math.max(1, ...industryEntries.map(([, v]) => v.count));
           const industryColors = ["#0085FF", "#0C4FCD", "#2E7D32", "#D97706", "#E82222", "#00C950"];
 
           // Card 3: Recent Contact Activity — deals, invoices, meetings, and
           // tasks tied to a contact, merged into one timeline.
           const contactActivity = [];
-          filteredData.filteredDeals
+          srcDeals
             .filter((d) => d.contact)
             .forEach((d) => {
               const at = d.updatedAt || d.createdAt;
@@ -2480,7 +2523,7 @@ const Insights = () => {
                 at,
               });
             });
-          filteredData.filteredInvoices
+          srcInvoices
             .filter((inv) => inv.deal?.contact)
             .forEach((inv) => {
               const at = inv.updatedAt || inv.date || inv.createdAt;
@@ -2496,7 +2539,7 @@ const Insights = () => {
                 at,
               });
             });
-          meetings
+          srcMeetings
             .filter((m) => m.linkedTo === "contact" && m.contact)
             .forEach((m) => {
               const at = m.updatedAt || m.scheduledAt || m.createdAt;
@@ -2512,7 +2555,7 @@ const Insights = () => {
                 at,
               });
             });
-          tasks
+          srcTasks
             .filter((t) =>
               (t.relatedEntities || []).some((r) => r.entityModel === "Contact"),
             )
@@ -2530,9 +2573,18 @@ const Insights = () => {
                 at,
               });
             });
-          const recentContactActivity = contactActivity
-            .sort((a, b) => new Date(b.at) - new Date(a.at))
-            .slice(0, 6);
+          // Visuals per activity type (the report returns data only).
+          const activityVisual = {
+            deal: { icon: <Briefcase className="w-4 h-4" />, iconBg: "#CCE7FF", iconColor: "#0085FF" },
+            invoice: { icon: <PdfIcon className="w-4 h-4" />, iconBg: "#FCCCCD", iconColor: "#EF0004" },
+            meeting: { icon: <VideoIcon className="w-4 h-4" />, iconBg: "rgba(0, 133, 255, 0.1)", iconColor: "#0085FF" },
+            task: { icon: <ClipboardList className="w-4 h-4" />, iconBg: "rgba(0, 201, 80, 0.12)", iconColor: "#00A745" },
+          };
+          const recentContactActivity = cr
+            ? cr.recentContactActivity.map((it) => ({ ...it, ...activityVisual[it.type] }))
+            : contactActivity
+                .sort((a, b) => new Date(b.at) - new Date(a.at))
+                .slice(0, 6);
 
           return (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
@@ -2683,6 +2735,14 @@ const Insights = () => {
   };
 
   const renderCompaniesReport = () => {
+    // Server-side report.companies is the source of truth. The raw-data
+    // calculation below is kept UNCHANGED, ONLY as a fallback for when that section is
+    // unavailable (report fetch failed / section errored on the server).
+    const pr = report?.companies || null;
+
+    // Pure, data-independent helpers shared by both paths.
+
+    const legacy = pr ? null : (() => {
     // Calculate metrics
     const totalCompanies = filteredData.filteredCompanies.length;
     const companiesWithWebsite = filteredData.filteredCompanies.filter(
@@ -2977,6 +3037,36 @@ const Insights = () => {
       .sort((a, b) => b.revenue - a.revenue)
       .map((c, idx) => ({ ...c, color: topRevenueColors[idx % topRevenueColors.length] }));
 
+    return { totalCompanies, companiesThisMonth, topLocations, completenessScore, activeCompanies, avgDealSizeCompanies, avgSalesCycleDays, totalCompaniesChange, activeCompaniesChange, newCompaniesChange, avgDealSizeChange, salesCycleChange, companySourceData, companySourceTotal, velocityPoints, pipelineContributionData, pipelineContributionMax, topRevenueCompaniesAll };
+    })();
+
+    // Same values from the server report. The server already ran the tab's steps (see computeCompaniesSection);
+    // only the completeness score (NaN when there are no companies) and the Date field are finished here.
+    const fromReport = pr && (() => {
+      const completenessScore = Math.round(((pr.withWebsite + pr.withAddress + pr.withIndustry) / (pr.totalCompanies * 3)) * 100);
+      return {
+        totalCompanies: pr.totalCompanies,
+        companiesThisMonth: pr.companiesThisMonth,
+        topLocations: pr.topLocations,
+        completenessScore,
+        activeCompanies: pr.activeCompanies,
+        avgDealSizeCompanies: pr.avgDealSizeCompanies,
+        avgSalesCycleDays: pr.avgSalesCycleDays,
+        totalCompaniesChange: pr.totalCompaniesChange,
+        activeCompaniesChange: pr.activeCompaniesChange,
+        newCompaniesChange: pr.newCompaniesChange,
+        avgDealSizeChange: pr.avgDealSizeChange,
+        salesCycleChange: pr.salesCycleChange,
+        companySourceData: pr.companySourceData,
+        companySourceTotal: pr.companySourceTotal,
+        velocityPoints: pr.velocityPoints,
+        pipelineContributionData: pr.pipelineContributionData,
+        pipelineContributionMax: pr.pipelineContributionMax,
+        topRevenueCompaniesAll: pr.topRevenueCompaniesAll.map((c) => ({ ...c, lastActive: c.lastActive ? new Date(c.lastActive) : null })),
+      };
+    })();
+
+    const { totalCompanies, companiesThisMonth, topLocations, completenessScore, activeCompanies, avgDealSizeCompanies, avgSalesCycleDays, totalCompaniesChange, activeCompaniesChange, newCompaniesChange, avgDealSizeChange, salesCycleChange, companySourceData, companySourceTotal, velocityPoints, pipelineContributionData, pipelineContributionMax, topRevenueCompaniesAll } = pr ? fromReport : legacy;
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -3324,27 +3414,38 @@ const Insights = () => {
   };
 
   const renderDealsReport = () => {
+    // Server-side report.deals is the source of truth. The raw-data
+    // calculations below are kept ONLY as a fallback for when that section is
+    // unavailable (report fetch failed / section errored on the server).
+    const dr = report?.deals || null;
+
     // Calculate basic metrics
-    const totalDeals = filteredData.filteredDeals.length;
-    const totalValue = filteredData.filteredDeals.reduce(
-      (sum, deal) => sum + (deal.amount || 0),
-      0
-    );
+    const totalDeals = dr ? dr.totalDeals : filteredData.filteredDeals.length;
+    const totalValue = dr
+      ? dr.totalValue
+      : filteredData.filteredDeals.reduce(
+          (sum, deal) => sum + (deal.amount || 0),
+          0
+        );
     const averageDealValue = totalValue / totalDeals || 0;
 
     // State for user filter
 
     // Status distribution
-    const statusDistribution = filteredData.filteredDeals.reduce(
-      (acc, deal) => {
-        const status = deal.status || "Unknown";
-        acc[status] = acc[status] || { count: 0, amount: 0 };
-        acc[status].count += 1;
-        acc[status].amount += deal.amount || 0;
-        return acc;
-      },
-      {}
-    );
+    const statusDistribution = dr
+      ? Object.fromEntries(
+          dr.statusDistribution.map((s) => [s.status, { count: s.count, amount: s.amount }])
+        )
+      : filteredData.filteredDeals.reduce(
+          (acc, deal) => {
+            const status = deal.status || "Unknown";
+            acc[status] = acc[status] || { count: 0, amount: 0 };
+            acc[status].count += 1;
+            acc[status].amount += deal.amount || 0;
+            return acc;
+          },
+          {}
+        );
 
     // The stages shown here must match Settings > Kanban Settings exactly —
     // not just whatever distinct status strings happen to exist on deals.
@@ -3370,97 +3471,87 @@ const Insights = () => {
     });
 
     // Won, Lost, Open deals
-    const wonDeals = filteredData.filteredDeals.filter(
-      (d) => d.status === "Won"
-    );
-    const lostDeals = filteredData.filteredDeals.filter(
-      (d) => d.status === "Lost"
-    );
-    const openDeals = filteredData.filteredDeals.filter(
-      (d) => d.status !== "Won" && d.status !== "Lost"
-    );
-
-    const wonValue = wonDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
-    const lostValue = lostDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
-    const openValue = openDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
+    // Raw per-status counts: from the report, or (fallback) from the raw deals.
+    const wonCount = dr ? dr.won.count : filteredData.filteredDeals.filter((d) => d.status === "Won").length;
+    const lostCount = dr ? dr.lost.count : filteredData.filteredDeals.filter((d) => d.status === "Lost").length;
 
     // Conversion metrics
-    const totalClosedDeals = wonDeals.length + lostDeals.length;
+    const totalClosedDeals = wonCount + lostCount;
     const winRate =
-      totalClosedDeals > 0 ? (wonDeals.length / totalClosedDeals) * 100 : 0;
-    const lossRate =
-      totalClosedDeals > 0 ? (lostDeals.length / totalClosedDeals) * 100 : 0;
+      totalClosedDeals > 0 ? (wonCount / totalClosedDeals) * 100 : 0;
+
+    // Month figures (this / last calendar month): from the report, or computed
+    // from the raw deals exactly as before.
+    const monthStats = dr
+      ? dr.month
+      : (() => {
+          const wonDeals = filteredData.filteredDeals.filter((d) => d.status === "Won");
+          const currentMonth = new Date().getMonth();
+          const currentYear = new Date().getFullYear();
+          const dealsThisMonth = filteredData.filteredDeals.filter((d) => {
+            const createdDate = new Date(d.createdAt);
+            return (
+              createdDate.getMonth() === currentMonth &&
+              createdDate.getFullYear() === currentYear
+            );
+          });
+          const lastMonthDate = new Date(currentYear, currentMonth - 1, 1);
+          const lastMonth = lastMonthDate.getMonth();
+          const lastMonthYear = lastMonthDate.getFullYear();
+          const dealsLastMonth = filteredData.filteredDeals.filter((d) => {
+            const created = new Date(d.createdAt);
+            return created.getMonth() === lastMonth && created.getFullYear() === lastMonthYear;
+          });
+          const closedIn = (d, m, yr) => {
+            const closed = new Date(d.updatedAt || d.createdAt);
+            return closed.getMonth() === m && closed.getFullYear() === yr;
+          };
+          const isClosedStatus = (d) => d.status === "Won" || d.status === "Lost";
+          return {
+            thisCount: dealsThisMonth.length,
+            thisValue: dealsThisMonth.reduce((sum, d) => sum + (d.amount || 0), 0),
+            lastCount: dealsLastMonth.length,
+            lastValue: dealsLastMonth.reduce((sum, d) => sum + (d.amount || 0), 0),
+            wonThis: wonDeals.filter((d) => closedIn(d, currentMonth, currentYear)).length,
+            wonLast: wonDeals.filter((d) => closedIn(d, lastMonth, lastMonthYear)).length,
+            closedThis: filteredData.filteredDeals.filter((d) => isClosedStatus(d) && closedIn(d, currentMonth, currentYear)).length,
+            closedLast: filteredData.filteredDeals.filter((d) => isClosedStatus(d) && closedIn(d, lastMonth, lastMonthYear)).length,
+          };
+        })();
 
     // Deals this month
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
-    const dealsThisMonth = filteredData.filteredDeals.filter((d) => {
-      const createdDate = new Date(d.createdAt);
-      return (
-        createdDate.getMonth() === currentMonth &&
-        createdDate.getFullYear() === currentYear
-      );
-    });
-    const dealsThisMonthCount = dealsThisMonth.length;
-    const dealsThisMonthValue = dealsThisMonth.reduce(
-      (sum, d) => sum + (d.amount || 0),
-      0
-    );
+    const dealsThisMonthCount = monthStats.thisCount;
+    const dealsThisMonthValue = monthStats.thisValue;
 
     // Month-over-month trends for the KPI row, mirroring the Companies tab's
     // StatCard pattern (icon + label/value + bottom-right change badge).
-    const lastMonthDate = new Date(currentYear, currentMonth - 1, 1);
-    const lastMonth = lastMonthDate.getMonth();
-    const lastMonthYear = lastMonthDate.getFullYear();
-    const dealsLastMonth = filteredData.filteredDeals.filter((d) => {
-      const created = new Date(d.createdAt);
-      return created.getMonth() === lastMonth && created.getFullYear() === lastMonthYear;
-    });
-    const dealsLastMonthValue = dealsLastMonth.reduce((sum, d) => sum + (d.amount || 0), 0);
+    const dealsLastMonthValue = monthStats.lastValue;
     const pctChange = (curr, prev) =>
       prev > 0 ? Math.round(((curr - prev) / prev) * 100) : curr > 0 ? 100 : 0;
 
     const pipelineValueChange = pctChange(dealsThisMonthValue, dealsLastMonthValue);
-    const newDealsChange = pctChange(dealsThisMonthCount, dealsLastMonth.length);
+    const newDealsChange = pctChange(dealsThisMonthCount, monthStats.lastCount);
 
-    const wonThisMonthDeals = wonDeals.filter((d) => {
-      const closed = new Date(d.updatedAt || d.createdAt);
-      return closed.getMonth() === currentMonth && closed.getFullYear() === currentYear;
-    });
-    const wonLastMonthDeals = wonDeals.filter((d) => {
-      const closed = new Date(d.updatedAt || d.createdAt);
-      return closed.getMonth() === lastMonth && closed.getFullYear() === lastMonthYear;
-    });
-    const wonDealsChange = pctChange(wonThisMonthDeals.length, wonLastMonthDeals.length);
+    const wonDealsChange = pctChange(monthStats.wonThis, monthStats.wonLast);
 
     const avgDealSizeThisMonthDeals =
-      dealsThisMonth.length > 0 ? dealsThisMonthValue / dealsThisMonth.length : 0;
+      monthStats.thisCount > 0 ? dealsThisMonthValue / monthStats.thisCount : 0;
     const avgDealSizeLastMonthDeals =
-      dealsLastMonth.length > 0 ? dealsLastMonthValue / dealsLastMonth.length : 0;
+      monthStats.lastCount > 0 ? dealsLastMonthValue / monthStats.lastCount : 0;
     const avgDealSizeChangeDeals = pctChange(avgDealSizeThisMonthDeals, avgDealSizeLastMonthDeals);
 
-    const closedThisMonth = filteredData.filteredDeals.filter((d) => {
-      if (d.status !== "Won" && d.status !== "Lost") return false;
-      const closed = new Date(d.updatedAt || d.createdAt);
-      return closed.getMonth() === currentMonth && closed.getFullYear() === currentYear;
-    });
-    const closedLastMonth = filteredData.filteredDeals.filter((d) => {
-      if (d.status !== "Won" && d.status !== "Lost") return false;
-      const closed = new Date(d.updatedAt || d.createdAt);
-      return closed.getMonth() === lastMonth && closed.getFullYear() === lastMonthYear;
-    });
     const winRateThisMonth =
-      closedThisMonth.length > 0
-        ? (wonThisMonthDeals.length / closedThisMonth.length) * 100
+      monthStats.closedThis > 0
+        ? (monthStats.wonThis / monthStats.closedThis) * 100
         : 0;
     const winRateLastMonth =
-      closedLastMonth.length > 0
-        ? (wonLastMonthDeals.length / closedLastMonth.length) * 100
+      monthStats.closedLast > 0
+        ? (monthStats.wonLast / monthStats.closedLast) * 100
         : 0;
     const winRateChange = pctChange(winRateThisMonth, winRateLastMonth);
 
     // User-wise analysis
-    const userDeals = filteredData.filteredDeals.reduce((acc, deal) => {
+    const userDeals = dr ? {} : filteredData.filteredDeals.reduce((acc, deal) => {
       const userId = deal.user?._id;
       const userName = deal.user?.name || "Unknown User";
 
@@ -3500,15 +3591,17 @@ const Insights = () => {
       return acc;
     }, {});
 
-    const userStats = Object.values(userDeals)
-      .map((user) => ({
-        ...user,
-        conversionRate:
-          user.wonDeals + user.lostDeals > 0
-            ? (user.wonDeals / (user.wonDeals + user.lostDeals)) * 100
-            : 0,
-      }))
-      .sort((a, b) => b.totalValue - a.totalValue);
+    const userStats = dr
+      ? dr.userStats.map((u) => ({ ...u, id: u.id ?? undefined }))
+      : Object.values(userDeals)
+          .map((user) => ({
+            ...user,
+            conversionRate:
+              user.wonDeals + user.lostDeals > 0
+                ? (user.wonDeals / (user.wonDeals + user.lostDeals)) * 100
+                : 0,
+          }))
+          .sort((a, b) => b.totalValue - a.totalValue);
 
     // Get unique users for dropdown
     const uniqueUsers = userStats.map((user) => ({
@@ -3517,25 +3610,37 @@ const Insights = () => {
     }));
 
     // Top companies by deal value
-    const companyDeals = filteredData.filteredDeals
-      .filter((d) => d.company?.name)
-      .reduce((acc, deal) => {
-        const companyName = deal.company.name;
-        acc[companyName] = acc[companyName] || { count: 0, amount: 0, won: 0 };
-        acc[companyName].count += 1;
-        acc[companyName].amount += deal.amount || 0;
-        if (deal.status === "Won") acc[companyName].won += 1;
-        return acc;
-      }, {});
+    const companyDeals = dr
+      ? {}
+      : filteredData.filteredDeals
+          .filter((d) => d.company?.name)
+          .reduce((acc, deal) => {
+            const companyName = deal.company.name;
+            acc[companyName] = acc[companyName] || { count: 0, amount: 0, won: 0 };
+            acc[companyName].count += 1;
+            acc[companyName].amount += deal.amount || 0;
+            if (deal.status === "Won") acc[companyName].won += 1;
+            return acc;
+          }, {});
 
-    const topCompanies = Object.entries(companyDeals)
-      .sort(([, a], [, b]) => b.amount - a.amount)
-      .slice(0, 5);
+    const topCompanies = dr
+      ? dr.topCompanies.map((c) => [c.name, { count: c.count, amount: c.amount, won: c.won }])
+      : Object.entries(companyDeals)
+          .sort(([, a], [, b]) => b.amount - a.amount)
+          .slice(0, 5);
 
     // Largest deals
-    const largestDeals = [...filteredData.filteredDeals]
-      .sort((a, b) => (b.amount || 0) - (a.amount || 0))
-      .slice(0, 5);
+    const largestDeals = dr
+      ? dr.largestDeals.map((d) => ({
+          _id: d._id,
+          title: d.title,
+          company: d.companyName ? { name: d.companyName } : null,
+          status: d.status,
+          amount: d.amount,
+        }))
+      : [...filteredData.filteredDeals]
+          .sort((a, b) => (b.amount || 0) - (a.amount || 0))
+          .slice(0, 5);
 
     // Chart data for deal status pie chart — same orderedStatuses source of
     // truth as the funnel/table/User Performance/Revenue Trend, so a deal
@@ -3589,14 +3694,19 @@ const Insights = () => {
     // each stage's deals' actual age (days since created, or days-to-close
     // for Won/Lost) since this system doesn't track stage-transition history.
     const stageTableData = funnelStages.map((stage) => {
-      const dealsInStage = filteredData.filteredDeals.filter((d) => d.status === stage.name);
-      const now = Date.now();
-      const ages = dealsInStage.map((d) => {
-        const created = new Date(d.createdAt).getTime();
-        const end = stage.name === "Won" || stage.name === "Lost" ? new Date(d.updatedAt || d.createdAt).getTime() : now;
-        return Math.max(0, (end - created) / (24 * 60 * 60 * 1000));
-      });
-      const avgDays = ages.length > 0 ? Math.round(ages.reduce((s, a) => s + a, 0) / ages.length) : 0;
+      let avgDays;
+      if (dr) {
+        avgDays = dr.stageAvgDays[stage.name] ?? 0;
+      } else {
+        const dealsInStage = filteredData.filteredDeals.filter((d) => d.status === stage.name);
+        const now = Date.now();
+        const ages = dealsInStage.map((d) => {
+          const created = new Date(d.createdAt).getTime();
+          const end = stage.name === "Won" || stage.name === "Lost" ? new Date(d.updatedAt || d.createdAt).getTime() : now;
+          return Math.max(0, (end - created) / (24 * 60 * 60 * 1000));
+        });
+        avgDays = ages.length > 0 ? Math.round(ages.reduce((s, a) => s + a, 0) / ages.length) : 0;
+      }
       const risk = avgDays > 21 ? "High" : avgDays > 7 ? "Medium" : "Low";
       const conversion = totalDeals > 0 ? Math.round((stage.count / totalDeals) * 100) : 0;
       const dropOff = Math.max(0, 100 - conversion);
@@ -3608,7 +3718,7 @@ const Insights = () => {
     // Construction/Manufacturing/Retail/Agency placeholder categories from
     // the design spec, since a company's actual industries are whatever its
     // records were tagged with.
-    const dealsByIndustry = (() => {
+    const dealsByIndustry = dr ? dr.dealsByIndustry : (() => {
       const companyIndustryMap = {};
       filteredData.filteredCompanies.forEach((c) => {
         companyIndustryMap[c._id] = c.industry || "Other";
@@ -3640,13 +3750,25 @@ const Insights = () => {
       const buckets = Object.fromEntries(
         months.map((m) => [m.key, Object.fromEntries(orderedStatuses.map((s) => [s, 0]))])
       );
-      filteredData.filteredDeals.forEach((d) => {
-        const created = new Date(d.createdAt);
-        const key = `${created.getFullYear()}-${created.getMonth()}`;
-        if (!buckets[key]) return;
-        const status = d.status && orderedStatuses.includes(d.status) ? d.status : orderedStatuses[0];
-        buckets[key][status] += d.amount || 0;
-      });
+      if (dr) {
+        // Report rows are per (calendar month, raw status); fold each into the
+        // same bucket/stage the per-deal loop below would have used.
+        dr.revenueTrend.forEach((r) => {
+          const [yr, mo] = r.ym.split("-");
+          const key = `${Number(yr)}-${Number(mo) - 1}`;
+          if (!buckets[key]) return;
+          const status = r.status && orderedStatuses.includes(r.status) ? r.status : orderedStatuses[0];
+          buckets[key][status] += r.amount || 0;
+        });
+      } else {
+        filteredData.filteredDeals.forEach((d) => {
+          const created = new Date(d.createdAt);
+          const key = `${created.getFullYear()}-${created.getMonth()}`;
+          if (!buckets[key]) return;
+          const status = d.status && orderedStatuses.includes(d.status) ? d.status : orderedStatuses[0];
+          buckets[key][status] += d.amount || 0;
+        });
+      }
       // A linear axis makes small months (₹7K-95K) visually indistinguishable
       // from 0 next to the ₹22L peak — a log scale keeps them readable
       // without distorting the peak. Log scales can't plot a true 0, so each
@@ -3710,7 +3832,7 @@ const Insights = () => {
           />
           <StatCard
             title="Won Deals"
-            value={wonDeals.length}
+            value={wonCount}
             icon={<Trophy className="w-6 h-6" />}
             color="text-green-600"
             change={wonDealsChange}
@@ -4039,6 +4161,32 @@ const Insights = () => {
   };
 
   const renderVendorsReport = () => {
+    // Server-side report.vendors is the source of truth. The raw-data
+    // calculation below is kept UNCHANGED, ONLY as a fallback for when that section is
+    // unavailable (report fetch failed / section errored on the server).
+    const pr = report?.vendors || null;
+
+    // Pure, data-independent helpers shared by both paths.
+    const vendorSpendTrendFormatY = (v) => {
+      if (v >= 1e7) return `₹${(v / 1e7).toFixed(v % 1e7 === 0 ? 0 : 1)}Cr`;
+      if (v >= 1e5) return `₹${(v / 1e5).toFixed(v % 1e5 === 0 ? 0 : 1)}L`;
+      if (v >= 1e3) return `₹${(v / 1e3).toFixed(v % 1e3 === 0 ? 0 : 1)}K`;
+      return `₹${v}`;
+    };
+    const paymentStatusColors = {
+      Received: "#34C759",
+      Pending: "#0085FF",
+      Partial: "#FC9C32",
+      Draft: "#9747FF",
+      Cancelled: "#E82222",
+    };
+    const vendorStatusStyles = {
+      Paid: { bg: "rgba(52,199,89,0.1)", color: "#34C759" },
+      "Partially Paid": { bg: "rgba(216,112,0,0.1)", color: "#D87000" },
+      Pending: { bg: "rgba(232,34,34,0.1)", color: "#E82222" },
+    };
+
+    const legacy = pr ? null : (() => {
     // Calculate metrics
     const totalVendors = filteredData.filteredVendors.length;
     const vendorsWithEmail = filteredData.filteredVendors.filter(
@@ -4138,13 +4286,6 @@ const Insights = () => {
       activeLastMonth > 0 ? { pct: Math.round(((activeThisMonth - activeLastMonth) / activeLastMonth) * 100), isNew: false } : { pct: 0, isNew: activeThisMonth > 0 };
 
     // Payment Distribution — real breakdown of purchase statuses (proxy for payment state)
-    const paymentStatusColors = {
-      Received: "#34C759",
-      Pending: "#0085FF",
-      Partial: "#FC9C32",
-      Draft: "#9747FF",
-      Cancelled: "#E82222",
-    };
     const purchaseStatusCounts = filteredData.filteredPurchases.reduce((acc, p) => {
       const key = p.status || "Draft";
       acc[key] = (acc[key] || 0) + 1;
@@ -4178,13 +4319,6 @@ const Insights = () => {
       });
       return months.map((m) => ({ name: m.label, ...buckets[m.key] }));
     })();
-    const vendorSpendTrendFormatY = (v) => {
-      if (v >= 1e7) return `₹${(v / 1e7).toFixed(v % 1e7 === 0 ? 0 : 1)}Cr`;
-      if (v >= 1e5) return `₹${(v / 1e5).toFixed(v % 1e5 === 0 ? 0 : 1)}L`;
-      if (v >= 1e3) return `₹${(v / 1e3).toFixed(v % 1e3 === 0 ? 0 : 1)}K`;
-      return `₹${v}`;
-    };
-
     // Top Vendors by Spend — real per-vendor rollup from purchases + vendor balance.
     const topVendorsBySpend = (() => {
       const byVendor = {};
@@ -4222,12 +4356,6 @@ const Insights = () => {
         .slice(0, 4);
     })();
     const vendorSpendGoesTotal = topVendorsBySpend.reduce((sum, v) => sum + v.totalPaid, 0);
-    const vendorStatusStyles = {
-      Paid: { bg: "rgba(52,199,89,0.1)", color: "#34C759" },
-      "Partially Paid": { bg: "rgba(216,112,0,0.1)", color: "#D87000" },
-      Pending: { bg: "rgba(232,34,34,0.1)", color: "#E82222" },
-    };
-
     // Recent Payments — most recent purchases across all vendors.
     const recentPayments = [...filteredData.filteredPurchases]
       .sort((a, b) => new Date(b.purchaseDate || b.createdAt) - new Date(a.purchaseDate || a.createdAt))
@@ -4245,6 +4373,90 @@ const Insights = () => {
         };
       });
 
+    const vendorTableRows = filteredData.filteredVendors.slice(0, 8);
+    return { averageBalance, vendorsWithPositiveBalance, vendorsWithNegativeBalance, vendorsWithZeroBalance, vendorsThisMonth, topCompanies, completenessScore, totalVendorSpend, outstandingPayables, totalCredits, activeVendors, avgVendorSpend, vendorSpendChange, activeVendorsChange, totalPurchasesForStatus, paymentDistribution, vendorSpendTrendData, topVendorsBySpend, vendorSpendGoesTotal, recentPayments, totalVendors, vendorTableRows };
+    })();
+
+    // Same values built from the server report (vendors half + purchases half). Derived formulas mirror the
+    // fallback above one-to-one (incl. the NaN averages when there are no vendors).
+    const fromReport = pr && (() => {
+      const V = pr.vendors;
+      const P = pr.purchases;
+      const totalVendors = V.total;
+      const averageBalance = V.totalBalance / V.total;
+      const completenessScore = Math.round(((V.withEmail + V.withPhone + V.withGSTIN + V.withCompany) / (V.total * 4)) * 100);
+      const totalVendorSpend = P.spend;
+      const activeVendors = P.activeVendors;
+      const avgVendorSpend = activeVendors > 0 ? totalVendorSpend / activeVendors : 0;
+      const spendThis = P.month.spendThis, spendLast = P.month.spendLast;
+      const vendorSpendChange =
+        spendLast > 0 ? { pct: Math.round(((spendThis - spendLast) / spendLast) * 100), isNew: false } : { pct: 0, isNew: spendThis > 0 };
+      const activeThis = P.month.activeThis, activeLast = P.month.activeLast;
+      const activeVendorsChange =
+        activeLast > 0 ? { pct: Math.round(((activeThis - activeLast) / activeLast) * 100), isNew: false } : { pct: 0, isNew: activeThis > 0 };
+      const purchaseStatusCounts = {};
+      P.statusCounts.forEach((s) => { purchaseStatusCounts[s.status] = (purchaseStatusCounts[s.status] || 0) + s.count; });
+      const totalPurchasesForStatus = P.count;
+      const paymentDistribution = Object.entries(purchaseStatusCounts)
+        .map(([status, count]) => ({
+          status,
+          count,
+          pct: totalPurchasesForStatus > 0 ? Math.round((count / totalPurchasesForStatus) * 100) : 0,
+          color: paymentStatusColors[status] || "#9CA3AF",
+        }))
+        .sort((a, b) => b.count - a.count);
+      const vendorSpendTrendData = (() => {
+        const now = new Date();
+        const months = Array.from({ length: 6 }, (_, i) => {
+          const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+          return { key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) };
+        });
+        const buckets = Object.fromEntries(months.map((m) => [m.key, { Spend: 0, Received: 0, Pending: 0 }]));
+        P.trend.forEach((r) => {
+          const [yr, mm] = r.ym.split("-");
+          const key = `${Number(yr)}-${Number(mm) - 1}`;
+          if (!buckets[key]) return;
+          buckets[key].Spend += r.amount || 0;
+          if (r.status === "Paid") buckets[key].Received += r.amount || 0;
+          else if (r.status === "Pending" || r.status === "Partial") buckets[key].Pending += r.amount || 0;
+        });
+        return months.map((m) => ({ name: m.label, ...buckets[m.key] }));
+      })();
+      const topVendorsBySpend = P.topVendors.map((r) => ({
+        vendorId: r.vendorId, totalPaid: r.totalPaid, transactions: r.transactions, lastPayment: new Date(r.lastPayment),
+        name: r.name, outstanding: r.outstanding, status: r.status,
+      }));
+      const vendorSpendGoesTotal = topVendorsBySpend.reduce((sum, v) => sum + v.totalPaid, 0);
+      const recentPayments = P.recent.map((p) => {
+        const d = new Date(p.at);
+        const status = p.status === "Paid" ? "Paid" : p.status === "Partial" ? "Partially Paid" : "Pending";
+        return {
+          id: p.id,
+          day: d.toLocaleDateString("en-IN", { day: "2-digit" }),
+          month: d.toLocaleDateString("en-IN", { month: "short" }),
+          amount: p.amount || 0,
+          vendorName: p.vendorName || "Unknown Vendor",
+          status,
+        };
+      });
+      return {
+        totalVendors, averageBalance,
+        vendorsWithPositiveBalance: V.positive,
+        vendorsWithNegativeBalance: V.negative,
+        vendorsWithZeroBalance: V.zero,
+        vendorsThisMonth: V.thisMonth,
+        topCompanies: V.topCompanies,
+        completenessScore, totalVendorSpend,
+        outstandingPayables: V.outstandingPayables,
+        totalCredits: V.totalCredits,
+        activeVendors, avgVendorSpend, vendorSpendChange, activeVendorsChange,
+        totalPurchasesForStatus, paymentDistribution, vendorSpendTrendData,
+        topVendorsBySpend, vendorSpendGoesTotal, recentPayments,
+        vendorTableRows: V.table,
+      };
+    })();
+
+    const { averageBalance, vendorsWithPositiveBalance, vendorsWithNegativeBalance, vendorsWithZeroBalance, vendorsThisMonth, topCompanies, completenessScore, totalVendorSpend, outstandingPayables, totalCredits, activeVendors, avgVendorSpend, vendorSpendChange, activeVendorsChange, totalPurchasesForStatus, paymentDistribution, vendorSpendTrendData, topVendorsBySpend, vendorSpendGoesTotal, recentPayments, totalVendors, vendorTableRows } = pr ? fromReport : legacy;
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -4622,7 +4834,7 @@ const Insights = () => {
         <div className="flex flex-col gap-2">
           <h3 className="text-sm font-semibold text-[#0E121B]">Vendors Directory</h3>
           <div className="bg-white rounded-xl border border-[#E1E4EA] overflow-hidden">
-            {filteredData.filteredVendors.length === 0 ? (
+            {totalVendors === 0 ? (
               <p className="text-sm text-gray-400 py-16 text-center">No vendors yet</p>
             ) : (
               <div className="overflow-x-auto">
@@ -4640,7 +4852,7 @@ const Insights = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredData.filteredVendors.slice(0, 8).map((v) => (
+                    {vendorTableRows.map((v) => (
                       <tr key={v._id} className="border-b border-[#E1E4EA] last:border-b-0">
                         <td className="py-2.5 px-3 text-sm font-medium text-[#222530] whitespace-nowrap">
                           {v.name}
@@ -4686,6 +4898,27 @@ const Insights = () => {
   };
 
   const renderPurchaseOrdersReport = () => {
+    // Server-side report.purchaseOrders is the source of truth. The raw-data
+    // calculation below is kept UNCHANGED, ONLY as a fallback for when that section is
+    // unavailable (report fetch failed / section errored on the server).
+    const pr = report?.purchaseOrders || null;
+
+    // Pure, data-independent helpers shared by both paths.
+    const pctChangePO = (curr, prev) => (prev > 0 ? Math.round(((curr - prev) / prev) * 100) : curr > 0 ? 100 : 0);
+    const poValueTrendFormatY = (v) => {
+      if (v >= 1e7) return `₹${(v / 1e7).toFixed(v % 1e7 === 0 ? 0 : 1)}Cr`;
+      if (v >= 1e5) return `₹${(v / 1e5).toFixed(v % 1e5 === 0 ? 0 : 1)}L`;
+      if (v >= 1e3) return `₹${(v / 1e3).toFixed(v % 1e3 === 0 ? 0 : 1)}K`;
+      return `₹${v}`;
+    };
+    const poStatusColors = {
+      Approved: "#00C950",
+      Pending: "#0085FF",
+      Delivered: "#9747FF",
+      Rejected: "#E82222",
+    };
+
+    const legacy = pr ? null : (() => {
     // Calculate metrics
     const totalPOs = filteredData.filteredPurchaseOrders.length;
     const totalAmount = filteredData.filteredPurchaseOrders.reduce(
@@ -4771,8 +5004,6 @@ const Insights = () => {
       const d = new Date(po.orderDate);
       return d.getMonth() === lastMonthPO && d.getFullYear() === lastMonthYearPO;
     });
-    const pctChangePO = (curr, prev) => (prev > 0 ? Math.round(((curr - prev) / prev) * 100) : curr > 0 ? 100 : 0);
-
     const totalPOValueChange = pctChangePO(posThisMonthAmount, posLastMonth.reduce((s, po) => s + (po.totalAmount || 0), 0));
     const openOrdersLastMonth = posLastMonth.filter((po) => po.status === "Pending" || po.status === "Approved").length;
     const openOrdersThisMonth = posThisMonth.filter((po) => po.status === "Pending" || po.status === "Approved").length;
@@ -4806,20 +5037,7 @@ const Insights = () => {
       });
       return months.map((m) => ({ name: m.label, ...buckets[m.key] }));
     })();
-    const poValueTrendFormatY = (v) => {
-      if (v >= 1e7) return `₹${(v / 1e7).toFixed(v % 1e7 === 0 ? 0 : 1)}Cr`;
-      if (v >= 1e5) return `₹${(v / 1e5).toFixed(v % 1e5 === 0 ? 0 : 1)}L`;
-      if (v >= 1e3) return `₹${(v / 1e3).toFixed(v % 1e3 === 0 ? 0 : 1)}K`;
-      return `₹${v}`;
-    };
-
     // PO Status Distribution — real breakdown of purchase order statuses.
-    const poStatusColors = {
-      Approved: "#00C950",
-      Pending: "#0085FF",
-      Delivered: "#9747FF",
-      Rejected: "#E82222",
-    };
     const poStatusDistribution = Object.entries(statusDistribution)
       .map(([status, data]) => ({
         status,
@@ -4879,6 +5097,80 @@ const Insights = () => {
         Icon: XCircle,
       },
     ];
+    const recentPOs = [...filteredData.filteredPurchaseOrders]
+      .sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate))
+      .slice(0, 8);
+    const pendingApprovalCount = pendingApprovalPOs.length;
+    return { totalPOs, totalAmount, averagePOAmount, posThisMonthCount, posThisWeek, pendingPOsCount, pendingPOsAmount, topVendors, largestPOs, totalPOValueChange, openOrdersChange, openOrdersTotal, pendingApprovalAmount, orderedValue, orderedValueChange, poValueTrendData, poStatusDistribution, approvalRate, upcomingDeliveries, poAlerts, recentPOs, pendingApprovalCount };
+    })();
+
+    // Same values built from the server report. Derived formulas (MoM %, approval rate, status %, alert
+    // text) mirror the fallback above one-to-one; list items are re-shaped into the PO-like objects the
+    // JSX already reads (poNumber / vendor?.name / orderDate / totalAmount / status).
+    const fromReport = pr && (() => {
+      const dist = Object.fromEntries(pr.statusDistribution.map((s) => [s.status, { count: s.count, amount: s.amount }]));
+      const cnt = (st) => dist[st]?.count || 0;
+      const amtOf = (st) => dist[st]?.amount || 0;
+      const totalPOs = pr.totalPOs;
+      const totalAmount = pr.totalAmount;
+      const averagePOAmount = totalAmount / totalPOs || 0;
+      const mo = pr.month;
+      const asPO = (r) => ({ _id: r._id, poNumber: r.poNumber, vendor: r.vendorName ? { name: r.vendorName } : null, orderDate: r.orderDate, status: r.status, totalAmount: r.amount });
+      const statusDistribution = dist;
+      const poValueTrendData = (() => {
+        const now = new Date();
+        const months = Array.from({ length: 6 }, (_, i) => {
+          const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+          return { key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleDateString("en-IN", { month: "short" }) };
+        });
+        const buckets = Object.fromEntries(months.map((m) => [m.key, { Total: 0, Ordered: 0, Outstanding: 0 }]));
+        pr.trend.forEach((r) => {
+          const [yr, mm] = r.ym.split("-");
+          const key = `${Number(yr)}-${Number(mm) - 1}`;
+          if (!buckets[key]) return;
+          buckets[key].Total += r.amount || 0;
+          if (r.status === "Approved") buckets[key].Ordered += r.amount || 0;
+          else if (r.status === "Pending") buckets[key].Outstanding += r.amount || 0;
+        });
+        return months.map((m) => ({ name: m.label, ...buckets[m.key] }));
+      })();
+      const poStatusDistribution = Object.entries(statusDistribution)
+        .map(([status, data]) => ({
+          status,
+          count: data.count,
+          pct: totalPOs > 0 ? Math.round((data.count / totalPOs) * 100) : 0,
+          color: poStatusColors[status] || "#9CA3AF",
+        }))
+        .sort((a, b) => b.count - a.count);
+      const approvalRate = totalPOs > 0 ? Math.round(((statusDistribution.Approved?.count || 0) + (statusDistribution.Delivered?.count || 0)) / totalPOs * 100) : 0;
+      const poAlerts = [
+        { key: "overdue", title: "Overdue Approvals", subtitle: `₹${formatNumberToIndian(Math.round(pr.overduePending.amount))} associated pipeline with ${pr.overduePending.count} POs`, bg: "#FCCCCD", color: "#DF120B", Icon: AlertCircle },
+        { key: "pending", title: `${cnt("Pending")} POs Awaiting Approval`, subtitle: `₹${formatNumberToIndian(Math.round(amtOf("Pending")))} associated pipeline with pending approvals`, bg: "rgba(255,204,0,0.1)", color: "#D4BF00", Icon: Clock },
+        { key: "approved", title: `${cnt("Approved")} POs Approved, Not Delivered`, subtitle: `₹${formatNumberToIndian(Math.round(amtOf("Approved")))} associated POs in transit`, bg: "rgba(0,133,255,0.1)", color: "#0085FF", Icon: Package },
+        { key: "rejected", title: `${cnt("Rejected")} POs Rejected`, subtitle: `₹${formatNumberToIndian(Math.round(amtOf("Rejected")))} associated pipeline was rejected`, bg: "#FCCCCD", color: "#F60000", Icon: XCircle },
+      ];
+      return {
+        totalPOs, totalAmount, averagePOAmount, statusDistribution,
+        posThisMonthCount: mo.thisCount,
+        posThisWeek: pr.weekCount,
+        pendingPOsCount: pr.active.count,
+        pendingPOsAmount: pr.active.amount,
+        topVendors: pr.topVendors.map((v) => [v.name, { count: v.count, amount: v.amount }]),
+        largestPOs: pr.largest.map(asPO),
+        upcomingDeliveries: pr.upcoming.map(asPO),
+        recentPOs: pr.recent.map(asPO),
+        totalPOValueChange: pctChangePO(mo.thisAmount, mo.lastAmount),
+        openOrdersChange: pctChangePO(mo.openThis, mo.openLast),
+        openOrdersTotal: pr.openTotal,
+        pendingApprovalCount: cnt("Pending"),
+        pendingApprovalAmount: amtOf("Pending"),
+        orderedValue: amtOf("Approved"),
+        orderedValueChange: pctChangePO(mo.orderedThis, mo.orderedLast),
+        poValueTrendData, poStatusDistribution, approvalRate, poAlerts,
+      };
+    })();
+
+    const { totalPOs, totalAmount, averagePOAmount, posThisMonthCount, posThisWeek, pendingPOsCount, pendingPOsAmount, topVendors, largestPOs, totalPOValueChange, openOrdersChange, openOrdersTotal, pendingApprovalAmount, orderedValue, orderedValueChange, poValueTrendData, poStatusDistribution, approvalRate, upcomingDeliveries, poAlerts, recentPOs, pendingApprovalCount } = pr ? fromReport : legacy;
 
     return (
       <div className="space-y-6">
@@ -4903,7 +5195,7 @@ const Insights = () => {
           />
           <StatCard
             title="Pending Approval"
-            value={pendingApprovalPOs.length}
+            value={pendingApprovalCount}
             icon={<Clock className="w-6 h-6" />}
             color="text-orange-600"
           />
@@ -5141,7 +5433,7 @@ const Insights = () => {
         <div className="flex flex-col gap-2">
           <h3 className="text-sm font-semibold text-[#0E121B]">Purchase Order Directory</h3>
           <div className="bg-white rounded-xl border border-[#E1E4EA] overflow-hidden">
-            {filteredData.filteredPurchaseOrders.length === 0 ? (
+            {totalPOs === 0 ? (
               <p className="text-sm text-gray-400 py-16 text-center">No purchase orders yet</p>
             ) : (
               <div className="overflow-x-auto">
@@ -5159,9 +5451,7 @@ const Insights = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {[...filteredData.filteredPurchaseOrders]
-                      .sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate))
-                      .slice(0, 8)
+                    {recentPOs
                       .map((po) => {
                         const statusStyle =
                           po.status === "Delivered"
@@ -5354,6 +5644,28 @@ const Insights = () => {
   };
 
   const renderPurchasesReport = () => {
+    // Server-side report.purchases is the source of truth. The raw-data
+    // calculation below is kept UNCHANGED, ONLY as a fallback for when that section is
+    // unavailable (report fetch failed / section errored on the server).
+    const pr = report?.purchases || null;
+
+    // Pure, data-independent helpers shared by both paths.
+    const pctChangePurch = (curr, prev) => (prev > 0 ? Math.round(((curr - prev) / prev) * 100) : curr > 0 ? 100 : 0);
+    const purchaseValueTrendFormatY = (v) => {
+      if (v >= 1e7) return `₹${(v / 1e7).toFixed(v % 1e7 === 0 ? 0 : 1)}Cr`;
+      if (v >= 1e5) return `₹${(v / 1e5).toFixed(v % 1e5 === 0 ? 0 : 1)}L`;
+      if (v >= 1e3) return `₹${(v / 1e3).toFixed(v % 1e3 === 0 ? 0 : 1)}K`;
+      return `₹${v}`;
+    };
+    const purchaseStatusColors = {
+      Received: "#34C759",
+      Pending: "#0085FF",
+      Partial: "#FC9C32",
+      Draft: "#525252",
+      Cancelled: "#E82222",
+    };
+
+    const legacy = pr ? null : (() => {
     // Calculate metrics
     const totalPurchases = filteredData.filteredPurchases.length;
     const totalAmount = filteredData.filteredPurchases.reduce(
@@ -5437,7 +5749,6 @@ const Insights = () => {
       const d = new Date(p.purchaseDate);
       return d.getMonth() === lastMonthPurch && d.getFullYear() === lastMonthYearPurch;
     });
-    const pctChangePurch = (curr, prev) => (prev > 0 ? Math.round(((curr - prev) / prev) * 100) : curr > 0 ? 100 : 0);
     const totalPurchasesChange = pctChangePurch(purchasesThisMonthAmount, purchasesLastMonth.reduce((s, p) => s + (p.grandTotal || 0), 0));
     const paidThisMonth = purchasesThisMonth.filter((p) => p.status === "Paid").reduce((s, p) => s + (p.grandTotal || 0), 0);
     const paidLastMonth = purchasesLastMonth.filter((p) => p.status === "Paid").reduce((s, p) => s + (p.grandTotal || 0), 0);
@@ -5476,21 +5787,7 @@ const Insights = () => {
       });
       return months.map((m) => ({ name: m.label, ...buckets[m.key] }));
     })();
-    const purchaseValueTrendFormatY = (v) => {
-      if (v >= 1e7) return `₹${(v / 1e7).toFixed(v % 1e7 === 0 ? 0 : 1)}Cr`;
-      if (v >= 1e5) return `₹${(v / 1e5).toFixed(v % 1e5 === 0 ? 0 : 1)}L`;
-      if (v >= 1e3) return `₹${(v / 1e3).toFixed(v % 1e3 === 0 ? 0 : 1)}K`;
-      return `₹${v}`;
-    };
-
     // Purchase Status Distribution — real breakdown of purchase bill statuses.
-    const purchaseStatusColors = {
-      Received: "#34C759",
-      Pending: "#0085FF",
-      Partial: "#FC9C32",
-      Draft: "#525252",
-      Cancelled: "#E82222",
-    };
     const purchaseStatusDistribution = Object.entries(statusDistribution)
       .map(([status, data]) => ({
         status,
@@ -5565,6 +5862,87 @@ const Insights = () => {
       },
     ];
 
+    const recentPurchasesTable = [...filteredData.filteredPurchases]
+      .sort((a, b) => new Date(b.purchaseDate) - new Date(a.purchaseDate))
+      .slice(0, 8);
+    return { totalPurchases, totalAmount, averagePurchaseAmount, purchasesThisMonthCount, purchasesThisWeek, topVendors, largestPurchases, paidPurchasesAmount, outstandingPurchasesAmount, gstInputTax, activeVendorsCount, totalPurchasesChange, paidPurchasesChange, outstandingPurchasesChange, gstChange, activeVendorsChangePurch, purchaseValueTrendData, purchaseStatusDistribution, receivedRate, purchaseFunnelStages, upcomingPayments, recentPurchaseActivity, purchaseAlerts, recentPurchasesTable };
+    })();
+
+    // Same values built from the server report. Derived formulas (MoM %, received rate, status %, funnel,
+    // alert text) mirror the fallback above one-to-one; list items are re-shaped into the purchase-like objects
+    // the JSX already reads (purchaseNumber / vendor?.name / purchaseDate / grandTotal / status).
+    const fromReport = pr && (() => {
+      const dist = Object.fromEntries(pr.statusDistribution.map((s) => [s.status, { count: s.count, amount: s.amount }]));
+      const cnt = (st) => dist[st]?.count || 0;
+      const amtOf = (st) => dist[st]?.amount || 0;
+      const mo = pr.month;
+      const totalPurchases = pr.totalPurchases;
+      const totalAmount = pr.totalAmount;
+      const averagePurchaseAmount = totalAmount / totalPurchases || 0;
+      const asP = (r) => ({ _id: r._id, purchaseNumber: r.purchaseNumber, vendor: r.vendorName ? { name: r.vendorName } : null, purchaseDate: r.purchaseDate, status: r.status, grandTotal: r.amount });
+      const purchaseValueTrendData = (() => {
+        const now = new Date();
+        const months = Array.from({ length: 6 }, (_, i) => {
+          const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+          return { key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleDateString("en-IN", { month: "short" }) };
+        });
+        const buckets = Object.fromEntries(months.map((m) => [m.key, { Total: 0, Paid: 0, Outstanding: 0 }]));
+        pr.trend.forEach((r) => {
+          const [yr, mm] = r.ym.split("-");
+          const key = `${Number(yr)}-${Number(mm) - 1}`;
+          if (!buckets[key]) return;
+          buckets[key].Total += r.amount || 0;
+          if (r.status === "Paid") buckets[key].Paid += r.amount || 0;
+          else if (r.status === "Pending" || r.status === "Partial" || r.status === "Draft") buckets[key].Outstanding += r.amount || 0;
+        });
+        return months.map((m) => ({ name: m.label, ...buckets[m.key] }));
+      })();
+      const purchaseStatusDistribution = Object.entries(dist)
+        .map(([status, data]) => ({
+          status,
+          count: data.count,
+          pct: totalPurchases > 0 ? Math.round((data.count / totalPurchases) * 100) : 0,
+          color: purchaseStatusColors[status] || "#9CA3AF",
+        }))
+        .sort((a, b) => b.count - a.count);
+      const receivedRate = totalPurchases > 0 ? Math.round(((dist.Received?.count || 0) / totalPurchases) * 100) : 0;
+      const purchaseFunnelStages = [
+        { label: "Total Purchases", count: totalPurchases, color: "#0085FF" },
+        { label: "Paid", count: dist.Received?.count || 0, color: "#00C950" },
+        { label: "Pending", count: (dist.Pending?.count || 0) + (dist.Partial?.count || 0), color: "#D87000" },
+        { label: "Draft", count: dist.Draft?.count || 0, color: "#ECB900" },
+        { label: "Cancelled", count: dist.Cancelled?.count || 0, color: "#E82222" },
+      ];
+      const purchaseAlerts = [
+        { key: "overdue", title: "Overdue Payments", subtitle: `₹${formatNumberToIndian(Math.round(pr.overdue.amount))} outstanding across ${pr.overdue.count} bills`, bg: "#FCCCCD", color: "#DF120B", Icon: AlertCircle },
+        { key: "awaiting", title: `${pr.outstanding.count} Bills Awaiting Payment`, subtitle: `₹${formatNumberToIndian(Math.round(pr.outstanding.amount))} total outstanding`, bg: "rgba(255,204,0,0.1)", color: "#D4BF00", Icon: Clock },
+        { key: "partial", title: `${cnt("Partial")} Bills with Partial Payment`, subtitle: `₹${formatNumberToIndian(Math.round(amtOf("Partial")))} partially received`, bg: "rgba(0,133,255,0.1)", color: "#0085FF", Icon: Wallet },
+        { key: "duesoon", title: "Due in Next 7 Days", subtitle: `${pr.dueSoon.count} bills, ₹${formatNumberToIndian(Math.round(pr.dueSoon.amount))} due soon`, bg: "#FCCCCD", color: "#F60000", Icon: CalendarIcon },
+      ];
+      const recentPurchasesTable = pr.recent.map(asP);
+      return {
+        totalPurchases, totalAmount, averagePurchaseAmount,
+        purchasesThisMonthCount: mo.thisCount,
+        purchasesThisWeek: pr.weekCount,
+        topVendors: pr.topVendors.map((v) => [v.name, { count: v.count, amount: v.amount }]),
+        largestPurchases: pr.largest.map(asP),
+        paidPurchasesAmount: pr.paidAmount,
+        outstandingPurchasesAmount: pr.outstanding.amount,
+        gstInputTax: pr.totalTax,
+        activeVendorsCount: pr.activeVendors,
+        totalPurchasesChange: pctChangePurch(mo.thisAmount, mo.lastAmount),
+        paidPurchasesChange: pctChangePurch(mo.paidThis, mo.paidLast),
+        outstandingPurchasesChange: pctChangePurch(mo.outThis, mo.outLast),
+        gstChange: pctChangePurch(mo.taxThis, mo.taxLast),
+        activeVendorsChangePurch: pctChangePurch(mo.vendorsThis, mo.vendorsLast),
+        purchaseValueTrendData, purchaseStatusDistribution, receivedRate, purchaseFunnelStages, purchaseAlerts,
+        upcomingPayments: pr.upcoming.map(asP),
+        recentPurchaseActivity: recentPurchasesTable.slice(0, 6),
+        recentPurchasesTable,
+      };
+    })();
+
+    const { totalPurchases, totalAmount, averagePurchaseAmount, purchasesThisMonthCount, purchasesThisWeek, topVendors, largestPurchases, paidPurchasesAmount, outstandingPurchasesAmount, gstInputTax, activeVendorsCount, totalPurchasesChange, paidPurchasesChange, outstandingPurchasesChange, gstChange, activeVendorsChangePurch, purchaseValueTrendData, purchaseStatusDistribution, receivedRate, purchaseFunnelStages, upcomingPayments, recentPurchaseActivity, purchaseAlerts, recentPurchasesTable } = pr ? fromReport : legacy;
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -5945,7 +6323,7 @@ const Insights = () => {
         <div className="flex flex-col gap-2">
           <h3 className="text-sm font-semibold text-[#0E121B]">Purchase Directory</h3>
           <div className="bg-white rounded-xl border border-[#E1E4EA] overflow-hidden">
-            {filteredData.filteredPurchases.length === 0 ? (
+            {totalPurchases === 0 ? (
               <p className="text-sm text-gray-400 py-16 text-center">No purchases yet</p>
             ) : (
               <div className="overflow-x-auto">
@@ -5963,10 +6341,8 @@ const Insights = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {[...filteredData.filteredPurchases]
-                      .sort((a, b) => new Date(b.purchaseDate) - new Date(a.purchaseDate))
-                      .slice(0, 8)
-                      .map((p) => {
+                    {recentPurchasesTable
+                            .map((p) => {
                         const statusStyle =
                           p.status === "Paid"
                             ? { bg: "rgba(52,199,89,0.1)", color: "#34C759" }
@@ -6075,6 +6451,33 @@ const Insights = () => {
   };
 
   const renderInvoicesReport = () => {
+    // Server-side report.invoices is the source of truth. The raw-data
+    // calculation below is kept UNCHANGED, ONLY as a fallback for when that section is
+    // unavailable (report fetch failed / section errored on the server).
+    const pr = report?.invoices || null;
+
+    // Pure, data-independent helpers shared by both paths.
+    const pctChangeInv = (curr, prev) => (prev > 0 ? Math.round(((curr - prev) / prev) * 100) : curr > 0 ? 100 : 0);
+    const invoiceStatusColors = {
+      Paid: "#34C759",
+      Sent: "#0085FF",
+      Accepted: "#9747FF",
+      "Partially Paid": "#FC9C32",
+      Pending: "#FBBF24",
+      Rejected: "#E82222",
+      Overdue: "#EF4444",
+      Draft: "#9CA3AF",
+      Void: "#6B7280",
+    };
+    const formatIndianShort = (value) => {
+      const abs = Math.abs(value || 0);
+      if (abs >= 10000000) return `${(value / 10000000).toFixed(1).replace(/\.0$/, "")}Cr`;
+      if (abs >= 100000) return `${(value / 100000).toFixed(1).replace(/\.0$/, "")}L`;
+      if (abs >= 1000) return `${(value / 1000).toFixed(1).replace(/\.0$/, "")}K`;
+      return `${value}`;
+    };
+
+    const legacy = pr ? null : (() => {
     // Calculate basic metrics
     const totalInvoices = filteredData.filteredInvoices.length;
     const totalAmount = filteredData.filteredInvoices.reduce(
@@ -6191,17 +6594,6 @@ const Insights = () => {
     // One colour per status, from the same palette as Payment Distribution -
     // every status but Paid/Sent used to fall through to a single grey, which
     // left five indistinguishable slices in the donut.
-    const invoiceStatusColors = {
-      Paid: "#34C759",
-      Sent: "#0085FF",
-      Accepted: "#9747FF",
-      "Partially Paid": "#FC9C32",
-      Pending: "#FBBF24",
-      Rejected: "#E82222",
-      Overdue: "#EF4444",
-      Draft: "#9CA3AF",
-      Void: "#6B7280",
-    };
     const invoiceStatusTotal = Object.values(statusDistribution).reduce(
       (sum, d) => sum + d.count,
       0
@@ -6253,14 +6645,6 @@ const Insights = () => {
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(-6);
 
-    const formatIndianShort = (value) => {
-      const abs = Math.abs(value || 0);
-      if (abs >= 10000000) return `${(value / 10000000).toFixed(1).replace(/\.0$/, "")}Cr`;
-      if (abs >= 100000) return `${(value / 100000).toFixed(1).replace(/\.0$/, "")}L`;
-      if (abs >= 1000) return `${(value / 1000).toFixed(1).replace(/\.0$/, "")}K`;
-      return `${value}`;
-    };
-
     const billingTrendData = monthlyTrend.map(([monthKey, data]) => {
       const [y, m] = monthKey.split("-");
       const label = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(
@@ -6284,7 +6668,6 @@ const Insights = () => {
       const d = new Date(i.date);
       return d.getMonth() === lastMonthInv && d.getFullYear() === lastMonthYearInv;
     });
-    const pctChangeInv = (curr, prev) => (prev > 0 ? Math.round(((curr - prev) / prev) * 100) : curr > 0 ? 100 : 0);
     const totalInvoicedChange = pctChangeInv(invoicesThisMonthAmount, invoicesLastMonth.reduce((s, i) => s + (i.amount || 0), 0));
     const collectedThisMonth = invoicesThisMonth.filter((i) => i.status === "Paid").reduce((s, i) => s + (i.amount || 0), 0);
     const collectedLastMonth = invoicesLastMonth.filter((i) => i.status === "Paid").reduce((s, i) => s + (i.amount || 0), 0);
@@ -6372,6 +6755,107 @@ const Insights = () => {
         };
       });
 
+    return { totalInvoices, totalAmount, averageInvoiceAmount, paidAmount, pendingAmount, overdueAmount, collectionRate, invoicesThisMonthCount, topDeals, topContactsByBilling, largestInvoices, invoiceStatusChartData, billingTrendData, totalInvoicedChange, collectedChange, outstandingChangeInv, overdueChange, collectionRateChange, upcomingCollections, invoicesByStatus, recentInvoiceActivity };
+    })();
+
+    // Same values built from the server report. Derived formulas (MoM %, collection rate, status %, chart
+    // shaping, activity text) mirror the fallback above one-to-one; list items are re-shaped into the
+    // invoice-like objects the JSX already reads (deal?.title / status / amount / invoiceNumber / dueDate).
+    const fromReport = pr && (() => {
+      const dist = {}; // status || "Unknown"
+      pr.statusDistribution.forEach((s) => {
+        const k = s.status || "Unknown";
+        dist[k] = dist[k] || { count: 0, amount: 0 };
+        dist[k].count += s.count;
+        dist[k].amount += s.amount;
+      });
+      const mo = pr.month;
+      const totalInvoices = pr.totalInvoices;
+      const totalAmount = pr.totalAmount;
+      const averageInvoiceAmount = totalAmount / totalInvoices || 0;
+      const paidAmount = pr.paidAmount;
+      const pendingAmount = pr.pendingAmount;
+      const overdueAmount = pr.overdueAmount;
+      const collectionRate = totalAmount > 0 ? (paidAmount / totalAmount) * 100 : 0;
+      const invoiceStatusTotal = Object.values(dist).reduce((sum, d) => sum + d.count, 0);
+      const invoiceStatusChartData = Object.entries(dist)
+        .map(([status, data]) => ({
+          name: status,
+          value: data.count,
+          amount: data.amount,
+          pct: invoiceStatusTotal > 0 ? Math.round((data.count / invoiceStatusTotal) * 100) : 0,
+          color: invoiceStatusColors[status] || "#9CA3AF",
+        }))
+        .filter((item) => item.value > 0)
+        .sort((a, b) => b.value - a.value);
+      const monthlyData = {};
+      pr.trend.forEach((r) => { monthlyData[r.ym] = { count: r.count, amount: r.amount, paid: r.paid, overdue: r.overdue }; });
+      const monthlyTrend = Object.entries(monthlyData).sort(([a], [b]) => a.localeCompare(b)).slice(-6);
+      const billingTrendData = monthlyTrend.map(([monthKey, data]) => {
+        const [y, m] = monthKey.split("-");
+        const label = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+        return { month: label, invoiced: data.amount, collected: data.paid, overdue: data.overdue };
+      });
+      const collectionRateLastMonth = mo.lastCount > 0 ? (mo.paidLast / mo.lastAmount) * 100 : 0;
+      const collectionRateThisMonth = mo.thisCount > 0 && mo.thisAmount > 0 ? (mo.paidThis / mo.thisAmount) * 100 : 0;
+      const invoicesByStatus = (() => {
+        const totals = {};
+        pr.statusDistribution.forEach((s) => { const k = s.status || "Draft"; totals[k] = (totals[k] || 0) + s.amount; });
+        const entries = Object.entries(totals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+        const top = entries.slice(0, 4).map(([name, value]) => ({ name, value }));
+        const restValue = entries.slice(4).reduce((sum, [, v]) => sum + v, 0);
+        const items = restValue > 0 ? [...top, { name: "Others", value: restValue }] : top;
+        items.sort((a, b) => b.value - a.value);
+        const total = items.reduce((sum, i) => sum + i.value, 0);
+        return items.map((i) => ({ ...i, pct: total > 0 ? Math.round((i.value / total) * 100) : 0 }));
+      })();
+      const recentInvoiceActivity = pr.recentActivity.map((r) => {
+        const invoice = { _id: r._id, invoiceNumber: r.invoiceNumber, status: r.status, amount: r.amount };
+        const at = r.at;
+        if (invoice.status === "Paid") {
+          return {
+            id: invoice._id,
+            icon: <CheckCircle className="w-4 h-4" />,
+            iconBg: "bg-[#EBF9EE] text-[#0AA43E]",
+            title: `Invoice #${invoice.invoiceNumber} paid`,
+            subtitle: `₹${formatNumberToIndian(invoice.amount || 0)} · ${new Date(at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`,
+          };
+        }
+        if (invoice.status === "Sent") {
+          return {
+            id: invoice._id,
+            icon: <MessageSquare className="w-4 h-4" />,
+            iconBg: "bg-[#EFEEFE] text-[#6155F5]",
+            title: `Invoice #${invoice.invoiceNumber} sent`,
+            subtitle: `₹${formatNumberToIndian(invoice.amount || 0)} · ${new Date(at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`,
+          };
+        }
+        return {
+          id: invoice._id,
+          icon: <Receipt className="w-4 h-4" />,
+          iconBg: "bg-[#EBF9EE] text-[#34C759]",
+          title: `Invoice #${invoice.invoiceNumber} ${invoice.status?.toLowerCase() || "created"}`,
+          subtitle: `₹${formatNumberToIndian(invoice.amount || 0)} · ${new Date(at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`,
+        };
+      });
+      return {
+        totalInvoices, totalAmount, averageInvoiceAmount, paidAmount, pendingAmount, overdueAmount, collectionRate,
+        invoicesThisMonthCount: mo.thisCount,
+        topDeals: pr.topDeals.map((d) => [d.title, { count: d.count, amount: d.amount, paid: d.paid }]),
+        topContactsByBilling: pr.topContacts.map((c) => ({ ...c, outstanding: c.invoiced - c.collected })),
+        largestInvoices: pr.largest.map((r) => ({ _id: r._id, deal: r.dealTitle ? { title: r.dealTitle } : null, status: r.status, amount: r.amount })),
+        invoiceStatusChartData, billingTrendData,
+        totalInvoicedChange: pctChangeInv(mo.thisAmount, mo.lastAmount),
+        collectedChange: pctChangeInv(mo.paidThis, mo.paidLast),
+        outstandingChangeInv: pctChangeInv(mo.pendingThis, mo.pendingLast),
+        overdueChange: pctChangeInv(mo.overdueThis, mo.overdueLast),
+        collectionRateChange: pctChangeInv(Math.round(collectionRateThisMonth), Math.round(collectionRateLastMonth)),
+        upcomingCollections: pr.upcoming.map((r) => ({ _id: r._id, invoiceNumber: r.invoiceNumber, amount: r.amount, dueDate: r.dueDate })),
+        invoicesByStatus, recentInvoiceActivity,
+      };
+    })();
+
+    const { totalInvoices, totalAmount, averageInvoiceAmount, paidAmount, pendingAmount, overdueAmount, collectionRate, invoicesThisMonthCount, topDeals, topContactsByBilling, largestInvoices, invoiceStatusChartData, billingTrendData, totalInvoicedChange, collectedChange, outstandingChangeInv, overdueChange, collectionRateChange, upcomingCollections, invoicesByStatus, recentInvoiceActivity } = pr ? fromReport : legacy;
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">

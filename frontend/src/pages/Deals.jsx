@@ -15,6 +15,7 @@ import { createPortal } from "react-dom";
 import { getAncestorZoom } from "../utils/domUtils";
 import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
 import API from "../services/api";
+import { showApiError } from "../utils/apiError";
 import { useTopLoadingSignal } from "../components/common/TopLoadingBar";
 import { formatNumberToIndian } from "../utils/numberFormatter";
 import {
@@ -1394,7 +1395,7 @@ function Deals() {
       setStaleDays(res.data?.staleDays || 0);
     } catch (error) {
       console.error("Failed to fetch stale days", error);
-      toast.error("Failed to fetch stale days", {
+      showApiError(error, "Failed to fetch stale days", {
         style: {
           zIndex: 99999,
           background: "#ffffff",
@@ -1422,7 +1423,7 @@ function Deals() {
       }
     } catch (error) {
       console.error("Failed to fetch deal fields", error);
-      toast.error("Failed to fetch deal fields", {
+      showApiError(error, "Failed to fetch deal fields", {
         style: {
           zIndex: 99999,
           background: "#ffffff",
@@ -1447,7 +1448,7 @@ function Deals() {
       setPermission(dealPerm?.permission || "no");
     } catch (err) {
       console.error("Failed to fetch permission");
-      toast.error("Failed to fetch permission", {
+      showApiError(err, "Failed to fetch permission", {
         style: {
           zIndex: 99999,
           background: "#ffffff",
@@ -1468,7 +1469,7 @@ function Deals() {
       setName(res.data?.name);
     } catch (error) {
       console.error("Error fetching Name:", error);
-      toast.error("Failed to fetch kanban name", {
+      showApiError(error, "Failed to fetch kanban name", {
         style: {
           zIndex: 99999,
           background: "#ffffff",
@@ -1489,7 +1490,7 @@ function Deals() {
       setStatuses(res.data?.statuses || []);
     } catch (error) {
       console.error("Error fetching statuses:", error);
-      toast.error("Failed to fetch statuses", {
+      showApiError(error, "Failed to fetch statuses", {
         style: {
           zIndex: 99999,
           background: "#ffffff",
@@ -1510,7 +1511,7 @@ function Deals() {
       setDeals(res.data);
     } catch (error) {
       console.error("Error fetching deals:", error);
-      toast.error("Failed to fetch deals", {
+      showApiError(error, "Failed to fetch deals", {
         style: {
           zIndex: 99999,
           background: "#ffffff",

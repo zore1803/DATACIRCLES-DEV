@@ -25,6 +25,9 @@ const Deal = require("../models/Deal");
 const restrictByPlan = require("../middlewares/restrictByPlan");
 const checkPermission = require("../middlewares/checkPermission");
 const { getOwnedCompanyIds } = require("../utils/ownedCompanies");
+const { cacheGetOrSet } = require("../cacheHelper");
+
+const DASHBOARD_STATS_TTL_SECONDS = 60;
 
 // Run an Express (req, res, next) middleware in-process and resolve to true iff
 // it calls next() without an error (i.e. access granted). Any res.json()/send()/
@@ -107,20 +110,36 @@ const getStats = async (req, res) => {
       parseDate(req.query.lastMonthStart) ||
       new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-    const [companies, contacts] = await Promise.all([
-      computeCompanies(req, org, userId, {
-        thisMonthStart,
-        nextMonthStart,
-        lastMonthStart,
-      }),
-      computeContacts(req, org, userId, {
-        thisMonthStart,
-        nextMonthStart,
-        lastMonthStart,
-      }),
-    ]);
+    // Redis cache (60s). The key carries every input that can change the
+    // response: tenant, user (drives ownOnly + permission/plan gating), role
+    // (drives the deal scope) and the three resolved month boundaries.
+    const cacheKey = [
+      "dashboard:stats",
+      String(org),
+      String(userId),
+      req.user.role || "none",
+      thisMonthStart.toISOString(),
+      nextMonthStart.toISOString(),
+      lastMonthStart.toISOString(),
+    ].join(":");
 
-    res.json({ companies, contacts });
+    const stats = await cacheGetOrSet(cacheKey, DASHBOARD_STATS_TTL_SECONDS, async () => {
+      const [companies, contacts] = await Promise.all([
+        computeCompanies(req, org, userId, {
+          thisMonthStart,
+          nextMonthStart,
+          lastMonthStart,
+        }),
+        computeContacts(req, org, userId, {
+          thisMonthStart,
+          nextMonthStart,
+          lastMonthStart,
+        }),
+      ]);
+      return { companies, contacts };
+    });
+
+    res.json(stats);
   } catch (err) {
     console.error("Dashboard stats error:", err);
     res.status(500).json({ message: err.message });
