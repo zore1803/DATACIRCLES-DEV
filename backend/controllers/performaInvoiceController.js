@@ -282,16 +282,24 @@ const getAllPerformaInvoices = async (req, res) => {
     if (deal) query.deal = deal;
 
     if (search) {
+      const pattern = buildFuzzySearchPattern(search);
       const matchingDeals = await Deal.find(
-        { organization: req.user.organization, title: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
+        { organization: req.user.organization, title: { $regex: pattern, $options: "i" } },
         { _id: 1 }
       );
-      query.$or = [
-        { status: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { performaInvoiceNumber: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { deal: { $in: matchingDeals.map((d) => d._id) } },
-        { receiverGSTIN: { $regex: buildFuzzySearchPattern(search), $options: "i" } }, // Added receiverGSTIN to search
-      ];
+      // Picker label = proforma number + the linked deal's title; search those
+      // only in picker mode. The full list keeps status/GSTIN too.
+      query.$or = req.query.picker === "true"
+        ? [
+            { performaInvoiceNumber: { $regex: pattern, $options: "i" } },
+            { deal: { $in: matchingDeals.map((d) => d._id) } },
+          ]
+        : [
+            { status: { $regex: pattern, $options: "i" } },
+            { performaInvoiceNumber: { $regex: pattern, $options: "i" } },
+            { deal: { $in: matchingDeals.map((d) => d._id) } },
+            { receiverGSTIN: { $regex: pattern, $options: "i" } }, // Added receiverGSTIN to search
+          ];
     }
 
     // own-only: restrict to proforma invoices this user owns, or whose deal

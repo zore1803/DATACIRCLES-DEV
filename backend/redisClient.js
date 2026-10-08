@@ -27,7 +27,11 @@ redisClient.on("error", (err) => console.error("Redis Client Error", err));
 redisClient.on("ready", () => console.log("Redis connected and ready"));
 
 (async () => {
-  if (!redisClient.isOpen) await redisClient.connect();
+  try {
+    if (!redisClient.isOpen) await redisClient.connect();
+  } catch (err) {
+    console.error("Redis Initial Connection Error:", err.message);
+  }
 })();
 
 module.exports = redisClient; // Change export default to module.exports

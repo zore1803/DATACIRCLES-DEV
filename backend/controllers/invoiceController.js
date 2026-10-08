@@ -400,16 +400,23 @@ const getAllInvoices = async (req, res) => {
     if (deal) query.deal = deal;
 
     if (search) {
-      query.$or = [
-        { status: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { invoiceNumber: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { receiverGSTIN: { $regex: buildFuzzySearchPattern(search), $options: "i" } }, // Added receiverGSTIN to search
-        { transactionType: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-      ];
+      const pattern = buildFuzzySearchPattern(search);
+      // The picker label shows the invoice number + the linked deal's title, so
+      // in picker mode search just those; the full Invoices list keeps the wider
+      // search (status, GSTIN, transaction type) below.
+      const pickerMode = req.query.picker === "true";
+      query.$or = pickerMode
+        ? [{ invoiceNumber: { $regex: pattern, $options: "i" } }]
+        : [
+            { status: { $regex: pattern, $options: "i" } },
+            { invoiceNumber: { $regex: pattern, $options: "i" } },
+            { receiverGSTIN: { $regex: pattern, $options: "i" } }, // Added receiverGSTIN to search
+            { transactionType: { $regex: pattern, $options: "i" } },
+          ];
       // The picker label shows the deal's title, so a search by deal must find it too.
       const matchingDeals = await Deal.find({
         organization: req.user.organization,
-        title: { $regex: buildFuzzySearchPattern(search), $options: "i" },
+        title: { $regex: pattern, $options: "i" },
       }).select("_id").limit(200).lean();
       if (matchingDeals.length) {
         query.$or.push({ deal: { $in: matchingDeals.map((d) => d._id) } });

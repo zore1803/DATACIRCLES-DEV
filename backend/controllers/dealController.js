@@ -152,20 +152,28 @@ const getAllDeals = async (req, res) => {
     }
 
     if (search) {
-      const searchOr = [
-        { title: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { status: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { "additionalFields.value": { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-      ];
-      // Pickers label a deal "Title — Customer", so a search by the customer's
-      // name must find it too.
-      const [matchingCompanies, matchingContacts] = await Promise.all([
-        Company.find({ organization: req.user.organization, name: { $regex: buildFuzzySearchPattern(search), $options: "i" } }).select("_id").limit(200).lean(),
-        Contact.find({ organization: req.user.organization, name: { $regex: buildFuzzySearchPattern(search), $options: "i" } }).select("_id").limit(200).lean(),
-      ]);
-      if (matchingCompanies.length) searchOr.push({ company: { $in: matchingCompanies.map((c) => c._id) } });
-      if (matchingContacts.length) searchOr.push({ contact: { $in: matchingContacts.map((c) => c._id) } });
-      preAndConditions.push({ $or: searchOr });
+      const pattern = buildFuzzySearchPattern(search);
+      if (req.query.picker === "true") {
+        // Picker dropdowns match the deal TITLE only (status / custom fields /
+        // the customer-name lookup aren't shown). The full Deals list keeps the
+        // wide search below, incl. finding a deal by its company/contact name.
+        preAndConditions.push({ $or: [{ title: { $regex: pattern, $options: "i" } }] });
+      } else {
+        const searchOr = [
+          { title: { $regex: pattern, $options: "i" } },
+          { status: { $regex: pattern, $options: "i" } },
+          { "additionalFields.value": { $regex: pattern, $options: "i" } },
+        ];
+        // Pickers label a deal "Title — Customer", so a search by the customer's
+        // name must find it too.
+        const [matchingCompanies, matchingContacts] = await Promise.all([
+          Company.find({ organization: req.user.organization, name: { $regex: pattern, $options: "i" } }).select("_id").limit(200).lean(),
+          Contact.find({ organization: req.user.organization, name: { $regex: pattern, $options: "i" } }).select("_id").limit(200).lean(),
+        ]);
+        if (matchingCompanies.length) searchOr.push({ company: { $in: matchingCompanies.map((c) => c._id) } });
+        if (matchingContacts.length) searchOr.push({ contact: { $in: matchingContacts.map((c) => c._id) } });
+        preAndConditions.push({ $or: searchOr });
+      }
     }
 
     if (preAndConditions.length > 0) {

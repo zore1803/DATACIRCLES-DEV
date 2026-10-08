@@ -394,12 +394,16 @@ exports.getAllPurchaseReturns = async (req, res) => {
     let query = { organization: req.user.organization };
 
     if (search) {
-      query.$or = [
-        { returnNumber: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { status: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { notes: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { "items.name": { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-      ];
+      const pattern = buildFuzzySearchPattern(search);
+      // Picker label shows the return number; search that only in picker mode.
+      query.$or = req.query.picker === "true"
+        ? [{ returnNumber: { $regex: pattern, $options: "i" } }]
+        : [
+            { returnNumber: { $regex: pattern, $options: "i" } },
+            { status: { $regex: pattern, $options: "i" } },
+            { notes: { $regex: pattern, $options: "i" } },
+            { "items.name": { $regex: pattern, $options: "i" } },
+          ];
     }
 
     const purchaseReturns = await PurchaseReturn.find(query).populate(POPULATE).sort({ createdAt: -1 });

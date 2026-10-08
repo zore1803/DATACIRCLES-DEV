@@ -210,19 +210,25 @@ exports.getAllPurchaseOrders = async (req, res) => {
     }
 
     if (search) {
-      query.$or = [
-        { poNumber: { $regex: buildFuzzySearchPattern(search), $options: 'i' } },
-        { status: { $regex: buildFuzzySearchPattern(search), $options: 'i' } },
-        { paymentTerms: { $regex: buildFuzzySearchPattern(search), $options: 'i' } },
-        { notes: { $regex: buildFuzzySearchPattern(search), $options: 'i' } }
-      ];
-      // The picker label shows the vendor's name, so a search by vendor must find it too.
-      const matchingVendors = await Vendor.find({
-        organization: req.user.organization,
-        name: { $regex: buildFuzzySearchPattern(search), $options: 'i' },
-      }).select('_id').limit(200).lean();
-      if (matchingVendors.length) {
-        query.$or.push({ vendor: { $in: matchingVendors.map((v) => v._id) } });
+      const pattern = buildFuzzySearchPattern(search);
+      if (req.query.picker === "true") {
+        // Picker label shows the PO number; search that only.
+        query.$or = [{ poNumber: { $regex: pattern, $options: 'i' } }];
+      } else {
+        query.$or = [
+          { poNumber: { $regex: pattern, $options: 'i' } },
+          { status: { $regex: pattern, $options: 'i' } },
+          { paymentTerms: { $regex: pattern, $options: 'i' } },
+          { notes: { $regex: pattern, $options: 'i' } }
+        ];
+        // The picker label shows the vendor's name, so a search by vendor must find it too.
+        const matchingVendors = await Vendor.find({
+          organization: req.user.organization,
+          name: { $regex: pattern, $options: 'i' },
+        }).select('_id').limit(200).lean();
+        if (matchingVendors.length) {
+          query.$or.push({ vendor: { $in: matchingVendors.map((v) => v._id) } });
+        }
       }
     }
     

@@ -330,13 +330,17 @@ exports.getAllSalesReturns = async (req, res) => {
     // Scope to a single deal when requested (deal detail page's Documents tab).
     if (deal) query.deal = deal;
     if (search) {
-      query.$or = [
-        { returnNumber: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { status: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { notes: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { reason: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { "items.name": { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-      ];
+      const pattern = buildFuzzySearchPattern(search);
+      // Picker label shows the return number; search that only in picker mode.
+      query.$or = req.query.picker === "true"
+        ? [{ returnNumber: { $regex: pattern, $options: "i" } }]
+        : [
+            { returnNumber: { $regex: pattern, $options: "i" } },
+            { status: { $regex: pattern, $options: "i" } },
+            { notes: { $regex: pattern, $options: "i" } },
+            { reason: { $regex: pattern, $options: "i" } },
+            { "items.name": { $regex: pattern, $options: "i" } },
+          ];
     }
     const rows = await SalesReturn.find(query).populate(POPULATE).sort({ createdAt: -1 });
     res.json(rows);

@@ -43,14 +43,19 @@ exports.getAllVendors = async (req, res) => {
     }
 
     if (search) {
-      query.$or = [
-        { name: { $regex: buildFuzzySearchPattern(search), $options: 'i' } },
-        { email: { $regex: buildFuzzySearchPattern(search), $options: 'i' } },
-        { phone: { $regex: buildFuzzySearchPattern(search), $options: 'i' } },
-        { company: { $regex: buildFuzzySearchPattern(search), $options: 'i' } },
-        { gstin: { $regex: buildFuzzySearchPattern(search), $options: 'i' } },
-        { 'additionalFields.value': { $regex: buildFuzzySearchPattern(search), $options: 'i' } }
-      ];
+      const pattern = buildFuzzySearchPattern(search);
+      // Picker dropdowns show only the vendor NAME, so in picker mode search the
+      // name only; the full Vendors list keeps the wide multi-field search.
+      query.$or = req.query.picker === "true"
+        ? [{ name: { $regex: pattern, $options: 'i' } }]
+        : [
+            { name: { $regex: pattern, $options: 'i' } },
+            { email: { $regex: pattern, $options: 'i' } },
+            { phone: { $regex: pattern, $options: 'i' } },
+            { company: { $regex: pattern, $options: 'i' } },
+            { gstin: { $regex: pattern, $options: 'i' } },
+            { 'additionalFields.value': { $regex: pattern, $options: 'i' } }
+          ];
     }
     
     let listQuery = Vendor.find(query).lean();

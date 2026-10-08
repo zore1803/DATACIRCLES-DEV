@@ -308,17 +308,25 @@ exports.getAllQuotations = async (req, res) => {
     }
 
     if (search) {
+      const pattern = buildFuzzySearchPattern(search);
       const matchingDeals = await Deal.find(
-        { organization: req.user.organization, title: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
+        { organization: req.user.organization, title: { $regex: pattern, $options: "i" } },
         { _id: 1 }
       );
+      // Picker label = quotation number + the linked deal's title; search those
+      // only in picker mode. The full Quotations list keeps status/GSTIN too.
       andConditions.push({
-        $or: [
-          { status: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-          { quotationNumber: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-          { deal: { $in: matchingDeals.map((d) => d._id) } },
-          { receiverGSTIN: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        ],
+        $or: req.query.picker === "true"
+          ? [
+              { quotationNumber: { $regex: pattern, $options: "i" } },
+              { deal: { $in: matchingDeals.map((d) => d._id) } },
+            ]
+          : [
+              { status: { $regex: pattern, $options: "i" } },
+              { quotationNumber: { $regex: pattern, $options: "i" } },
+              { deal: { $in: matchingDeals.map((d) => d._id) } },
+              { receiverGSTIN: { $regex: pattern, $options: "i" } },
+            ],
       });
     }
 

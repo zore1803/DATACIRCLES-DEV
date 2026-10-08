@@ -288,16 +288,24 @@ exports.getAllDeliveryChallans = async (req, res) => {
     }
 
     if (search) {
+      const pattern = buildFuzzySearchPattern(search);
       const matchingDeals = await Deal.find(
-        { organization: req.user.organization, title: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
+        { organization: req.user.organization, title: { $regex: pattern, $options: "i" } },
         { _id: 1 }
       );
+      // Picker label = challan number + the linked deal's title; search those
+      // only in picker mode. The full list keeps status too.
       andConditions.push({
-        $or: [
-          { status: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-          { deliveryChallanNumber: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-          { deal: { $in: matchingDeals.map((d) => d._id) } },
-        ],
+        $or: req.query.picker === "true"
+          ? [
+              { deliveryChallanNumber: { $regex: pattern, $options: "i" } },
+              { deal: { $in: matchingDeals.map((d) => d._id) } },
+            ]
+          : [
+              { status: { $regex: pattern, $options: "i" } },
+              { deliveryChallanNumber: { $regex: pattern, $options: "i" } },
+              { deal: { $in: matchingDeals.map((d) => d._id) } },
+            ],
       });
     }
 

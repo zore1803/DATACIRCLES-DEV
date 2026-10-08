@@ -1,6 +1,25 @@
 require('dotenv').config();
 require('./redisClient');
 
+// --- CRASH PREVENTION: Global Error Handlers ---
+// In Node 16+, an unhandled promise rejection crashes the entire process.
+// This catches any forgotten try/catch blocks anywhere in the app so the server stays alive.
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Promise Rejection:', reason);
+});
+
+// An uncaught exception leaves the process in an undefined, possibly corrupted
+// state (half-open connections, leaked handles), so continuing to serve from it
+// is unsafe. Log it, then exit so the process manager (Docker restart policy /
+// PM2 / systemd) brings up a clean instance. exitCode is set before exit() so any
+// pending stdout/stderr writes can flush.
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception — exiting for a clean restart:', err);
+  process.exitCode = 1;
+  process.exit(1);
+});
+// -----------------------------------------------
+
 const dns = require('dns');
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 dns.promises.setServers(['8.8.8.8', '8.8.4.4']);

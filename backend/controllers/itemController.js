@@ -310,16 +310,30 @@ const getAllItems = async (req, res) => {
     let query = { organization: req.user.organization }; // Filter by organization
 
     if (search) {
-      query.$or = [
-        { name: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { description: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { category: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { hsnSac: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { barcode: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-        { "variants.name": { $regex: buildFuzzySearchPattern(search), $options: "i" } }, // Search in variant names
-        { "variants.sku": { $regex: buildFuzzySearchPattern(search), $options: "i" } }, // Search in variant SKUs
-        { "variants.barcode": { $regex: buildFuzzySearchPattern(search), $options: "i" } }, // Variants carry their own barcode
-      ];
+      const pattern = buildFuzzySearchPattern(search);
+      // Picker dropdowns show the item NAME, but billing users legitimately look
+      // items up by SKU and barcode (typed or scanned), so picker mode keeps
+      // name + SKU + barcode — just not category/description/HSN, which aren't
+      // shown and made matches look unrelated (e.g. "el" hitting "Electronics").
+      // The full Items list (getAllItemsPaginated) keeps the complete search.
+      query.$or = req.query.picker === "true"
+        ? [
+            { name: { $regex: pattern, $options: "i" } },
+            { barcode: { $regex: pattern, $options: "i" } },
+            { "variants.name": { $regex: pattern, $options: "i" } },
+            { "variants.sku": { $regex: pattern, $options: "i" } },
+            { "variants.barcode": { $regex: pattern, $options: "i" } },
+          ]
+        : [
+            { name: { $regex: pattern, $options: "i" } },
+            { description: { $regex: pattern, $options: "i" } },
+            { category: { $regex: pattern, $options: "i" } },
+            { hsnSac: { $regex: pattern, $options: "i" } },
+            { barcode: { $regex: pattern, $options: "i" } },
+            { "variants.name": { $regex: pattern, $options: "i" } },
+            { "variants.sku": { $regex: pattern, $options: "i" } },
+            { "variants.barcode": { $regex: pattern, $options: "i" } },
+          ];
     }
 
     if (category) {

@@ -116,22 +116,30 @@ const getAllContacts = async (req, res) => {
     }
 
     if (search) {
-      const matchingCompanies = await Company.find({
-        organization: req.user.organization,
-        name: { $regex: buildFuzzySearchPattern(search), $options: "i" },
-      }).select("_id");
+      const pattern = buildFuzzySearchPattern(search);
+      if (req.query.picker === "true") {
+        // Picker dropdowns show only the contact NAME, so search the name only
+        // (and skip the extra company lookup). The full Contacts list below keeps
+        // the wide multi-field search incl. matching by the linked company name.
+        andConditions.push({ $or: [{ name: { $regex: pattern, $options: "i" } }] });
+      } else {
+        const matchingCompanies = await Company.find({
+          organization: req.user.organization,
+          name: { $regex: pattern, $options: "i" },
+        }).select("_id");
 
-      andConditions.push({
-        $or: [
-          { name: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-          { email: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-          { phone: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-          { stageStatus: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-          { lifecycleStage: { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-          { "additionalFields.value": { $regex: buildFuzzySearchPattern(search), $options: "i" } },
-          { company: { $in: matchingCompanies.map((c) => c._id) } },
-        ],
-      });
+        andConditions.push({
+          $or: [
+            { name: { $regex: pattern, $options: "i" } },
+            { email: { $regex: pattern, $options: "i" } },
+            { phone: { $regex: pattern, $options: "i" } },
+            { stageStatus: { $regex: pattern, $options: "i" } },
+            { lifecycleStage: { $regex: pattern, $options: "i" } },
+            { "additionalFields.value": { $regex: pattern, $options: "i" } },
+            { company: { $in: matchingCompanies.map((c) => c._id) } },
+          ],
+        });
+      }
     }
 
     if (andConditions.length > 0) {

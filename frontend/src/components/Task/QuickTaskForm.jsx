@@ -56,80 +56,27 @@ const SingleSelectDropdown = ({ options, value, onChange, disabled }) => (
 // Compact searchable picker for the linked record, styled as a right-aligned
 // pill so it sits in the same meta-row rhythm as Status / Priority rather
 // than being a full-width labelled field.
-const EntityPickerDropdown = ({ entities, value, onChange, entityLabel, displayKey, isOpen, onOpenChange }) => {
-  const [searchTerm, setSearchTerm] = useState("");
-
-  const selected = entities.find((e) => e._id === value);
-  const filtered = entities.filter((e) =>
-    (e[displayKey] || e.name || "").toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => onOpenChange(!isOpen)}
-        className="w-full flex items-center justify-between gap-2 px-3 h-[38px] rounded-full text-[13px] font-medium focus:outline-none transition-all border border-[#1F2937]/10 bg-white cursor-pointer"
-      >
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className={`truncate ${selected ? "text-[#1F2937]" : "text-[#1F2937] opacity-50"}`}>
-            {selected ? selected[displayKey] || selected.name : `Select ${entityLabel}`}
-          </span>
-        </div>
-        <ChevronDown className={`w-3.5 h-3.5 flex-shrink-0 text-[#1F2937] opacity-50 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-
-      {isOpen && (
-        <>
-          <div className="fixed inset-0 z-[10040]" onClick={() => onOpenChange(false)} />
-          <div className="absolute left-0 right-0 mt-2 w-full bg-white border border-gray-100 rounded-xl shadow-xl z-[10050] animate-in fade-in zoom-in duration-200">
-            <div className="p-2 border-b border-gray-100">
-              <div className="relative">
-                <SearchIcon className="absolute left-3 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
-                <input
-                  type="text"
-                  autoFocus
-                  placeholder={`Search ${entityLabel.toLowerCase()}...`}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-            <div className="max-h-40 overflow-y-auto py-1">
-              {filtered.length === 0 ? (
-                <p className="px-4 py-3 text-xs text-center text-gray-400">
-                  No {entityLabel.toLowerCase()} found
-                </p>
-              ) : (
-                filtered.map((entity) => (
-                  <button
-                    key={entity._id}
-                    type="button"
-                    onClick={() => {
-                      onChange(entity._id);
-                      onOpenChange(false);
-                      setSearchTerm("");
-                    }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-[13px] transition-colors hover:bg-gray-50 ${value === entity._id ? "bg-blue-50/50 text-blue-600" : "text-gray-600"}`}
-                  >
-                    <span className="font-medium truncate">{entity[displayKey] || entity.name}</span>
-                    {value === entity._id && <CheckIcon className="w-3.5 h-3.5 ml-auto text-blue-600 flex-shrink-0" />}
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-};
 
 import {
   FormBody, FormField, FormLabel, FieldRow, InputWithAction, FieldActionButton,
   TextInput, TextArea, selectButtonCls,
 } from "../common/form";
+import SearchableDropdown from "../contact/SearchableDropdown";
+
+// The "Related to" record picker is server-side per entity type: it searches the
+// matching endpoint (debounced, 20 rows) instead of holding the whole collection.
+// Contact's label is built client-side ("Name (Company)"), as the list did before.
+const RELATED_PICKER = {
+  Company: { endpoint: "/companies", displayKey: "name", params: { picker: "true" } },
+  Contact: {
+    endpoint: "/contacts",
+    displayKey: "displayName",
+    params: { picker: "true" },
+    map: (c) => ({ ...c, displayName: `${c.name} (${c.company?.name || "No Company"})` }),
+  },
+  Deal: { endpoint: "/deals", displayKey: "title", params: {} },
+  Vendor: { endpoint: "/vendors", displayKey: "name", params: {} },
+};
 
 const QuickTaskForm = ({
   companies,
@@ -155,8 +102,6 @@ const QuickTaskForm = ({
     users: [],
     additionalFields: [],
   });
-  const [deals, setDeals] = useState([]);
-  const [vendors, setVendors] = useState([]);
   const [users, setUsers] = useState([]);
   // Org's TaskFields definitions — drives the Custom Fields section below.
   const [taskFieldDefs, setTaskFieldDefs] = useState([]);
@@ -256,13 +201,10 @@ const QuickTaskForm = ({
 
   const fetchData = async () => {
     try {
-      const [dealsRes, vendorsRes, usersRes] = await Promise.all([
-        API.get("/deals"),
-        API.get("/vendors"),
-        API.get("/auth/all-user"),
-      ]);
-      setDeals(dealsRes.data);
-      setVendors(vendorsRes.data);
+      // Deals/vendors are no longer bulk-fetched here — the "Related to" picker
+      // searches them server-side (see RELATED_PICKER). Only the user list, which
+      // feeds the assignees multi-select, is loaded up front.
+      const usersRes = await API.get("/auth/all-user");
       setUsers(usersRes.data.allUsers);
     } catch (err) {
       console.error("Failed to fetch data:", err);
@@ -361,13 +303,12 @@ const QuickTaskForm = ({
   };
 
   const handleDealCreated = (newDeal) => {
-    setDeals((prev) => [...prev, newDeal]);
+    // The remote picker shows the new deal's label via its by-id load once selected.
     handleFormChange("relatedTo", newDeal._id);
     setShowQuickDealsForm(false);
   };
 
   const handleVendorCreated = (newVendor) => {
-    setVendors((prev) => [...prev, newVendor]);
     handleFormChange("relatedTo", newVendor._id);
     setShowQuickVendorForm(false);
   };
@@ -377,22 +318,6 @@ const QuickTaskForm = ({
     else if (form.relationModel === "Contact") setShowQuickContactForm(true);
     else if (form.relationModel === "Deal") setShowQuickDealsForm(true);
     else if (form.relationModel === "Vendor") setShowQuickVendorForm(true);
-  };
-
-  const getOptions = () => {
-    const map = {
-      Company: localCompanies,
-      Contact: localContacts,
-      Deal: deals,
-      Vendor: vendors,
-    };
-    return map[form.relationModel] || [];
-  };
-
-  const getDisplayKey = () => {
-    if (form.relationModel === "Deal") return "title";
-    if (form.relationModel === "Contact") return "displayName";
-    return "name";
   };
 
   const filteredUsers = users.filter(
@@ -662,14 +587,19 @@ const QuickTaskForm = ({
                       />
                     }
                   >
-                    <EntityPickerDropdown
-                      entities={getOptions()}
+                    <SearchableDropdown
+                      key={form.relationModel}
+                      remote={{
+                        endpoint: RELATED_PICKER[form.relationModel].endpoint,
+                        params: RELATED_PICKER[form.relationModel].params,
+                        map: RELATED_PICKER[form.relationModel].map,
+                      }}
                       value={form.relatedTo}
                       onChange={(val) => handleFormChange("relatedTo", val)}
-                      entityLabel={form.relationModel}
-                      displayKey={getDisplayKey()}
-                      isOpen={openDropdown === "entity"}
-                      onOpenChange={(open) => setOpenDropdown(open ? "entity" : null)}
+                      displayKey={RELATED_PICKER[form.relationModel].displayKey}
+                      valueKey="_id"
+                      placeholder={form.relationModel}
+                      compact
                     />
                   </InputWithAction>
                 </FormField>

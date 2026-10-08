@@ -31,6 +31,7 @@ const PICKER_EXCLUDE = "-additionalFields -socialMedia -profilePicture -starredB
 const getAllCompanies = async (req, res) => {
   try {
     const { search } = req.query;
+    const pickerMode = req.query.picker === "true";
     let query = { organization: req.user.organization };
 
     if (search) {
@@ -38,15 +39,21 @@ const getAllCompanies = async (req, res) => {
       // a customer typing "finance and banking" should still find "Finance &
       // Banking" and vice versa, since users don't reliably type the symbol.
       const pattern = buildFuzzySearchPattern(search);
-      query.$or = [
-        { name: { $regex: pattern, $options: "i" } },
-        { industry: { $regex: pattern, $options: "i" } },
-        { gstin: { $regex: pattern, $options: "i" } },
-        { website: { $regex: pattern, $options: "i" } },
-        { address: { $regex: pattern, $options: "i" } },
-        { leadSource: { $regex: pattern, $options: "i" } },
-        { "additionalFields.value": { $regex: pattern, $options: "i" } },
-      ];
+      // Picker dropdowns show only the company NAME, so a match on a hidden field
+      // (address "Cypress Blvd" for "pre", industry, GSTIN…) looks wrong to the
+      // user. In picker mode search the name only; the full Companies list keeps
+      // the wide multi-field search below.
+      query.$or = pickerMode
+        ? [{ name: { $regex: pattern, $options: "i" } }]
+        : [
+            { name: { $regex: pattern, $options: "i" } },
+            { industry: { $regex: pattern, $options: "i" } },
+            { gstin: { $regex: pattern, $options: "i" } },
+            { website: { $regex: pattern, $options: "i" } },
+            { address: { $regex: pattern, $options: "i" } },
+            { leadSource: { $regex: pattern, $options: "i" } },
+            { "additionalFields.value": { $regex: pattern, $options: "i" } },
+          ];
     }
 
     // own-only: restrict to companies this user created/owns, combined with
