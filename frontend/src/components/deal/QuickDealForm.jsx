@@ -566,7 +566,7 @@ const QuickDealForm = ({
               >
                 <SearchableDropdown
                   options={[]}
-                  remote={{ endpoint: "/companies" }}
+                  remote={{ endpoint: "/companies", params: { picker: "true" } }}
                   value={form.company}
                   disabled={isCompanyLocked}
                   onChange={(value) => handleFormChange("company", value)}
@@ -646,6 +646,7 @@ const QuickDealForm = ({
                   options={[]}
                   remote={{
                     endpoint: "/contacts",
+                    params: { picker: "true" },
                     map: (c) => ({
                       ...c,
                       displayName: `${c.name} (${c.company?.name || "No Company"})`,

@@ -42,8 +42,7 @@ const statusOptions = [
   },
 ];
 
-const QuickCallLogForm = ({ contacts, onCallLogCreated, onRequestClose }) => {
-  console.log(contacts);
+const QuickCallLogForm = ({ onCallLogCreated, onRequestClose }) => {
   const [form, setForm] = useState({
     callType: "Outbound",
     status: "Connected",
@@ -286,7 +285,8 @@ const QuickCallLogForm = ({ contacts, onCallLogCreated, onRequestClose }) => {
             <div>
               <FormLabel required>Contact</FormLabel>
               <SearchableDropdown
-                options={contacts}
+                options={[]}
+                remote={{ endpoint: "/contacts", params: { picker: "true" } }}
                 value={form.contact}
                 onChange={(value) => {
                   handleFormChange("contact", value);

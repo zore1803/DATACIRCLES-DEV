@@ -109,5 +109,7 @@ contactSchema.pre("save", async function (next) {
 // The Contacts list filters by organization with no index before this, so it
 // scanned the whole collection.
 contactSchema.index({ organization: 1, createdAt: -1 });
+// The contact picker lists the first page by name (GET /contacts?limit=&picker=true).
+contactSchema.index({ organization: 1, name: 1 });
 
 module.exports = mongoose.model("Contact", contactSchema);

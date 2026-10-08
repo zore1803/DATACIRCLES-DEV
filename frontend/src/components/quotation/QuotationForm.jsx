@@ -30,6 +30,8 @@ import { resolveTransactionType, placeOfSupplyFields } from "../../utils/placeOf
 import EditIcon from "../common/EditIcon";
 import QuickDealForm from "../deal/QuickDealForm";
 import SearchableDropdown from "../contact/SearchableDropdown";
+import useRecordCache from "../../hooks/useRecordCache";
+import { resolveCompanyPick, resolveContactPick } from "../../utils/recordPick";
 import toast from "react-hot-toast";
 import { computeDocument, GST_RATES } from "../../../../shared/documentTemplates";
 import { PREDEFINED_NOTES, PREDEFINED_TERMS } from "../../utils/documentDefaultText";
@@ -442,9 +444,9 @@ const QuotationForm = ({
   const [prefixOptions, setPrefixOptions] = useState(documentTypeSettings?.quote?.prefixes || []);
   const [suffixOptions, setSuffixOptions] = useState(documentTypeSettings?.quote?.suffixes || []);
   const [localDeals, setLocalDeals] = useState(deals);
-  // Companies/contacts for the deal-less direct-link pickers (deal XOR direct-link).
-  const [companies, setCompanies] = useState([]);
-  const [contacts, setContacts] = useState([]);
+  // The deal-less direct-link pickers (deal XOR direct-link) search the server. This remembers the
+  // company / contact records picked, so their address and GSTIN can be read without a full list.
+  const records = useRecordCache();
   const [sellerState, setSellerState] = useState("");
   // "billing" | "shipping" | null -- which field group opened the saved
   // address book (AddressBookDrawer).
@@ -621,9 +623,6 @@ const QuotationForm = ({
       requestAnimationFrame(() => requestAnimationFrame(() => setIsSliding(true)));
       fetchItems();
       setLocalDeals(deals);
-      // Lists for the direct Company/Contact pickers (used when no deal is chosen).
-      API.get("/companies").then(r => setCompanies(Array.isArray(r.data) ? r.data : (r.data?.companies || []))).catch(() => {});
-      API.get("/contacts").then(r => setContacts(Array.isArray(r.data) ? r.data : (r.data?.contacts || []))).catch(() => {});
       API.get("/branding").then(r => setSellerState((r.data?.state || "").trim().toLowerCase())).catch(() => {});
     } else {
       setIsSliding(false);
@@ -1155,8 +1154,18 @@ const QuotationForm = ({
 
   // Direct Company pick (deal-less). Fills address/GST from the company the way a
   // deal would, and drops a contact that doesn't belong to the chosen company.
-  const applyCompanySelection = (value, { markDirty = true } = {}) => {
-    const selectedCompany = companies.find((c) => c._id === value);
+  // The id is applied at once so the dropdown shows it immediately; the address / GSTIN and the
+  // "does the chosen contact belong here?" check follow as soon as the company record is in hand
+  // (it normally arrives with the pick itself, so there is usually no wait). If the user picks
+  // something else in the meantime, the late result is dropped.
+  const applyCompanySelection = async (value, { markDirty = true, record } = {}) => {
+    setForm((prev) => ({ ...prev, company: value }));
+    if (markDirty) setHasUnsavedChanges(true);
+    const contactChecked = form.contact;
+    const { company: selectedCompany, keepContact } = await resolveCompanyPick(records, value, {
+      record,
+      currentContactId: contactChecked,
+    });
     const nextBilling =
       selectedCompany && !isAddressEmpty(selectedCompany.billingAddress)
         ? { ...emptyAddress(), ...selectedCompany.billingAddress }
@@ -1166,62 +1175,49 @@ const QuotationForm = ({
         ? { ...emptyAddress(), ...selectedCompany.shippingAddresses[0] }
         : emptyAddress();
     setForm((prev) => {
+      if (prev.company !== value) return prev; // superseded by a newer pick
       const shipping = prev.sameAsBilling ? nextBilling : nextShipping;
       const autoType = resolveTransactionType(sellerState, shipping, nextBilling);
-      const keepContact =
-        prev.contact &&
-        contacts.some(
-          (ct) => ct._id === prev.contact && (ct.company?._id || ct.company) === value
-        );
       return {
         ...prev,
-        company: value,
-        contact: keepContact ? prev.contact : "",
+        contact: prev.contact === contactChecked && !keepContact ? "" : prev.contact,
         receiverGSTIN: selectedCompany?.gstin || "",
         billingAddress: nextBilling,
         shippingAddress: shipping,
         transactionType: autoType || prev.transactionType,
       };
     });
-    if (markDirty) setHasUnsavedChanges(true);
   };
 
   // Direct Contact pick (deal-less). If the contact belongs to a company and none
   // is chosen yet, adopt it (and its address/GST) so the two stay consistent.
-  const applyContactSelection = (value, { markDirty = true } = {}) => {
-    const selectedContact = contacts.find((c) => c._id === value);
-    const contactCompanyId = selectedContact?.company?._id || selectedContact?.company || "";
-    setForm((prev) => {
-      if (!prev.company && contactCompanyId) {
-        const selectedCompany = companies.find((c) => c._id === contactCompanyId);
-        const nextBilling =
-          selectedCompany && !isAddressEmpty(selectedCompany.billingAddress)
-            ? { ...emptyAddress(), ...selectedCompany.billingAddress }
-            : prev.billingAddress;
-        const nextShipping =
-          selectedCompany && !isAddressEmpty(selectedCompany.shippingAddresses?.[0])
-            ? { ...emptyAddress(), ...selectedCompany.shippingAddresses[0] }
-            : prev.shippingAddress;
-        const shipping = prev.sameAsBilling ? nextBilling : nextShipping;
-        return {
-          ...prev,
-          contact: value,
-          company: contactCompanyId,
-          receiverGSTIN: selectedCompany?.gstin || prev.receiverGSTIN,
-          billingAddress: nextBilling,
-          shippingAddress: shipping,
-        };
-      }
-      return { ...prev, contact: value };
-    });
+  const applyContactSelection = async (value, { markDirty = true, record } = {}) => {
+    setForm((prev) => ({ ...prev, contact: value }));
     if (markDirty) setHasUnsavedChanges(true);
+    // A company is only adopted when none is chosen yet.
+    if (!value || form.company) return;
+    const { contactCompanyId, company: selectedCompany } = await resolveContactPick(records, value, { record });
+    if (!contactCompanyId) return;
+    setForm((prev) => {
+      if (prev.contact !== value || prev.company) return prev; // superseded by a newer pick
+      const nextBilling =
+        selectedCompany && !isAddressEmpty(selectedCompany.billingAddress)
+          ? { ...emptyAddress(), ...selectedCompany.billingAddress }
+          : prev.billingAddress;
+      const nextShipping =
+        selectedCompany && !isAddressEmpty(selectedCompany.shippingAddresses?.[0])
+          ? { ...emptyAddress(), ...selectedCompany.shippingAddresses[0] }
+          : prev.shippingAddress;
+      const shipping = prev.sameAsBilling ? nextBilling : nextShipping;
+      return {
+        ...prev,
+        company: contactCompanyId,
+        receiverGSTIN: selectedCompany?.gstin || prev.receiverGSTIN,
+        billingAddress: nextBilling,
+        shippingAddress: shipping,
+      };
+    });
   };
-
-  // Contacts available to the direct picker: scoped to the chosen company, or all
-  // contacts when no company is selected.
-  const contactOptions = form.company
-    ? contacts.filter((c) => (c.company?._id || c.company) === form.company)
-    : contacts;
 
   // Applies `preselectDealId` to a NEW document. Never overrides a deal already on the
   // form -- in particular one carried over from the split view via formOverride -- except
@@ -1821,16 +1817,21 @@ const QuotationForm = ({
                   </label>
                   {form.deal ? (
                     <div className="w-full h-[38px] px-3.5 flex items-center text-[13px] border border-[#1F2937]/10 rounded-full bg-gray-50 text-gray-600 truncate">
-                      {companies.find((c) => c._id === form.company)?.name
+                      {records.peek("companies", form.company)?.name
                         || localDeals.find((d) => d._id === form.deal)?.company?.name
                         || "—"}
                     </div>
                   ) : (
                     <div className="bg-blue-50/50 rounded-lg">
                       <SearchableDropdown
-                        options={companies}
+                        options={[]}
+                        remote={{
+                          endpoint: "/companies",
+                          params: { picker: "true" },
+                          onSelectedLoaded: (record) => records.remember("companies", record),
+                        }}
                         value={form.company}
-                        onChange={(value) => applyCompanySelection(value)}
+                        onChange={(value, option) => applyCompanySelection(value, { record: option })}
                         placeholder="Search companies..."
                         displayKey="name"
                         valueKey="_id"
@@ -1851,16 +1852,22 @@ const QuotationForm = ({
                   </label>
                   {form.deal ? (
                     <div className="w-full h-[38px] px-3.5 flex items-center text-[13px] border border-[#1F2937]/10 rounded-full bg-gray-50 text-gray-600 truncate">
-                      {contacts.find((c) => c._id === form.contact)?.name
+                      {records.peek("contacts", form.contact)?.name
                         || localDeals.find((d) => d._id === form.deal)?.contact?.name
                         || "—"}
                     </div>
                   ) : (
                     <div className="bg-blue-50/50 rounded-lg">
                       <SearchableDropdown
-                        options={contactOptions}
+                        options={[]}
+                        remote={{
+                          endpoint: "/contacts",
+                          // Narrowed to the chosen company; all contacts while none is chosen.
+                          params: { picker: "true", ...(form.company ? { company: form.company } : {}) },
+                          onSelectedLoaded: (record) => records.remember("contacts", record),
+                        }}
                         value={form.contact}
-                        onChange={(value) => applyContactSelection(value)}
+                        onChange={(value, option) => applyContactSelection(value, { record: option })}
                         placeholder="Search contacts..."
                         displayKey="name"
                         valueKey="_id"

@@ -272,7 +272,7 @@ const CallLogForm = ({
                 options={[]}
                 remote={{
                   endpoint: "/contacts",
-                  params: companyId ? { company: companyId } : {},
+                  params: { picker: "true", ...(companyId ? { company: companyId } : {}) },
                 }}
                 value={form.contact}
                 onChange={(value) => {

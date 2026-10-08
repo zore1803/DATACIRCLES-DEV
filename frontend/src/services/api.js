@@ -1,5 +1,7 @@
 // services/api.js
 import axios from "axios";
+import toast from "react-hot-toast";
+import { requestAppNavigation } from "../utils/appNavigation";
 
 const API = axios.create({
   baseURL: `${import.meta.env.VITE_APP_API_URL}/api`,
@@ -338,15 +340,37 @@ let isRedirectingToSubscription = false;
 // A page that loads several things at once gets several NO_SUBSCRIPTION
 // failures, and each one's own catch block would show its own error toast
 // (4-5 identical "No subscription found" messages). For a few seconds after
-// the first one, AppToaster hides error toasts (see isNoSubscriptionBurst) and
-// shows ONE friendly notice instead, on the page the user lands on.
+// the first one, toast.error is a no-op (see the override below) and ONE
+// friendly notice is shown instead, on the page the user lands on.
 const NO_SUBSCRIPTION_BURST_MS = 3000;
 let noSubscriptionUntil = 0;
 export const isNoSubscriptionBurst = () => Date.now() < noSubscriptionUntil;
 
-// Handed to the next page load through sessionStorage, because the redirect
-// below is a full page load and anything shown before it would vanish.
+// The notice itself. The fixed id means it can never be shown twice, however many
+// toasters are mounted or however the user got here.
+export const NO_SUBSCRIPTION_TOAST_ID = "no-subscription-notice";
+export const NO_SUBSCRIPTION_MESSAGE =
+  "You don't have an active plan yet. Pick a plan below to get started.";
+
+// Fallback only: if the in-app navigation below is not handled and a full page load is needed
+// instead, the notice is handed to the next page load through sessionStorage (anything shown
+// before a full load would vanish). AppToaster picks it up on mount.
 export const NO_SUBSCRIPTION_NOTICE_KEY = "dc:no-subscription-notice";
+
+// Suppress error toasts DURING the burst by never creating them. They used to be created and then
+// hidden at render time (AppToaster returned null), but react-hot-toast still lays out an
+// (empty) box for every toast it holds, so each hidden error left an invisible gap in the stack.
+// toast.error is a plain property of the shared toast function, so wrapping it once here covers
+// every caller in the app. It still returns an id, because callers may pass it to toast.dismiss(),
+// and dismiss(undefined) would clear ALL toasts. The marker makes this safe against hot reloads
+// re-running this module.
+if (!toast.error.__dcSubscriptionAware) {
+  const originalToastError = toast.error;
+  const suppressedToastError = (...args) =>
+    isNoSubscriptionBurst() ? "suppressed-no-subscription-toast" : originalToastError(...args);
+  suppressedToastError.__dcSubscriptionAware = true;
+  toast.error = suppressedToastError;
+}
 
 API.interceptors.response.use(
   (response) => response,
@@ -365,13 +389,26 @@ API.interceptors.response.use(
       !window.location.pathname.startsWith("/subscription")
     ) {
       isRedirectingToSubscription = true;
-      try {
-        sessionStorage.setItem(NO_SUBSCRIPTION_NOTICE_KEY, "1");
-      } catch {
-        // Storage can be blocked (private mode); the redirect still works,
-        // the friendly notice is just skipped.
+      // Navigate inside the running app (no white flash, nothing remounted or lost).
+      if (requestAppNavigation("/subscription")) {
+        // Nothing remounts, so AppToaster's on-mount pickup would never run: show the notice now.
+        toast(NO_SUBSCRIPTION_MESSAGE, { id: NO_SUBSCRIPTION_TOAST_ID, duration: 8000 });
+        // The flag only needs to cover the burst of simultaneous failures. A full reload used to
+        // reset it for free; without one it must be released, or a plan that lapses later in the
+        // same session would never redirect again.
+        setTimeout(() => {
+          isRedirectingToSubscription = false;
+        }, NO_SUBSCRIPTION_BURST_MS);
+      } else {
+        // No in-app listener (e.g. very early in boot): a full page load still gets the user there.
+        try {
+          sessionStorage.setItem(NO_SUBSCRIPTION_NOTICE_KEY, "1");
+        } catch {
+          // Storage can be blocked (private mode); the redirect still works,
+          // the friendly notice is just skipped.
+        }
+        window.location.href = "/subscription";
       }
-      window.location.href = "/subscription";
     }
 
     return Promise.reject(error);

@@ -1896,7 +1896,6 @@ const Header = () => {
           )}
           {showQuickCallLogForm && (
             <QuickCallLogForm
-              contacts={contacts}
               onCallLogCreated={handleCallLogCreated}
               onRequestClose={() => setShowQuickCallLogForm(false)}
             />

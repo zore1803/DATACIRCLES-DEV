@@ -22,6 +22,12 @@ const createCompany = async (req, res) => {
   }
 };
 
+// Picker mode (?picker=true) is for dropdowns: it leaves out the parts of a company that no
+// dropdown reads (custom field values, social links, picture, star list) and skips the four
+// audit populates. Everything a form uses when a company is picked — name, GSTIN, billing and
+// shipping addresses, email, parent/subsidiaries — is still returned.
+const PICKER_EXCLUDE = "-additionalFields -socialMedia -profilePicture -starredBy -__v";
+
 const getAllCompanies = async (req, res) => {
   try {
     const { search } = req.query;
@@ -54,11 +60,16 @@ const getAllCompanies = async (req, res) => {
       }
     }
 
-    let listQuery = Company.find(query)
-      .populate("user", "name")
-      .populate("createdBy", "name")
-      .populate("lastUpdatedBy", "name")
-      .populate("owner", "name email");
+    let listQuery = Company.find(query);
+    if (req.query.picker === "true") {
+      listQuery = listQuery.select(PICKER_EXCLUDE).lean();
+    } else {
+      listQuery = listQuery
+        .populate("user", "name")
+        .populate("createdBy", "name")
+        .populate("lastUpdatedBy", "name")
+        .populate("owner", "name email");
+    }
 
     // Picker callers pass ?limit= so they never pull the whole collection.
     const cap = parsePickerLimit(req.query.limit);

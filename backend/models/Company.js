@@ -99,5 +99,7 @@ const companySchema = new mongoose.Schema(
 // The Companies list filters by organization with no index before this, so it
 // scanned the whole collection.
 companySchema.index({ organization: 1, createdAt: -1 });
+// The company picker lists the first page by name (GET /companies?limit=&picker=true).
+companySchema.index({ organization: 1, name: 1 });
 
 module.exports = mongoose.model('Company', companySchema);

@@ -93,6 +93,11 @@ const updateContact = async (req, res) => {
   }
 };
 
+// Picker mode (?picker=true) is for dropdowns: it leaves out the parts of a contact that no
+// dropdown reads (custom field values, social links, avatar, star list), skips the audit
+// populates, and populates only the company's name and GSTIN instead of the whole company record.
+const PICKER_EXCLUDE = "-additionalFields -socialMedia -avatar -starredBy -__v";
+
 const getAllContacts = async (req, res) => {
   try {
     const { search, lifecycleStage, stageStatus, company } = req.query;
@@ -148,11 +153,16 @@ const getAllContacts = async (req, res) => {
       query.company = company;
     }
 
-    let listQuery = Contact.find(query)
-      .populate("company")
-      .populate("user", "name")
-      .populate("createdBy", "name")
-      .populate("lastUpdatedBy", "name");
+    let listQuery = Contact.find(query);
+    if (req.query.picker === "true") {
+      listQuery = listQuery.select(PICKER_EXCLUDE).populate("company", "name gstin").lean();
+    } else {
+      listQuery = listQuery
+        .populate("company")
+        .populate("user", "name")
+        .populate("createdBy", "name")
+        .populate("lastUpdatedBy", "name");
+    }
 
     // Picker callers pass ?limit= so they never pull the whole collection.
     const cap = parsePickerLimit(req.query.limit);

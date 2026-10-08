@@ -10,11 +10,13 @@ import {
   Route,
   Link,
   useLocation,
+  useNavigate,
 } from "react-router-dom";
 import { Auth0Provider, useAuth0 } from "@auth0/auth0-react";
 import API, { configureAxios } from "./services/api";
 import Intercom from "./components/common/Intercom";
 import AppToaster from "./components/AppToaster";
+import { APP_NAVIGATE_EVENT, createAppNavigateListener } from "./utils/appNavigation";
 import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
 import Contacts from "./pages/Contacts";
@@ -242,6 +244,7 @@ function AppInner() {
   // classes/background (Nav/Header hidden, gray auth-page fill) until something else happened
   // to force a re-render, instead of updating the moment the URL actually changed.
   const location = useLocation();
+  const navigate = useNavigate();
   const [showChecklist, setShowChecklist] = useState(false);
   const [isSetupComplete, setIsSetupComplete] = useState(false);
   // Completing setup (joining with a company code) doesn't change any auth
@@ -249,6 +252,16 @@ function AppInner() {
   // header or sidebar until a manual reload. Login fires "dc:setup-complete"
   // and this bumps the effect.
   const [setupSignal, setSetupSignal] = useState(0);
+
+  // Code outside React (the axios interceptors in services/api.js, e.g. "no active subscription")
+  // asks to move the user to another page by firing APP_NAVIGATE_EVENT instead of assigning
+  // window.location.href, which would reload and white-flash the whole app. Carry it out here,
+  // where navigate() is available, as an ordinary in-place route change.
+  useEffect(() => {
+    const onAppNavigate = createAppNavigateListener(navigate);
+    window.addEventListener(APP_NAVIGATE_EVENT, onAppNavigate);
+    return () => window.removeEventListener(APP_NAVIGATE_EVENT, onAppNavigate);
+  }, [navigate]);
 
   useEffect(() => {
     const onSetupComplete = () => setSetupSignal((n) => n + 1);

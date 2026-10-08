@@ -656,7 +656,7 @@ const QuickContactForm = ({ onContactCreated, onContactUpdated, onRequestClose, 
               >
                 <SearchableDropdown
                   options={[]}
-                  remote={{ endpoint: "/companies" }}
+                  remote={{ endpoint: "/companies", params: { picker: "true" } }}
                   value={form.company}
                   onChange={(value) => handleFormChange("company", value)}
                   placeholder="Select Company"
