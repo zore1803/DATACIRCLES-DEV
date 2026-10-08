@@ -4,6 +4,7 @@ const {
   checkCustomFieldLimit,
 } = require("../middlewares/customFieldRestriction");
 
+const { sanitizeFieldsConfigBody } = require("../utils/safeBody");
 const validateFields = (fields) => {
   const allowedTypes = [
     "string",
@@ -64,6 +65,8 @@ const validateCategories = (categories) => {
 
 const createCompanyFields = async (req, res) => {
   try {
+    // Tenant/identity keys and client-supplied createdBy are never trusted.
+    req.body = sanitizeFieldsConfigBody(req.body, req.user._id);
     // Validate fields before creating
 
     validateCategories(req.body.fieldCategories);
@@ -112,6 +115,8 @@ const createCompanyFields = async (req, res) => {
 
 const updateCompanyFields = async (req, res) => {
   try {
+    // Tenant/identity keys and client-supplied createdBy are never trusted.
+    req.body = sanitizeFieldsConfigBody(req.body, req.user._id);
     // 1. Validate categories if they are passed in the request
     validateCategories(req.body.fieldCategories);
 

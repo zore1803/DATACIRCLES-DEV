@@ -90,11 +90,19 @@ function runGate(mw, req) {
 // Mirrors the route chain: subscriptionGate (route-level) -> restrictByPlan(module,"read")
 // -> checkPermission(resource,"readonly"). Returns { allowed, ownOnly }.
 async function resolveModuleAccess(req, planModule, permResource) {
-  req.ownOnly = false;
-  const planOk = await runGate(restrictByPlan(planModule, "read"), req);
+  // Every report section resolves its own access concurrently (Promise.all in
+  // getReport). checkPermission reports own-only by WRITING req.ownOnly, so on the
+  // single shared `req` one section's gate could overwrite another's value between
+  // the write and our read-back — an own-only module could then run unrestricted.
+  // Each call therefore gets its own request object: it inherits req (user, query,
+  // ...) through the prototype but takes its own writes (ownOnly, and whatever
+  // restrictByPlan attaches), so sections can never see each other's state.
+  const scoped = Object.create(req);
+  scoped.ownOnly = false;
+  const planOk = await runGate(restrictByPlan(planModule, "read"), scoped);
   if (!planOk) return { allowed: false, ownOnly: false };
-  const permOk = await runGate(checkPermission(permResource, "readonly"), req);
-  return { allowed: permOk, ownOnly: !!req.ownOnly };
+  const permOk = await runGate(checkPermission(permResource, "readonly"), scoped);
+  return { allowed: permOk, ownOnly: !!scoped.ownOnly };
 }
 
 // Turn grouped { <monthNumber 1..12>: value } into the fixed 12-entry array the
@@ -171,6 +179,9 @@ const getReport = async (req, res) => {
       statusFilters.poStatus || "all",
     ].join(":");
 
+    // A report with any failed (null) section is returned to this caller but NOT
+    // cached, so one transient failure can't pin every request to a degraded report
+    // (which makes the client download all the raw lists) for the whole TTL.
     const report = await cacheGetOrSet(cacheKey, INSIGHTS_REPORT_TTL_SECONDS, async () => {
     const [deals, invoices, purchases, vendors, contacts, companies, pos, topCustomers, overviewStats, dailyTrends, activity, dealsSection, poSection, purchasesSection, invoicesSection, vendorsSection, companiesSection, contactsSection] =
       await Promise.all([
@@ -255,7 +266,7 @@ const getReport = async (req, res) => {
       // Contacts tab (renderContactsReport). null on failure -> client falls back to raw data.
       contacts: contactsSection,
     };
-    });
+    }, { shouldCache: isCompleteReport });
 
     res.json(report);
   } catch (err) {
@@ -599,6 +610,16 @@ function isValidTimeZone(tz) {
   } catch (e) {
     return false;
   }
+}
+
+// True when every top-level section of the report is present. safeSection turns a
+// failed section into null, so a null/undefined value means a degraded report.
+function isCompleteReport(report) {
+  return (
+    !!report &&
+    typeof report === "object" &&
+    Object.values(report).every((section) => section !== null && section !== undefined)
+  );
 }
 
 // One failing section must not break the whole report: log it, return null, and
@@ -1483,8 +1504,8 @@ async function computePurchaseOrdersSection(req, org, userId, range, tz, poStatu
 //   - filtered set: org + ownOnly (route: `query.user = req.user._id`), date on
 //     `purchaseDate || createdAt`, then exact `status === purchaseStatus`.
 //   - month / trend / week / overdue bucketing uses `purchaseDate` only.
-//   - "outstanding" = Pending | Partial | Draft; the funnel/received-rate use the
-//     `Received` status (not in the enum, so it is always 0) — left to the client.
+//   - "outstanding" = Pending | Partial | Draft. The funnel/received-rate used a
+//     non-existent `Received` status (always 0); the client now reads `Paid`.
 //   - active vendors: overall = distinct vendors that RESOLVE (client filters falsy);
 //     this/last month = Set WITHOUT that filter, so purchases whose vendor no longer
 //     exists (populate -> null) or is absent add ONE extra "null"/"undefined" member.
@@ -2479,4 +2500,4 @@ async function computeContactsSection(req, org, userId, range, tz, filters) {
   };
 }
 
-module.exports = { getReport, computeDealsSection, computePurchaseOrdersSection, computePurchasesSection, computeInvoicesSection, computeVendorsSection, computeCompaniesSection, computeContactsSection };
+module.exports = { getReport, isCompleteReport,computeDealsSection, computePurchaseOrdersSection, computePurchasesSection, computeInvoicesSection, computeVendorsSection, computeCompaniesSection, computeContactsSection };

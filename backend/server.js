@@ -108,6 +108,8 @@ app.use("/api/subscription", subscriptionRoutes)
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.raw({ type: 'application/json', limit: '50mb' }));
+// Drop $-prefixed keys from parsed JSON bodies so they can't become Mongo operators.
+app.use(require('./middlewares/stripDollarKeys'));
 app.use('/uploads', express.static('uploads'));
 
 app.use('/api/doc', swaggerUi.serve, swaggerUi.setup(swaggerDocument));

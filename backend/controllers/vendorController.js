@@ -5,6 +5,14 @@ const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const Vendor = require("../models/Vendor");
 const Payment = require("../models/Payment");
 const vendorService = require("../services/vendorService");
+const { SERVER_AUDIT_FIELDS, stripServerFields } = require("../utils/safeBody");
+
+// Payment fields only the server may set. allocatedAmount, isDocumentPayment
+// are maintained by paymentAllocationService; the rest are tenant/identity.
+const PAYMENT_PROTECTED_FIELDS = [
+  "organization", "user", "vendor", "party", "partyType",
+  "allocatedAmount", "isDocumentPayment", ...SERVER_AUDIT_FIELDS,
+];
 const { processAdditionalFields } = require("../services/fieldCoercionService");
 const partyLedger = require("../services/partyLedgerService");
 const allocationService = require("../services/paymentAllocationService");
@@ -230,10 +238,17 @@ exports.bulkImportVendors = async (req, res) => {
     const skippedVendors = [];
 
     for (let i = 0; i < vendors.length; i++) {
-      const vendor = vendors[i];
+      const rawRow = vendors[i];
       const rowNumber = i + 1;
 
-      if (!vendor.name || vendor.name.trim() === '') {
+      if (!rawRow || typeof rawRow !== 'object' || Array.isArray(rawRow)) {
+        skippedVendors.push({ row: rowNumber, vendor: rawRow, reason: "Row is not a vendor object" });
+        continue;
+      }
+      // organization/user are assigned below; identity and audit fields are server-only.
+      const vendor = stripServerFields({ ...rawRow }, vendorService.VENDOR_PROTECTED_FIELDS);
+
+      if (typeof vendor.name !== 'string' || vendor.name.trim() === '') {
         skippedVendors.push({
           row: rowNumber,
           vendor,
@@ -360,8 +375,15 @@ exports.addPaymentForVendor = async (req, res) => {
       return res.status(404).json({ error: "Vendor not found" });
     }
 
+    const paymentData = stripServerFields({ ...req.body }, PAYMENT_PROTECTED_FIELDS);
+    // A vendor payment's generalized party pointer can only be this vendor.
+    if (req.body.party !== undefined || req.body.partyType !== undefined) {
+      paymentData.party = vendorId;
+      paymentData.partyType = "Vendor";
+    }
+
     const payment = new Payment({ 
-      ...req.body, 
+      ...paymentData, 
       vendor: vendorId,
       user: req.user.id,
       organization: req.user.organization
@@ -513,7 +535,8 @@ exports.updatePayment = async (req, res) => {
     }
 
     // Update payment fields
-    Object.assign(payment, req.body);
+    // Tenant / party / allocation fields are not editable through this endpoint.
+    Object.assign(payment, stripServerFields({ ...req.body }, PAYMENT_PROTECTED_FIELDS));
     await payment.save();
 
     // The amount/direction change is the balance change — nothing stored to

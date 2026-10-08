@@ -8,6 +8,15 @@ const restrictByPlan = require("../middlewares/restrictByPlan");
 const Company = require("../models/Company");
 const Contact = require("../models/Contact");
 const normalizePhone = require("../utils/normalizePhone");
+const { escapeRegex } = require("../utils/searchRegex");
+const { CONTACT_PROTECTED_FIELDS, CONTACT_CREATE_SERVER_FIELDS } = require("../services/contactService");
+
+// Fields a bulk-import row may never set (organization/user are assigned per row).
+const IMPORT_SERVER_FIELDS = [
+  ...CONTACT_PROTECTED_FIELDS,
+  ...CONTACT_CREATE_SERVER_FIELDS,
+  "lastUpdatedBy",
+];
 
 const requireAuth = [authMiddleware, require('../middlewares/userSync')];
 const subscriptionGate = require('../middlewares/subscriptionGate');
@@ -216,10 +225,20 @@ router.post(
       const skippedContacts = [];
 
       for (let i = 0; i < contacts.length; i++) {
-        const contact = contacts[i];
+        const rawRow = contacts[i];
         const rowNumber = i + 1;
 
-        if (!contact.name || contact.name.trim() === '') {
+        if (!rawRow || typeof rawRow !== "object" || Array.isArray(rawRow)) {
+          skippedContacts.push({ row: rowNumber, contact: rawRow, reason: "Row is not a contact object" });
+          continue;
+        }
+
+        // Tenant / authorship / identity / audit fields are server-controlled;
+        // organization and user are set below.
+        const contact = { ...rawRow };
+        IMPORT_SERVER_FIELDS.forEach((f) => delete contact[f]);
+
+        if (typeof contact.name !== "string" || contact.name.trim() === '') {
           skippedContacts.push({
             row: rowNumber,
             contact: contact,
@@ -229,9 +248,13 @@ router.post(
         }
 
         if (contact.company) {
+          if (typeof contact.company !== "string") {
+            skippedContacts.push({ row: rowNumber, contact: contact, reason: "Invalid company" });
+            continue;
+          }
           // Perform case-insensitive company name search within the same organization
           const company = await Company.findOne({
-            name: { $regex: `^${contact.company.trim()}$`, $options: 'i' },
+            name: { $regex: `^${escapeRegex(contact.company.trim())}$`, $options: 'i' },
             organization: req.user.organization,
           });
 

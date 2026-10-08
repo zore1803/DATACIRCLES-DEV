@@ -5,6 +5,7 @@ const authMiddleware = require("../middlewares/auth");
 const checkPermission = require("../middlewares/checkPermission");
 const uploadMiddlewareS3 = require("../middlewares/uploadMiddlewareS3");
 const restrictByPlan = require("../middlewares/restrictByPlan");
+const stripDollarKeys = require("../middlewares/stripDollarKeys");
 const { gstinError } = require("../utils/gstinValidation");
 const Company = require("../models/Company");
 const Subscription = require("../models/Subscription");
@@ -21,6 +22,7 @@ router.post(
   restrictByPlan("companies", "write"),
   checkPermission("Companies", "read-write"),
   uploadMiddlewareS3().single("profilePicture"),
+  stripDollarKeys, // multipart bodies are parsed here, after the global JSON-body strip
   companyController.createCompany,
 );
 
@@ -32,6 +34,7 @@ router.put(
   // restrictByPlan("companies", "write"),
   // checkPermission("Companies", "read-write"),
   uploadMiddlewareS3().single("profilePicture"),
+  stripDollarKeys,
   companyController.updateCompany,
 );
 

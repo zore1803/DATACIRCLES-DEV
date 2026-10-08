@@ -596,8 +596,10 @@ const addSubsidiary = async (req, res) => {
 
   try {
     // 1. Validate both companies exist
-    const parent = await Company.findById(id);
-    const child = await Company.findById(subsidiaryId);
+    // Scoped to the caller's organization, so another tenant's company is
+    // indistinguishable from one that doesn't exist.
+    const parent = await Company.findOne({ _id: id, organization: req.user.organization });
+    const child = await Company.findOne({ _id: subsidiaryId, organization: req.user.organization });
 
     if (!parent || !child) {
       return res.status(404).json({ message: "Company not found" });
@@ -681,11 +683,15 @@ const removeSubsidiary = async (req, res) => {
       lastUpdatedBy: req.user._id,
     });
 
-    // Clear child's parent reference
-    await Company.findByIdAndUpdate(subsidiaryId, {
-      $unset: { parentCompany: "" },
-      lastUpdatedBy: req.user._id,
-    });
+    // Clear child's parent reference — scoped to the caller's organization so
+    // another tenant's company can't be modified by passing its id.
+    await Company.findOneAndUpdate(
+      { _id: subsidiaryId, organization: req.user.organization },
+      {
+        $unset: { parentCompany: "" },
+        lastUpdatedBy: req.user._id,
+      },
+    );
 
     res.status(200).json({ message: "Subsidiary removed successfully" });
   } catch (error) {

@@ -3,6 +3,13 @@ const { parsePickerLimit } = require("../utils/pickerLimit");
 const { formatCustomFieldValue } = require("../utils/exportFormat");
 const Item = require("../models/Item");
 const StockMovement = require("../models/StockMovement");
+const { SERVER_AUDIT_FIELDS, stripServerFields } = require("../utils/safeBody");
+
+// Identity / audit fields the client may never set (organization and user are
+// assigned from the session). Dotted keys are dropped too: in an update a key
+// such as "inventory.currentStock" is a Mongo dot-path that would bypass the
+// stock-ledger protection below.
+const ITEM_PROTECTED_FIELDS = SERVER_AUDIT_FIELDS;
 
 // Normalizes the inventory block posted by the item form. Multipart requests deliver nested
 // objects as strings, so the caller parses first and passes the resulting object here.
@@ -162,7 +169,7 @@ async function recordOpeningStock({ organization, itemId, variantId, openingStoc
 const createItem = async (req, res) => {
   try {
     const itemData = {
-      ...req.body,
+      ...stripServerFields({ ...req.body }, ITEM_PROTECTED_FIELDS, { dropDotted: true }),
       user: req.user.id,
       organization: req.user.organization,
     };
@@ -481,7 +488,7 @@ const getItemById = async (req, res) => {
 const updateItem = async (req, res) => {
   try {
     const itemData = {
-      ...req.body,
+      ...stripServerFields({ ...req.body }, ITEM_PROTECTED_FIELDS, { dropDotted: true }),
       user: req.user.id,
       organization: req.user.organization,
     };

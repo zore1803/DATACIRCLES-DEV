@@ -1,6 +1,31 @@
 const Company = require("../models/Company");
 const { processAdditionalFields } = require("./fieldCoercionService");
 const { gstinError } = require("../utils/gstinValidation");
+const User = require("../models/User");
+const { validateOrgReferences } = require("../utils/orgReferences");
+
+// Fields a client may never set through create/update: tenant, authorship,
+// identity, and per-user star state (changed only by toggleStarCompany).
+const COMPANY_PROTECTED_FIELDS = ["organization", "createdBy", "_id", "starredBy"];
+
+// Extra fields only the server may set on a NEW company: the audit timestamps.
+const COMPANY_CREATE_SERVER_FIELDS = ["createdAt", "updatedAt", "__v"];
+
+// Relationship fields that must point at records in the caller's own
+// organization (a company can't be wired to another tenant's users/companies).
+const COMPANY_REFERENCES = [
+  { field: "user", Model: User, label: "User" },
+  { field: "owner", Model: User, label: "Owner" },
+  { field: "parentCompany", Model: Company, label: "Parent company" },
+  { field: "subsidiaries", Model: Company, label: "Subsidiary company", many: true },
+];
+
+// Throws (the controllers turn that into a 400 { error }) when a supplied
+// reference is malformed or belongs to another organization.
+async function assertCompanyReferences(data, organizationId) {
+  const error = await validateOrgReferences(data, organizationId, COMPANY_REFERENCES);
+  if (error) throw new Error(error);
+}
 
 // Uppercases/trims a submitted GSTIN and rejects it if invalid. A value equal to the one
 // already stored is accepted, so older records with a bad GSTIN can still be edited.
@@ -79,13 +104,23 @@ async function createCompany(
   rawData,
   { actingUserId, createdByUserId, profilePictureUrl, session } = {}
 ) {
-  const companyData = {
-    ...rawData,
+  const companyData = { ...rawData };
+  [...COMPANY_PROTECTED_FIELDS, ...COMPANY_CREATE_SERVER_FIELDS].forEach((f) => delete companyData[f]);
+
+  // `user` is always set from the acting user below, so a client value is dropped.
+  delete companyData.user;
+
+  // Nothing is written unless every supplied reference is in this organization.
+  await assertCompanyReferences(companyData, organizationId);
+
+  Object.assign(companyData, {
     organization: organizationId,
-    user: rawData._id || actingUserId,
+    // The record's creating user. (This used to be `rawData._id || actingUserId`,
+    // which let a client-supplied _id become the company's `user`.)
+    user: actingUserId,
     createdBy: createdByUserId,
     lastUpdatedBy: createdByUserId,
-  };
+  });
 
   checkGstin(companyData);
 
@@ -145,7 +180,11 @@ async function updateCompany(
     lastUpdatedBy: lastUpdatedByUserId,
   };
 
-  delete updateData.createdBy;
+  // The target company is already pinned to organizationId by the
+  // findOneAndUpdate filter below; these must not be re-pointed by the client.
+  COMPANY_PROTECTED_FIELDS.forEach((f) => delete updateData[f]);
+
+  await assertCompanyReferences(updateData, organizationId);
 
   if (updateData.gstin && String(updateData.gstin).trim()) {
     const existing = await Company.findOne({ _id: companyId, organization: organizationId })

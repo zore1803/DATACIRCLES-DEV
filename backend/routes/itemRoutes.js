@@ -6,7 +6,13 @@ const authMiddleware = require("../middlewares/auth");
 const userSync = require("../middlewares/userSync");
 const checkPermission = require("../middlewares/checkPermission");
 
+const { SERVER_AUDIT_FIELDS, stripServerFields } = require("../utils/safeBody");
+
 const requireAuth = [authMiddleware, userSync];
+
+// A bulk-import row is flat catalog data. Stock (inventory) and variants are owned
+// by the item form + StockMovement ledger, so an import cannot seed them directly.
+const IMPORT_SERVER_FIELDS = ["organization", "user", "inventory", "variants", ...SERVER_AUDIT_FIELDS];
 const subscriptionGate = require('../middlewares/subscriptionGate');
 const uploadMiddlewareS3 = require('../middlewares/uploadMiddlewareS3');
 
@@ -101,8 +107,10 @@ router.post('/bulk-import', requireAuth, subscriptionGate, checkPermission('item
 
     // Process each item
     const validItems = [];
-    for (const item of items) {
-      if (!item.name || item.name.trim() === '') {
+    for (const rawRow of items) {
+      if (!rawRow || typeof rawRow !== 'object' || Array.isArray(rawRow)) continue;
+      const item = stripServerFields({ ...rawRow }, IMPORT_SERVER_FIELDS, { dropDotted: true });
+      if (typeof item.name !== 'string' || item.name.trim() === '') {
         console.log(`Skipping invalid item: no name`);
         continue;
       }

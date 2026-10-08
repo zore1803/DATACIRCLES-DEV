@@ -72,6 +72,9 @@ const isTaskOwnedByUser = (task, userId) => {
   return inUsers || task.createdBy?.toString() === uid;
 };
 
+// starredBy is per-user state, changed only through toggleStarTask.
+const TASK_PROTECTED_FIELDS = ["organization", "createdBy", "_id", "starredBy"];
+
 const createTask = async (req, res) => {
   try {
     let assignedUsers = [];
@@ -745,7 +748,11 @@ const updateTask = async (req, res) => {
 
     const prevUsers = task.users.map((u) => u.toString());
 
+    // Tenant / authorship / identity fields are never client-writable. The task
+    // itself was loaded above by _id + the caller's organization, and the
+    // update below is pinned to that same pair.
     const updatePayload = { ...req.body };
+    TASK_PROTECTED_FIELDS.forEach((f) => delete updatePayload[f]);
     if (updatePayload.additionalFields) {
       updatePayload.additionalFields = await processAdditionalFields(
         "task",
@@ -754,7 +761,10 @@ const updateTask = async (req, res) => {
       );
     }
 
-    await task.updateOne(updatePayload);
+    await Task.updateOne(
+      { _id: task._id, organization: req.user.organization },
+      updatePayload,
+    );
 
     // Get updated task with populated fields
     const updatedTask = await Task.findById(req.params.id)

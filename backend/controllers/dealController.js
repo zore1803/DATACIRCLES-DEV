@@ -2,6 +2,7 @@ const { buildFuzzySearchPattern, escapeRegex } = require('../utils/searchRegex')
 const { formatCustomFieldValue, formatExportDate } = require("../utils/exportFormat");
 const { parsePickerLimit } = require('../utils/pickerLimit');
 // controllers/dealController.js (updated to handle field types)
+const { validateOrgReferences } = require("../utils/orgReferences");
 const Deal = require("../models/Deal");
 const Invoice = require("../models/Invoice");
 const Expense = require("../models/Expense");
@@ -33,15 +34,40 @@ const isOwnedByUser = (deal, userId, ownedCompanyIds = []) => {
   return !!companyId && ownedCompanyIds.some((id) => id.toString() === companyId);
 };
 
+// Fields a client may never set through create/update: tenant, authorship,
+// identity. organization comes from the authenticated user; createdBy is
+// immutable.
+const DEAL_PROTECTED_FIELDS = ["organization", "createdBy", "_id"];
+
+// Extra fields that only the server may set on a NEW deal: per-user star state
+// and the audit timestamps.
+const DEAL_CREATE_SERVER_FIELDS = ["starredBy", "createdAt", "updatedAt", "__v"];
+
+// Deal relationships that must belong to the caller's organization.
+const DEAL_REFERENCES = [
+  { field: "company", Model: Company, label: "Company" },
+  { field: "contact", Model: Contact, label: "Contact" },
+  { field: "user", Model: User, label: "Owner" },
+];
+const validateDealReferences = (data, organization) =>
+  validateOrgReferences(data, organization, DEAL_REFERENCES);
+
 const createDeal = async (req, res) => {
   try {
-    const dealData = {
-      ...req.body,
+    const dealData = { ...req.body };
+    [...DEAL_PROTECTED_FIELDS, ...DEAL_CREATE_SERVER_FIELDS].forEach((f) => delete dealData[f]);
+
+    // Nothing is written unless every supplied company / contact / owner belongs
+    // to the caller's organization.
+    const referenceError = await validateDealReferences(dealData, req.user.organization);
+    if (referenceError) return res.status(400).json({ error: referenceError });
+
+    Object.assign(dealData, {
       organization: req.user.organization,
-      user: req.body.user || req.user._id, // Allow frontend to pass Owner
+      user: dealData.user || req.user._id, // Allow frontend to pass Owner (verified above)
       createdBy: req.user._id, // ADDED BY
       lastUpdatedBy: req.user._id, // UPDATED BY
-    };
+    });
 
     // Process additional fields with proper typing
     if (req.body.additionalFields) {
@@ -276,7 +302,14 @@ const updateDeal = async (req, res) => {
       lastUpdatedBy: req.user._id, // Track who updated it
     };
 
-    delete updateData.createdBy; // Protect immutable field
+    // Protect tenant / authorship / identity fields. The target deal is already
+    // pinned to the caller's organization by the findOneAndUpdate filter below.
+    DEAL_PROTECTED_FIELDS.forEach((f) => delete updateData[f]);
+
+    // A deal may only point at a company, contact or owner in the caller's own
+    // organization — otherwise it could be wired to another tenant's records.
+    const referenceError = await validateDealReferences(updateData, req.user.organization);
+    if (referenceError) return res.status(400).json({ error: referenceError });
 
     // Process additional fields with proper typing
     if (req.body.additionalFields) {

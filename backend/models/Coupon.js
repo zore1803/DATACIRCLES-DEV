@@ -90,7 +90,8 @@ const couponSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'SuperAdmin' },
 }, { timestamps: true });
 
-couponSchema.index({ code: 1 });
+// `code` is already indexed (uniquely) by `unique: true` on the field above; a second
+// couponSchema.index({ code: 1 }) here was a duplicate definition.
 couponSchema.index({ isActive: 1 });
 
 module.exports = mongoose.model('Coupon', couponSchema);

@@ -2,6 +2,7 @@ const ContactFields = require("../models/ContactFields");
 const Contact = require("../models/Contact"); 
 const { checkCustomFieldLimit } = require("../middlewares/customFieldRestriction");
 
+const { sanitizeFieldsConfigBody } = require("../utils/safeBody");
 const validateFields = (fields) => {
   const allowedTypes = [
     "string",
@@ -61,6 +62,8 @@ const validateCategories = (categories) => {
 
 const createContactFields = async (req, res) => {
   try {
+    // Tenant/identity keys and client-supplied createdBy are never trusted.
+    req.body = sanitizeFieldsConfigBody(req.body, req.user._id);
     validateCategories(req.body.fieldCategories);
 
     if (req.body.fields && Array.isArray(req.body.fields)) {
@@ -109,6 +112,8 @@ const createContactFields = async (req, res) => {
 // Update based on User ID & Organization
 const updateContactFields = async (req, res) => {
   try {
+    // Tenant/identity keys and client-supplied createdBy are never trusted.
+    req.body = sanitizeFieldsConfigBody(req.body, req.user._id);
     validateCategories(req.body.fieldCategories);
 
     if (req.body.fields && Array.isArray(req.body.fields)) {
@@ -178,6 +183,8 @@ const updateContactFields = async (req, res) => {
 // Update based on specific Document ID
 const updateContactFieldsById = async (req, res) => {
   try {
+    // Tenant/identity keys and client-supplied createdBy are never trusted.
+    req.body = sanitizeFieldsConfigBody(req.body, req.user._id);
     validateCategories(req.body.fieldCategories);
 
     if (req.body.fields && Array.isArray(req.body.fields)) {

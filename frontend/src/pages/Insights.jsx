@@ -3,7 +3,6 @@ import AvgDealSizeIcon from "../components/common/AvgDealSizeIcon";
 import PdfIcon from "../components/common/PdfIcon";
 import VideoIcon from "../components/common/VideoIcon";
 import CellphoneIcon from "../components/common/CellphoneIcon";
-import DownloadIcon from "../components/common/DownloadIcon";
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useTopLoadingSignal } from "../components/common/TopLoadingBar";
 import logo from "/DataCircles.png";
@@ -69,10 +68,32 @@ import {
   ChevronRight,
 } from "lucide-react";
 import API from "../services/api";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import FilterIcon from "../components/common/FilterIcon";
-import StatTile from "../components/common/StatTile";
+import InsightsStatTile from "../components/insights/InsightsStatTile";
+
+// Every report section the page can fall back from. The raw lists (/contacts,
+// /deals, ...) are only downloaded when the report is missing or any of these is
+// null/absent: a failed report request, a `safeSection` that errored, or a cached
+// response from before a section existed. While the report is complete, no raw
+// list is fetched at all.
+const REPORT_SECTIONS_WITH_FALLBACK = [
+  "summary",
+  "overviewStats",
+  "dailyTrends",
+  "activity",
+  "deals",
+  "purchaseOrders",
+  "purchases",
+  "invoices",
+  "vendors",
+  "companies",
+  "contacts",
+];
+const reportNeedsRawFallback = (r) =>
+  !r ||
+  REPORT_SECTIONS_WITH_FALLBACK.some((k) => r[k] == null) ||
+  !Array.isArray(r.pipeline) ||
+  !Array.isArray(r.revenueByMonth);
 
 // Array of cool loading messages relevant for dashboard
 const loadingMessages = [
@@ -341,19 +362,32 @@ const DealPipelineBar = ({ stageEntries, colors, totalDeals }) => {
 
 const Insights = () => {
   const [activeTab, setActiveTab] = useState("overview");
-  // The tab strip scrolls sideways when the 8 tabs don't fit. Keep the active
-  // tab in view inside the strip (only the strip scrolls, never the page) so
-  // switching tabs can't leave neighbours like "Overview" stranded off-screen.
+  // The tab strip scrolls sideways when the 8 tabs don't fit. The active tab is
+  // centred inside the strip (only the strip scrolls, never the page) and an
+  // edge fade shows on whichever side still hides tabs, so a neighbour such as
+  // "Overview" is never left cut off mid-letter with no hint it is scrollable.
   const tabStripRef = useRef(null);
+  const [tabEdges, setTabEdges] = useState({ left: false, right: false });
+  const updateTabEdges = () => {
+    const el = tabStripRef.current;
+    if (!el) return;
+    const left = el.scrollLeft > 2;
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+    setTabEdges((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
+  };
   useEffect(() => {
     const strip = tabStripRef.current;
     const btn = strip?.querySelector(`[data-tab-id="${activeTab}"]`);
-    if (!strip || !btn) return;
-    const left = btn.offsetLeft - 8;
-    const right = btn.offsetLeft + btn.offsetWidth + 8;
-    if (left < strip.scrollLeft) strip.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
-    else if (right > strip.scrollLeft + strip.clientWidth)
-      strip.scrollTo({ left: right - strip.clientWidth, behavior: "smooth" });
+    if (strip && btn) {
+      const target = btn.offsetLeft - (strip.clientWidth - btn.offsetWidth) / 2;
+      strip.scrollTo({
+        left: Math.max(0, Math.min(target, strip.scrollWidth - strip.clientWidth)),
+        behavior: "smooth",
+      });
+    }
+    updateTabEdges();
+    window.addEventListener("resize", updateTabEdges);
+    return () => window.removeEventListener("resize", updateTabEdges);
   }, [activeTab]);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const [dateRange, setDateRange] = useState({
@@ -388,12 +422,52 @@ const Insights = () => {
   // daily Revenue-vs-Spends, status distributions, funnel/velocity/industry,
   // etc.), so none can be removed until those widgets are migrated too.
   const [report, setReport] = useState(null);
+  // Report request state. `reportLoading` starts true because the mount effect
+  // below fires the first request immediately; `reportError` holds the failure
+  // (if any) of the latest request and is cleared when a new one starts. The raw
+  // fallback behaviour is unchanged — this is only state, surfaced for later use.
+  const [reportLoading, setReportLoading] = useState(true);
+  const [reportError, setReportError] = useState(null);
+  // Flips true once the FIRST report request has settled (success or failure), so
+  // the initial skeleton below covers only the first load — later date/filter
+  // refetches never blank the page.
+  const reportSettledRef = useRef(false);
+  // Newest-request-wins guard: each fetchReport call takes the next id, and only
+  // the call whose id is still current may touch report state. Without it a slow
+  // response for an older date range / filter set could land after a newer one and
+  // overwrite it (or an old failure could clear a newer success).
+  const reportRequestIdRef = useRef(0);
   const [activityTab, setActivityTab] = useState("all");
   const [loading, setLoading] = useState(false);
+  // /kanban is fetched on its own (not inside fetchData's Promise.all). It starts
+  // true because the mount effect fires it immediately, and keeps the skeleton up
+  // until it settles so the Deals tab never renders with un-ordered stages — the
+  // same guarantee it had back when it shared the Promise.all.
+  const [kanbanLoading, setKanbanLoading] = useState(true);
+  // Raw lists are now fetched lazily (see the effect after fetchReport): only when
+  // the report is unavailable/incomplete. `rawLoaded` flips true once that fetch
+  // has settled, so a page that needs the raw fallback keeps its skeleton up until
+  // the data is there instead of flashing zeros first.
+  const [rawLoaded, setRawLoaded] = useState(false);
+  const rawRequestedRef = useRef(false);
+  // True when the raw-list fallback request itself failed. Together with an
+  // incomplete report it means there is genuinely nothing to render from, so the
+  // page says so (banner + Retry) instead of showing zeros that look like data.
+  const [rawFailed, setRawFailed] = useState(false);
+  const rawNeeded = reportSettledRef.current && reportNeedsRawFallback(report);
+  // The page skeleton shows while the raw lists load, until the first report
+  // request settles, until /kanban settles, and while a needed raw fallback has
+  // not loaded yet — so the page can't render empty values behind an in-flight
+  // request.
+  const showSkeleton =
+    loading ||
+    kanbanLoading ||
+    (reportLoading && !reportSettledRef.current) ||
+    (rawNeeded && !rawLoaded);
   // Drive the top-edge progress bar from the page's real loading state, the same
   // 1:1 mapping every other page uses — the Insights skeleton alone never
   // signaled the shared bar, so it was missing here.
-  useTopLoadingSignal(loading);
+  useTopLoadingSignal(showSkeleton);
   const [expandedRows, setExpandedRows] = useState([]);
   const [selectedUser, setSelectedUser] = React.useState("all");
   const [kanbanStatuses, setKanbanStatuses] = useState(null);
@@ -471,9 +545,24 @@ const Insights = () => {
     },
   ];
 
+  // Lazy raw fetch: runs ONCE, and only after a report request has settled with a
+  // missing/incomplete report. A complete report never triggers it.
   useEffect(() => {
+    if (reportLoading || !reportSettledRef.current) return;
+    if (rawRequestedRef.current) return;
+    if (!reportNeedsRawFallback(report)) return;
+    rawRequestedRef.current = true;
     fetchData();
-  }, []);
+  }, [report, reportLoading]);
+
+  // Report incomplete AND the raw fallback failed: nothing real to display.
+  const insightsUnavailable = rawFailed && reportNeedsRawFallback(report);
+  const retryInsights = () => {
+    rawRequestedRef.current = false; // let the lazy effect fetch raw again if still needed
+    setRawFailed(false);
+    setRawLoaded(false);
+    fetchReport(dateRange, filters);
+  };
 
   // Fetch the server-side report. Additive and resilient: a failure leaves
   // `report` null and the page keeps working off the existing requests, so this
@@ -481,6 +570,10 @@ const Insights = () => {
   // (only sent when both ends are set, matching filteredData), and the browser's
   // IANA timezone is sent so month buckets match the client's local getMonth().
   const fetchReport = async (range, activeFilters) => {
+    const requestId = ++reportRequestIdRef.current;
+    const isLatest = () => requestId === reportRequestIdRef.current;
+    setReportLoading(true);
+    setReportError(null);
     try {
       const params = {
         tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -499,10 +592,20 @@ const Insights = () => {
         });
       }
       const res = await API.get("/insights/report", { params });
+      if (!isLatest()) return; // a newer request superseded this one
       setReport(res.data || null);
     } catch (error) {
+      if (!isLatest()) return; // a stale failure must not clobber newer state
       console.warn("Insights report fetch failed (page falls back to client analytics):", error?.response?.status || error?.message);
       setReport(null);
+      setReportError(error?.response?.data?.message || error?.message || "Failed to load the Insights report.");
+    } finally {
+      // Only the latest request settles loading; a superseded one leaves it to the
+      // request that replaced it, so the loading state never flips off early.
+      if (isLatest()) {
+        reportSettledRef.current = true;
+        setReportLoading(false);
+      }
     }
   };
 
@@ -520,9 +623,29 @@ const Insights = () => {
     filters.poStatus,
   ]);
 
+  // The Deals pipeline stages are whatever's configured in Settings > Kanban
+  // Settings, not a fixed Open/Won/Lost trio — Insights' deal breakdowns should
+  // only ever show stages that currently exist there, not stale statuses left
+  // behind on deals after a stage was renamed/deleted. Fetched independently of
+  // the raw lists (it is small, and the Deals tab needs it even when the report
+  // is present). A failure leaves kanbanStatuses null, the same fallback as before.
+  const fetchKanban = async () => {
+    try {
+      const kanbanRes = await API.get("/kanban").catch(() => ({ data: null }));
+      setKanbanStatuses(kanbanRes.data?.statuses || null);
+    } finally {
+      setKanbanLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchKanban();
+  }, []);
+
   const fetchData = async () => {
     try {
       setLoading(true);
+      setRawFailed(false);
       const [
         contactsRes,
         companiesRes,
@@ -533,7 +656,6 @@ const Insights = () => {
         purchasesRes,
         invoicesRes,
         meetingsRes,
-        kanbanRes,
       ] = await Promise.all([
         API.get("/contacts"),
         API.get("/companies"),
@@ -544,12 +666,6 @@ const Insights = () => {
         API.get("/purchases"),
         API.get("/invoices"),
         API.get("/meetings").catch(() => ({ data: { meetings: [] } })),
-        // The Deals pipeline stages are whatever's configured in Settings >
-        // Kanban Settings, not a fixed Open/Won/Lost trio — Insights' deal
-        // breakdowns should only ever show stages that currently exist
-        // there, not stale statuses left behind on deals after a stage was
-        // renamed/deleted.
-        API.get("/kanban").catch(() => ({ data: null })),
       ]);
 
       setContacts(contactsRes.data);
@@ -561,16 +677,31 @@ const Insights = () => {
       setPurchases(purchasesRes.data);
       setInvoices(invoicesRes.data);
       setMeetings(meetingsRes.data?.meetings || meetingsRes.data || []);
-      setKanbanStatuses(kanbanRes.data?.statuses || null);
     } catch (error) {
       console.error("Failed to fetch data:", error);
+      setRawFailed(true);
     } finally {
       setLoading(false);
+      setRawLoaded(true);
     }
   };
 
   // Filter data based on date range and filters
   const filteredData = useMemo(() => {
+    // The raw lists are only fetched when the report is unavailable/incomplete.
+    // Until then every list is empty by construction, so there is nothing to
+    // filter — skip the work (same empty result the filters would produce).
+    if (!rawLoaded) {
+      return {
+        filteredContacts: [],
+        filteredCompanies: [],
+        filteredDeals: [],
+        filteredVendors: [],
+        filteredPurchaseOrders: [],
+        filteredPurchases: [],
+        filteredInvoices: [],
+      };
+    }
     let filteredContacts = contacts;
     let filteredCompanies = companies;
     let filteredDeals = deals;
@@ -664,10 +795,15 @@ const Insights = () => {
     invoices,
     dateRange,
     filters,
+    rawLoaded,
   ]);
 
   // Generate chart data
   const chartData = useMemo(() => {
+    // Only the fallback for the Overview daily chart (the report supplies the
+    // series otherwise). Without raw lists there is nothing to bucket, and the
+    // per-day loop below would still run once per day of the range — skip it.
+    if (!rawLoaded) return { dailyTrends: [] };
     const { filteredPurchaseOrders, filteredPurchases, filteredInvoices } = filteredData;
 
     // Daily trends — one bucket per calendar day, spanning from the
@@ -743,153 +879,11 @@ const Insights = () => {
     }
 
     return { dailyTrends };
-  }, [filteredData]);
+  }, [filteredData, rawLoaded, dateRange.startDate, dateRange.endDate]);
 
-  // Export functions
-  const exportToPDF = (reportType) => {
-    const doc = new jsPDF();
-    const {
-      filteredContacts,
-      filteredCompanies,
-      filteredDeals,
-      filteredVendors,
-      filteredPurchaseOrders,
-      filteredPurchases,
-      filteredInvoices,
-    } = filteredData;
-
-    doc.setFontSize(20);
-    doc.text(`${reportType} Report`, 20, 20);
-
-    doc.setFontSize(12);
-    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 20, 35);
-    doc.text(
-      `Date Range: ${dateRange.startDate || "All time"} - ${
-        dateRange.endDate || "Present"
-      }`,
-      20,
-      45
-    );
-
-    let data = [];
-    let headers = [];
-
-    switch (reportType) {
-      case "Contacts":
-        headers = ["Name", "Email", "Phone", "Company", "Status"];
-        data = filteredContacts.map((contact) => [
-          contact.name,
-          contact.email,
-          contact.phone || "",
-          contact.company?.name || "",
-          contact.stageStatus || "",
-        ]);
-        break;
-
-      case "Companies":
-        headers = ["Name", "Industry", "Size", "Location", "Website"];
-        data = filteredCompanies.map((company) => [
-          company.name,
-          company.industry || "",
-          company.size || "",
-          company.location || "",
-          company.website || "",
-        ]);
-        break;
-
-      case "Deals":
-        headers = ["Title", "Value", "Stage", "Company", "Close Date"];
-        data = filteredDeals.map((deal) => [
-          deal.title,
-          `₹${deal.amount || 0}`,
-          deal.status || "",
-          deal.company?.name || "",
-          deal.closeDate ? new Date(deal.closeDate).toLocaleDateString() : "",
-        ]);
-        break;
-
-      case "Vendors":
-        headers = ["Name", "Email", "Phone", "Company", "GSTIN", "Balance"];
-        data = filteredVendors.map((vendor) => [
-          vendor.name,
-          vendor.email || "",
-          vendor.phone || "",
-          vendor.company || "",
-          vendor.gstin || "",
-          `₹${vendor.balance || 0}`,
-        ]);
-        break;
-
-      case "Purchase Orders":
-        headers = [
-          "PO Number",
-          "Vendor",
-          "Order Date",
-          "Total Amount",
-          "Status",
-        ];
-        data = filteredPurchaseOrders.map((po) => [
-          po.poNumber,
-          po.vendor?.name || "",
-          new Date(po.orderDate).toLocaleDateString(),
-          `₹${po.totalAmount || 0}`,
-          po.status || "",
-        ]);
-        break;
-
-      case "Purchases":
-        headers = [
-          "Purchase Number",
-          "Vendor",
-          "Purchase Date",
-          "Total Amount",
-          "Status",
-        ];
-        data = filteredPurchases.map((purchase) => [
-          purchase.purchaseNumber,
-          purchase.vendor?.name || "",
-          new Date(purchase.purchaseDate).toLocaleDateString(),
-          `₹${purchase.grandTotal || 0}`,
-          purchase.status || "",
-        ]);
-        break;
-
-      case "Invoices":
-        headers = [
-          "Invoice Number",
-          "Deal",
-          "Amount",
-          "Status",
-          "Date",
-          "Due Date",
-        ];
-        data = filteredInvoices.map((invoice) => [
-          invoice.invoiceNumber,
-          invoice.deal?.title || "",
-          `₹${invoice.amount || 0}`,
-          invoice.status || "",
-          new Date(invoice.date).toLocaleDateString(),
-          invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : "",
-        ]);
-        break;
-    }
-
-    autoTable(doc, {
-      head: [headers],
-      body: data,
-      startY: 60,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [59, 130, 246] },
-    });
-
-    doc.save(
-      `${reportType}-report-${new Date().toISOString().split("T")[0]}.pdf`
-    );
-  };
-
-  // Insights' own card is gone: it now renders the shared StatTile every
-  // other page uses, so the KPI strip here matches Companies, Deals,
-  // Inventory and the dashboard instead of being a second, taller design.
+  // Insights tiles render InsightsStatTile: the shared StatTile's look with a
+  // stacked trend (figure over period) that can't wrap or squeeze the heading.
+  // The shared StatTile itself is untouched, so other pages are unaffected.
   // The prop signature is unchanged — 46 call sites keep working — and the
   // mapping happens here: title -> label, change -> the trailing subtitle,
   // color -> the icon's colour class.
@@ -909,7 +903,7 @@ const Insights = () => {
     const noChange = c && !c.isNew && c.pct === 0;
 
     return (
-      <StatTile
+      <InsightsStatTile
         tile={{
           label: title,
           value,
@@ -917,33 +911,23 @@ const Insights = () => {
           iconClass: color,
           ...(change !== undefined
             ? {
-                subtitle: c.isNew ? (/^new/i.test(changeLabel) ? changeLabel.charAt(0).toUpperCase() + changeLabel.slice(1) : `New ${changeLabel}`) : (noChange ? "No change" : `${c.pct >= 0 ? "+" : ""}${c.pct}% ${changeLabel}`),
-                subtitleIcon: up ? TrendingUp : TrendingDown,
-                subtitleColor: noChange ? "#6B7280" : (up ? "#00C950" : "#E82222"),
+                // Figure + arrow first, the period muted beneath it. "New" has
+                // no baseline period to describe a leading "new ..." label, and
+                // a plain "No change" needs no caption.
+                trendValue: c.isNew ? "New" : (noChange ? "No change" : `${c.pct >= 0 ? "+" : ""}${c.pct}%`),
+                trendLabel: noChange
+                  ? undefined
+                  : c.isNew
+                    ? changeLabel.replace(/^new\s+/i, "")
+                    : changeLabel,
+                trendIcon: up ? TrendingUp : TrendingDown,
+                trendColor: noChange ? "#6B7280" : (up ? "#00C950" : "#E82222"),
               }
             : {}),
         }}
       />
     );
   };
-
-  const TableWrapper = ({ title, onExport, children }) => (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-gray-900">{title}</h3>
-          <button
-            onClick={onExport}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors"
-          >
-            <DownloadIcon className="w-4 h-4" />
-            Export PDF
-          </button>
-        </div>
-      </div>
-      <div className="overflow-x-auto">{children}</div>
-    </div>
-  );
 
   const getStatusBadge = (status) => {
     const statusConfig = {
@@ -1040,6 +1024,9 @@ const Insights = () => {
   // sorted newest-first. Notes aren't included since notes are only
   // fetched per-company/contact, not org-wide.
   const businessActivity = useMemo(() => {
+    // Fallback-only feed (the report supplies `activity` otherwise); needs the
+    // raw lists, which are empty until a fallback is actually required.
+    if (!rawLoaded) return [];
     const items = [];
 
     deals.forEach((deal) => {
@@ -1111,7 +1098,7 @@ const Insights = () => {
       .filter((item) => item.at)
       .sort((a, b) => new Date(b.at) - new Date(a.at))
       .slice(0, 20);
-  }, [deals, tasks, meetings, invoices]);
+  }, [deals, tasks, meetings, invoices, rawLoaded]);
 
   // Phase 2: the icon/color for each report activity item, matching the
   // client-side businessActivity exactly (invoices turn red when overdue).
@@ -5797,12 +5784,12 @@ const Insights = () => {
       }))
       .sort((a, b) => b.count - a.count);
     const receivedRate =
-      totalPurchases > 0 ? Math.round(((statusDistribution.Received?.count || 0) / totalPurchases) * 100) : 0;
+      totalPurchases > 0 ? Math.round(((statusDistribution.Paid?.count || 0) / totalPurchases) * 100) : 0;
 
     // Purchase Status Funnel — real counts, ordered Total → Paid → Pending → Draft → Cancelled.
     const purchaseFunnelStages = [
       { label: "Total Purchases", count: totalPurchases, color: "#0085FF" },
-      { label: "Paid", count: statusDistribution.Received?.count || 0, color: "#00C950" },
+      { label: "Paid", count: statusDistribution.Paid?.count || 0, color: "#00C950" },
       { label: "Pending", count: (statusDistribution.Pending?.count || 0) + (statusDistribution.Partial?.count || 0), color: "#D87000" },
       { label: "Draft", count: statusDistribution.Draft?.count || 0, color: "#ECB900" },
       { label: "Cancelled", count: statusDistribution.Cancelled?.count || 0, color: "#E82222" },
@@ -5905,10 +5892,10 @@ const Insights = () => {
           color: purchaseStatusColors[status] || "#9CA3AF",
         }))
         .sort((a, b) => b.count - a.count);
-      const receivedRate = totalPurchases > 0 ? Math.round(((dist.Received?.count || 0) / totalPurchases) * 100) : 0;
+      const receivedRate = totalPurchases > 0 ? Math.round(((dist.Paid?.count || 0) / totalPurchases) * 100) : 0;
       const purchaseFunnelStages = [
         { label: "Total Purchases", count: totalPurchases, color: "#0085FF" },
-        { label: "Paid", count: dist.Received?.count || 0, color: "#00C950" },
+        { label: "Paid", count: dist.Paid?.count || 0, color: "#00C950" },
         { label: "Pending", count: (dist.Pending?.count || 0) + (dist.Partial?.count || 0), color: "#D87000" },
         { label: "Draft", count: dist.Draft?.count || 0, color: "#ECB900" },
         { label: "Cancelled", count: dist.Cancelled?.count || 0, color: "#E82222" },
@@ -7282,7 +7269,7 @@ const Insights = () => {
     );
   };
 
-  if (loading) {
+  if (showSkeleton) {
     return (
       <PageSkeleton variant="insights" />
     );
@@ -7333,6 +7320,11 @@ const Insights = () => {
       >
         <div
           ref={tabStripRef}
+          onScroll={updateTabEdges}
+          style={(() => {
+            const mask = `linear-gradient(to right, ${tabEdges.left ? "transparent 0, #000 28px" : "#000 0"}, ${tabEdges.right ? "#000 calc(100% - 28px), transparent 100%" : "#000 100%"})`;
+            return { WebkitMaskImage: mask, maskImage: mask };
+          })()}
           className="inline-flex items-center gap-1 h-11 p-1 bg-[#F1F1F5] rounded-full overflow-x-auto max-w-full min-w-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {tabs.map((tab) => (
@@ -7495,6 +7487,23 @@ const Insights = () => {
       </div>
 
       <div className="pt-[80px] lg:pt-[90px]">
+      {insightsUnavailable && (
+        <div
+          role="alert"
+          className="mx-4 sm:mx-6 lg:mx-8 mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          <span>
+            Couldn&apos;t load Insights data{reportError ? `: ${reportError}` : ""}. The figures below may be incomplete.
+          </span>
+          <button
+            type="button"
+            onClick={retryInsights}
+            className="flex-shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {/* Tab Content */}
       <div className="min-h-[400px]">
         {activeTab === "overview" && renderOverview()}

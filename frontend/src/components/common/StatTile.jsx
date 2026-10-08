@@ -18,7 +18,7 @@ export default function StatTile({ tile }) {
   return (
     // flex-1/w-full so the tile fills its slot in a flex row (the dashboard KPI
     // strips) as well as in a grid cell (the company stat rows).
-    <div className="min-h-[56px] w-full flex-1 flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl min-w-0">
+    <div className="h-[56px] w-full flex-1 flex items-center gap-2 px-3 bg-gray-50 border border-gray-200 rounded-xl min-w-0">
       {Icon && (
         <>
           <div className={`flex lg:hidden flex-shrink-0 ${tile.iconClass || "text-blue-600"}`}>
@@ -29,15 +29,9 @@ export default function StatTile({ tile }) {
           </div>
         </>
       )}
-      <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
-        {/* flex-1 so the label/value claim the free space first; the trend
-            below shrinks and wraps rather than starving this column — which
-            is what clamped "Avg. Sales Cycle" down to "Avg. Sales…". */}
-        <div className="min-w-[84px] flex-1">
-          <p
-            className="w-full text-[10px] sm:text-[11px] text-gray-500 leading-tight break-words"
-            title={typeof tile.label === "string" ? tile.label : undefined}
-          >
+      <div className="min-w-0 flex-1 flex items-end justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate w-full text-[10px] sm:text-[11px] text-gray-500">
             {tile.label}
           </p>
           <p
@@ -53,13 +47,11 @@ export default function StatTile({ tile }) {
         </div>
         {tile.subtitle && (
           <span
-            className={`self-end min-w-0 max-w-[55%] text-[10px] xl:text-[11px] flex items-center justify-end gap-1 text-right leading-tight ${tile.subtitleClass || ""}`}
+            className={`text-[11px] flex items-center gap-1 flex-shrink-0 whitespace-nowrap ${tile.subtitleClass || ""}`}
             style={tile.subtitleColor ? { color: tile.subtitleColor } : undefined}
           >
-            {tile.subtitleIcon && (
-              <tile.subtitleIcon size={12} className="flex-shrink-0" />
-            )}
-            <span>{tile.subtitle}</span>
+            {tile.subtitleIcon && <tile.subtitleIcon size={12} />}
+            {tile.subtitle}
           </span>
         )}
       </div>

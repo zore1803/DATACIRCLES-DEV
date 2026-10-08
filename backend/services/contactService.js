@@ -1,4 +1,7 @@
 const Contact = require("../models/Contact");
+const Company = require("../models/Company");
+const User = require("../models/User");
+const { validateOrgReferences } = require("../utils/orgReferences");
 const { processAdditionalFields } = require("./fieldCoercionService");
 const {
   getStageMap,
@@ -7,6 +10,26 @@ const {
   defaultStatusForStageInMap,
   invalidCombinationMessageInMap,
 } = require("./contactLifecycleService");
+
+// Fields a client may never set through create/update: tenant, authorship,
+// identity, and per-user star state (changed only by toggleStarContact).
+const CONTACT_PROTECTED_FIELDS = ["organization", "createdBy", "_id", "starredBy"];
+
+// Extra fields only the server may set on a NEW contact: the audit timestamps.
+const CONTACT_CREATE_SERVER_FIELDS = ["createdAt", "updatedAt", "__v"];
+
+// Relationship fields that must point at records in the caller's own organization.
+const CONTACT_REFERENCES = [
+  { field: "company", Model: Company, label: "Company" },
+  { field: "user", Model: User, label: "User" },
+];
+
+// Throws (the controllers turn that into a 400 { error }) when a supplied
+// reference is malformed or belongs to another organization.
+async function assertContactReferences(data, organizationId) {
+  const error = await validateOrgReferences(data, organizationId, CONTACT_REFERENCES);
+  if (error) throw new Error(error);
+}
 
 function normalizeSocialMedia(socialMedia) {
   return {
@@ -66,10 +89,19 @@ async function createContact(
   rawData,
   { actingUserId, createdByUserId, avatarUrl, session } = {}
 ) {
+  const safeData = { ...rawData };
+  [...CONTACT_PROTECTED_FIELDS, ...CONTACT_CREATE_SERVER_FIELDS].forEach((f) => delete safeData[f]);
+
+  // Nothing is written unless every supplied company / user is in this organization.
+  await assertContactReferences(safeData, organizationId);
+
   let contactData = {
-    ...rawData,
+    ...safeData,
     organization: organizationId,
-    user: rawData._id || actingUserId,
+    // The record's creating user. (This used to be `rawData._id || actingUserId`,
+    // which let a client-supplied _id become the contact's `user`.) A client
+    // `user` is honoured only if it was verified above to be in this organization.
+    user: safeData.user || actingUserId,
     createdBy: createdByUserId,
     lastUpdatedBy: createdByUserId,
   };
@@ -149,7 +181,11 @@ async function updateContact(
     lastUpdatedBy: lastUpdatedByUserId,
   };
 
-  delete updateData.createdBy;
+  // The target contact is already pinned to organizationId by the
+  // findOneAndUpdate filter below; these must not be re-pointed by the client.
+  CONTACT_PROTECTED_FIELDS.forEach((f) => delete updateData[f]);
+
+  await assertContactReferences(updateData, organizationId);
 
   if (avatarUrl) {
     updateData.avatar = avatarUrl;
@@ -210,6 +246,8 @@ async function updateContact(
 }
 
 module.exports = {
+  CONTACT_PROTECTED_FIELDS,
+  CONTACT_CREATE_SERVER_FIELDS,
   createContact,
   updateContact,
 };

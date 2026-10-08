@@ -1,6 +1,7 @@
 const DealFields = require('../models/DealFields');
 const { checkCustomFieldLimit } = require('../middlewares/customFieldRestriction');
 
+const { sanitizeFieldsConfigBody } = require("../utils/safeBody");
 const validateFields = (fields) => {
   const allowedTypes = ['string', 'number', 'dropdown', 'text', 'url', 'date', 'multiselect'];
   
@@ -44,6 +45,8 @@ const validateCategories = (categories) => {
 
 exports.createDealFields = async (req, res) => {
   try {
+    // Tenant/identity keys and client-supplied createdBy are never trusted.
+    req.body = sanitizeFieldsConfigBody(req.body, req.user._id);
     validateCategories(req.body.fieldCategories);
 
     if (req.body.fields && Array.isArray(req.body.fields)) {
@@ -150,6 +153,8 @@ exports.getDealFieldsById = async (req, res) => {
 
 exports.updateDealFields = async (req, res) => {
   try {
+    // Tenant/identity keys and client-supplied createdBy are never trusted.
+    req.body = sanitizeFieldsConfigBody(req.body, req.user._id);
     validateCategories(req.body.fieldCategories);
 
     if (req.body.fields && Array.isArray(req.body.fields)) {
@@ -217,6 +222,8 @@ exports.updateDealFields = async (req, res) => {
 
 exports.updateDealFieldsById = async (req, res) => {
   try {
+    // Tenant/identity keys and client-supplied createdBy are never trusted.
+    req.body = sanitizeFieldsConfigBody(req.body, req.user._id);
     validateCategories(req.body.fieldCategories);
 
     if (req.body.fields && Array.isArray(req.body.fields)) {

@@ -1,6 +1,12 @@
 const Vendor = require("../models/Vendor");
 const { processAdditionalFields } = require("./fieldCoercionService");
 const { gstinError } = require("../utils/gstinValidation");
+const { SERVER_AUDIT_FIELDS, stripServerFields } = require("../utils/safeBody");
+
+// Fields a client may never set through create/update: tenant and identity
+// (plus the audit timestamps). `user` is the creating user: set on create, and
+// never re-pointed by an edit.
+const VENDOR_PROTECTED_FIELDS = ["organization", "user", ...SERVER_AUDIT_FIELDS];
 
 /**
  * Purpose: Error subclass carrying the exact {message} response shape the
@@ -94,7 +100,7 @@ async function buildVendorPayload(rawData, organizationId) {
  * Known callers: vendorController.createVendor (Phase 0)
  */
 async function createVendor(organizationId, rawData, { userId, avatarUrl, session } = {}) {
-  const payload = await buildVendorPayload(rawData, organizationId);
+  const payload = stripServerFields(await buildVendorPayload(rawData, organizationId), VENDOR_PROTECTED_FIELDS);
   checkGstin(payload);
 
   const vendorData = {
@@ -126,7 +132,9 @@ async function createVendor(organizationId, rawData, { userId, avatarUrl, sessio
  * Known callers: vendorController.updateVendor (Phase 0)
  */
 async function updateVendor(vendorId, organizationId, rawData, { avatarUrl, session } = {}) {
-  const payload = await buildVendorPayload(rawData, organizationId);
+  // The target vendor is already pinned to organizationId by the
+  // findOneAndUpdate filter below; these must not be re-pointed by the client.
+  const payload = stripServerFields(await buildVendorPayload(rawData, organizationId), VENDOR_PROTECTED_FIELDS);
   if (payload.gstin && String(payload.gstin).trim()) {
     const existing = await Vendor.findOne({ _id: vendorId, organization: organizationId })
       .select("gstin")
@@ -152,6 +160,7 @@ async function updateVendor(vendorId, organizationId, rawData, { avatarUrl, sess
 }
 
 module.exports = {
+  VENDOR_PROTECTED_FIELDS,
   VendorInputError,
   checkGstin,
   createVendor,
