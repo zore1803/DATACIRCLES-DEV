@@ -12,6 +12,17 @@ const razorpay = require("../config/razorpay");
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
 const crypto = require("crypto");
+const {
+  personKey,
+  getPersonRecords,
+  ensurePersonId,
+  describeRecords,
+  signSelectionToken,
+  verifySelectionToken,
+  issueSessionToken,
+  syncIdentityToSiblings,
+  personRecordIds,
+} = require("../utils/personIdentity");
 const mongoose = require("mongoose");
 const sendGridMail = require("../utils/sendGridMail.js");
 const bcrypt = require("bcrypt");
@@ -299,7 +310,7 @@ exports.updateProfile = async (req, res) => {
       if (!emailRegex.test(email)) {
         return res.status(400).json({ error: "Please enter a valid email address" });
       }
-      const existing = await User.findOne({ email });
+      const existing = await User.findOne({ email, _id: { $nin: await personRecordIds(user) } });
       if (existing) {
         return res.status(400).json({ error: "This email is already in use." });
       }
@@ -310,7 +321,7 @@ exports.updateProfile = async (req, res) => {
       if (!emailRegex.test(email)) {
         return res.status(400).json({ error: "Please enter a valid email address" });
       }
-      const existing = await User.findOne({ email: email.toLowerCase() });
+      const existing = await User.findOne({ email: email.toLowerCase(), _id: { $nin: await personRecordIds(user) } });
       if (existing) {
         return res.status(400).json({ error: "This email is already in use." });
       }
@@ -394,6 +405,14 @@ exports.updateProfile = async (req, res) => {
 
     await user.save();
 
+    // Email and phone belong to the person: keep their other organization records in step.
+    await syncIdentityToSiblings(user, {
+      email: user.email,
+      isEmailVerified: user.isEmailVerified,
+      phone: user.phone,
+      isPhoneVerified: user.isPhoneVerified,
+    });
+
     res.json({
       message: "User Profile updated",
       user,
@@ -476,7 +495,9 @@ exports.inviteUser = async (req, res) => {
 
   try {
     // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    // Someone who already has an account in ANOTHER organization can still be invited here
+    // (they join as a new membership); only a record in this organization blocks it.
+    const existingUser = await User.findOne({ email, organization: req.user.organization });
     if (existingUser) {
       return res.status(400).json({ message: "User already exists" });
     }
@@ -746,20 +767,23 @@ exports.verifyOtp = async (req, res) => {
   }
   await tempOtp.deleteOne();
 
-  let user = await User.findOne({ phone });
+  const records = await User.find({ phone }).sort({ createdAt: 1 });
   const secret = process.env.JWT_SECRET;
 
-  if (user) {
-    const token = jwt.sign(
-      {
-        sub: `phone|${phone}`,
-        name: user.name,
-        [`${process.env.AUTH0_NAMESPACE}email`]: user.profileEmail,
-        [`${process.env.AUTH0_NAMESPACE}name`]: user.name,
-      },
-      secret,
-      { expiresIn: "7d" },
-    );
+  if (records.length > 0) {
+    // One person with several organizations: let them choose. Records of unrelated people that
+    // merely share a number (legacy shared family/office numbers) keep the old first-match
+    // behaviour, so no organization names are shown to someone who isn't that person.
+    if (records.length > 1 && new Set(records.map(personKey)).size === 1) {
+      return res.json({
+        success: true,
+        requiresOrgSelection: true,
+        selectionToken: signSelectionToken(records.map((r) => r._id), "phone"),
+        organizations: await describeRecords(records),
+      });
+    }
+    const user = records[0];
+    const token = issueSessionToken(user, "phone");
     return res.json({ success: true, token, user });
   } else {
     const tempToken = jwt.sign({ sub: `temp-phone|${phone}` }, secret, {
@@ -1317,12 +1341,13 @@ exports.linkGoogleAccount = async (req, res) => {
       return res.status(400).json({ error: "That doesn't look like a Google account." });
     }
 
-    const existingByGoogle = await User.findOne({ auth0Id: sub, _id: { $ne: user._id } });
+    const ownRecordIds = await personRecordIds(user);
+    const existingByGoogle = await User.findOne({ auth0Id: sub, _id: { $nin: ownRecordIds } });
     if (existingByGoogle) {
       return res.status(400).json({ error: "This Google account is already linked to a different DataCircles account." });
     }
     if (email) {
-      const existingByEmail = await User.findOne({ email: email.toLowerCase(), _id: { $ne: user._id } });
+      const existingByEmail = await User.findOne({ email: email.toLowerCase(), _id: { $nin: ownRecordIds } });
       if (existingByEmail) {
         return res.status(400).json({ error: "This Google account's email is already used by a different DataCircles account." });
       }
@@ -1353,6 +1378,7 @@ exports.linkGoogleAccount = async (req, res) => {
       user.isEmailVerified = true;
     }
     await user.save();
+    await syncIdentityToSiblings(user, { auth0Id: user.auth0Id });
 
     res.json({ success: true, user, message: "Google account connected. You can now sign in with it too." });
   } catch (error) {
@@ -1379,6 +1405,8 @@ exports.unlinkGoogleAccount = async (req, res) => {
       });
     }
 
+    // Siblings are matched through the id being removed, so sync before clearing it here.
+    await syncIdentityToSiblings(user, { auth0Id: undefined });
     user.auth0Id = undefined;
     await user.save();
 
@@ -2073,6 +2101,7 @@ exports.resetPassword = async (req, res) => {
 
     user.password = await bcrypt.hash(password, 12);
     await user.save();
+    await syncIdentityToSiblings(user, { password: user.password });
 
     res.json({ message: "Password successfully reset. You can now sign in." });
   } catch (error) {
@@ -2250,6 +2279,8 @@ async function sendSignupOtpEmail(email, otp) {
 
 const SIGNUP_OTP_TTL_MS = 10 * 60 * 1000;
 const SIGNUP_OTP_MAX_ATTEMPTS = 5;
+// Wrong company codes allowed per verified email before it has to be verified again.
+const SIGNUP_CODE_MAX_ATTEMPTS = 5;
 const SIGNUP_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
@@ -2266,10 +2297,9 @@ exports.signupSendOtp = async (req, res) => {
     }
     const normalizedEmail = email.trim().toLowerCase();
 
-    const existing = await User.findOne({ email: normalizedEmail }).select("isEmailVerified").lean();
-    if (existing && existing.isEmailVerified) {
-      return res.status(400).json({ message: "An account with this email already exists." });
-    }
+    // An email that already has an account is allowed through: the signup then ADDS another
+    // organization to that person (register() asks for the account's current password).
+    const existingAccount = Boolean(await User.exists({ email: normalizedEmail, isEmailVerified: true }));
 
     const otp = crypto.randomInt(100000, 1000000).toString();
     await TempEmailOTP.deleteMany({ email: normalizedEmail });
@@ -2283,7 +2313,7 @@ exports.signupSendOtp = async (req, res) => {
 
     await sendSignupOtpEmail(normalizedEmail, otp);
 
-    res.json({ success: true, message: "Verification code sent. Check your email." });
+    res.json({ success: true, existingAccount, message: "Verification code sent. Check your email." });
   } catch (error) {
     console.error("Signup send OTP error:", error);
     res.status(500).json({ message: "Unable to send the code. Please try again." });
@@ -2325,6 +2355,7 @@ exports.signupVerifyOtp = async (req, res) => {
     // Verified. Give the user a fresh window to finish the rest of the form
     // (createdAt drives the collection's TTL index, so it has to move too).
     record.verified = true;
+    record.attempts = 0;
     record.expires = new Date(Date.now() + SIGNUP_OTP_TTL_MS);
     record.createdAt = new Date();
     await record.save();
@@ -2438,7 +2469,7 @@ async function resolveSignupMembership(normalizedEmail, rawCode) {
   if (!code) return { joined: false };
 
   const org = await Organization.findOne({ code: new RegExp("^" + escapeRegex(code) + "$", "i") });
-  if (!org) return { status: 400, error: "Invalid company code" };
+  if (!org) return { status: 400, error: "Invalid company code", invalidCode: true };
 
   // A code join takes a staff seat, so it must respect the organization's seat limit.
   const subscription = await Subscription.findOne({ organization: org._id });
@@ -2494,13 +2525,31 @@ exports.register = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
-    let user = await User.findOne({ email: normalizedEmail });
+    const sameEmail = await User.find({ email: normalizedEmail }).select("+password");
+    const verifiedRecords = sameEmail.filter((record) => record.isEmailVerified);
 
-    if (user && user.isEmailVerified) {
-      return res.status(400).json({ message: "An account with this email already exists." });
+    // The email already has an account: this signup adds ANOTHER organization to that person.
+    // The email code proved the mailbox; the account's current password proves it is theirs.
+    let person = null;
+    if (verifiedRecords.length > 0) {
+      let passwordMatches = false;
+      for (const record of verifiedRecords) {
+        if (record.password && (await bcrypt.compare(password, record.password))) {
+          passwordMatches = true;
+          break;
+        }
+      }
+      if (!passwordMatches) {
+        return res.status(400).json({
+          message: "This email already has an account. Enter its current password to add another organization.",
+        });
+      }
+      person = verifiedRecords[0];
     }
 
-    if (user && !user.isEmailVerified) {
+    let user = person ? null : sameEmail.find((record) => !record.isEmailVerified) || null;
+
+    if (user) {
       // A registration from the old create-then-verify flow was never finished;
       // the email is verified now, so complete it in place instead of bouncing
       // off the unique email index.
@@ -2520,6 +2569,18 @@ exports.register = async (req, res) => {
       // Join an existing organization (invite, or company code) or create a new one.
       const membership = await resolveSignupMembership(normalizedEmail, req.body.companyCode);
       if (membership.error) {
+        if (membership.invalidCode) {
+          // The verified email stays valid for a while, so without a cap it could be used
+          // to try company codes one after another. Burn the verification after too many misses.
+          verifiedOtp.attempts = (verifiedOtp.attempts || 0) + 1;
+          if (verifiedOtp.attempts >= SIGNUP_CODE_MAX_ATTEMPTS) {
+            await verifiedOtp.deleteOne();
+            return res.status(429).json({
+              message: "Too many incorrect company codes. Please verify your email again to continue.",
+            });
+          }
+          await verifiedOtp.save();
+        }
         return res.status(membership.status).json({ message: membership.error });
       }
 
@@ -2527,6 +2588,9 @@ exports.register = async (req, res) => {
       let role;
       let permissions;
       if (membership.joined) {
+        if (person && sameEmail.some((record) => String(record.organization) === String(membership.organization))) {
+          return res.status(400).json({ message: "You already belong to this organization." });
+        }
         organizationId = membership.organization;
         role = "staff";
         permissions = membership.permissions;
@@ -2545,9 +2609,20 @@ exports.register = async (req, res) => {
       }
 
       user = new User({
-        name: fullName.trim(),
+        // An existing person keeps their identity (name, password hash, phone, Google link) and the
+        // new record is linked to theirs, so they can switch between the organizations.
+        name: person ? person.name : fullName.trim(),
         email: normalizedEmail,
-        password: hashedPassword,
+        password: person ? person.password : hashedPassword,
+        ...(person
+          ? {
+              profileEmail: person.profileEmail,
+              phone: person.phone,
+              auth0Id: person.auth0Id,
+              isPhoneVerified: person.isPhoneVerified,
+              personId: await ensurePersonId(person),
+            }
+          : {}),
         organization: organizationId,
         role,
         permissions,
@@ -2571,6 +2646,7 @@ exports.register = async (req, res) => {
 
     res.status(201).json({
       success: true,
+      addedToExistingAccount: Boolean(person),
       message: "Account created.",
       user: { email: normalizedEmail },
     });
@@ -2670,6 +2746,7 @@ exports.setPassword = async (req, res) => {
     }
     req.user.password = await bcrypt.hash(password, 12);
     await req.user.save();
+    await syncIdentityToSiblings(req.user, { password: req.user.password });
     res.json({ success: true, message: "Password saved." });
   } catch (error) {
     console.error("Set password error:", error);
@@ -2689,23 +2766,24 @@ exports.login = async (req, res, next) => {
     // 1. Construct search condition (Mongoose uses direct objects)
     const searchCondition = email ? { email } : { phone };
 
-    // 2. Find user and populate organization if needed
-    // password is `select: false` on the schema, so ask for it explicitly: this is the
-    // one place that compares it.
-    const user = await User.findOne(searchCondition).select("+password").populate("organization");
+    // 2. Find the account(s). A person can have one record per organization, all with the same
+    // email/phone. password is `select: false` on the schema, so ask for it explicitly: this is
+    // the one place that compares it.
+    const records = await User.find(searchCondition).select("+password").populate("organization");
 
-    if (!user) {
+    if (records.length === 0) {
       return res.status(401).json({
         success: false,
         message: `Invalid ${email ? "email" : "phone number"} or password`,
       });
     }
 
-    // 3. Verify Password
-    // Note: Ensure you add 'password' to your User schema.
-    // If using password_hash from Sequelize, rename field accordingly.
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
+    // 3. Verify the password against every record found
+    const matching = [];
+    for (const record of records) {
+      if (record.password && (await bcrypt.compare(password, record.password))) matching.push(record);
+    }
+    if (matching.length === 0) {
       return res.status(401).json({
         success: false,
         message: "Invalid credentials",
@@ -2718,7 +2796,8 @@ exports.login = async (req, res, next) => {
     // proven ownership of. Phone accounts aren't gated here: they default
     // isPhoneVerified true and log in through the separate send-otp/verify-otp
     // flow, never through this password branch.
-    if (email && !user.isEmailVerified) {
+    const usable = email ? matching.filter((record) => record.isEmailVerified) : matching;
+    if (usable.length === 0) {
       return res.status(403).json({
         success: false,
         requiresVerification: true,
@@ -2726,30 +2805,34 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // 4. Role-Based Logic (Adapted for your Mongoose schema)
+    // 4. More than one organization: the password is proven, so let the person choose which one
+    // to sign in to. The short-lived selection token is what makes that choice unforgeable.
+    // Records of unrelated people (legacy shared phone numbers) never get a picker.
+    if (usable.length > 1 && new Set(usable.map(personKey)).size === 1) {
+      return res.json({
+        success: true,
+        requiresOrgSelection: true,
+        selectionToken: signSelectionToken(usable.map((record) => record._id), "password"),
+        organizations: await describeRecords(usable),
+      });
+    }
+
+    const user = usable[0];
+
+    // 5. Role-Based Logic (Adapted for your Mongoose schema)
     // Your schema uses "admin" or "staff". Drivers logic removed/updated:
     if (user.role === "staff" && user.onboarding?.isCompleted === false) {
       // Optional: Example of specific logic for your schema's state
       console.log("User has not finished onboarding");
     }
 
-    // 5. Generate JWT
+    // 6. Generate JWT
     // sub uses a "password|<userId>" format so authMiddleware/userSyncMiddleware
     // can recognize this as a local password-login token (mirrors the phone|
     // token convention) instead of falling through to Auth0 JWKS verification.
-    const token = jwt.sign(
-      {
-        sub: `password|${user._id}`,
-        user_id: user._id, // Mongoose uses _id
-        role: user.role,
-        organization: user.organization?._id,
-        email: user.email,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
-    );
+    const token = issueSessionToken(user, "password");
 
-    // 6. Prepare Response
+    // 7. Prepare Response
     // Convert to object and remove sensitive data
     const userResponse = user.toObject();
     delete userResponse.password;
@@ -2762,6 +2845,136 @@ exports.login = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+};
+
+// ============ MULTI-ORGANIZATION: PICK, LIST, SWITCH, CREATE ============
+
+// Token payload for a record the client has just been moved to. Password and phone sessions get a
+// fresh token pinned to that record; Auth0 (Google) sessions keep their token and name the record
+// through the X-Active-User header, so they get no token here.
+function switchPayload(req, target) {
+  const provider = req.auth?.sub ? req.auth.sub.split("|")[0] : null;
+  const token =
+    provider === "password" ? issueSessionToken(target, "password")
+    : provider === "phone" ? issueSessionToken(target, "phone")
+    : null;
+  return { success: true, token, activeUserId: target._id, user: target };
+}
+
+// POST /api/auth/select-org  { selectionToken, userId }
+// Second half of a sign-in that matched several organizations (see login / verifyOtp).
+exports.selectOrganization = async (req, res) => {
+  try {
+    const { selectionToken, userId } = req.body;
+    if (!selectionToken || !userId) {
+      return res.status(400).json({ message: "Choose an organization to continue." });
+    }
+    let decoded;
+    try {
+      decoded = verifySelectionToken(selectionToken);
+    } catch {
+      return res.status(401).json({ message: "Your sign-in expired. Please sign in again." });
+    }
+    if (!decoded.ids.includes(String(userId))) {
+      return res.status(403).json({ message: "That organization isn't available for this sign-in." });
+    }
+    const user = await User.findById(userId).populate("organization");
+    if (!user) return res.status(404).json({ message: "Organization not found." });
+
+    const token = issueSessionToken(user, decoded.kind === "phone" ? "phone" : "password");
+    const userResponse = user.toObject();
+    delete userResponse.password;
+    res.json({ success: true, message: "Login successful", token, user: userResponse });
+  } catch (error) {
+    console.error("Select organization error:", error);
+    res.status(500).json({ message: "Unable to continue. Please try again." });
+  }
+};
+
+// GET /api/auth/my-organizations: every organization this person belongs to
+exports.listMyOrganizations = async (req, res) => {
+  try {
+    if (req.superAdmin) return res.status(403).json({ message: "Not available for super admins." });
+    const records = await getPersonRecords(req.user);
+    res.json({
+      currentUserId: req.user._id,
+      organizations: await describeRecords(records, req.user._id),
+    });
+  } catch (error) {
+    console.error("List organizations error:", error);
+    res.status(500).json({ message: "Unable to load your organizations." });
+  }
+};
+
+// POST /api/auth/switch-org  { userId }
+// Moves the session to another organization of the SAME person. Allowed targets come only from
+// the person's linked records, never from anything the client supplies about identity.
+exports.switchOrganization = async (req, res) => {
+  try {
+    if (req.superAdmin) return res.status(403).json({ message: "Not available for super admins." });
+    const { userId } = req.body;
+    const records = await getPersonRecords(req.user);
+    const target = records.find((record) => String(record._id) === String(userId));
+    if (!target) {
+      return res.status(403).json({ message: "You don't belong to that organization." });
+    }
+    res.json(switchPayload(req, target));
+  } catch (error) {
+    console.error("Switch organization error:", error);
+    res.status(500).json({ message: "Unable to switch organization. Please try again." });
+  }
+};
+
+// POST /api/auth/organizations  { name, address?, state?, gstNumber? }
+// Creates another organization for the signed-in person: a new admin record with the same
+// identity (email, phone, password, Google link), linked to this one, then switches to it.
+exports.createOrganization = async (req, res) => {
+  try {
+    if (req.superAdmin) return res.status(403).json({ message: "Not available for super admins." });
+    const name = cleanSignupText(req.body.name, 120);
+    if (name.length < 2) {
+      return res.status(400).json({ message: "Enter the organization's name." });
+    }
+    const address = cleanSignupText(req.body.address, 300);
+    const state = cleanSignupText(req.body.state, 80);
+    const gstNumber = cleanSignupText(req.body.gstNumber, 20);
+
+    const current = await User.findById(req.user._id).select("+password");
+    const personId = await ensurePersonId(current);
+
+    const org = await provisionOrganizationForNewAccount(name);
+    if (address) org.address = address;
+    if (state) org.state = state;
+    if (gstNumber) org.gstNumber = gstNumber;
+    if (address || state || gstNumber) await org.save();
+    await Branding.updateOne(
+      { organization: org._id },
+      { $set: { ...(address && { address }), ...(state && { state }), ...(gstNumber && { gstin: gstNumber }) } },
+    );
+
+    const created = new User({
+      name: current.name,
+      email: current.email,
+      profileEmail: current.profileEmail,
+      phone: current.phone,
+      password: current.password,
+      auth0Id: current.auth0Id,
+      isEmailVerified: current.isEmailVerified,
+      isPhoneVerified: current.isPhoneVerified,
+      personId,
+      organization: org._id,
+      role: "admin",
+      permissions: ADMIN_PERMISSIONS,
+      onboarding: { isCompleted: true, currentStep: 3 },
+    });
+    await created.save();
+
+    const target = await User.findById(created._id);
+    res.status(201).json(switchPayload(req, target));
+  } catch (error) {
+    console.error("Create organization error:", error);
+    res.status(500).json({ message: "Unable to create the organization. Please try again." });
   }
 };
 

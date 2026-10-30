@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { ChevronDown } from "lucide-react";
 import API from "../services/api";
+import { INDIA_STATES } from "../constants/addressOptions";
 
 // Customization questions. `multi` questions take up to MAX_PICKS answers, from the chips and/or typed in.
 const MAX_PICKS = 2;
@@ -105,6 +107,10 @@ export default function Register() {
   // idle -> (code sent) sent -> (code accepted) verified
   const [emailStep, setEmailStep] = useState("idle");
   const [emailOtp, setEmailOtp] = useState("");
+  // This email already has an account: the signup adds ANOTHER organization to it, and the password
+  // typed below must be that account's current password.
+  const [existingAccount, setExistingAccount] = useState(false);
+  const [addedToExisting, setAddedToExisting] = useState(false);
   const [otpBusy, setOtpBusy] = useState(false);
   const [resendIn, setResendIn] = useState(0);
 
@@ -128,7 +134,8 @@ export default function Register() {
     try {
       setOtpBusy(true);
       setEmailError("");
-      await API.post("/auth/signup/send-otp", { email });
+      const sent = await API.post("/auth/signup/send-otp", { email });
+      setExistingAccount(Boolean(sent.data?.existingAccount));
       setEmailOtp("");
       setEmailStep("sent");
       setResendIn(30);
@@ -158,6 +165,7 @@ export default function Register() {
 
   // Editing the address invalidates any code that was sent for the old one.
   const handleChangeEmail = () => {
+    setExistingAccount(false);
     setEmailStep("idle");
     setEmailOtp("");
     setResendIn(0);
@@ -248,7 +256,7 @@ export default function Register() {
     try {
       setIsCreatingAccount(true);
 
-      await API.post("/auth/register", {
+      const registered = await API.post("/auth/register", {
         fullName: fullName.trim(),
         email: workEmail.trim().toLowerCase(),
         password,
@@ -277,9 +285,23 @@ export default function Register() {
       });
 
       // The email was verified before this call, so the account is ready to use.
+      setAddedToExisting(Boolean(registered.data?.addedToExistingAccount));
       setAccountCreated(true);
     } catch (error) {
       console.error("Signup error:", error);
+
+      // Wrong current password for an email that already has an account: fix it on step 1.
+      if (/current password/i.test(error.response?.data?.message || "")) {
+        setStep(1);
+        setErrors({
+          fullName: "",
+          workEmail: "",
+          password: error.response.data.message,
+          confirmPassword: "",
+          general: "",
+        });
+        return;
+      }
 
       // The email verification window (10 min) can lapse while the later steps are filled in.
       if (/verify your email/i.test(error.response?.data?.message || "")) {
@@ -467,8 +489,9 @@ export default function Register() {
                     text-[#475569]
                   "
                 >
-                  Your account has been created successfully. You can now log in
-                  to your account.
+                  {addedToExisting
+                    ? "The organization has been added to your account. Log in with your usual email and password."
+                    : "Your account has been created successfully. You can now log in to your account."}
                 </p>
 
                 {/* Login Button */}
@@ -780,6 +803,13 @@ export default function Register() {
                           )}
                           </div>
                         </div>
+                      )}
+
+                      {existingAccount && emailStep === "verified" && (
+                        <p className="mt-1.5 font-['Inter'] text-[12px] text-[#475569]">
+                          This email already has an account. Enter your <span className="font-medium">current password</span>{" "}
+                          below to add this as another organization.
+                        </p>
                       )}
 
                       {errors.workEmail && (
@@ -1296,13 +1326,23 @@ export default function Register() {
                         </div>
                         <div className="mt-[clamp(14px,2.2vh,20px)]">
                           <label className="block font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-[#0F172A]">State</label>
-                          <input
-                            type="text"
-                            placeholder="ex.Maharashtra"
-                            value={company.workspaceState}
-                            onChange={(e) => setCompany((prev) => ({ ...prev, workspaceState: e.target.value }))}
-                            className="mt-[clamp(6px,1.2vh,8px)] h-[clamp(42px,5.5vh,48px)] w-full rounded-full border border-[#E2E8F0] bg-white px-[clamp(12px,1.5vw,16px)] font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-normal leading-[20px] text-[#0F172A] outline-none placeholder:text-[#64748B] focus:border-[#0085FF]"
-                          />
+                          <div className="relative mt-[clamp(6px,1.2vh,8px)]">
+                            <select
+                              value={company.workspaceState}
+                              onChange={(e) => setCompany((prev) => ({ ...prev, workspaceState: e.target.value }))}
+                              className={`h-[clamp(42px,5.5vh,48px)] w-full cursor-pointer appearance-none rounded-full border border-[#E2E8F0] bg-white pl-[clamp(12px,1.5vw,16px)] pr-10 font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-normal leading-[20px] outline-none focus:border-[#0085FF] ${
+                                company.workspaceState ? "text-[#0F172A]" : "text-[#64748B]"
+                              }`}
+                            >
+                              <option value="">Select state</option>
+                              {INDIA_STATES.map((name) => (
+                                <option key={name} value={name} className="text-[#0F172A]">
+                                  {name}
+                                </option>
+                              ))}
+                            </select>
+                            <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
+                          </div>
                         </div>
                     </div>
                       <div

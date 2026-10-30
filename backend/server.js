@@ -94,6 +94,7 @@ const corsOptions = {
     "x-phone-token",
     "X-CSRF-Token",
     "X-Requested-With",
+    "X-Active-User",
     "Accept",
     "Origin",
   ],
@@ -170,6 +171,9 @@ app.use('/api/dashboard', dashboardRoutes);
 
 const insightsRoutes = require('./routes/insightsRoutes');
 app.use('/api/insights', insightsRoutes);
+
+const profileChecklistRoutes = require('./routes/profileChecklist');
+app.use('/api/profile-checklist', profileChecklistRoutes);
 
 const systemSettingsRoutes = require('./routes/systemSettingsRoutes');
 app.use('/api/system-settings', systemSettingsRoutes);

@@ -4,6 +4,33 @@ const Invited = require('../models/Invited');
 const Organization = require('../models/Organization');
 const generateUniqueCode = require('../utils/generateUniqueCode');
 const { notifyAdminsOfNewStaff } = require('../controllers/authController');
+const { personKey, describeRecords } = require('../utils/personIdentity');
+
+// A person can have one User record per organization. A password token already names its record
+// and a phone token carries the record id as a third part, but an Auth0 (Google) token only
+// proves the identity, so the browser names the record it is working in with X-Active-User.
+// The header is NOT trusted on its own: it must be one of the records this identity matches.
+// With several records and no valid choice yet, answer 409 with the list so the client can show
+// its organization picker, then retry with the header set.
+// Returns { user } (possibly null), or { responded: true } once the 409 has been sent.
+async function pickAuth0Record(req, res, filter) {
+  const candidates = await User.find(filter).sort({ createdAt: 1 });
+  if (candidates.length <= 1) return { user: candidates[0] || null };
+
+  const wanted = req.headers['x-active-user'];
+  const chosen = wanted && candidates.find((c) => String(c._id) === String(wanted));
+  if (chosen) return { user: chosen };
+
+  // Records of unrelated people that merely match (legacy data): keep the old behaviour.
+  if (new Set(candidates.map(personKey)).size > 1) return { user: candidates[0] };
+
+  res.status(409).json({
+    code: 'ORG_SELECTION_REQUIRED',
+    message: 'Choose an organization to continue',
+    organizations: await describeRecords(candidates),
+  });
+  return { responded: true };
+}
 
 module.exports = async (req, res, next) => {
   if (req.auth && req.auth._id && !req.auth.sub) {
@@ -48,8 +75,11 @@ module.exports = async (req, res, next) => {
   }
 
   if (provider === 'phone') {
-    const phone = sub.split('|')[1];
-    let user = await User.findOne({ phone });
+    const [, phone, pinnedId] = sub.split('|');
+    // "phone|<phone>|<userId>" names the organization record; older tokens have no third part
+    // and fall back to the first record with that phone, as before.
+    let user = pinnedId ? await User.findOne({ _id: pinnedId, phone }) : null;
+    if (!user) user = await User.findOne({ phone });
     if (user) {
       if (name && user.name !== name) {
         user.name = name;
@@ -69,7 +99,9 @@ module.exports = async (req, res, next) => {
   }
 
   if (provider === 'facebook') {
-    let user = await User.findOne({ auth0Id: sub });
+    const picked = await pickAuth0Record(req, res, { auth0Id: sub });
+    if (picked.responded) return;
+    let user = picked.user;
     if (user) {
       req.user = user;
       return next();
@@ -140,12 +172,14 @@ module.exports = async (req, res, next) => {
   }
   // FIX: only search by email if email is actually defined
   // Without this guard, { email: undefined } matches documents with no email field
-  let user = await User.findOne({
+  const picked = await pickAuth0Record(req, res, {
     $or: [
       { auth0Id: sub },
       ...(email ? [{ email }] : []),
     ],
   });
+  if (picked.responded) return;
+  let user = picked.user;
 
   if (user) {
     if (!user.auth0Id) {
