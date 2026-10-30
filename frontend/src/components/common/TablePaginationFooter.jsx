@@ -66,7 +66,7 @@ export default function TablePaginationFooter({
             <select
               value={limit}
               onChange={(e) => onLimitChange(parseInt(e.target.value, 10))}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer bg-white"
+              className="border border-gray-200 rounded-full px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer bg-white"
             >
               {limitOptions.map((n) => (
                 <option key={n} value={n}>

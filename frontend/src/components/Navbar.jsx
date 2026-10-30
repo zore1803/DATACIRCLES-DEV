@@ -332,7 +332,42 @@ const Navbar = () => {
     document.documentElement.style.removeProperty("--btn-primary-hover");
   }, [branding?.colors?.primary]);
 
-  const getInitials = (name) => {
+  // Absolute URL for the uploaded logo: data/blob/http URLs are used as-is, a
+// server-relative path gets the API origin in front (same rule Header uses).
+const resolveLogoUrl = (logoUrl) => {
+  if (!logoUrl || typeof logoUrl !== "string") return "";
+  return /^(data:|blob:|http)/.test(logoUrl)
+    ? logoUrl
+    : `${import.meta.env.VITE_APP_API_URL}${logoUrl}`;
+};
+
+// The organization's square mark in the sidebar switcher: the logo uploaded in
+// Organization Details when there is one, the company's initials on the brand
+// colour otherwise (or if the image fails to load).
+const OrgMark = ({ branding, className = "" }) => {
+  const src = resolveLogoUrl(branding?.logoUrl);
+  const [failedSrc, setFailedSrc] = useState("");
+  if (src && failedSrc !== src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        onError={() => setFailedSrc(src)}
+        className={`flex-shrink-0 rounded object-contain bg-white ${className}`}
+      />
+    );
+  }
+  return (
+    <span
+      className={`flex items-center justify-center flex-shrink-0 rounded text-white text-[14px] font-medium leading-[102%] ${className}`}
+      style={{ background: "var(--btn-primary)" }}
+    >
+      {getInitials(branding?.companyName)}
+    </span>
+  );
+};
+
+const getInitials = (name) => {
     if (!name || !name.trim()) return "?";
     const words = name.trim().split(" ");
     return words.length === 1
@@ -873,13 +908,10 @@ const Navbar = () => {
                 className={`flex flex-row items-center gap-1.5 min-w-0 ${isHovered || isMobileOpen ? "flex-1" : "w-8 h-8"
                   }`}
               >
-                <span
-                  className={`flex items-center justify-center flex-shrink-0 rounded text-white text-[14px] font-medium leading-[102%] ${isHovered || isMobileOpen ? "w-7 h-7" : "w-8 h-8"
-                    }`}
-                  style={{ background: "var(--btn-primary)" }}
-                >
-                  {getInitials(branding?.companyName)}
-                </span>
+                <OrgMark
+                  branding={branding}
+                  className={isHovered || isMobileOpen ? "w-7 h-7" : "w-8 h-8"}
+                />
                 {(isHovered || isMobileOpen) && (
                   <span className="text-[14px] font-medium leading-[120%] text-[#0A0A0A] truncate">
                     {branding?.companyName || "Company"}
@@ -905,12 +937,7 @@ const Navbar = () => {
                 />
                 <div className="absolute left-0 right-0 top-full mt-1 z-[9997] bg-white border border-[#E5E5E5] rounded-md shadow-lg py-1">
                   <div className="flex items-center gap-1.5 px-2 py-2 bg-[#F5FAFF]">
-                    <span
-                      className="flex items-center justify-center w-7 h-7 flex-shrink-0 rounded text-white text-[14px] font-medium leading-[102%]"
-                      style={{ background: "var(--btn-primary)" }}
-                    >
-                      {getInitials(branding?.companyName)}
-                    </span>
+                    <OrgMark branding={branding} className="w-7 h-7" />
                     <span className="text-[14px] font-medium text-[#0A0A0A] truncate">
                       {branding?.companyName || "Company"}
                     </span>

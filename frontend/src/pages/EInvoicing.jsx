@@ -952,7 +952,7 @@ export default function EInvoicing() {
           <select
             value={pagination.limit}
             onChange={(e) => handleLimitChange(Number(e.target.value))}
-            className="appearance-none border border-gray-300 rounded-lg pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
+            className="appearance-none border border-gray-300 rounded-full pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
           >
             {[10, 20, 50, 100, 150].map((n) => (
               <option key={n} value={n}>{n} per page</option>

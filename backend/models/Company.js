@@ -37,6 +37,9 @@ const companySchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     industry: { type: String },
+    // Optional refinement of `industry` (e.g. "Dairy & Animal Husbandry" under
+    // "Agriculture, Forestry & Fishing"). Never required.
+    subIndustry: { type: String },
     gstin: {
       type: String,
     },

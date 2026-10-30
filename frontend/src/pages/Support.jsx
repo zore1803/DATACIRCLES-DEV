@@ -854,7 +854,7 @@ const Support = () => {
             <select
               value={pagination.limit}
               onChange={(e) => handleLimitChange(parseInt(e.target.value))}
-              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               disabled={loading}
             >
               <option value={10}>10 per page</option>

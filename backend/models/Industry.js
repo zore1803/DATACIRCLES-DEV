@@ -10,6 +10,13 @@ const industrySchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Optional suggestions for the company form's Sub-industry field (never
+  // required). Set on the built-in industries from constants/industries.js.
+  subIndustries: [{ type: String, trim: true }],
+  // Position in the dropdown and which market the entry comes from ("IN" or
+  // "INTL"). Only the built-in industries carry these.
+  sortOrder: { type: Number },
+  region: { type: String },
   organization: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Organization',

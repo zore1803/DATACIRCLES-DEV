@@ -1823,7 +1823,7 @@ export default function PaymentsTimeline() {
           <select
             value={pagination.limit}
             onChange={e => handleLimitChange(parseInt(e.target.value))}
-            className="border border-gray-300 rounded-md text-sm py-1 pl-2 pr-6 focus:outline-none focus:border-[#0085FF] focus:ring-1 focus:ring-[#0085FF]"
+            className="border border-gray-300 rounded-full text-sm py-1 pl-2 pr-6 focus:outline-none focus:border-[#0085FF] focus:ring-1 focus:ring-[#0085FF]"
           >
             {[10, 20, 50, 100].map(val => <option key={val} value={val}>{val} per page</option>)}
           </select>
