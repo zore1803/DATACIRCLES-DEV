@@ -1201,6 +1201,9 @@ const Header = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isSearchOpen]);
 
+  const isApple = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+  const shortcutModifier = isApple ? "\u2318" : "Ctrl";
+
   const handleSearchFocus = (fromRef) => openSearchOverlay(fromRef);
   const handleSearchChange = (e, fromRef) => {
     setSearchQuery(e.target.value);
@@ -1544,8 +1547,20 @@ const Header = () => {
               onFocus={() => handleSearchFocus()}
               // gray-300 rather than gray-200: the field sits on the header's
               // tinted chrome now, where the lighter border all but vanished.
-              className="w-full h-full pl-11 pr-4 bg-white border border-gray-300 rounded-full text-sm text-gray-700 placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-sans"
+              className="w-full h-full pl-11 pr-[4.5rem] bg-white border border-gray-300 rounded-full text-sm text-gray-700 placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-sans"
             />
+            {/* Shortcut hint (the Ctrl/Cmd+K handler above does the work). Purely visual, so it
+                never takes a click, and it steps aside once something is typed. */}
+            {!searchQuery && (
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute right-4 top-1/2 flex -translate-y-1/2 select-none items-center"
+              >
+                <kbd className="whitespace-nowrap rounded-md border border-gray-200 bg-gray-50 px-2 py-1 font-sans text-[11px] font-medium leading-none text-gray-400">
+                  {shortcutModifier}+K
+                </kbd>
+              </span>
+            )}
           </div>
 
           {isSearchOpen && searchOrigin && (

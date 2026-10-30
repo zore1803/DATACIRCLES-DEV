@@ -1,7 +1,7 @@
 ﻿import DeleteIcon from "../common/DeleteIcon";
 import VariantImagePicker from "./VariantImagePicker";
 import { UNIT_OPTIONS, unitLabelToValue } from "./unitOptions";
-import { stripVariantFileState } from "../../utils/variantResolve";
+import { stripVariantFileState, addBlankAttribute, renameAttribute, attrDisplayKey } from "../../utils/variantResolve";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import React, { useEffect, useState, useRef } from "react";
@@ -743,7 +743,7 @@ const ItemForm = ({
                         onClick={() => {
                           setCurrentVariant((prev) => ({
                             ...prev,
-                            attributes: { ...prev.attributes, "": "" },
+                            attributes: addBlankAttribute(prev.attributes),
                           }));
                         }}
                         className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"
@@ -759,16 +759,10 @@ const ItemForm = ({
                           <div key={idx} className="flex gap-2 items-center">
                             <input
                               type="text"
-                              value={key}
+                              value={attrDisplayKey(key)}
                               onChange={(e) => {
                                 const newKey = e.target.value;
-                                setCurrentVariant((prev) => {
-                                  const newAttrs = { ...prev.attributes };
-                                  const value = newAttrs[key];
-                                  delete newAttrs[key];
-                                  newAttrs[newKey] = value;
-                                  return { ...prev, attributes: newAttrs };
-                                });
+                                setCurrentVariant((prev) => ({ ...prev, attributes: renameAttribute(prev.attributes, key, newKey) }));
                               }}
                               className={inputCls({ grow: true })}
                               placeholder="Attribute Name (e.g. color)"

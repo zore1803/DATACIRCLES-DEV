@@ -24,6 +24,13 @@ router.get('/invoice-check',
   brandingController.checkInvoiceBrandingStatus
 );
 
+// The organization's logo as a data URL (client-side PDF letterheads)
+router.get('/logo-data',
+  requireAuth,
+  subscriptionGate,
+  brandingController.getLogoDataUrl
+);
+
 // GET branding by organization ID (for admin purposes)
 router.get('/organization/:orgId',
   requireAuth,

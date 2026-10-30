@@ -1,6 +1,7 @@
 import { autoTable } from "jspdf-autotable";
 import toast from "react-hot-toast";
 import API from "../services/api";
+import { loadLetterhead, drawLetterhead } from "./pdfLetterhead";
 
 export function formatINR(value) {
   const n = Number(value);
@@ -142,10 +143,11 @@ async function exportToExcel({ rows, columns, fileNamePrefix }) {
   );
 }
 
-// More columns than a portrait A4 can hold legibly (e.g. a Deal with many
-// custom fields): go landscape, step the font down, and past 12 columns use A3.
+// List reports are always landscape: they are wide tables, and the organization header (details
+// left, logo right) needs the room. The font steps down as columns are added, and past 12 columns
+// the page grows to A3.
 function pdfLayout(columnCount) {
-  if (columnCount <= 7) return { orientation: "portrait", format: "a4", fontSize: columnCount <= 6 ? 9 : 8 };
+  if (columnCount <= 7) return { orientation: "landscape", format: "a4", fontSize: columnCount <= 6 ? 9 : 8 };
   if (columnCount <= 12) return { orientation: "landscape", format: "a4", fontSize: columnCount <= 9 ? 8 : 7 };
   return { orientation: "landscape", format: "a3", fontSize: columnCount <= 18 ? 7 : 6 };
 }
@@ -164,15 +166,17 @@ export async function downloadTablePDF({ head, body, fileNamePrefix, title }) {
   const layout = pdfLayout(head.length);
   const doc = new jsPDF({ orientation: layout.orientation, format: layout.format });
 
-  doc.setFontSize(18);
-  doc.text(title, 14, 20);
+  // Organization details top-left, logo top-right, then the title: the same header on every list
+  // report. If branding can't be loaded the title still goes in, at its old position.
+  const letterhead = await loadLetterhead();
+  const { startY } = drawLetterhead(doc, { ...letterhead, title, generatedOn: formatExportDate(new Date()) });
 
   autoTable(doc, {
     head: [head],
     body: body.map((row) =>
       row.map((v) => (v === null || v === undefined || v === "" ? "—" : String(v))),
     ),
-    startY: 30,
+    startY,
     styles: { fontSize: layout.fontSize, cellPadding: 3, overflow: "linebreak" },
     headStyles: { fillColor: [52, 144, 220], textColor: 255, fontStyle: "bold" },
     alternateRowStyles: { fillColor: [245, 245, 245] },

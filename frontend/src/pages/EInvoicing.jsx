@@ -1,6 +1,8 @@
 import DeleteIcon from "../components/common/DeleteIcon";
 import { FaWhatsapp } from "react-icons/fa";
 import emailLogo from "../assets/email-logo.svg";
+import excelLogo from "../assets/excel-logo.png";
+import pdfLogo from "../assets/pdf-icon.png";
 import Checkbox from "../components/common/Checkbox";
 import MoreIcon from "../components/common/MoreIcon";
 import DownloadIcon from "../components/common/DownloadIcon";
@@ -1237,6 +1239,9 @@ export default function EInvoicing() {
                               }}
                               className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                             >
+                              <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center -my-0.5">
+                                <img src={excelLogo} alt="" className="h-5 w-5 object-contain" />
+                              </span>
                               Export as Excel
                             </button>
                             <button
@@ -1247,6 +1252,9 @@ export default function EInvoicing() {
                               }}
                               className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                             >
+                              <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center -my-0.5">
+                                <img src={pdfLogo} alt="" className="h-4 w-4 object-contain" />
+                              </span>
                               Export as PDF
                             </button>
                           </div>

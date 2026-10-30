@@ -2,6 +2,10 @@
 const KanbanBoard = require('../models/KanbanBoard');
 const Deal = require('../models/Deal');
 
+// Won and Lost are the pipeline's system stages. They can sit anywhere in the pipeline (users drag
+// them), but are never renamed or removed: other code identifies a closed deal by these names.
+const SYSTEM_STAGES = ['Won', 'Lost'];
+
 const createKanbanBoard = async (req, res) => {
   try {
     const boardData = {
@@ -79,6 +83,19 @@ const updateKanbanBoard = async (req, res) => {
     }
 
     let updateQuery = { statuses: req.body.statuses };
+
+    // Enforce the system stages here as well as in the settings screen, so the API can't be used to
+    // rename or drop them. A rename shows up as the old name going missing, same as a removal.
+    if (Array.isArray(req.body.statuses)) {
+      const missingSystem = SYSTEM_STAGES.filter(
+        (stage) => (board.statuses || []).includes(stage) && !req.body.statuses.includes(stage)
+      );
+      if (missingSystem.length > 0) {
+        return res.status(400).json({
+          error: `"${missingSystem[0]}" is a system stage: it can be moved, but not renamed or removed.`,
+        });
+      }
+    }
 
     // Block removing a stage that still has deals sitting in it. Only a
     // true deletion shrinks the array — a rename or reorder keeps the same

@@ -4,8 +4,8 @@ import DownloadIcon from "./DownloadIcon";
 
 // In-app replacement for the browser's window.confirm("Do you want to export
 // as ...?") used by every Export as Excel / Export as PDF menu item. Same card
-// as the Confirm Deletion dialog (BulkDeleteModal) so the two read as one
-// family: icon chip + title, one line of copy, Cancel / primary action.
+// as a capsule: icon, title + one line of copy, then Cancel / primary action
+// side by side (stacked in a rounded card on a narrow phone).
 //
 //   if (!(await confirmExport("excel"))) return;
 //
@@ -35,27 +35,30 @@ function ConfirmExportDialog({ format, onResult }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-export-title"
-        className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+        // A capsule on screens wide enough for one row (icon, text, buttons side by side); on a
+        // narrow phone it stacks, so it falls back to a heavily rounded card instead.
+        className="bg-white w-full max-w-[600px] shadow-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col items-stretch gap-4 rounded-[28px] px-6 py-5 sm:flex-row sm:items-center sm:gap-4 sm:rounded-full sm:py-3 sm:pl-4 sm:pr-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-3 mb-4">
-          <div className="bg-green-100 p-2 rounded-lg">
-            <DownloadIcon className="w-5 h-5 text-green-600" />
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-[#EAF4FF]">
+            <DownloadIcon className="h-5 w-5 text-[#0085FF]" />
           </div>
-          <h2 id="confirm-export-title" className="text-xl font-bold text-gray-900">
-            Confirm Export
-          </h2>
+          <div className="min-w-0">
+            <h2 id="confirm-export-title" className="text-base font-bold leading-tight text-gray-900">
+              Confirm Export
+            </h2>
+            <p className="mt-0.5 text-[13px] leading-snug text-gray-600">
+              Do you want to export as <span className="font-semibold text-gray-900">{label}</span>?
+            </p>
+          </div>
         </div>
 
-        <p className="text-sm text-gray-600 mb-6">
-          Do you want to export as <span className="font-semibold text-gray-900">{label}</span>?
-        </p>
-
-        <div className="flex justify-end gap-3">
+        <div className="flex flex-shrink-0 justify-end gap-2">
           <button
             type="button"
             onClick={() => onResult(false)}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+            className="rounded-full bg-gray-100 px-5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200"
           >
             Cancel
           </button>
@@ -63,9 +66,9 @@ function ConfirmExportDialog({ format, onResult }) {
             ref={confirmRef}
             type="button"
             onClick={() => onResult(true)}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center gap-2"
+            className="flex items-center gap-2 rounded-full bg-[#0085FF] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#0078E8]"
           >
-            <DownloadIcon className="w-4 h-4" />
+            <DownloadIcon className="h-4 w-4" />
             Export
           </button>
         </div>

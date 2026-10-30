@@ -1,4 +1,7 @@
 const Branding = require('../models/Branding');
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 // Helper function to delete file from S3
 async function deleteFileFromS3(key) {
@@ -44,6 +47,71 @@ function extractS3KeyFromUrl(url) {
   
   return null;
 }
+
+// ---- Logo as a data URL, for client-side PDF letterheads ---------------------------------------
+// The logo lives on CloudFront (a different origin from the app), and a browser can't turn a
+// cross-origin image into bytes for jsPDF without CORS headers on that CDN. So the server reads it
+// and hands it over as a data URL, the same way the server-side invoice PDFs already load it.
+const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+const LOGO_TYPES = ['image/png', 'image/jpeg']; // the formats jsPDF can embed
+
+// Only fetch from this deployment's own storage hosts. The URL comes from the organization's saved
+// branding, never from the request, but the allow-list keeps this from ever being turned into a
+// fetch-anything proxy.
+function isOwnStorageHost(hostname) {
+  const cdn = (process.env.CLOUDFRONT_DOMAIN || '').toLowerCase().replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+  const host = hostname.toLowerCase();
+  return (cdn && host === cdn) || host.endsWith('.amazonaws.com');
+}
+
+function sniffImageType(buffer) {
+  if (buffer.length > 8 && buffer.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
+  return null;
+}
+
+async function readLogoBytes(logoUrl) {
+  if (/^https?:\/\//i.test(logoUrl)) {
+    if (!isOwnStorageHost(new URL(logoUrl).hostname)) return null;
+    const response = await axios.get(logoUrl, {
+      responseType: 'arraybuffer',
+      timeout: 8000,
+      maxContentLength: LOGO_MAX_BYTES,
+      maxBodyLength: LOGO_MAX_BYTES,
+    });
+    return Buffer.from(response.data);
+  }
+  // Older logos were stored on this server under /uploads.
+  if (logoUrl.startsWith('/uploads/')) {
+    const root = path.resolve('uploads');
+    const file = path.resolve(root, '.' + logoUrl.slice('/uploads'.length));
+    if (!file.startsWith(root + path.sep)) return null; // no path traversal out of /uploads
+    const stat = await fs.promises.stat(file);
+    if (stat.size > LOGO_MAX_BYTES) return null;
+    return fs.promises.readFile(file);
+  }
+  return null;
+}
+
+// GET /api/branding/logo-data -> { dataUrl } (null when there is no usable logo)
+exports.getLogoDataUrl = async (req, res) => {
+  try {
+    const branding = await Branding.findOne({ organization: req.user.organization })
+      .sort({ updatedAt: -1 })
+      .select('logoUrl');
+    if (!branding?.logoUrl) return res.json({ dataUrl: null });
+
+    const bytes = await readLogoBytes(branding.logoUrl);
+    const type = bytes && bytes.length <= LOGO_MAX_BYTES ? sniffImageType(bytes) : null;
+    if (!type || !LOGO_TYPES.includes(type)) return res.json({ dataUrl: null });
+
+    res.json({ dataUrl: `data:${type};base64,${bytes.toString('base64')}` });
+  } catch (error) {
+    // A missing logo must never stop a report from exporting: answer "no logo".
+    console.error('Logo data lookup failed:', error.message);
+    res.json({ dataUrl: null });
+  }
+};
 
 // GET current branding for logged in user's organization
 exports.getBranding = async (req, res) => {

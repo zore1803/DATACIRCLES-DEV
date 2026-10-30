@@ -91,6 +91,9 @@ import AppToaster from "../components/AppToaster";
 import { useSubscription } from "../contexts/SubscriptionContext";
 import { hasMinPlan } from "../utils/subscriptionHelpers";
 import UpgradeRequiredModal from "../components/subscription/UpgradeRequiredModal";
+import StickyScrollBoard from "../components/common/StickyScrollBoard";
+import excelLogo from "../assets/excel-logo.png";
+import pdfLogo from "../assets/pdf-icon.png";
 import StatTile from "../components/common/StatTile";
 import TableViewIcon from "../components/common/TableViewIcon";
 import KanbanViewIcon from "../components/common/KanbanViewIcon";
@@ -178,7 +181,7 @@ const MAX_STALE_DAYS = 3650;
 
 // Small dialog for the one org-wide deal setting: when a deal counts as
 // "stale" (created more than N days ago, shown red; 0 = off). Opened from the
-// three-dot menu (Deal Settings) or the "Stale after..." chip by the title.
+// three-dot menu (Stale Deals) or the "Stale after..." chip by the title.
 const DealSettingSidebar = ({ isOpen, onClose, staleDays, setStaleDays, deals = [] }) => {
   useBodyScrollLock(isOpen);
   const [value, setValue] = useState(String(staleDays));
@@ -239,7 +242,7 @@ const DealSettingSidebar = ({ isOpen, onClose, staleDays, setStaleDays, deals = 
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 pt-4 pb-3">
-          <h2 className="text-base font-bold text-gray-900 font-sf">Deal Settings</h2>
+          <h2 className="text-base font-bold text-gray-900 font-sf">Stale Deals</h2>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors" aria-label="Close">
             <X className="w-4 h-4 text-gray-500" />
           </button>
@@ -2380,7 +2383,7 @@ function Deals() {
               </div>
               <p className="text-[#5B5A64] text-[10px] sm:text-sm m-0 leading-tight truncate">
                 Manage Your Sales Pipeline
-                {/* Quick way into Deal Settings without opening the three-dot menu. */}
+                {/* Quick way into Stale Deals without opening the three-dot menu. */}
                 <button
                   type="button"
                   onClick={() => setShowSettings(true)}
@@ -2562,6 +2565,9 @@ function Deals() {
                             }}
                             className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                           >
+                            <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center -my-0.5">
+                              <img src={excelLogo} alt="" className="h-5 w-5 object-contain" />
+                            </span>
                             Export as Excel
                           </button>
                           <button
@@ -2572,6 +2578,9 @@ function Deals() {
                             }}
                             className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                           >
+                            <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center -my-0.5">
+                              <img src={pdfLogo} alt="" className="h-4 w-4 object-contain" />
+                            </span>
                             Export as PDF
                           </button>
                         </div>
@@ -2595,7 +2604,7 @@ function Deals() {
                       className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                     >
                       <SettingsIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
-                      Deal Settings
+                      Stale Deals
                     </button>
                   </div>
                 )}
@@ -2778,10 +2787,7 @@ function Deals() {
                 so the page itself scrolls to reveal more cards instead of a
                 fixed-height column clipping them. Horizontal scroll for
                 sliding between Open/Won/Lost is unchanged. */}
-            <div
-              className="overflow-x-auto scrollbar-hide -mx-6"
-              style={{ padding: "16px 24px 24px" }}
-            >
+            <StickyScrollBoard className="-mx-6" style={{ padding: "16px 24px 24px" }}>
               <div className="flex min-w-max" style={{ gap: "16px" }}>
                 {statuses?.map((status) => {
                   const columnDeals = dealsByStatus[status] ?? [];
@@ -2807,7 +2813,7 @@ function Deals() {
                   );
                 })}
               </div>
-            </div>
+            </StickyScrollBoard>
             {createPortal(
               <DragOverlay dropAnimation={null}>
                 {activeDeal ? (

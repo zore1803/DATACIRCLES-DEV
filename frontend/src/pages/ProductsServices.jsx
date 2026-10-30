@@ -126,9 +126,21 @@ const ViewDetails = ({ item, onRequestClose, onEdit, onDelete }) => {
         {/* Header — matches the quick-drawer header spec, with the
             id-style Edit/Delete/Close row TaskDetailsModal/CallLogDetailView use. */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
-          <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
-            Item Details
-          </h2>
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="min-w-0 truncate text-[16px] font-semibold leading-6 text-[#161618]" title={item.name}>
+              {item.name}
+            </h2>
+            <span
+              className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${item.type === "product" ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"}`}
+            >
+              {item.type}
+            </span>
+            <span
+              className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${item.isActive ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}
+            >
+              {item.isActive ? "Active" : "Inactive"}
+            </span>
+          </div>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -159,182 +171,111 @@ const ViewDetails = ({ item, onRequestClose, onEdit, onDelete }) => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar">
-          <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-900 mb-3 font-inter">
-              Variants
-            </h3>
+        <div className="flex-1 overflow-y-auto px-6 py-5 custom-scrollbar space-y-5">
+          {/* Identity */}
+          <div>
+            {item.description ? (
+              <div
+                className="ql-editor !p-0 text-sm text-[#4B5563] font-inter"
+                dangerouslySetInnerHTML={{ __html: item.description }}
+              />
+            ) : (
+              <p className="text-sm text-gray-400">No description provided</p>
+            )}
+          </div>
+
+          {/* Pricing + details, one table */}
+          {(() => {
+            const profit = (parseFloat(item.sellingPrice) || 0) - (parseFloat(item.purchasePrice) || 0);
+            const rows = [
+              ["Purchase Price", formatCurrency(item.purchasePrice)],
+              ["Selling Price", formatCurrency(item.sellingPrice)],
+            ];
+            const details = [
+              ["Category", item.category || "N/A"],
+              ["HSN/SAC", item.hsnSac || "N/A"],
+              ["Tax Inclusive", item.taxInclusive ? "Yes" : "No"],
+            ];
+            const row = ([label, value]) => (
+              <div key={label} className="flex items-center justify-between gap-4 px-4 py-3">
+                <span className="text-[13px] text-[#78788D]">{label}</span>
+                <span className="text-[13px] font-medium text-[#161618] text-right">{value}</span>
+              </div>
+            );
+            return (
+              <div className="rounded-xl border border-[#E5E7EB] divide-y divide-[#E5E7EB] overflow-hidden">
+                {rows.map(row)}
+                <div className={`flex items-center justify-between gap-4 px-4 py-3 ${profit < 0 ? "bg-red-50" : "bg-green-50"}`}>
+                  <span className="text-[13px] font-medium text-[#161618]">Profit per unit</span>
+                  <span className={`text-[14px] font-semibold ${profit < 0 ? "text-red-600" : "text-green-700"}`}>
+                    {profit < 0 ? "-" : ""}₹{formatNumberFixed(Math.abs(profit))}
+                  </span>
+                </div>
+                {details.map(row)}
+              </div>
+            );
+          })()}
+
+          {/* Variants */}
+          <div>
+            <h4 className="text-[11px] font-medium text-[#78788D] uppercase tracking-wide mb-2">
+              Variants{item.variants?.length ? ` (${item.variants.length})` : ""}
+            </h4>
             {item.variants && item.variants.length > 0 ? (
               <div className="space-y-2">
-                {item.variants.map((variant, index) => (
-                  <div
-                    key={index}
-                    className="p-3 bg-gray-50 rounded-lg border border-gray-100"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 font-inter">
-                          {variant.name}
-                        </p>
-                        <p className="text-xs text-gray-500 font-inter mt-0.5">
-                          SKU: {variant.sku || "N/A"}
-                        </p>
-                        <p className="text-xs text-gray-500 font-inter mt-0.5">
-                          {Object.entries(variant.attributes || {})
-                            .map(([key, value]) => `${key}: ${value}`)
-                            .join(", ")}
-                        </p>
+                {item.variants.map((variant, index) => {
+                  const attrs = Object.entries(variant.attributes || {}).filter(([k]) => k);
+                  return (
+                    <div key={index} className="rounded-xl border border-[#E5E7EB] px-4 py-3">
+                      <div className="flex justify-between items-start gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-[#161618] break-words">{variant.name}</p>
+                          <p className="text-xs text-[#78788D] mt-0.5">SKU: {variant.sku || "N/A"}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-sm font-semibold text-[#161618]">{formatCurrency(variant.sellingPrice)}</p>
+                          <p className="text-xs text-[#78788D] mt-0.5">Stock: {variant.stock}</p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-gray-900 font-inter">
-                          {formatCurrency(variant.sellingPrice)}
-                        </p>
-                        <p className="text-xs text-gray-500 font-inter mt-0.5">
-                          Stock: {variant.stock}
-                        </p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {attrs.map(([key, value]) => (
+                          <span key={key} className="px-2 py-0.5 rounded-full bg-gray-100 text-[11px] text-[#4B5563]">
+                            {key}: <span className="font-medium text-[#161618]">{value}</span>
+                          </span>
+                        ))}
                         <span
-                          className={`inline-flex mt-1 px-1.5 py-0.5 rounded text-[10px] uppercase font-semibold border ${variant.isActive ? "bg-green-50 text-green-700 border-green-100" : "bg-gray-50 text-gray-600 border-gray-200"}`}
+                          className={`ml-auto px-2 py-0.5 rounded-full text-[10px] uppercase font-semibold ${variant.isActive ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-600"}`}
                         >
                           {variant.isActive ? "Active" : "Inactive"}
                         </span>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
-              <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                <p className="text-sm text-gray-500 font-inter">
-                  No variants configured
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-inter">
-                  Type
-                </label>
-                <span
-                  className={`px-2 py-1 rounded text-xs font-semibold uppercase ${item.type === "product"
-                    ? "bg-blue-50 text-blue-700 border border-blue-100"
-                    : "bg-purple-50 text-purple-700 border border-purple-100"
-                    }`}
-                >
-                  {item.type}
-                </span>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-inter">
-                  Status
-                </label>
-                <span
-                  className={`px-2 py-1 rounded text-xs font-semibold uppercase ${item.isActive
-                    ? "bg-green-50 text-green-700 border border-green-100"
-                    : "bg-red-50 text-red-700 border border-red-100"
-                    }`}
-                >
-                  {item.isActive ? "Active" : "Inactive"}
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-inter">
-                Item Name
-              </label>
-              <p className="text-sm text-gray-900 font-inter font-medium bg-gray-50 p-2 rounded-lg border border-gray-100">
-                {item.name}
+              <p className="text-sm text-gray-400 rounded-xl border border-dashed border-[#E5E7EB] px-4 py-4 text-center">
+                No variants configured
               </p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-inter">
-                Description
-              </label>
-              {item.description ? (
-                <div
-                  className="ql-editor p-3 bg-gray-50 rounded-lg text-sm text-gray-900 font-inter border border-gray-100"
-                  dangerouslySetInnerHTML={{
-                    __html: item.description,
-                  }}
-                />
-              ) : (
-                <p className="text-sm text-gray-400 italic">
-                  No description provided
-                </p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-inter">
-                  Purchase Price
-                </label>
-                <div className="text-sm text-gray-900 font-inter font-semibold bg-gray-50 p-2 rounded-lg border border-gray-100">
-                  {formatCurrency(item.purchasePrice)}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-inter">
-                  Selling Price
-                </label>
-                <div className="text-sm text-gray-900 font-inter font-semibold bg-gray-50 p-2 rounded-lg border border-gray-100">
-                  {formatCurrency(item.sellingPrice)}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-inter">
-                  Tax Inclusive
-                </label>
-                <p className="text-sm text-gray-900 font-inter">
-                  {item.taxInclusive ? "Yes" : "No"}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-inter">
-                  HSN/SAC
-                </label>
-                <p className="text-sm text-gray-900 font-inter">
-                  {item.hsnSac || "N/A"}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-inter">
-                  Category
-                </label>
-                <p className="text-sm text-gray-900 font-inter">
-                  {item.category || "N/A"}
-                </p>
-              </div>
-            </div>
-
-            {imagePreviews.length > 0 && (
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-inter">
-                  Images
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {imagePreviews.map((preview, index) => (
-                    <img
-                      key={index}
-                      src={preview}
-                      alt={`Image ${index + 1}`}
-                      className="w-full h-24 object-cover rounded-lg border border-gray-200 cursor-pointer"
-                      onClick={() => setSelectedImageIndex(index)}
-                    />
-                  ))}
-                </div>
-              </div>
             )}
           </div>
+
+          {imagePreviews.length > 0 && (
+            <div>
+              <h4 className="text-[11px] font-medium text-[#78788D] uppercase tracking-wide mb-2">Images</h4>
+              <div className="grid grid-cols-3 gap-2">
+                {imagePreviews.map((preview, index) => (
+                  <img
+                    key={index}
+                    src={preview}
+                    alt={`Image ${index + 1}`}
+                    className="w-full h-24 object-cover rounded-xl border border-[#E5E7EB] cursor-pointer"
+                    onClick={() => setSelectedImageIndex(index)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

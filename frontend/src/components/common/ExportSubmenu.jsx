@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
 import DownloadIcon from "./DownloadIcon";
+import excelLogo from "../../assets/excel-logo.png";
+import pdfLogo from "../../assets/pdf-icon.png";
 
 // "Export" row for a page's ⋮ menu that flies out "Export as Excel" /
 // "Export as PDF" — the same control the Deals page has, packaged so every
@@ -69,6 +71,9 @@ export default function ExportSubmenu({ onExport, onDone, disabled = false, item
                 : "w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors first:rounded-t-lg flex items-center gap-2 whitespace-nowrap"
             }
           >
+            <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center -my-0.5">
+              <img src={excelLogo} alt="" className="h-5 w-5 object-contain" />
+            </span>
             Export as Excel
           </button>
           <button
@@ -80,6 +85,9 @@ export default function ExportSubmenu({ onExport, onDone, disabled = false, item
                 : "w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors last:rounded-b-lg flex items-center gap-2 whitespace-nowrap"
             }
           >
+            <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center -my-0.5">
+              <img src={pdfLogo} alt="" className="h-4 w-4 object-contain" />
+            </span>
             Export as PDF
           </button>
         </div>

@@ -1,7 +1,7 @@
 import DeleteIcon from "../common/DeleteIcon";
 import { UNIT_OPTIONS } from "./unitOptions";
 import VariantImagePicker from "./VariantImagePicker";
-import { stripVariantFileState } from "../../utils/variantResolve";
+import { stripVariantFileState, addBlankAttribute, renameAttribute, attrDisplayKey } from "../../utils/variantResolve";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import React, { useState, useEffect, useRef } from "react";
@@ -526,7 +526,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <label className={lbl + " mb-0"}>Attributes</label>
-                          <button type="button" onClick={() => setCurrentVariant((p) => ({ ...p, attributes: { ...p.attributes, "": "" } }))} className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
+                          <button type="button" onClick={() => setCurrentVariant((p) => ({ ...p, attributes: addBlankAttribute(p.attributes) }))} className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
                             <PlusIcon className="w-4 h-4" /> Add Attribute
                           </button>
                         </div>
@@ -534,7 +534,7 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                           <div className="space-y-2">
                             {Object.entries(currentVariant.attributes).map(([key, val], idx) => (
                               <div key={idx} className="flex gap-2 items-center">
-                                <input type="text" value={key} onChange={(e) => { const nk = e.target.value; setCurrentVariant((p) => { const a = { ...p.attributes }; const v = a[key]; delete a[key]; a[nk] = v; return { ...p, attributes: a }; }); }} placeholder="Name (e.g. color)" className={inputCls({ grow: true })} />
+                                <input type="text" value={attrDisplayKey(key)} onChange={(e) => { const nk = e.target.value; setCurrentVariant((p) => ({ ...p, attributes: renameAttribute(p.attributes, key, nk) })); }} placeholder="Name (e.g. color)" className={inputCls({ grow: true })} />
                                 <input type="text" value={val} onChange={(e) => setCurrentVariant((p) => ({ ...p, attributes: { ...p.attributes, [key]: e.target.value } }))} placeholder="Value (e.g. Red)" className={inputCls({ grow: true })} />
                                 <button type="button" onClick={() => setCurrentVariant((p) => { const a = { ...p.attributes }; delete a[key]; return { ...p, attributes: a }; })} className="text-red-500 hover:text-red-600 p-1"><DeleteIcon className="w-4 h-4" /></button>
                               </div>

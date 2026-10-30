@@ -17,12 +17,16 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
-import { GripVertical, X, Check, Layers, Lock } from "lucide-react";
+import { GripVertical, X, Check, Layers, Lock, ChevronDown } from "lucide-react";
 import toast from "react-hot-toast";
 import AppToaster from "../AppToaster";
 import EditIcon from "../common/EditIcon";
 
-const SortableCard = ({ id, isEditing, editValue, setEditValue, handleUpdate, handleCancel, handleEdit, handleDelete, index }) => {
+// Won and Lost are the pipeline's system stages: they can be dragged anywhere in the pipeline, but
+// never renamed or removed (the API enforces the same rule).
+const SYSTEM_STAGES = ["Won", "Lost"];
+
+const SortableCard = ({ id, isSystem = false, isEditing, editValue, setEditValue, handleUpdate, handleCancel, handleEdit, handleDelete, index }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
 
   const style = {
@@ -30,7 +34,7 @@ const SortableCard = ({ id, isEditing, editValue, setEditValue, handleUpdate, ha
     transition,
   };
 
-  if (isEditing) {
+  if (isEditing && !isSystem) {
     return (
       <div
         ref={setNodeRef}
@@ -86,45 +90,42 @@ const SortableCard = ({ id, isEditing, editValue, setEditValue, handleUpdate, ha
         >
           <GripVertical className="w-5 h-5" />
         </button>
-        <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isSystem ? "bg-[#99A0AE]" : "bg-blue-500"}`} />
         <div className="flex flex-col">
           <span className="text-[14px] font-medium text-[#1F2937] leading-tight">{id}</span>
-          <span className="text-[12px] text-blue-600 font-medium">Custom</span>
+          {isSystem ? (
+            <span className="text-[12px] text-[#525866] font-medium">System default</span>
+          ) : (
+            <span className="text-[12px] text-blue-600 font-medium">Custom</span>
+          )}
         </div>
       </div>
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        <button
-          onClick={() => handleEdit(index)}
-          className="flex items-center justify-center w-8 h-8 rounded-full text-[#99A0AE] hover:text-blue-600 hover:bg-blue-50 transition-colors"
-          title="Edit"
+      {isSystem ? (
+        // Draggable, but not editable or removable: a lock stands in for the edit/delete buttons.
+        <div
+          className="flex items-center justify-center w-8 h-8 flex-shrink-0 text-[#99A0AE]"
+          title="System stage: can be moved, but not renamed or removed"
         >
-          <EditIcon className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => handleDelete(index)}
-          className="flex items-center justify-center w-8 h-8 rounded-full text-[#99A0AE] hover:text-red-600 hover:bg-red-50 transition-colors"
-          title="Delete"
-        >
-          <DeleteIcon className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const StaticCard = ({ status }) => {
-  return (
-    <div className="bg-[#FAFBFC] border border-[#E1E4EA] rounded-lg p-3 flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
-          <Lock className="w-4 h-4 text-[#99A0AE]" />
+          <Lock className="w-4 h-4" />
         </div>
-        <div className="w-2 h-2 rounded-full bg-[#99A0AE] flex-shrink-0" />
-        <div className="flex flex-col">
-          <span className="text-[14px] font-medium text-[#1F2937] leading-tight">{status}</span>
-          <span className="text-[12px] text-[#525866] font-medium">System default</span>
+      ) : (
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <button
+            onClick={() => handleEdit(index)}
+            className="flex items-center justify-center w-8 h-8 rounded-full text-[#99A0AE] hover:text-blue-600 hover:bg-blue-50 transition-colors"
+            title="Edit"
+          >
+            <EditIcon className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleDelete(index)}
+            className="flex items-center justify-center w-8 h-8 rounded-full text-[#99A0AE] hover:text-red-600 hover:bg-red-50 transition-colors"
+            title="Delete"
+          >
+            <DeleteIcon className="w-4 h-4" />
+          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 };
@@ -242,12 +243,21 @@ export default function KanbanSettings({ embedded = false }) {
       const idx = statuses.indexOf(insertAfter);
       updated = [...statuses.slice(0, idx + 1), name, ...statuses.slice(idx + 1)];
     } else {
-      updated = [...statuses, name];
+      // "At the end" keeps Won and Lost last: the new stage goes in front of the system stages
+      // that close the pipeline. (If the user has moved them elsewhere, it really is the end.)
+      updated = [...statuses.slice(0, endOfCustomStages), name, ...statuses.slice(endOfCustomStages)];
     }
     saveBoard(updated);
     setNewStatus("");
     setInsertAfter("");
   };
+
+  // Index where the run of system stages (Won, Lost) closing the pipeline begins; equals
+  // statuses.length when the pipeline doesn't end with them.
+  let endOfCustomStages = statuses.length;
+  while (endOfCustomStages > 0 && SYSTEM_STAGES.includes(statuses[endOfCustomStages - 1])) endOfCustomStages -= 1;
+  const closingSystemStages = statuses.slice(endOfCustomStages);
+  const defaultInsertLabel = closingSystemStages.length ? `Before ${closingSystemStages.join(" & ")}` : "At the end";
 
   const handleEdit = (index) => {
     const status = statuses[index];
@@ -330,18 +340,23 @@ export default function KanbanSettings({ embedded = false }) {
           {/* Insert position — lets the user place a new stage where it belongs
               in the pipeline instead of always at the end. */}
           {statuses.length > 0 && (
-            <select
-              value={insertAfter}
-              onChange={(e) => setInsertAfter(e.target.value)}
-              title="Where to add the new stage"
-              className="flex-shrink-0 h-10 px-3 pr-8 text-[13px] rounded-full border border-[#E1E4EA] bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 max-w-[190px]"
-            >
-              <option value="">At the end</option>
-              <option value="__start__">At the beginning</option>
-              {statuses.map((s) => (
-                <option key={s} value={s}>After “{s}”</option>
-              ))}
-            </select>
+            // The native arrow is hidden and a chevron drawn instead, so the text and the arrow get
+            // even padding inside the pill (the browser's own arrow hugs the right edge).
+            <div className="relative flex-shrink-0 max-w-[190px]">
+              <select
+                value={insertAfter}
+                onChange={(e) => setInsertAfter(e.target.value)}
+                title="Where to add the new stage"
+                className="h-10 w-full appearance-none pl-4 pr-10 text-[13px] leading-none rounded-full border border-[#E1E4EA] bg-white text-[#0F172A] cursor-pointer truncate focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+              >
+                <option value="">{defaultInsertLabel}</option>
+                <option value="__start__">At the beginning</option>
+                {statuses.map((s) => (
+                  <option key={s} value={s}>After “{s}”</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]" />
+            </div>
           )}
           <button
             type="submit"
@@ -365,72 +380,44 @@ export default function KanbanSettings({ embedded = false }) {
             <p className="text-xs text-gray-400 mt-0.5">Add your first stage to get started</p>
           </div>
         ) : (
-          <div className="space-y-8 mt-6">
-            {/* System Defaults Section */}
-            <div>
-              <div className="mb-3 border-b border-[#E1E4EA] pb-2">
-                <h3 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase">System Default</h3>
-              </div>
-              <div className="space-y-2">
-                {statuses.map((status) => {
-                  if (status !== "Won" && status !== "Lost") return null;
-                  return <StaticCard key={status} status={status} />;
-                })}
-              </div>
+          <div className="mt-6">
+            <div className="mb-3 border-b border-[#E1E4EA] pb-2">
+              <h3 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase">Pipeline order</h3>
             </div>
-
-            {/* Custom Stages Section */}
-            <div>
-              <div className="mb-3 border-b border-[#E1E4EA] pb-2">
-                <h3 className="text-[11px] font-bold text-gray-500 tracking-wider uppercase">Custom Stages</h3>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <div className="space-y-2 relative">
+                <SortableContext items={statuses} strategy={verticalListSortingStrategy}>
+                  {statuses.map((status, index) => (
+                    <SortableCard
+                      key={status}
+                      id={status}
+                      index={index}
+                      isSystem={SYSTEM_STAGES.includes(status)}
+                      isEditing={editIndex === index}
+                      editValue={editValue}
+                      setEditValue={setEditValue}
+                      handleUpdate={handleUpdate}
+                      handleCancel={handleCancel}
+                      handleEdit={handleEdit}
+                      handleDelete={handleDelete}
+                    />
+                  ))}
+                </SortableContext>
               </div>
-              
-              {statuses.filter((s) => s !== "Won" && s !== "Lost").length === 0 ? (
-                <div className="text-center py-8 rounded-xl border border-dashed border-[#E1E4EA] bg-[#FAFBFC]">
-                  <p className="text-sm text-gray-500">No custom stages yet</p>
-                </div>
-              ) : (
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                >
-                  <div className="space-y-2 relative">
-                    <SortableContext
-                      items={statuses.filter((s) => s !== "Won" && s !== "Lost")}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      {statuses.map((status, index) => {
-                        if (status === "Won" || status === "Lost") return null;
-                        return (
-                          <SortableCard
-                            key={status}
-                            id={status}
-                            index={index}
-                            isEditing={editIndex === index}
-                            editValue={editValue}
-                            setEditValue={setEditValue}
-                            handleUpdate={handleUpdate}
-                            handleCancel={handleCancel}
-                            handleEdit={handleEdit}
-                            handleDelete={handleDelete}
-                          />
-                        );
-                      })}
-                    </SortableContext>
-                  </div>
-                </DndContext>
-              )}
-            </div>
+            </DndContext>
           </div>
         )}
 
         {!embedded && (
           <p className="text-xs text-gray-400 mt-3">
             Drag a row to reorder the pipeline. Changes save automatically and apply to all deals.
-            Won and Lost cannot be renamed or removed.
+            Won and Lost can be moved anywhere in the pipeline, but cannot be renamed or removed.
           </p>
         )}
       </div>
