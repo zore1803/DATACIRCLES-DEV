@@ -1,6 +1,38 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import API from "../services/api";
+
+// Customization questions. `multi` questions take up to MAX_PICKS answers, from the chips and/or typed in.
+const MAX_PICKS = 2;
+const QUESTIONS = [
+  {
+    field: "usage",
+    label: "What will you be using DataCircles for?",
+    options: ["CRM", "Project Management", "Invoicing", "HR"],
+    placeholder: "Type what you use it for, press Enter",
+    multi: true,
+  },
+  {
+    field: "mainGoal",
+    label: "What is your main goal?",
+    options: ["Increase Sales", "Organization", "Team Collab"],
+    placeholder: "Type your goal, press Enter",
+    multi: true,
+  },
+  {
+    field: "teamSize",
+    label: "How big is your team?",
+    options: ["Just me", "2-10", "11-50", "50+"],
+    multi: false,
+  },
+  {
+    field: "source",
+    label: "Where did you hear about us?",
+    options: ["Google", "LinkedIn", "Friend"],
+    placeholder: "Type where you heard about us, press Enter",
+    multi: true,
+  },
+];
 
 export default function Register() {
   const location = useLocation();
@@ -27,13 +59,105 @@ export default function Register() {
 
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
 
+  // Signup is three steps and the account is only created at the very end:
+  //   1 account details + email OTP  ->  2 customization questions  ->  3 company (skippable)
+  const [step, setStep] = useState(1);
+  const [answers, setAnswers] = useState({ usage: [], mainGoal: [], teamSize: "", source: [] });
+  const [company, setCompany] = useState({ workspaceName: "", workspaceAddress: "", workspaceState: "" });
+  // "Others": an input appears, Enter adds the typed value as another selected chip.
+  const [otherOpen, setOtherOpen] = useState({ usage: false, mainGoal: false, source: false });
+  const [otherDraft, setOtherDraft] = useState({ usage: "", mainGoal: "", source: "" });
+
+  const togglePick = (field, value) =>
+    setAnswers((prev) => {
+      const current = prev[field];
+      if (current.includes(value)) return { ...prev, [field]: current.filter((v) => v !== value) };
+      if (current.length >= MAX_PICKS) return prev;
+      return { ...prev, [field]: [...current, value] };
+    });
+
+  const addCustomPick = (field) => {
+    const value = otherDraft[field].trim().slice(0, 60);
+    if (!value) return;
+    setAnswers((prev) => {
+      const current = prev[field];
+      if (current.length >= MAX_PICKS || current.some((v) => v.toLowerCase() === value.toLowerCase())) return prev;
+      return { ...prev, [field]: [...current, value] };
+    });
+    setOtherDraft((prev) => ({ ...prev, [field]: "" }));
+  };
+
+  const questionsAnswered =
+    answers.usage.length > 0 && answers.mainGoal.length > 0 && !!answers.teamSize && answers.source.length > 0;
+
+  // Email is verified with a one-time code BEFORE the account is created.
+  // idle -> (code sent) sent -> (code accepted) verified
+  const [emailStep, setEmailStep] = useState("idle");
+  const [emailOtp, setEmailOtp] = useState("");
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [resendIn, setResendIn] = useState(0);
+
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (resendIn <= 0) return undefined;
+    const t = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
+
+  const setEmailError = (message) =>
+    setErrors((prev) => ({ ...prev, workEmail: message, general: "" }));
+
+  const handleSendEmailOtp = async () => {
+    const email = workEmail.trim().toLowerCase();
+    if (!email) return setEmailError("Work email is required.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return setEmailError("Please enter a valid email address.");
+    }
+    try {
+      setOtpBusy(true);
+      setEmailError("");
+      await API.post("/auth/signup/send-otp", { email });
+      setEmailOtp("");
+      setEmailStep("sent");
+      setResendIn(30);
+    } catch (error) {
+      setEmailError(error.response?.data?.message || "Unable to send the code. Please try again.");
+    } finally {
+      setOtpBusy(false);
+    }
+  };
+
+  const handleVerifyEmailOtp = async () => {
+    if (emailOtp.length !== 6 || otpBusy) return;
+    try {
+      setOtpBusy(true);
+      setEmailError("");
+      await API.post("/auth/signup/verify-otp", {
+        email: workEmail.trim().toLowerCase(),
+        code: emailOtp,
+      });
+      setEmailStep("verified");
+    } catch (error) {
+      setEmailError(error.response?.data?.message || "Invalid verification code.");
+    } finally {
+      setOtpBusy(false);
+    }
+  };
+
+  // Editing the address invalidates any code that was sent for the old one.
+  const handleChangeEmail = () => {
+    setEmailStep("idle");
+    setEmailOtp("");
+    setResendIn(0);
+    setEmailError("");
+  };
 
   // ==================================================
   // HANDLE SIGNUP
   // ==================================================
 
-  const handleSignup = async () => {
+  const handleNext = () => {
     const newErrors = {
       fullName: "",
       workEmail: "",
@@ -62,6 +186,8 @@ export default function Register() {
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(workEmail.trim())
     ) {
       newErrors.workEmail = "Please enter a valid email address.";
+    } else if (emailStep !== "verified") {
+      newErrors.workEmail = "Please verify your email to continue.";
     }
 
     // --------------------------------------------------
@@ -101,17 +227,28 @@ export default function Register() {
       return;
     }
 
-    // ==================================================
-    // SEND DATA TO BACKEND
-    // ==================================================
+    // Nothing is sent yet — the account is created after the last step.
+    setErrors(newErrors);
+    setStep(2);
+  };
 
+  // Final step. `includeCompany` is false when the company step was skipped.
+  const handleCreateAccount = async (includeCompany) => {
     try {
       setIsCreatingAccount(true);
 
-      const { data } = await API.post("/auth/register", {
+      await API.post("/auth/register", {
         fullName: fullName.trim(),
         email: workEmail.trim().toLowerCase(),
         password,
+        ...answers,
+        ...(includeCompany
+          ? {
+              workspaceName: company.workspaceName.trim(),
+              workspaceAddress: company.workspaceAddress.trim(),
+              workspaceState: company.workspaceState.trim(),
+            }
+          : {}),
       });
 
       // --------------------------------------------------
@@ -126,16 +263,25 @@ export default function Register() {
         general: "",
       });
 
-      // Registration is completed only after OTP verification.
-      navigate("/verification", {
-        state: {
-          email:
-            data.user?.email ||
-            workEmail.trim().toLowerCase(),
-        },
-      });
+      // The email was verified before this call, so the account is ready to use.
+      setAccountCreated(true);
     } catch (error) {
       console.error("Signup error:", error);
+
+      // The email verification window (10 min) can lapse while the later steps are filled in.
+      if (/verify your email/i.test(error.response?.data?.message || "")) {
+        setEmailStep("idle");
+        setEmailOtp("");
+        setStep(1);
+        setErrors({
+          fullName: "",
+          workEmail: error.response.data.message,
+          password: "",
+          confirmPassword: "",
+          general: "",
+        });
+        return;
+      }
 
       setErrors({
         fullName: "",
@@ -356,7 +502,9 @@ export default function Register() {
                       text-[#0F172A]
                     "
                   >
-                    Create Your Account
+                    {step === 1 && "Create Your Account"}
+                    {step === 2 && "Customize Your Workspace"}
+                    {step === 3 && "Tell Us About Your Company"}
                   </h1>
 
                   {/* Description */}
@@ -371,9 +519,25 @@ export default function Register() {
                       text-[#475569]
                     "
                   >
-                    Set up your workspace and start managing your business project
-                    workflows.
+                    {step === 1 &&
+                      "Set up your workspace and start managing your business project workflows."}
+                    {step === 2 && "A few quick questions so we can tailor DataCircles to you."}
+                    {step === 3 &&
+                      "Add your company details now, or skip and do it later from Settings."}
                   </p>
+
+                  {/* Step indicator */}
+                  <div className="mt-[clamp(10px,1.6vh,14px)] flex items-center gap-2">
+                    {[1, 2, 3].map((n) => (
+                      <span
+                        key={n}
+                        className={`h-1.5 flex-1 rounded-full ${n <= step ? "bg-[#0085FF]" : "bg-[#E2E8F0]"}`}
+                      />
+                    ))}
+                    <span className="ml-1 whitespace-nowrap font-['Inter'] text-[12px] font-medium text-[#64748B]">
+                      Step {step} of 3
+                    </span>
+                  </div>
 
                 </div>
 
@@ -381,13 +545,14 @@ export default function Register() {
                     FORM SECTION
                     ================================================== */}
 
+                {step === 1 && (
                 <div className="mt-[clamp(16px,2.5vh,24px)] w-full">
 
                   {/* Full Name + Work Email */}
-                  <div className="flex w-full flex-col gap-[clamp(14px,2.5vh,25px)] sm:flex-row">
+                  <div className="flex w-full flex-col gap-[clamp(14px,2.5vh,25px)]">
 
                     {/* FULL NAME */}
-                    <div className="w-full sm:w-[calc(50%-8px)]">
+                    <div className="w-full">
 
                       <label
                         className="
@@ -448,8 +613,9 @@ export default function Register() {
                     </div>
 
                     {/* WORK EMAIL */}
-                    <div className="w-full sm:w-[calc(50%-8px)]">
+                    <div className="w-full">
 
+                      <div className="flex items-center justify-between">
                       <label
                         className="
                           block
@@ -460,16 +626,41 @@ export default function Register() {
                           text-[#0F172A]
                         "
                       >
-                        Work email{" "}
+                        {emailStep === "sent" ? "Verification code" : "Work email"}{" "}
                         <span className="text-[#DC2626]">*</span>
                       </label>
+                      {emailStep === "verified" && (
+                        <button
+                          type="button"
+                          onClick={handleChangeEmail}
+                          className="font-['Inter'] text-[12px] font-medium text-[#475569] hover:text-[#0F172A]"
+                        >
+                          Change email
+                        </button>
+                      )}
+                      </div>
 
+                      <div className="mt-[clamp(6px,1.2vh,8px)] flex items-center gap-2">
                       <input
-                        type="email"
-                        placeholder="ex.johndoe@example.com"
-                        value={workEmail}
+                        type={emailStep === "sent" ? "text" : "email"}
+                        inputMode={emailStep === "sent" ? "numeric" : undefined}
+                        autoComplete={emailStep === "sent" ? "one-time-code" : undefined}
+                        maxLength={emailStep === "sent" ? 6 : undefined}
+                        placeholder={emailStep === "sent" ? "Enter 6-digit code" : "ex.johndoe@example.com"}
+                        value={emailStep === "sent" ? emailOtp : workEmail}
+                        disabled={emailStep === "verified"}
+                        onKeyDown={(e) => {
+                          if (emailStep === "sent" && e.key === "Enter") {
+                            e.preventDefault();
+                            handleVerifyEmailOtp();
+                          }
+                        }}
                         onChange={(e) => {
-                          setWorkEmail(e.target.value);
+                          if (emailStep === "sent") {
+                            setEmailOtp(e.target.value.replace(/\D/g, "").slice(0, 6));
+                          } else {
+                            setWorkEmail(e.target.value);
+                          }
 
                           setErrors((prev) => ({
                             ...prev,
@@ -478,13 +669,15 @@ export default function Register() {
                           }));
                         }}
                         className={`
-                          mt-[clamp(6px,1.2vh,8px)]
                           h-[clamp(42px,5.5vh,48px)]
-                          w-full
+                          min-w-0
+                          flex-1
                           rounded-full
                           border
                           bg-white
                           px-[clamp(12px,1.5vw,16px)]
+                          disabled:bg-[#F8FAFC]
+                          disabled:text-[#475569]
                           font-['Inter']
                           text-[clamp(12px,1.4vw,14px)]
                           font-normal
@@ -492,6 +685,7 @@ export default function Register() {
                           text-[#0F172A]
                           outline-none
                           placeholder:text-[#64748B]
+                          ${emailStep === "sent" ? "tracking-[0.25em] placeholder:tracking-normal" : ""}
                           ${
                             errors.workEmail
                               ? "border-[#DC2626]"
@@ -499,6 +693,66 @@ export default function Register() {
                           }
                         `}
                       />
+
+                      {emailStep === "idle" && (
+                        <button
+                          type="button"
+                          onClick={handleSendEmailOtp}
+                          disabled={otpBusy || !workEmail.trim()}
+                          className="h-[clamp(42px,5.5vh,48px)] shrink-0 rounded-full bg-[#0085FF] px-4 font-['Inter'] text-[13px] font-medium text-white transition hover:bg-[#0078E8] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {otpBusy ? "Sending..." : "Verify"}
+                        </button>
+                      )}
+                      {emailStep === "sent" && (
+                        <button
+                          type="button"
+                          onClick={handleVerifyEmailOtp}
+                          disabled={otpBusy || emailOtp.length !== 6}
+                          className="h-[clamp(42px,5.5vh,48px)] shrink-0 rounded-full bg-[#0085FF] px-4 font-['Inter'] text-[13px] font-medium text-white transition hover:bg-[#0078E8] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {otpBusy ? "Checking..." : "Verify"}
+                        </button>
+                      )}
+                      {emailStep === "verified" && (
+                        <span className="flex h-[clamp(42px,5.5vh,48px)] shrink-0 items-center gap-1 px-1 text-[13px] font-medium text-[#16A34A]">
+                          <svg width="14" height="14" viewBox="0 0 28 28" fill="none">
+                            <path d="M23.3333 7L10.5 19.8333L4.66663 14" stroke="#16A34A" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          Verified
+                        </span>
+                      )}
+                      </div>
+
+                      {emailStep === "sent" && (
+                        <div className="mt-1.5 flex flex-col gap-1 font-['Inter'] text-[12px]">
+                          {emailStep === "sent" && (
+                            <span className="text-[#64748B]">
+                              Code sent to{" "}
+                              <span className="font-medium text-[#0F172A]">{workEmail.trim().toLowerCase()}</span>
+                            </span>
+                          )}
+                          <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={handleChangeEmail}
+                            className="font-medium text-[#475569] hover:text-[#0F172A]"
+                          >
+                            Change email
+                          </button>
+                          {emailStep === "sent" && (
+                            <button
+                              type="button"
+                              onClick={handleSendEmailOtp}
+                              disabled={otpBusy || resendIn > 0}
+                              className="font-medium text-[#0085FF] hover:underline disabled:cursor-not-allowed disabled:text-[#94A3B8] disabled:no-underline"
+                            >
+                              {resendIn > 0 ? `Resend code in ${resendIn}s` : "Resend code"}
+                            </button>
+                          )}
+                          </div>
+                        </div>
+                      )}
 
                       {errors.workEmail && (
                         <p className="mt-[4px] text-[clamp(11px,0.9vw,12px)] font-medium leading-[clamp(15px,2vh,16px)] text-[#DC2626]">
@@ -846,8 +1100,7 @@ export default function Register() {
 
                   <button
                     type="button"
-                    onClick={handleSignup}
-                    disabled={isCreatingAccount}
+                    onClick={handleNext}
                     className="
                       mt-[clamp(20px,3.5vh,32px)]
                       h-[clamp(42px,5.5vh,48px)]
@@ -865,12 +1118,171 @@ export default function Register() {
                       disabled:opacity-70
                     "
                   >
-                    {isCreatingAccount
-                      ? "Creating Account..."
-                      : "Create Account"}
+                    Next
                   </button>
 
                 </div>
+                )}
+
+                {step === 2 && (
+                  <div className="mt-[clamp(16px,2.5vh,24px)] w-full">
+                    {QUESTIONS.map((q) => {
+                      const picked = q.multi ? answers[q.field] : [];
+                      const custom = picked.filter((v) => !q.options.includes(v));
+                      const full = q.multi && picked.length >= MAX_PICKS;
+                      return (
+                        <div key={q.field} className="mt-[clamp(14px,2.2vh,20px)] first:mt-0">
+                          <p className="font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium text-[#0F172A]">
+                            {q.label} <span className="text-[#DC2626]">*</span>
+                            {q.multi && (
+                              <span className="ml-2 text-[12px] font-normal text-[#64748B]">Pick up to {MAX_PICKS}</span>
+                            )}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {q.options.map((opt) => {
+                              const on = q.multi ? picked.includes(opt) : answers[q.field] === opt;
+                              return (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  disabled={q.multi && full && !on}
+                                  onClick={() =>
+                                    q.multi
+                                      ? togglePick(q.field, opt)
+                                      : setAnswers((prev) => ({ ...prev, [q.field]: opt }))
+                                  }
+                                  className={`rounded-full border px-4 py-2 font-['Inter'] text-[13px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${on ? "border-[#0085FF] bg-[#EAF4FF] text-[#0085FF]" : "border-[#E2E8F0] bg-white text-[#475569] hover:border-[#CBD5E1]"}`}
+                                >
+                                  {opt}
+                                </button>
+                              );
+                            })}
+                            {custom.map((value) => (
+                              <button
+                                key={value}
+                                type="button"
+                                title="Remove"
+                                onClick={() => togglePick(q.field, value)}
+                                className={`rounded-full border px-4 py-2 font-['Inter'] text-[13px] font-medium transition flex items-center gap-1.5 border-[#0085FF] bg-[#EAF4FF] text-[#0085FF]`}
+                              >
+                                {value}
+                                <span aria-hidden="true" className="text-[15px] leading-none">&times;</span>
+                              </button>
+                            ))}
+                            {q.multi && (
+                              <button
+                                type="button"
+                                disabled={full}
+                                onClick={() => setOtherOpen((prev) => ({ ...prev, [q.field]: !prev[q.field] }))}
+                                className={`rounded-full border px-4 py-2 font-['Inter'] text-[13px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${otherOpen[q.field] && !full ? "border-[#0085FF] bg-[#EAF4FF] text-[#0085FF]" : "border-[#E2E8F0] bg-white text-[#475569] hover:border-[#CBD5E1]"}`}
+                              >
+                                Others
+                              </button>
+                            )}
+                          </div>
+                          {q.multi && otherOpen[q.field] && !full && (
+                            <input
+                              type="text"
+                              autoFocus
+                              maxLength={60}
+                              placeholder={q.placeholder}
+                              value={otherDraft[q.field]}
+                              onChange={(e) => setOtherDraft((prev) => ({ ...prev, [q.field]: e.target.value }))}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  addCustomPick(q.field);
+                                }
+                              }}
+                              className="mt-2 h-[clamp(40px,5.2vh,46px)] w-full rounded-full border border-[#E2E8F0] bg-white px-[clamp(12px,1.5vw,16px)] font-['Inter'] text-[clamp(12px,1.4vw,14px)] text-[#0F172A] outline-none placeholder:text-[#64748B] focus:border-[#0085FF]"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                    <div className="mt-[clamp(20px,3.5vh,32px)] flex gap-3">
+                      <button type="button" onClick={() => setStep(1)} className="h-[clamp(42px,5.5vh,48px)] rounded-full border border-[#E2E8F0] bg-white px-6 font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-[#475569] transition hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-60">
+                        Back
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStep(3)}
+                        disabled={!questionsAnswered}
+                        className="h-[clamp(42px,5.5vh,48px)] flex-1 rounded-full bg-[#0085FF] font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-white transition hover:bg-[#0078E8] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {step === 3 && (
+                  <div className="mt-[clamp(16px,2.5vh,24px)] w-full">
+                    <div>
+                      <label className="block font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-[#0F172A]">Company name</label>
+                      <input
+                        type="text"
+                        placeholder="ex.Acme Pvt Ltd"
+                        value={company.workspaceName}
+                        onChange={(e) => setCompany((prev) => ({ ...prev, workspaceName: e.target.value }))}
+                        className="mt-[clamp(6px,1.2vh,8px)] h-[clamp(42px,5.5vh,48px)] w-full rounded-full border border-[#E2E8F0] bg-white px-[clamp(12px,1.5vw,16px)] font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-normal leading-[20px] text-[#0F172A] outline-none placeholder:text-[#64748B] focus:border-[#0085FF]"
+                      />
+                    </div>
+                    <div className="mt-[clamp(14px,2.2vh,20px)]">
+                      <label className="block font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-[#0F172A]">Address</label>
+                      <input
+                        type="text"
+                        placeholder="ex.12, MG Road, Mumbai"
+                        value={company.workspaceAddress}
+                        onChange={(e) => setCompany((prev) => ({ ...prev, workspaceAddress: e.target.value }))}
+                        className="mt-[clamp(6px,1.2vh,8px)] h-[clamp(42px,5.5vh,48px)] w-full rounded-full border border-[#E2E8F0] bg-white px-[clamp(12px,1.5vw,16px)] font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-normal leading-[20px] text-[#0F172A] outline-none placeholder:text-[#64748B] focus:border-[#0085FF]"
+                      />
+                    </div>
+                    <div className="mt-[clamp(14px,2.2vh,20px)]">
+                      <label className="block font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-[#0F172A]">State</label>
+                      <input
+                        type="text"
+                        placeholder="ex.Maharashtra"
+                        value={company.workspaceState}
+                        onChange={(e) => setCompany((prev) => ({ ...prev, workspaceState: e.target.value }))}
+                        className="mt-[clamp(6px,1.2vh,8px)] h-[clamp(42px,5.5vh,48px)] w-full rounded-full border border-[#E2E8F0] bg-white px-[clamp(12px,1.5vw,16px)] font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-normal leading-[20px] text-[#0F172A] outline-none placeholder:text-[#64748B] focus:border-[#0085FF]"
+                      />
+                    </div>
+
+                    {errors.general && (
+                      <p className="mt-3 text-[clamp(11px,0.9vw,12px)] font-medium text-[#DC2626]">
+                        {errors.general}
+                      </p>
+                    )}
+
+                    <div className="mt-[clamp(20px,3.5vh,32px)] flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setStep(2)}
+                        disabled={isCreatingAccount}
+                        className="h-[clamp(42px,5.5vh,48px)] rounded-full border border-[#E2E8F0] bg-white px-6 font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-[#475569] transition hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCreateAccount(false)}
+                        disabled={isCreatingAccount}
+                        className="h-[clamp(42px,5.5vh,48px)] rounded-full border border-[#E2E8F0] bg-white px-6 font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-[#475569] transition hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Skip
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCreateAccount(true)}
+                        disabled={isCreatingAccount || !company.workspaceName.trim()}
+                        className="h-[clamp(42px,5.5vh,48px)] flex-1 rounded-full bg-[#0085FF] font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-white transition hover:bg-[#0078E8] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isCreatingAccount ? "Creating Account..." : "Create Account"}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* ==================================================
                     SOCIAL + LOGIN SECTION
@@ -878,6 +1290,8 @@ export default function Register() {
 
                 <div className="mt-[clamp(16px,2.5vh,24px)] w-full">
 
+                  {step === 1 && (
+                  <>
                   {/* Or Continue With */}
                   <div className="flex w-full items-center">
 
@@ -965,6 +1379,8 @@ export default function Register() {
                     </p>
 
                   </div>
+                  </>
+                  )}
 
                   {/* FOOTER */}
                   <div className="mt-[clamp(18px,4vh,56px)] whitespace-nowrap w-full justify-center">

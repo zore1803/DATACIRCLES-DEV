@@ -16,6 +16,11 @@ const tempEmailOTPSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    // Wrong-code guesses against this OTP; the signup flow deletes it after too many.
+    attempts: {
+        type: Number,
+        default: 0
+    },
     expires: {
         type: Date,
         required: true

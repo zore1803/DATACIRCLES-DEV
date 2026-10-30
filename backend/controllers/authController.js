@@ -2248,9 +2248,170 @@ async function sendSignupOtpEmail(email, otp) {
   });
 }
 
+const SIGNUP_OTP_TTL_MS = 10 * 60 * 1000;
+const SIGNUP_OTP_MAX_ATTEMPTS = 5;
+const SIGNUP_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * POST /api/auth/signup/send-otp
+ * Body: { email } — first step of self-serve signup. The email is verified
+ * BEFORE any account or workspace exists; /auth/register then requires this
+ * verification to have completed.
+ */
+exports.signupSendOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !SIGNUP_EMAIL_REGEX.test(email)) {
+      return res.status(400).json({ message: "A valid email is required" });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const existing = await User.findOne({ email: normalizedEmail }).select("isEmailVerified").lean();
+    if (existing && existing.isEmailVerified) {
+      return res.status(400).json({ message: "An account with this email already exists." });
+    }
+
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    await TempEmailOTP.deleteMany({ email: normalizedEmail });
+    await new TempEmailOTP({
+      email: normalizedEmail,
+      otp,
+      verified: false,
+      attempts: 0,
+      expires: new Date(Date.now() + SIGNUP_OTP_TTL_MS),
+    }).save();
+
+    await sendSignupOtpEmail(normalizedEmail, otp);
+
+    res.json({ success: true, message: "Verification code sent. Check your email." });
+  } catch (error) {
+    console.error("Signup send OTP error:", error);
+    res.status(500).json({ message: "Unable to send the code. Please try again." });
+  }
+};
+
+/**
+ * POST /api/auth/signup/verify-otp
+ * Body: { email, code } — marks the email verified so /auth/register accepts it.
+ * Five wrong guesses burn the code, so it can't be brute-forced.
+ */
+exports.signupVerifyOtp = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    if (!email || !code) {
+      return res.status(400).json({ message: "Email and code are required" });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const record = await TempEmailOTP.findOne({
+      email: normalizedEmail,
+      verified: false,
+      expires: { $gt: new Date() },
+    });
+    if (!record) {
+      return res.status(400).json({ message: "Code expired. Please request a new one." });
+    }
+
+    if (record.otp !== code.toString()) {
+      record.attempts = (record.attempts || 0) + 1;
+      if (record.attempts >= SIGNUP_OTP_MAX_ATTEMPTS) {
+        await record.deleteOne();
+        return res.status(400).json({ message: "Too many wrong attempts. Please request a new code." });
+      }
+      await record.save();
+      return res.status(400).json({ message: "Invalid verification code." });
+    }
+
+    // Verified. Give the user a fresh window to finish the rest of the form
+    // (createdAt drives the collection's TTL index, so it has to move too).
+    record.verified = true;
+    record.expires = new Date(Date.now() + SIGNUP_OTP_TTL_MS);
+    record.createdAt = new Date();
+    await record.save();
+
+    res.json({ success: true, message: "Email verified." });
+  } catch (error) {
+    console.error("Signup verify OTP error:", error);
+    res.status(500).json({ message: "Unable to verify the code. Please try again." });
+  }
+};
+
+// Free-text signup fields come straight from the browser: trim and cap them.
+const cleanSignupText = (value, max) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+
+// Questionnaire answers allow up to two picks per question (predefined chips and/or
+// typed "Others"). Accepts an array, or a comma-separated string from older clients.
+const SIGNUP_MAX_PICKS = 2;
+function cleanSignupList(value) {
+  const parts = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : [];
+  const seen = new Set();
+  const out = [];
+  for (const part of parts) {
+    const text = cleanSignupText(part, 60);
+    const key = text.toLowerCase();
+    if (!text || seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+    if (out.length >= SIGNUP_MAX_PICKS) break;
+  }
+  return out;
+}
+
+// The optional questionnaire + company steps of the signup form. Everything here
+// may be blank — the company step can be skipped, and the answers are only trusted
+// as display/segmentation data, never for access control.
+function signupProfileFrom(body) {
+  return {
+    usage: cleanSignupList(body.usage),
+    mainGoal: cleanSignupList(body.mainGoal),
+    teamSize: cleanSignupText(body.teamSize, 40),
+    source: cleanSignupList(body.source),
+    workspaceName: cleanSignupText(body.workspaceName, 120),
+    workspaceAddress: cleanSignupText(body.workspaceAddress, 300),
+    workspaceState: cleanSignupText(body.workspaceState, 80),
+  };
+}
+
+// Records the signup answers in the same places Settings/onboarding already read
+// them from (see setupWorkspace), so completing them here means /onboarding has
+// nothing left to ask.
+function applySignupProfile(user, fullName, profile) {
+  const [firstName, ...rest] = fullName.trim().split(/\s+/);
+  // onboardingIntent is the older single-string shape, so the picks are joined for it.
+  user.onboardingIntent = {
+    usage: profile.usage.join(", "),
+    mainGoal: profile.mainGoal.join(", "),
+    source: profile.source.join(", "),
+  };
+  user.onboarding = {
+    isCompleted: Boolean(profile.usage.length && profile.mainGoal.length && profile.source.length),
+    currentStep: 3,
+  };
+  user.userData = user.userData || {};
+  user.userData.onboardingData = {
+    personalInfo: { firstName: firstName || "", lastName: rest.join(" ") },
+    workspaceInfo: {
+      workspaceName: profile.workspaceName,
+      address: profile.workspaceAddress,
+      state: profile.workspaceState,
+      role: "admin",
+    },
+    preferences: {
+      useCases: profile.usage,
+      priorities: profile.mainGoal,
+      teamType: profile.source,
+    },
+  };
+  user.userData.futureData = { ...(user.userData.futureData || {}), teamSize: profile.teamSize };
+  user.markModified("userData");
+}
+
 /**
  * POST /api/auth/register
- * Body: { fullName, email, password }
+ * Body: { fullName, email, password, usage?, mainGoal?, teamSize?, source?,
+ *         workspaceName?, workspaceAddress?, workspaceState? } — requires the
+ * email to have been verified via /auth/signup/send-otp +
+ * /auth/signup/verify-otp first.
  */
 exports.register = async (req, res) => {
   try {
@@ -2259,8 +2420,7 @@ exports.register = async (req, res) => {
     if (!fullName || !fullName.trim()) {
       return res.status(400).json({ message: "Full name is required" });
     }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email || !emailRegex.test(email)) {
+    if (!email || !SIGNUP_EMAIL_REGEX.test(email)) {
       return res.status(400).json({ message: "A valid email is required" });
     }
     if (!password || password.length < 6) {
@@ -2268,6 +2428,17 @@ exports.register = async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const profile = signupProfileFrom(req.body);
+
+    const verifiedOtp = await TempEmailOTP.findOne({
+      email: normalizedEmail,
+      verified: true,
+      expires: { $gt: new Date() },
+    });
+    if (!verifiedOtp) {
+      return res.status(400).json({ message: "Please verify your email before creating the account." });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 12);
     let user = await User.findOne({ email: normalizedEmail });
 
@@ -2276,14 +2447,26 @@ exports.register = async (req, res) => {
     }
 
     if (user && !user.isEmailVerified) {
-      // A previous registration attempt never got verified — let this submission
-      // retry it in place (fresh password/name, fresh OTP) instead of bouncing
-      // off the unique email index with a confusing duplicate-key error.
+      // A registration from the old create-then-verify flow was never finished;
+      // the email is verified now, so complete it in place instead of bouncing
+      // off the unique email index.
       user.name = fullName.trim();
       user.password = hashedPassword;
+      user.isEmailVerified = true;
+      applySignupProfile(user, fullName, profile);
       await user.save();
+      const existingOrg = user.organization ? await Organization.findById(user.organization) : null;
+      if (existingOrg) {
+        if (profile.workspaceName) existingOrg.name = profile.workspaceName;
+        if (profile.workspaceAddress) existingOrg.address = profile.workspaceAddress;
+        if (profile.workspaceState) existingOrg.state = profile.workspaceState;
+        await existingOrg.save();
+      }
     } else {
-      const org = await provisionOrganizationForNewAccount(`${fullName.trim()}'s Workspace`);
+      const org = await provisionOrganizationForNewAccount(profile.workspaceName || `${fullName.trim()}'s Workspace`);
+      if (profile.workspaceAddress) org.address = profile.workspaceAddress;
+      if (profile.workspaceState) org.state = profile.workspaceState;
+      if (profile.workspaceAddress || profile.workspaceState) await org.save();
       user = new User({
         name: fullName.trim(),
         email: normalizedEmail,
@@ -2291,26 +2474,18 @@ exports.register = async (req, res) => {
         organization: org._id,
         role: "admin",
         permissions: ADMIN_PERMISSIONS,
-        isEmailVerified: false,
+        isEmailVerified: true,
         onboarding: { isCompleted: false, currentStep: 1 },
       });
+      applySignupProfile(user, fullName, profile);
       await user.save();
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await TempEmailOTP.deleteMany({ email: normalizedEmail });
-    await new TempEmailOTP({
-      email: normalizedEmail,
-      otp,
-      verified: false,
-      expires: new Date(Date.now() + 10 * 60 * 1000),
-    }).save();
-
-    await sendSignupOtpEmail(normalizedEmail, otp);
 
     res.status(201).json({
       success: true,
-      message: "Account created. Check your email for a verification code.",
+      message: "Account created.",
       user: { email: normalizedEmail },
     });
   } catch (error) {
