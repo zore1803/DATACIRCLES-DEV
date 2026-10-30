@@ -1,4 +1,6 @@
 import PdfIcon from "../common/PdfIcon";
+import { FaWhatsapp } from "react-icons/fa";
+import emailLogo from "../../assets/email-logo.png";
 import EmptyState from "../common/EmptyState";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
@@ -53,8 +55,8 @@ import {
   X,
   IndianRupee,
   Share2,
-  MessageCircle,
-  Mail,
+  
+  
   Copy as CopyIcon,
 } from "lucide-react";
 import { EditablePaginationButtons } from "../common/EditablePaginationButtons";
@@ -1454,7 +1456,7 @@ View or download it here: ${link}`;
                 className="w-[160px] z-[100061] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5"
               >
                 <button type="button" className={itemCls} onClick={() => { close(); window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank"); }}>
-                  <MessageCircle className="w-3.5 h-3.5 text-green-600" />
+                  <FaWhatsapp className="w-3.5 h-3.5 text-[#25D366]" />
                   WhatsApp
                 </button>
                 <button type="button" className={itemCls} onClick={() => {
@@ -1462,7 +1464,7 @@ View or download it here: ${link}`;
                   const to = invoice.deal?.contact?.email || invoice.deal?.company?.email || "";
                   window.location.href = `mailto:${to}?subject=${encodeURIComponent(`Invoice ${num}`)}&body=${encodeURIComponent(message)}`;
                 }}>
-                  <Mail className="w-3.5 h-3.5 text-indigo-600" />
+                  <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain scale-[1.35]" />
                   Email
                 </button>
                 <button type="button" className={itemCls} onClick={async () => {

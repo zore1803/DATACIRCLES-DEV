@@ -11,7 +11,8 @@ import DownloadIcon from "./DownloadIcon";
 // the screen edge that it would be cut off, it opens to the left instead.
 const FLYOUT_WIDTH = 176 + 4 + 12; // w-44 + gap + breathing room
 
-export default function ExportSubmenu({ onExport, onDone, disabled = false, itemClassName = "px-3" }) {
+// `compact` matches the row-actions card style (Companies): 160px card, text-xs rows, dark icons.
+export default function ExportSubmenu({ onExport, onDone, disabled = false, itemClassName = "px-3", compact = false }) {
   const [open, setOpen] = useState(false);
   const [openLeft, setOpenLeft] = useState(false);
   const ref = useRef(null);
@@ -27,8 +28,8 @@ export default function ExportSubmenu({ onExport, onDone, disabled = false, item
   useLayoutEffect(() => {
     if (!open || !ref.current) return;
     const rect = ref.current.getBoundingClientRect();
-    setOpenLeft(rect.right + FLYOUT_WIDTH > document.documentElement.clientWidth);
-  }, [open]);
+    setOpenLeft(rect.right + (compact ? 160 + 4 + 12 : FLYOUT_WIDTH) > document.documentElement.clientWidth);
+  }, [open, compact]);
 
   const pick = (format) => {
     setOpen(false);
@@ -42,28 +43,42 @@ export default function ExportSubmenu({ onExport, onDone, disabled = false, item
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         disabled={disabled}
-        className={`w-full flex items-center gap-2 ${itemClassName} py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50`}
+        className={
+          compact
+            ? "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap disabled:opacity-50"
+            : `w-full flex items-center gap-2 ${itemClassName} py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50`
+        }
       >
-        <DownloadIcon className="w-4 h-4 text-gray-400" />
+        <DownloadIcon className={compact ? "w-3.5 h-3.5 text-[#1C1B1F]" : "w-4 h-4 text-gray-400"} />
         Export
       </button>
       {open && (
         <div
-          className={`absolute top-0 z-10 w-44 bg-white border border-gray-200 rounded-lg shadow-xl ${
-            openLeft ? "right-full mr-1" : "left-full ml-1"
-          }`}
+          className={`absolute top-0 z-10 ${
+            compact
+              ? "w-[160px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5"
+              : "w-44 bg-white border border-gray-200 rounded-lg shadow-xl"
+          } ${openLeft ? "right-full mr-1" : "left-full ml-1"}`}
         >
           <button
             type="button"
             onClick={() => pick("excel")}
-            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors first:rounded-t-lg flex items-center gap-2 whitespace-nowrap"
+            className={
+              compact
+                ? "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                : "w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors first:rounded-t-lg flex items-center gap-2 whitespace-nowrap"
+            }
           >
             Export as Excel
           </button>
           <button
             type="button"
             onClick={() => pick("pdf")}
-            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors last:rounded-b-lg flex items-center gap-2 whitespace-nowrap"
+            className={
+              compact
+                ? "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                : "w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors last:rounded-b-lg flex items-center gap-2 whitespace-nowrap"
+            }
           >
             Export as PDF
           </button>

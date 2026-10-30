@@ -1,6 +1,8 @@
 import React, { useState } from "react";
+import { FaWhatsapp } from "react-icons/fa";
+import emailLogo from "../../assets/email-logo.png";
 import { createPortal } from "react-dom";
-import { MessageCircle, Mail, MessageSquare, Copy } from "lucide-react";
+import { MessageSquare, Copy } from "lucide-react";
 import toast from "react-hot-toast";
 
 // Reusable "Share via WhatsApp/Email/SMS" flyout, generalized from
@@ -144,8 +146,8 @@ export default function ShareFlyoutMenu({
           </>
         ) : (
           [
-            { label: "WhatsApp", icon: <MessageCircle className="w-4 h-4 text-green-600" />, onClick: () => openChannel("whatsapp") },
-            { label: "Email", icon: <Mail className="w-4 h-4 text-blue-600" />, onClick: () => openChannel("email") },
+            { label: "WhatsApp", icon: <FaWhatsapp className="w-4 h-4 text-[#25D366]" />, onClick: () => openChannel("whatsapp") },
+            { label: "Email", icon: <img src={emailLogo} alt="" className="w-4 h-4 object-contain scale-[1.35]" />, onClick: () => openChannel("email") },
             { label: "SMS", icon: <MessageSquare className="w-4 h-4 text-purple-600" />, onClick: () => openChannel("sms") },
             { label: "Copy Link", icon: <Copy className="w-4 h-4 text-gray-500" />, onClick: copyLink },
           ].map(({ label, icon, onClick }) => (

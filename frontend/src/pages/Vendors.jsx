@@ -1434,7 +1434,7 @@ function Vendors() {
             {showMoreMenu && (
               <div
                 onClick={(e) => e.stopPropagation()}
-                className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg border border-[#E1E4EA] py-1 z-50"
+                className="absolute right-0 z-50 mt-2 w-[180px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right"
               >
                 {/* Filters — hidden on mobile as a standalone button; folded
                     in here instead. */}
@@ -1443,9 +1443,9 @@ function Vendors() {
                     setShowAdvancedFilters(true);
                     setShowMoreMenu(false);
                   }}
-                  className="lg:hidden w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
-                  <FilterIcon size={16} />
+                  <FilterIcon size={14} />
                   Filters
                   {activeFilters.length > 0 && (
                     <span className="ml-auto bg-[#0085FF] text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
@@ -1458,12 +1458,12 @@ function Vendors() {
                     setShowImport((v) => !v);
                     setShowMoreMenu(false);
                   }}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
-                  <UploadIcon className="w-4 h-4 text-gray-400" />
+                  <UploadIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                   {showImport ? "Hide Import" : "Import"}
                 </button>
-                <ExportSubmenu
+                <ExportSubmenu compact
                   itemClassName="px-4"
                   onExport={handleExportAll}
                   onDone={() => setShowMoreMenu(false)}
@@ -1473,17 +1473,17 @@ function Vendors() {
                     setShowColumnSettings(true);
                     setShowMoreMenu(false);
                   }}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
-                  <SettingsIcon className="w-4 h-4 text-gray-400" />
+                  <SettingsIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                   Column Settings
                 </button>
                 <Link
                   to="/settings/forms?module=Vendor"
                   onClick={() => setShowMoreMenu(false)}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
-                  <PdfIcon className="w-4 h-4 text-gray-400" />
+                  <PdfIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                   Forms
                 </Link>
               </div>

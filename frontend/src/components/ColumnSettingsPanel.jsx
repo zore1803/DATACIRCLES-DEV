@@ -26,7 +26,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 import SearchIcon from "./common/SearchIcon";
-import SettingsIcon from "./common/SettingsIcon";
 import EyeIcon from "./common/EyeIcon";
 // Sortable Column Item Component
 const SortableColumnItem = ({ column, onToggleVisibility }) => {
@@ -49,11 +48,11 @@ const SortableColumnItem = ({ column, onToggleVisibility }) => {
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-white border-2 rounded-lg p-3 flex items-center gap-3 transition-all ${
+      className={`bg-white border rounded-lg p-3 flex items-center gap-3 transition-all ${
         isDragging
           ? "border-blue-400 shadow-lg scale-105 z-10"
           : column.visible
-          ? "border-gray-200 hover:border-gray-300"
+          ? "border-[#E1E4EA] hover:border-gray-300"
           : "border-gray-100 bg-gray-50"
       }`}
     >
@@ -230,46 +229,39 @@ const ColumnSettingsPanel = ({
 
       {/* Slide-in Panel */}
       <div className="fixed dc-panel-card dc-panel-w bg-white shadow-2xl z-[9999] flex flex-col overflow-hidden animate-slideInRight">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-white/20 p-2 rounded-lg">
-              <SettingsIcon className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-white font-sf">
-                Column Settings
-              </h2>
-              <p className="text-blue-100 text-sm font-inter">
-                {moduleName} - {visibleCount} of {localColumns.length} visible
-              </p>
-            </div>
+        {/* Header — same spec as the other side panels, with the search folded in */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-4">
+          <div className="flex flex-col min-w-0 flex-shrink-0">
+            <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide whitespace-nowrap">
+              Column Settings
+            </h2>
+            <p className="text-xs text-[#78788D] font-inter whitespace-nowrap">
+              {moduleName} - {visibleCount} of {localColumns.length} visible
+            </p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-white/90 hover:text-white hover:bg-white/20 p-2 rounded-lg transition-all"
-            aria-label="Close settings"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Search Bar */}
-        <div className="p-4 border-b border-gray-200">
-          <div className="relative">
+          <div className="relative flex-1 min-w-0 max-w-[260px] ml-auto">
             <SearchIcon className="absolute left-3 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
             <input
               type="text"
               placeholder="Search columns..."
-              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors font-inter"
+              className="w-full border border-[#1F2937]/10 rounded-full pl-9 pr-3 h-9 text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50 font-inter"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            title="Close"
+            className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity flex-shrink-0"
+            aria-label="Close settings"
+          >
+            <X className="w-[18px] h-[18px]" strokeWidth={2} />
+          </button>
         </div>
 
         {/* Quick Actions */}
-        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+        <div className="px-6 pt-4 pb-1 flex items-center justify-between flex-shrink-0">
           <div className="flex gap-2">
             <button
               onClick={handleSelectAll}
@@ -295,7 +287,7 @@ const ColumnSettingsPanel = ({
         </div>
 
         {/* Columns List */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -321,7 +313,7 @@ const ColumnSettingsPanel = ({
             {/* Drag Overlay */}
             <DragOverlay>
               {activeColumn ? (
-                <div className="bg-white border-2 border-blue-400 rounded-lg p-3 flex items-center gap-3 shadow-2xl opacity-90">
+                <div className="bg-white border border-blue-400 rounded-lg p-3 flex items-center gap-3 shadow-2xl opacity-90">
                   <GripVertical className="w-5 h-5 text-gray-400" />
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
@@ -351,17 +343,17 @@ const ColumnSettingsPanel = ({
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-gray-200 bg-gray-50 flex gap-3">
+        {/* Footer — compact, right-aligned pill buttons like the other panels */}
+        <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium font-inter text-sm hover:bg-gray-50 transition-colors"
+            className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium font-inter text-sm hover:bg-blue-700 transition-colors shadow-sm"
+            className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 transition-colors"
           >
             Save Changes
           </button>

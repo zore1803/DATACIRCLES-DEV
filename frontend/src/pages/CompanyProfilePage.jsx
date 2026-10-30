@@ -1070,16 +1070,15 @@ const CompanyProfilePage = () => {
                 <MoreIcon className="w-4 h-4" />
               </button>
               {showActionsMenu && (
-                <div className="absolute right-0 mt-1 w-32 lg:w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+                <div className="absolute right-0 z-50 mt-1 w-[180px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right">
                   <button
                     onClick={() => {
                       setShowStats((prev) => !prev);
                       setShowActionsMenu(false);
                     }}
-                    className="flex items-center gap-1.5 lg:gap-2 w-full px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm font-normal text-gray-700 hover:bg-gray-50 text-left"
+                    className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap text-left"
                   >
-                    <EyeIcon size={12} className="text-gray-400 lg:hidden" />
-                    <EyeIcon size={14} className="text-gray-400 hidden lg:block" />
+                    <EyeIcon size={14} className="text-[#1C1B1F]" />
                     {showStats ? "Hide KPIs" : "Unhide KPIs"}
                   </button>
                   {activeTab === "Deals" && (
@@ -1088,10 +1087,9 @@ const CompanyProfilePage = () => {
                         setDealsViewMode((prev) => (prev === "board" ? "list" : "board"));
                         setShowActionsMenu(false);
                       }}
-                      className="flex items-center gap-1.5 lg:gap-2 w-full px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm font-normal text-gray-700 hover:bg-gray-50 text-left"
+                      className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap text-left"
                     >
-                      <LayoutGrid size={12} className="text-gray-400 lg:hidden" />
-                      <LayoutGrid size={14} className="text-gray-400 hidden lg:block" />
+                      <LayoutGrid size={14} className="text-[#1C1B1F]" />
                       {dealsViewMode === "board" ? "List View" : "Kanban View"}
                     </button>
                   )}
@@ -1101,9 +1099,9 @@ const CompanyProfilePage = () => {
                       handleEdit();
                       setShowActionsMenu(false);
                     }}
-                    className="lg:hidden flex items-center gap-1.5 w-full px-2 py-1.5 text-xs font-normal text-gray-700 hover:bg-gray-50 text-left"
+                    className="lg:hidden flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap text-left"
                   >
-                    <EditIcon size={12} className="text-gray-400" />
+                    <EditIcon size={14} className="text-[#1C1B1F]" />
                     Edit
                   </button>
                   {canManageChildCompany && !parentCompany && (
@@ -1112,10 +1110,9 @@ const CompanyProfilePage = () => {
                         setShowSubsidiaryModal(true);
                         setShowActionsMenu(false);
                       }}
-                      className="flex items-center gap-1.5 lg:gap-2 w-full px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm font-normal text-gray-700 hover:bg-gray-50 text-left"
+                      className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap text-left"
                     >
-                      <Building2 size={12} className="text-gray-400 lg:hidden" />
-                      <Building2 size={14} className="text-gray-400 hidden lg:block" />
+                      <Building2 size={14} className="text-[#1C1B1F]" />
                       Add Child Company
                     </button>
                   )}

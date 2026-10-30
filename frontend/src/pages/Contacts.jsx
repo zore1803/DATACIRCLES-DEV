@@ -2260,7 +2260,7 @@ function Contacts() {
                 </button>
 
                 {isMoreMenuOpen && (
-                  <div className="absolute right-0 z-50 mt-2 w-56 bg-white border border-gray-100 rounded-xl shadow-xl py-1 animate-in fade-in zoom-in duration-200 origin-top-right">
+                  <div className="absolute right-0 z-50 mt-2 w-[180px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right">
                     {/* Switcher + Hotlist: mobile-only entries, folded in here instead of their own controls */}
                     {activeTab !== "Hotlist" && (
                       <>
@@ -2269,9 +2269,9 @@ function Contacts() {
                             setShowKanban(false);
                             setIsMoreMenuOpen(false);
                           }}
-                          className="lg:hidden w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                         >
-                          <TableViewIcon size={16} className="flex-shrink-0 text-gray-400" />
+                          <TableViewIcon size={14} className="flex-shrink-0 text-[#1C1B1F]" />
                           List View
                           {!showKanban && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600" />}
                         </button>
@@ -2280,9 +2280,9 @@ function Contacts() {
                             setShowKanban(true);
                             setIsMoreMenuOpen(false);
                           }}
-                          className="lg:hidden w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                         >
-                          <KanbanViewIcon size={16} className="flex-shrink-0 text-gray-400" />
+                          <KanbanViewIcon size={14} className="flex-shrink-0 text-[#1C1B1F]" />
                           Kanban View
                           {showKanban && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600" />}
                         </button>
@@ -2293,9 +2293,9 @@ function Contacts() {
                         handleTabChange(activeTab === "Hotlist" ? "All" : "Hotlist");
                         setIsMoreMenuOpen(false);
                       }}
-                      className="lg:hidden w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                     >
-                      <HotlistIcon className="w-4 h-4 text-[#1D4ED8] flex-shrink-0" />
+                      <HotlistIcon className="w-3.5 h-3.5 text-[#1D4ED8] flex-shrink-0" />
                       {activeTab === "Hotlist" ? "Hide Hotlist" : "Hotlist"}
                     </button>
                     
@@ -2304,21 +2304,21 @@ function Contacts() {
                         setShowImport(true);
                         setIsMoreMenuOpen(false);
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                     >
-                      <UploadIcon className="w-4 h-4 text-gray-400" />
+                      <UploadIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                       Import
                     </button>
-                    <ExportSubmenu
+                    <ExportSubmenu compact
                       onExport={handleExportAll}
                       onDone={() => setIsMoreMenuOpen(false)}
                     />
                     <Link
                       to="/settings/forms?module=Contact"
                       onClick={() => setIsMoreMenuOpen(false)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                     >
-                      <PdfIcon className="w-4 h-4 text-gray-400" />
+                      <PdfIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                       Forms
                     </Link>
                     <button
@@ -2326,9 +2326,9 @@ function Contacts() {
                         setShowColumnSettings(true);
                         setIsMoreMenuOpen(false);
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                     >
-                      <SettingsIcon className="w-4 h-4 text-gray-400" />
+                      <SettingsIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                       Columns
                     </button>
                     <button
@@ -2336,9 +2336,9 @@ function Contacts() {
                         setShowAdvancedFilters(true);
                         setIsMoreMenuOpen(false);
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                     >
-                      <FilterIcon size={16} />
+                      <FilterIcon size={14} />
                       Filters
                       {activeFilters.length > 0 && (
                         <span className="ml-auto bg-blue-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">

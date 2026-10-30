@@ -584,16 +584,15 @@ const ContactDetailsPage = () => {
                 <MoreIcon className="w-4 h-4" />
               </button>
               {showActionsMenu && (
-                <div className="absolute right-0 mt-1 w-32 lg:w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+                <div className="absolute right-0 z-50 mt-1 w-[180px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right">
                   <button
                     onClick={() => {
                       setShowStats((prev) => !prev);
                       setShowActionsMenu(false);
                     }}
-                    className="flex items-center gap-1.5 lg:gap-2 w-full px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm font-normal text-gray-700 hover:bg-gray-50 text-left"
+                    className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap text-left"
                   >
-                    <EyeIcon size={12} className="text-gray-400 lg:hidden" />
-                    <EyeIcon size={14} className="text-gray-400 hidden lg:block" />
+                    <EyeIcon size={14} className="text-[#1C1B1F]" />
                     {showStats ? "Hide KPIs" : "Unhide KPIs"}
                   </button>
                   {/* Edit: mobile-only entry, folded in here instead of its own button */}
@@ -602,9 +601,9 @@ const ContactDetailsPage = () => {
                       handleEdit();
                       setShowActionsMenu(false);
                     }}
-                    className="lg:hidden flex items-center gap-1.5 w-full px-2 py-1.5 text-xs font-normal text-gray-700 hover:bg-gray-50 text-left"
+                    className="lg:hidden flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap text-left"
                   >
-                    <EditIcon size={12} className="text-gray-400" />
+                    <EditIcon size={14} className="text-[#1C1B1F]" />
                     Edit
                   </button>
                   <button
@@ -612,10 +611,9 @@ const ContactDetailsPage = () => {
                       setShowMergeModal(true);
                       setShowActionsMenu(false);
                     }}
-                    className="flex items-center gap-1.5 lg:gap-2 w-full px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm font-normal text-gray-700 hover:bg-gray-50 text-left"
+                    className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap text-left"
                   >
-                    <CopyPlus size={12} className="text-gray-400 lg:hidden" />
-                    <CopyPlus size={14} className="text-gray-400 hidden lg:block" />
+                    <CopyPlus size={14} className="text-[#1C1B1F]" />
                     Merge Contact
                   </button>
                   <button
@@ -623,10 +621,9 @@ const ContactDetailsPage = () => {
                       setShowDeleteConfirm(true);
                       setShowActionsMenu(false);
                     }}
-                    className="flex items-center gap-1.5 lg:gap-2 w-full px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm font-normal text-red-600 hover:bg-red-50 text-left"
+                    className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs font-normal text-[#CD3636] hover:bg-red-50 whitespace-nowrap text-left"
                   >
-                    <DeleteIcon style={{ width: 12, height: 12 }} className="text-red-400 lg:hidden" />
-                    <DeleteIcon style={{ width: 14, height: 14 }} className="text-red-400 hidden lg:block" />
+                    <DeleteIcon style={{ width: 14, height: 14 }} className="text-[#CD3636]" />
                     Delete Contact
                   </button>
                 </div>

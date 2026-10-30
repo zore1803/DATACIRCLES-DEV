@@ -1386,7 +1386,7 @@ function ProductsServices() {
             } else if (vc.key === "type") {
               baseContent = (
                 <span
-                  className={`px-2 py-1 rounded-full text-xs font-semibold uppercase ${item.type === "product" ? "bg-green-100 text-green-700" : "bg-purple-100 text-purple-700"
+                  className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold uppercase ${item.type === "product" ? "bg-green-100 text-green-700" : "bg-purple-100 text-purple-700"
                     }`}
                 >
                   {item.type}
@@ -1421,7 +1421,7 @@ function ProductsServices() {
                     setShowDetails(true);
                   }}
                   title="View variant details (SKU, price, stock)"
-                  className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors cursor-pointer"
+                  className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors cursor-pointer"
                 >
                   {item.variants.length} Variant{item.variants.length > 1 ? "s" : ""}
                 </button>
@@ -1431,7 +1431,7 @@ function ProductsServices() {
             } else if (vc.key === "isActive") {
               baseContent = (
                 <span
-                  className={`px-2 py-1 rounded-full text-xs font-semibold ${item.isActive ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                  className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${item.isActive ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
                     }`}
                 >
                   {item.isActive ? "Active" : "In-Active"}
@@ -1938,16 +1938,16 @@ function ProductsServices() {
                     )}
                   </button>
                   {isMoreMenuOpen && (
-                    <div className="absolute right-0 z-50 mt-2 w-52 bg-white border border-gray-100 rounded-xl shadow-xl py-2 animate-in fade-in zoom-in duration-200 origin-top-right">
+                    <div className="absolute right-0 z-50 mt-2 w-[180px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right">
                       {/* Mobile-only: filter + columns (desktop shows dedicated buttons) */}
                       <button
                         onClick={() => {
                           setShowAdvancedFilters(true);
                           setIsMoreMenuOpen(false);
                         }}
-                        className="lg:hidden w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                       >
-                        <FilterIcon size={16} />
+                        <FilterIcon size={14} />
                         Filters
                         {activeFilters.length > 0 && (
                           <span className="ml-auto bg-blue-100 text-blue-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
@@ -1960,9 +1960,9 @@ function ProductsServices() {
                           setShowColumnSettings(true);
                           setIsMoreMenuOpen(false);
                         }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                       >
-                        <SlidersHorizontal className="w-4 h-4 text-gray-400" />
+                        <SlidersHorizontal className="w-3.5 h-3.5 text-[#1C1B1F]" />
                         Columns
                       </button>
                       <button
@@ -1970,12 +1970,12 @@ function ProductsServices() {
                           setShowImport(true);
                           setIsMoreMenuOpen(false);
                         }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                       >
-                        <UploadIcon className="w-4 h-4 text-gray-400" />
+                        <UploadIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                         Import
                       </button>
-                      <ExportSubmenu
+                      <ExportSubmenu compact
                         onExport={handleExportAll}
                         onDone={() => setIsMoreMenuOpen(false)}
                       />

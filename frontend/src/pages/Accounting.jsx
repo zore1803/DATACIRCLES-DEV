@@ -1,4 +1,6 @@
 import CalendarIcon from "../components/common/CalendarIcon";
+import { FaWhatsapp } from "react-icons/fa";
+import emailLogo from "../assets/email-logo.png";
 import EmptyState from "../components/common/EmptyState";
 import DeleteIcon from "../components/common/DeleteIcon";
 import PdfIcon from "../components/common/PdfIcon";
@@ -36,7 +38,7 @@ import {
   Settings,
   Search,
   Share2,
-  MessageCircle,
+  
   Mail,
   Copy,
   MessageSquare,
@@ -2422,9 +2424,9 @@ const Accounting = () => {
                 {showMoreMenu && (
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg border border-[#E1E4EA] py-1 z-50"
+                    className="absolute right-0 z-50 mt-2 w-[180px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right"
                   >
-                    <ExportSubmenu
+                    <ExportSubmenu compact
                       itemClassName="px-4"
                       onExport={handleExportAll}
                       onDone={() => setShowMoreMenu(false)}
@@ -2432,7 +2434,7 @@ const Accounting = () => {
 
                     {/* Tab switcher — folded in here on mobile since the pill
                         selector itself is hidden below lg. */}
-                    <div className="lg:hidden py-1 border-b border-[#E1E4EA]">
+                    <div className="lg:hidden flex flex-col gap-0.5 pb-1.5 mb-1.5 border-b border-[#F1F1F5]">
                       {TABS.map((tab) => (
                         <button
                           key={tab.key}
@@ -2440,9 +2442,9 @@ const Accounting = () => {
                             setActiveTab(tab.key);
                             setShowMoreMenu(false);
                           }}
-                          className={`w-full flex items-center gap-2 px-4 py-2 text-sm ${activeTab === tab.key
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs whitespace-nowrap ${activeTab === tab.key
                             ? "text-[#0085FF] font-medium bg-blue-50"
-                            : "text-gray-700 hover:bg-gray-50"
+                            : "text-[#161618] hover:bg-gray-50"
                             }`}
                         >
                           {tab.label}
@@ -2452,7 +2454,7 @@ const Accounting = () => {
 
                     {/* Filter by status — folded in here on mobile since the
                         standalone filter button is hidden below lg. */}
-                    <div className="lg:hidden py-1 border-b border-[#E1E4EA] max-h-48 overflow-y-auto">
+                    <div className="lg:hidden flex flex-col gap-0.5 pb-1.5 mb-1.5 border-b border-[#F1F1F5] max-h-48 overflow-y-auto">
                       {["", ...statusOptions].map((status) => (
                         <button
                           key={status || "all"}
@@ -2463,9 +2465,9 @@ const Accounting = () => {
                             }));
                             setShowMoreMenu(false);
                           }}
-                          className={`w-full text-left px-4 py-2 text-sm ${filterStatuses[activeTab] === status
+                          className={`w-full text-left px-2 py-1.5 rounded-md text-xs whitespace-nowrap ${filterStatuses[activeTab] === status
                             ? "text-[#0085FF] font-medium bg-blue-50"
-                            : "text-gray-700 hover:bg-gray-50"
+                            : "text-[#161618] hover:bg-gray-50"
                             }`}
                         >
                           {status || "All Statuses"}
@@ -2478,9 +2480,9 @@ const Accounting = () => {
                         setShowMoreMenu(false);
                         setShowTemplateDrawer(true);
                       }}
-                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                     >
-                      <LayoutTemplate className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                      <LayoutTemplate className="w-3.5 h-3.5 text-[#1C1B1F] flex-shrink-0" />
                       Template
                     </button>
                   </div>
@@ -3533,8 +3535,8 @@ const Accounting = () => {
                 }
 
                 const items = [
-                  { label: "WhatsApp", icon: <MessageCircle className="w-3.5 h-3.5 text-green-600" />, onClick: () => openChannel("whatsapp") },
-                  { label: "Email", icon: <Mail className="w-3.5 h-3.5 text-blue-600" />, onClick: () => openChannel("email") },
+                  { label: "WhatsApp", icon: <FaWhatsapp className="w-3.5 h-3.5 text-[#25D366]" />, onClick: () => openChannel("whatsapp") },
+                  { label: "Email", icon: <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain scale-[1.35]" />, onClick: () => openChannel("email") },
                   { label: "SMS", icon: <MessageSquare className="w-3.5 h-3.5 text-purple-600" />, onClick: () => openChannel("sms") },
                   { label: "Copy Link", icon: <Copy className="w-3.5 h-3.5 text-gray-500" />, onClick: () => { navigator.clipboard.writeText(link).catch(() => {}); toast.success("Link copied"); closeMenu(); } },
                 ];

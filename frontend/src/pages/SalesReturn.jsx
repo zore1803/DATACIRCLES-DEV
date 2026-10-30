@@ -1,4 +1,6 @@
 import ExportSubmenu from "../components/common/ExportSubmenu";
+import { FaWhatsapp } from "react-icons/fa";
+import emailLogo from "../assets/email-logo.png";
 import DeleteIcon from "../components/common/DeleteIcon";
 import EmptyState from "../components/common/EmptyState";
 import BulkDeleteModal from "../components/common/BulkDeleteModal";
@@ -26,7 +28,7 @@ import {
   RotateCcw,
   CheckCircle2,
   Share2,
-  MessageCircle,
+  
   Mail,
   MessageSquare,
   Copy,
@@ -1300,8 +1302,8 @@ const SalesReturn = () => {
               }
 
               const items = [
-                { label: "WhatsApp", icon: <MessageCircle className="w-3.5 h-3.5 text-green-600" />, onClick: () => openChannel("whatsapp") },
-                { label: "Email", icon: <Mail className="w-3.5 h-3.5 text-blue-600" />, onClick: () => openChannel("email") },
+                { label: "WhatsApp", icon: <FaWhatsapp className="w-3.5 h-3.5 text-[#25D366]" />, onClick: () => openChannel("whatsapp") },
+                { label: "Email", icon: <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain scale-[1.35]" />, onClick: () => openChannel("email") },
                 { label: "SMS", icon: <MessageSquare className="w-3.5 h-3.5 text-purple-600" />, onClick: () => openChannel("sms") },
                 { label: "Copy Link", icon: <Copy className="w-3.5 h-3.5 text-gray-500" />, onClick: () => { navigator.clipboard.writeText(link).catch(() => {}); toast.success("Link copied"); closeMenu(); } },
               ];
@@ -1864,12 +1866,12 @@ const SalesReturn = () => {
                         )}
                       </button>
                       {isMoreMenuOpen && (
-                        <div className="absolute right-0 z-50 mt-2 w-52 bg-white border border-gray-100 rounded-xl shadow-xl py-2 animate-in fade-in zoom-in duration-200 origin-top-right">
+                        <div className="absolute right-0 z-50 mt-2 w-[180px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right">
                           <button
                             onClick={() => { setShowAdvancedFilters(true); setIsMoreMenuOpen(false); }}
-                            className="lg:hidden w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                           >
-                            <FilterIcon size={16} />
+                            <FilterIcon size={14} />
                             Filters
                             {activeFilters.length > 0 && (
                               <span className="ml-auto bg-blue-100 text-blue-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
@@ -1879,20 +1881,20 @@ const SalesReturn = () => {
                           </button>
                           <button
                             onClick={() => { setShowImport(true); setIsMoreMenuOpen(false); }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                           >
-                            <UploadIcon className="w-4 h-4 text-gray-400" />
+                            <UploadIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                             Import
                           </button>
-                          <ExportSubmenu
+                          <ExportSubmenu compact
                             onExport={handleExportAll}
                             onDone={() => setIsMoreMenuOpen(false)}
                           />
                           <button
                             onClick={() => { setShowColumnSettings(true); setIsMoreMenuOpen(false); }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                           >
-                            <SettingsIcon className="w-4 h-4 text-gray-400" />
+                            <SettingsIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                             Columns
                           </button>
                         </div>

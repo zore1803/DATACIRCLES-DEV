@@ -1,4 +1,5 @@
 import DeleteIcon from "../common/DeleteIcon";
+import emailLogo from "../../assets/email-logo.png";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import EmptyState from "../common/EmptyState";
@@ -9,10 +10,11 @@ import SettingsIcon from "../common/SettingsIcon";
 import {
   Search as SearchIcon, X, ChevronDown,
   Pin, PinOff, ArrowUp, ArrowDown, EyeOff, ChevronLeft, ChevronRight,
-  Share2, Repeat, Copy, MessageCircle, Mail, MessageSquare,
+  Share2, Repeat, Copy, MessageSquare,
   TrendingUp, TrendingDown, CalendarDays, Calculator, ListChecks,
 } from "lucide-react";
 import { createPortal } from "react-dom";
+import { FaWhatsapp } from "react-icons/fa";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import ExpenseFormPanel from "./ExpenseFormPanel";
@@ -130,7 +132,8 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
   const [rowMenuPos, setRowMenuPos] = useState(null);
   // Which page of the row flyout is showing: the action list, the Convert
   // targets, or the share channels. Mirrors Accounting.jsx's row menu.
-  const [rowMenuView, setRowMenuView] = useState("main");
+  const [rowMenuView, setRowMenuView] = useState("main"); // side flyout open: "main" | "share" | "convert"
+  const [rowFlyoutPos, setRowFlyoutPos] = useState(null);
   const [viewRow, setViewRow] = useState(null);
   const [busyRowId, setBusyRowId] = useState(null);
 
@@ -452,7 +455,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
 
   useEffect(() => {
     if (!openMenu) return;
-    const close = () => { setOpenMenu(null); setRowMenuPos(null); setRowMenuView("main"); };
+    const close = () => { setOpenMenu(null); setRowMenuPos(null); setRowMenuView("main"); setRowFlyoutPos(null); };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [openMenu]);
@@ -547,6 +550,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
     setOpenMenu(null);
     setRowMenuPos(null);
     setRowMenuView("main");
+    setRowFlyoutPos(null);
   };
 
   // One-row export. Same sheet shape as the toolbar's bulk export so the two
@@ -800,28 +804,28 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
               <MoreIcon className="w-4 h-4" />
             </button>
             {moreMenuOpen && (
-              <div className="absolute right-0 z-50 mt-2 w-56 bg-white border border-gray-100 rounded-xl shadow-xl py-1">
+              <div className="absolute right-0 z-50 mt-2 w-[180px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right">
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => { toggleStats(); setMoreMenuOpen(false); }}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-[13px] text-[#161618] hover:bg-gray-50 transition-colors"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
                   {showStats
-                    ? <EyeOff className="w-4 h-4 text-gray-400" />
-                    : <EyeIcon className="w-4 h-4 text-gray-400" />}
+                    ? <EyeOff className="w-3.5 h-3.5 text-[#1C1B1F]" />
+                    : <EyeIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />}
                   {showStats ? "Hide KPIs" : "Show KPIs"}
                 </button>
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => { setShowColumnSettings(true); setMoreMenuOpen(false); }}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-[13px] text-[#161618] hover:bg-gray-50 transition-colors"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
-                  <SettingsIcon className="w-4 h-4 text-gray-400" />
+                  <SettingsIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                   Manage Columns
                 </button>
-                <ExportSubmenu
+                <ExportSubmenu compact
                   itemClassName="px-4"
                   onExport={handleExport}
                   onDone={() => setMoreMenuOpen(false)}
@@ -1122,8 +1126,8 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
                                     // Same zoom-corrected, row-centered, viewport-clamped
                                     // anchoring as the PaymentsTimeline row-actions menu.
                                     const zMenu = getAncestorZoom(document.body);
-                                    const MENU_W = 224; // matches w-56 below
-                                    const MENU_H = 300; // 7 items + divider + padding
+                                    const MENU_W = 160; // matches w-[160px] below
+                                    const MENU_H = 235; // 7 items + divider + padding
                                     const MARGIN = 8;
                                     const rect = e.currentTarget.getBoundingClientRect();
                                     const viewportH = window.innerHeight / zMenu;
@@ -1158,7 +1162,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
                                 {openMenu === r._id && rowMenuPos && createPortal(
                                   <>
                                     <div
-                                      className="fixed inset-0 z-[59]"
+                                      className="fixed inset-0 z-[9998]"
                                       onMouseDown={(e) => e.stopPropagation()}
                                       onClick={closeRowMenu}
                                     />
@@ -1166,135 +1170,146 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
                                       onMouseDown={(e) => e.stopPropagation()}
                                       onClick={(e) => e.stopPropagation()}
                                       style={{ position: "fixed", top: rowMenuPos.top, left: rowMenuPos.left }}
-                                      className="w-56 bg-white border border-[#E1E4EA] rounded-xl shadow-xl py-1 z-[60] max-h-[70vh] overflow-y-auto"
+                                      className="w-[160px] z-[9999] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right max-h-[70vh] overflow-y-auto"
                                     >
-                                      {rowMenuView === "main" && (
+                                      {(
                                         <>
                                           <button
                                             type="button"
                                             onClick={() => { closeRowMenu(); setViewRow(r); }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                                           >
-                                            <EyeIcon className="w-4 h-4 text-blue-600" />
+                                            <EyeIcon className="w-3.5 h-3.5 text-blue-600" />
                                             View
                                           </button>
                                           <button
                                             type="button"
                                             onClick={() => { closeRowMenu(); openEdit(r); }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                                           >
-                                            <EditIcon className="w-4 h-4 text-blue-600" />
+                                            <EditIcon className="w-3.5 h-3.5 text-blue-600" />
                                             Edit
                                           </button>
                                           <button
                                             type="button"
                                             onClick={() => { closeRowMenu(); handleDownloadRow(r); }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                                           >
-                                            <DownloadIcon className="w-4 h-4 text-green-600" />
+                                            <DownloadIcon className="w-3.5 h-3.5 text-green-600" />
                                             Download
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => setRowMenuView("share")}
-                                            className="w-full flex items-center justify-between gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (rowMenuView === "share") { setRowMenuView("main"); setRowFlyoutPos(null); return; }
+                                              const zFly = getAncestorZoom(document.body);
+                                              const fRect = e.currentTarget.getBoundingClientRect();
+                                              setRowFlyoutPos({ x: Math.max(4, fRect.left / zFly - 160), y: fRect.top / zFly });
+                                              setRowMenuView("share");
+                                            }}
+                                            className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50"
                                           >
-                                            <span className="flex items-center gap-2 text-left">
-                                              <Share2 className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                                              Share via WhatsApp/Email/SMS
+                                            <span className="flex items-center gap-2">
+                                              <Share2 className="w-3.5 h-3.5 text-blue-600" />
+                                              Share
                                             </span>
-                                            <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                            <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => setRowMenuView("convert")}
-                                            className="w-full flex items-center justify-between px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (rowMenuView === "convert") { setRowMenuView("main"); setRowFlyoutPos(null); return; }
+                                              const zFly = getAncestorZoom(document.body);
+                                              const fRect = e.currentTarget.getBoundingClientRect();
+                                              setRowFlyoutPos({ x: Math.max(4, fRect.left / zFly - 210), y: fRect.top / zFly });
+                                              setRowMenuView("convert");
+                                            }}
+                                            className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50"
                                           >
                                             <span className="flex items-center gap-2">
-                                              <Repeat className="w-4 h-4 text-orange-600" />
+                                              <Repeat className="w-3.5 h-3.5 text-orange-600" />
                                               Convert
                                             </span>
-                                            <ChevronRight className="w-4 h-4 text-gray-400" />
+                                            <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                                           </button>
                                           <button
                                             type="button"
                                             disabled={busyRowId === r._id}
                                             onClick={() => { closeRowMenu(); handleDuplicate(r); }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 flex items-center gap-2"
+                                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap disabled:text-gray-300 disabled:cursor-not-allowed"
                                           >
-                                            <Copy className="w-4 h-4 text-indigo-600" />
+                                            <Copy className="w-3.5 h-3.5 text-indigo-600" />
                                             Duplicate
                                           </button>
-                                          <div className="border-t border-gray-100 my-1" />
+                                          <div className="w-full border-t border-[#F1F1F5] my-0.5" />
                                           <button
                                             type="button"
                                             disabled={deletingId === r._id}
                                             onClick={() => { closeRowMenu(); handleDelete(r); }}
-                                            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-40 flex items-center gap-2"
+                                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-red-600 hover:bg-red-50 whitespace-nowrap disabled:opacity-40"
                                           >
-                                            <DeleteIcon className="w-4 h-4" />
+                                            <DeleteIcon className="w-3.5 h-3.5" />
                                             Delete
                                           </button>
                                         </>
                                       )}
-
-                                      {rowMenuView === "share" && (
+                                    </div>
+                                  </>,
+                                  document.body
+                                )}
+                                {openMenu === r._id && rowFlyoutPos && (rowMenuView === "share" || rowMenuView === "convert") && createPortal(
+                                  <>
+                                    {/* Above the row menu's backdrop so clicks reach the flyout; clicking outside closes both. */}
+                                    <div
+                                      className="fixed inset-0 z-[10000]"
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      onClick={closeRowMenu}
+                                    />
+                                    <div
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      onClick={(e) => e.stopPropagation()}
+                                      style={{ position: "fixed", top: rowFlyoutPos.y, left: rowFlyoutPos.x }}
+                                      className={`z-[10001] ${rowMenuView === "share" ? "w-[160px]" : "w-[210px]"} overflow-hidden bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5`}
+                                    >
+                                      {rowMenuView === "share" ? (
                                         <>
                                           <button
                                             type="button"
-                                            onClick={() => setRowMenuView("main")}
-                                            className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 border-b border-gray-100"
-                                          >
-                                            <ChevronLeft className="w-4 h-4" />
-                                            Back
-                                          </button>
-                                          <button
-                                            type="button"
                                             onClick={() => { closeRowMenu(); shareVia("whatsapp", r); }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                                           >
-                                            <MessageCircle className="w-4 h-4 text-green-600" />
+                                            <FaWhatsapp className="w-3.5 h-3.5 text-[#25D366]" />
                                             WhatsApp
                                           </button>
                                           <button
                                             type="button"
                                             onClick={() => { closeRowMenu(); shareVia("email", r); }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                                           >
-                                            <Mail className="w-4 h-4 text-blue-600" />
+                                            <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain scale-[1.35]" />
                                             Email
                                           </button>
                                           <button
                                             type="button"
                                             onClick={() => { closeRowMenu(); shareVia("sms", r); }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                                           >
-                                            <MessageSquare className="w-4 h-4 text-orange-600" />
+                                            <MessageSquare className="w-3.5 h-3.5 text-purple-600" />
                                             SMS
                                           </button>
                                         </>
-                                      )}
-
-                                      {rowMenuView === "convert" && (
-                                        <>
-                                          <button
-                                            type="button"
-                                            onClick={() => setRowMenuView("main")}
-                                            className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 border-b border-gray-100"
-                                          >
-                                            <ChevronLeft className="w-4 h-4" />
-                                            Back
-                                          </button>
-                                          <button
-                                            type="button"
-                                            disabled={busyRowId === r._id}
-                                            onClick={() => { closeRowMenu(); handleConvert(r); }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 flex items-center gap-2"
-                                          >
-                                            <Repeat className="w-4 h-4 text-orange-600" />
-                                            Convert to {convertTargetLabel}
-                                          </button>
-                                        </>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          disabled={busyRowId === r._id}
+                                          onClick={() => { closeRowMenu(); handleConvert(r); }}
+                                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 disabled:text-gray-300 disabled:cursor-not-allowed"
+                                        >
+                                          <Repeat className="w-3.5 h-3.5 text-orange-600 flex-shrink-0" />
+                                          <span className="truncate">Convert to {convertTargetLabel}</span>
+                                        </button>
                                       )}
                                     </div>
                                   </>,

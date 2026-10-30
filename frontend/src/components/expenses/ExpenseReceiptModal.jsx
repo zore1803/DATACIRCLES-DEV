@@ -2,8 +2,10 @@ import DownloadIcon from "../common/DownloadIcon";
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  X, Printer, Share2, Mail, MessageCircle, MessageSquare, Copy, Repeat,
+  X, Printer, Share2, MessageSquare, Copy, Repeat,
 } from "lucide-react";
+import { FaWhatsapp } from "react-icons/fa";
+import emailLogo from "../../assets/email-logo.png";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import EditIcon from "../common/EditIcon";
@@ -140,9 +142,9 @@ export default function ExpenseReceiptModal({
                   `${noun} ${receiptNo}`
                 )}&body=${encodeURIComponent(shareText)}`;
               }}
-              className="h-9 px-3 flex items-center gap-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+              className="h-9 px-3 flex items-center gap-1.5 bg-white border border-[#E1E4EA] text-[#161618] text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
             >
-              <Mail className="w-3.5 h-3.5" />
+              <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain scale-[1.35]" />
               Email
             </button>
             <button
@@ -153,9 +155,9 @@ export default function ExpenseReceiptModal({
                   "noopener,noreferrer"
                 )
               }
-              className="h-9 px-3 flex items-center gap-1.5 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600 transition-colors"
+              className="h-9 px-3 flex items-center gap-1.5 bg-white border border-[#E1E4EA] text-[#161618] text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
             >
-              <MessageCircle className="w-3.5 h-3.5" />
+              <FaWhatsapp className="w-3.5 h-3.5 text-[#25D366]" />
               Whatsapp
             </button>
 
