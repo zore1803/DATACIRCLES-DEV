@@ -2375,7 +2375,7 @@ function signupProfileFrom(body) {
 // Records the signup answers in the same places Settings/onboarding already read
 // them from (see setupWorkspace), so completing them here means /onboarding has
 // nothing left to ask.
-function applySignupProfile(user, fullName, profile) {
+function applySignupProfile(user, fullName, profile, role = "admin") {
   const [firstName, ...rest] = fullName.trim().split(/\s+/);
   // onboardingIntent is the older single-string shape, so the picks are joined for it.
   user.onboardingIntent = {
@@ -2394,7 +2394,7 @@ function applySignupProfile(user, fullName, profile) {
       workspaceName: profile.workspaceName,
       address: profile.workspaceAddress,
       state: profile.workspaceState,
-      role: "admin",
+      role,
     },
     preferences: {
       useCases: profile.usage,
@@ -2406,9 +2406,63 @@ function applySignupProfile(user, fullName, profile) {
   user.markModified("userData");
 }
 
+// Decides whether a new email signup joins an EXISTING organization instead of
+// creating one, using the same two routes completeRegistration offers phone/Auth0
+// users: a pending email invite (checked first), or a company code typed in step 3.
+// Returns { joined: false } to create a fresh workspace, { joined: true, ... } to
+// join, or { error, status } when the join is refused.
+async function resolveSignupMembership(normalizedEmail, rawCode) {
+  const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  const invited = await Invited.findOne({
+    email: new RegExp("^" + escapeRegex(normalizedEmail) + "$", "i"),
+  });
+  if (invited) {
+    if (invited.pendingPayment) {
+      return {
+        status: 402,
+        error: "Your invite is waiting on a seat purchase to complete. Ask your admin to finish payment, then try again.",
+      };
+    }
+    // The invite already validated seats, so no seat check here.
+    return {
+      joined: true,
+      method: "invite",
+      organization: invited.organization,
+      permissions: invited.permissions || [],
+      invite: invited,
+    };
+  }
+
+  const code = typeof rawCode === "string" ? rawCode.trim() : "";
+  if (!code) return { joined: false };
+
+  const org = await Organization.findOne({ code: new RegExp("^" + escapeRegex(code) + "$", "i") });
+  if (!org) return { status: 400, error: "Invalid company code" };
+
+  // A code join takes a staff seat, so it must respect the organization's seat limit.
+  const subscription = await Subscription.findOne({ organization: org._id });
+  if (subscription) {
+    const seatStatus = await getSeatStatus(org._id);
+    if (!seatStatus.hasFreeStaffSeat) {
+      return {
+        status: 403,
+        error: "This organization has reached its user limit. Please contact your admin to purchase more seats.",
+      };
+    }
+  }
+
+  return {
+    joined: true,
+    method: "code",
+    organization: org._id,
+    permissions: ADMIN_PERMISSIONS.map((entry) => ({ ...entry })),
+  };
+}
+
 /**
  * POST /api/auth/register
- * Body: { fullName, email, password, usage?, mainGoal?, teamSize?, source?,
+ * Body: { fullName, email, password, companyCode?, usage?, mainGoal?, teamSize?, source?,
  *         workspaceName?, workspaceAddress?, workspaceState? } — requires the
  * email to have been verified via /auth/signup/send-otp +
  * /auth/signup/verify-otp first.
@@ -2463,22 +2517,54 @@ exports.register = async (req, res) => {
         await existingOrg.save();
       }
     } else {
-      const org = await provisionOrganizationForNewAccount(profile.workspaceName || `${fullName.trim()}'s Workspace`);
-      if (profile.workspaceAddress) org.address = profile.workspaceAddress;
-      if (profile.workspaceState) org.state = profile.workspaceState;
-      if (profile.workspaceAddress || profile.workspaceState) await org.save();
+      // Join an existing organization (invite, or company code) or create a new one.
+      const membership = await resolveSignupMembership(normalizedEmail, req.body.companyCode);
+      if (membership.error) {
+        return res.status(membership.status).json({ message: membership.error });
+      }
+
+      let organizationId;
+      let role;
+      let permissions;
+      if (membership.joined) {
+        organizationId = membership.organization;
+        role = "staff";
+        permissions = membership.permissions;
+        // The workspace belongs to someone else: never let signup fields rename it.
+        profile.workspaceName = "";
+        profile.workspaceAddress = "";
+        profile.workspaceState = "";
+      } else {
+        const org = await provisionOrganizationForNewAccount(profile.workspaceName || `${fullName.trim()}'s Workspace`);
+        if (profile.workspaceAddress) org.address = profile.workspaceAddress;
+        if (profile.workspaceState) org.state = profile.workspaceState;
+        if (profile.workspaceAddress || profile.workspaceState) await org.save();
+        organizationId = org._id;
+        role = "admin";
+        permissions = ADMIN_PERMISSIONS;
+      }
+
       user = new User({
         name: fullName.trim(),
         email: normalizedEmail,
         password: hashedPassword,
-        organization: org._id,
-        role: "admin",
-        permissions: ADMIN_PERMISSIONS,
+        organization: organizationId,
+        role,
+        permissions,
         isEmailVerified: true,
         onboarding: { isCompleted: false, currentStep: 1 },
       });
-      applySignupProfile(user, fullName, profile);
+      applySignupProfile(user, fullName, profile, role);
       await user.save();
+
+      if (membership.invite) {
+        await Invited.deleteOne({ _id: membership.invite._id });
+      }
+      if (role !== "admin") {
+        notifyAdminsOfNewStaff({ organization: organizationId, staffUser: user }).catch((err) =>
+          console.error("Failed to notify admins of new staff:", err.message)
+        );
+      }
     }
 
     await TempEmailOTP.deleteMany({ email: normalizedEmail });

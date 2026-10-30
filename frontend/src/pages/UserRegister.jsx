@@ -9,14 +9,14 @@ const QUESTIONS = [
     field: "usage",
     label: "What will you be using DataCircles for?",
     options: ["CRM", "Project Management", "Invoicing", "HR"],
-    placeholder: "Type what you use it for, press Enter",
+    placeholder: "Type what you use it for, press Enter or comma",
     multi: true,
   },
   {
     field: "mainGoal",
     label: "What is your main goal?",
     options: ["Increase Sales", "Organization", "Team Collab"],
-    placeholder: "Type your goal, press Enter",
+    placeholder: "Type your goal, press Enter or comma",
     multi: true,
   },
   {
@@ -29,7 +29,7 @@ const QUESTIONS = [
     field: "source",
     label: "Where did you hear about us?",
     options: ["Google", "LinkedIn", "Friend"],
-    placeholder: "Type where you heard about us, press Enter",
+    placeholder: "Type where you heard about us, press Enter or comma",
     multi: true,
   },
 ];
@@ -64,6 +64,9 @@ export default function Register() {
   const [step, setStep] = useState(1);
   const [answers, setAnswers] = useState({ usage: [], mainGoal: [], teamSize: "", source: [] });
   const [company, setCompany] = useState({ workspaceName: "", workspaceAddress: "", workspaceState: "" });
+  // Step 3 either creates a new company or joins an existing one with its company code.
+  const [companyMode, setCompanyMode] = useState("create");
+  const [companyCode, setCompanyCode] = useState("");
   // "Others": an input appears, Enter adds the typed value as another selected chip.
   const [otherOpen, setOtherOpen] = useState({ usage: false, mainGoal: false, source: false });
   const [otherDraft, setOtherDraft] = useState({ usage: "", mainGoal: "", source: "" });
@@ -76,13 +79,21 @@ export default function Register() {
       return { ...prev, [field]: [...current, value] };
     });
 
+  // Typed text is split on commas, so "gaming, coding" becomes two chips (still capped at MAX_PICKS).
   const addCustomPick = (field) => {
-    const value = otherDraft[field].trim().slice(0, 60);
-    if (!value) return;
+    const values = otherDraft[field]
+      .split(",")
+      .map((part) => part.trim().slice(0, 60))
+      .filter(Boolean);
+    if (values.length === 0) return;
     setAnswers((prev) => {
-      const current = prev[field];
-      if (current.length >= MAX_PICKS || current.some((v) => v.toLowerCase() === value.toLowerCase())) return prev;
-      return { ...prev, [field]: [...current, value] };
+      const next = [...prev[field]];
+      for (const value of values) {
+        if (next.length >= MAX_PICKS) break;
+        if (next.some((v) => v.toLowerCase() === value.toLowerCase())) continue;
+        next.push(value);
+      }
+      return { ...prev, [field]: next };
     });
     setOtherDraft((prev) => ({ ...prev, [field]: "" }));
   };
@@ -242,7 +253,9 @@ export default function Register() {
         email: workEmail.trim().toLowerCase(),
         password,
         ...answers,
-        ...(includeCompany
+        ...(includeCompany && companyMode === "join"
+          ? { companyCode: companyCode.trim() }
+          : includeCompany
           ? {
               workspaceName: company.workspaceName.trim(),
               workspaceAddress: company.workspaceAddress.trim(),
@@ -374,7 +387,19 @@ export default function Register() {
             RIGHT SECTION
             ================================================== */}
 
-        <div className="min-h-0 w-full min-w-0 flex-1 overflow-y-auto rounded-[18px] bg-white lg:h-full lg:min-h-0">
+        <div className="relative min-h-0 w-full min-w-0 flex-1 overflow-y-auto rounded-[18px] bg-white lg:h-full lg:min-h-0">
+
+          {/* Skip the company step: creates the account with a default workspace */}
+          {step === 3 && !accountCreated && (
+            <button
+              type="button"
+              onClick={() => handleCreateAccount(false)}
+              disabled={isCreatingAccount}
+              className="absolute right-[clamp(24px,5vw,64px)] top-[clamp(24px,5vh,48px)] z-10 h-9 rounded-full border border-[#E2E8F0] bg-white px-5 font-['Inter'] text-[13px] font-medium text-[#475569] transition hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Skip
+            </button>
+          )}
 
           {/* CENTERED CONTENT */}
           <div className="flex h-full min-h-0 w-full items-center justify-center px-[clamp(12px,4vw,40px)] py-[clamp(16px,3vh,32px)]">
@@ -518,12 +543,15 @@ export default function Register() {
                       tracking-[0]
                       text-[#475569]
                     "
+                    style={step === 3 ? { minHeight: "calc(2 * clamp(22px, 3.2vh, 28px))" } : undefined}
                   >
                     {step === 1 &&
                       "Set up your workspace and start managing your business project workflows."}
                     {step === 2 && "A few quick questions so we can tailor DataCircles to you."}
                     {step === 3 &&
-                      "Add your company details now, or skip and do it later from Settings."}
+                      (companyMode === "join"
+                        ? "Enter the company code your admin shared to join their workspace."
+                        : "Add your company details now, or skip and do it later from Settings.")}
                   </p>
 
                   {/* Step indicator */}
@@ -1189,7 +1217,8 @@ export default function Register() {
                               value={otherDraft[q.field]}
                               onChange={(e) => setOtherDraft((prev) => ({ ...prev, [q.field]: e.target.value }))}
                               onKeyDown={(e) => {
-                                if (e.key === "Enter") {
+                                // Enter or a comma commits what's typed as a chip.
+                                if (e.key === "Enter" || e.key === ",") {
                                   e.preventDefault();
                                   addCustomPick(q.field);
                                 }
@@ -1218,35 +1247,86 @@ export default function Register() {
 
                 {step === 3 && (
                   <div className="mt-[clamp(16px,2.5vh,24px)] w-full">
-                    <div>
-                      <label className="block font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-[#0F172A]">Company name</label>
-                      <input
-                        type="text"
-                        placeholder="ex.Acme Pvt Ltd"
-                        value={company.workspaceName}
-                        onChange={(e) => setCompany((prev) => ({ ...prev, workspaceName: e.target.value }))}
-                        className="mt-[clamp(6px,1.2vh,8px)] h-[clamp(42px,5.5vh,48px)] w-full rounded-full border border-[#E2E8F0] bg-white px-[clamp(12px,1.5vw,16px)] font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-normal leading-[20px] text-[#0F172A] outline-none placeholder:text-[#64748B] focus:border-[#0085FF]"
-                      />
+                    {/* Create a new company, or join one that already exists */}
+                    <div className="flex gap-1 rounded-full bg-[#F1F5F9] p-1.5">
+                      <button
+                        type="button"
+                        onClick={() => { setCompanyMode("create"); setErrors((prev) => ({ ...prev, general: "" })); }}
+                        className={`flex-1 rounded-full px-3 py-2.5 font-['Inter'] text-[13px] font-medium transition ${companyMode === "create" ? "bg-white text-[#0085FF] shadow-sm" : "text-[#64748B] hover:text-[#0F172A]"}`}
+                      >
+                        Create a company
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCompanyMode("join");
+                          setErrors((prev) => ({ ...prev, general: "" }));
+                          setTimeout(() => document.getElementById("signup-company-code")?.focus(), 0);
+                        }}
+                        className={`flex-1 rounded-full px-3 py-2.5 font-['Inter'] text-[13px] font-medium transition ${companyMode === "join" ? "bg-white text-[#0085FF] shadow-sm" : "text-[#64748B] hover:text-[#0F172A]"}`}
+                      >
+                        Join with company code
+                      </button>
                     </div>
-                    <div className="mt-[clamp(14px,2.2vh,20px)]">
-                      <label className="block font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-[#0F172A]">Address</label>
-                      <input
-                        type="text"
-                        placeholder="ex.12, MG Road, Mumbai"
-                        value={company.workspaceAddress}
-                        onChange={(e) => setCompany((prev) => ({ ...prev, workspaceAddress: e.target.value }))}
-                        className="mt-[clamp(6px,1.2vh,8px)] h-[clamp(42px,5.5vh,48px)] w-full rounded-full border border-[#E2E8F0] bg-white px-[clamp(12px,1.5vw,16px)] font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-normal leading-[20px] text-[#0F172A] outline-none placeholder:text-[#64748B] focus:border-[#0085FF]"
-                      />
+
+                    <div className="grid">
+                    <div
+                      className={`col-start-1 row-start-1 ${companyMode === "create" ? "" : "invisible"}`}
+                      aria-hidden={companyMode !== "create"}
+                    >
+                        <div className="mt-[clamp(14px,2.2vh,20px)]">
+                          <label className="block font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-[#0F172A]">Company name</label>
+                          <input
+                            type="text"
+                            placeholder="ex.Acme Pvt Ltd"
+                            value={company.workspaceName}
+                            onChange={(e) => setCompany((prev) => ({ ...prev, workspaceName: e.target.value }))}
+                            className="mt-[clamp(6px,1.2vh,8px)] h-[clamp(42px,5.5vh,48px)] w-full rounded-full border border-[#E2E8F0] bg-white px-[clamp(12px,1.5vw,16px)] font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-normal leading-[20px] text-[#0F172A] outline-none placeholder:text-[#64748B] focus:border-[#0085FF]"
+                          />
+                        </div>
+                        <div className="mt-[clamp(14px,2.2vh,20px)]">
+                          <label className="block font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-[#0F172A]">Address</label>
+                          <input
+                            type="text"
+                            placeholder="ex.12, MG Road, Mumbai"
+                            value={company.workspaceAddress}
+                            onChange={(e) => setCompany((prev) => ({ ...prev, workspaceAddress: e.target.value }))}
+                            className="mt-[clamp(6px,1.2vh,8px)] h-[clamp(42px,5.5vh,48px)] w-full rounded-full border border-[#E2E8F0] bg-white px-[clamp(12px,1.5vw,16px)] font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-normal leading-[20px] text-[#0F172A] outline-none placeholder:text-[#64748B] focus:border-[#0085FF]"
+                          />
+                        </div>
+                        <div className="mt-[clamp(14px,2.2vh,20px)]">
+                          <label className="block font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-[#0F172A]">State</label>
+                          <input
+                            type="text"
+                            placeholder="ex.Maharashtra"
+                            value={company.workspaceState}
+                            onChange={(e) => setCompany((prev) => ({ ...prev, workspaceState: e.target.value }))}
+                            className="mt-[clamp(6px,1.2vh,8px)] h-[clamp(42px,5.5vh,48px)] w-full rounded-full border border-[#E2E8F0] bg-white px-[clamp(12px,1.5vw,16px)] font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-normal leading-[20px] text-[#0F172A] outline-none placeholder:text-[#64748B] focus:border-[#0085FF]"
+                          />
+                        </div>
                     </div>
-                    <div className="mt-[clamp(14px,2.2vh,20px)]">
-                      <label className="block font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-[#0F172A]">State</label>
-                      <input
-                        type="text"
-                        placeholder="ex.Maharashtra"
-                        value={company.workspaceState}
-                        onChange={(e) => setCompany((prev) => ({ ...prev, workspaceState: e.target.value }))}
-                        className="mt-[clamp(6px,1.2vh,8px)] h-[clamp(42px,5.5vh,48px)] w-full rounded-full border border-[#E2E8F0] bg-white px-[clamp(12px,1.5vw,16px)] font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-normal leading-[20px] text-[#0F172A] outline-none placeholder:text-[#64748B] focus:border-[#0085FF]"
-                      />
+                      <div
+                        className={`col-start-1 row-start-1 mt-[clamp(14px,2.2vh,20px)] ${companyMode === "join" ? "" : "invisible"}`}
+                        aria-hidden={companyMode !== "join"}
+                      >
+                        <label className="block font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-[#0F172A]">Company code</label>
+                        <input
+                          id="signup-company-code"
+                          type="text"
+                          maxLength={40}
+                          placeholder="ex.AB12CD34"
+                          value={companyCode}
+                          onChange={(e) => {
+                            setCompanyCode(e.target.value);
+                            setErrors((prev) => ({ ...prev, general: "" }));
+                          }}
+                          className="mt-[clamp(6px,1.2vh,8px)] h-[clamp(42px,5.5vh,48px)] w-full rounded-full border border-[#E2E8F0] bg-white px-[clamp(12px,1.5vw,16px)] font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-normal leading-[20px] text-[#0F172A] outline-none placeholder:text-[#64748B] focus:border-[#0085FF]"
+                        />
+                        <p className="mt-2 font-['Inter'] text-[12px] text-[#64748B]">
+                          Ask your admin for the code (Settings &gt; User Management). If you were invited by email, you
+                          don&apos;t need one, you&apos;ll be added to that workspace automatically.
+                        </p>
+                      </div>
                     </div>
 
                     {errors.general && (
@@ -1266,19 +1346,16 @@ export default function Register() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleCreateAccount(false)}
-                        disabled={isCreatingAccount}
-                        className="h-[clamp(42px,5.5vh,48px)] rounded-full border border-[#E2E8F0] bg-white px-6 font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-[#475569] transition hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        Skip
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => handleCreateAccount(true)}
-                        disabled={isCreatingAccount || !company.workspaceName.trim()}
+                        disabled={
+                          isCreatingAccount ||
+                          (companyMode === "join" ? !companyCode.trim() : !company.workspaceName.trim())
+                        }
                         className="h-[clamp(42px,5.5vh,48px)] flex-1 rounded-full bg-[#0085FF] font-['Inter'] text-[clamp(12px,1.4vw,14px)] font-medium leading-[20px] text-white transition hover:bg-[#0078E8] disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {isCreatingAccount ? "Creating Account..." : "Create Account"}
+                        {isCreatingAccount
+                          ? companyMode === "join" ? "Joining..." : "Creating Account..."
+                          : companyMode === "join" ? "Join Company" : "Create Account"}
                       </button>
                     </div>
                   </div>
