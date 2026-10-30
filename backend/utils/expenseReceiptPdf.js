@@ -1,4 +1,16 @@
+const fs = require("fs");
+const path = require("path");
 const puppeteer = require("puppeteer");
+
+// The green "PAID" stamp shown under the total of a settled expense. Inlined as a data URI because
+// the page is built with setContent (no base URL), so a file path would not load. A missing file
+// only means the receipt renders without the stamp.
+let PAID_STAMP = "";
+try {
+  PAID_STAMP = `data:image/png;base64,${fs.readFileSync(path.join(__dirname, "assets", "paid-logo.png")).toString("base64")}`;
+} catch {
+  PAID_STAMP = "";
+}
 
 /*
  * Renders one Expense / Indirect Income entry as a printable receipt PDF.
@@ -52,125 +64,204 @@ const formatDate = (date) =>
       })
     : "N/A";
 
+const { toWords } = require("number-to-words");
+
+const titleCase = (text) => text.replace(/,/g, "").replace(/\b[a-z]/g, (c) => c.toUpperCase());
+
+// "Thirteen Thousand Four Hundred Thirty-Six Rupees And Fifty-Four Paise Only"
+function amountInWords(amount) {
+  const total = Math.round((parseFloat(amount) || 0) * 100);
+  const rupees = Math.floor(total / 100);
+  const paise = total % 100;
+  let words = `${titleCase(toWords(rupees))} Rupees`;
+  if (paise) words += ` And ${titleCase(toWords(paise))} Paise`;
+  return `${words} Only`;
+}
+
+const maskAccount = (number) => {
+  const digits = String(number || "").replace(/\s/g, "");
+  return digits.length > 4 ? `•••• ${digits.slice(-4)}` : digits;
+};
+
 function buildHtml(entry, orgDetails) {
   const isIncome = entry.kind === "income";
-  const noun = isIncome ? "Income" : "Expense";
-  const docLabel = isIncome ? "INCOME RECEIPT" : "EXPENSE VOUCHER";
+  const docLabel = isIncome ? "Income receipt" : "Expense voucher";
   const receiptNo = `${isIncome ? "INC" : "EXP"}-${String(entry._id).slice(-6).toUpperCase()}`;
   const isPaid = entry.status === "Paid";
-  const stamp = isPaid ? (isIncome ? "RECEIVED" : "PAID") : "PENDING";
-  const stampColor = isPaid ? (isIncome ? "#16A34A" : "#DC2626") : "#D97706";
-  const accent = isIncome ? "#16A34A" : "#2563EB";
 
+  // Blue band like the invoice template; green when money comes in.
+  const accent = isIncome ? "#059669" : "#0A74FF";
+  const accentSoft = isIncome ? "#ECFDF5" : "#EFF6FF";
+
+  const orgName = orgDetails?.companyName || "Company Name";
   const orgAddress = [orgDetails?.address, orgDetails?.city, orgDetails?.state, orgDetails?.pincode]
     .filter(Boolean)
     .join(", ");
-  const vendorName = entry.vendor?.companyName || entry.vendor?.name || "";
-  const isForeign = entry.currency && entry.currency !== "INR";
+  const orgContact = [orgDetails?.email, orgDetails?.mobile].filter(Boolean).map(escapeHtml).join(", ");
 
-  const row = (label, value) =>
-    value === "" || value === null || value === undefined
-      ? ""
-      : `<div class="kv"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`;
+  const vendorName = entry.vendor?.companyName || entry.vendor?.name || "";
+  const vendorContact = [entry.vendor?.email, entry.vendor?.phone].filter(Boolean).map(escapeHtml).join(", ");
+  const isForeign = entry.currency && entry.currency !== "INR";
+  const paidOn = isPaid && entry.paymentDate ? formatDate(entry.paymentDate) : "";
+  const bankLine = entry.bankAccount?.bank
+    ? `${entry.bankAccount.bank}${entry.bankAccount.accountNumber ? ` ${maskAccount(entry.bankAccount.accountNumber)}` : ""}`
+    : "";
+
+  const description = entry.category || "Uncategorised";
+  const noteText = [entry.notes, entry.paymentNotes].filter(Boolean).join("\n");
+
+  const meta = (label, value) =>
+    value
+      ? `<div class="meta-row"><span class="meta-l">${escapeHtml(label)}</span><span class="meta-v">${escapeHtml(value)}</span></div>`
+      : "";
+
+  const total = (label, value, cls = "") =>
+    `<div class="tot-row ${cls}"><span>${escapeHtml(label)}</span><span>${value}</span></div>`;
 
   return `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8" />
 <style>
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; color: #111827; }
-  .sheet { padding: 28px; }
-  .head { text-align: center; border-bottom: 2px solid #E5E7EB; padding-bottom: 18px; }
-  .logo { max-height: 56px; max-width: 200px; object-fit: contain; margin-bottom: 10px; }
-  .org { font-size: 22px; font-weight: 700; }
-  .small { font-size: 11px; color: #4B5563; line-height: 1.6; }
-  .doc-title { font-size: 20px; font-weight: 700; letter-spacing: 1px; color: ${accent}; margin-top: 16px; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin: 24px 0; }
-  .kv { display: flex; justify-content: space-between; gap: 16px; font-size: 11px; padding: 6px 0; border-bottom: 1px dashed #E5E7EB; }
-  .kv span:first-child { color: #6B7280; font-weight: 600; text-transform: uppercase; }
-  .kv span:last-child { color: #111827; font-weight: 700; text-align: right; }
-  .amount-box { margin: 8px 0 0; padding: 14px 16px; background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; }
-  .amount-label { font-size: 10px; color: #6B7280; font-weight: 700; text-transform: uppercase; }
-  .amount { font-size: 26px; font-weight: 700; margin-top: 4px; }
-  .section { margin-top: 22px; }
-  .label { font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; color: #374151; }
-  .notes { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px; font-size: 11px; white-space: pre-wrap; }
-  .stamp { margin-top: 28px; text-align: right; }
-  .stamp span { display: inline-block; padding: 10px 26px; border: 3px solid ${stampColor}; color: ${stampColor}; font-size: 18px; font-weight: 700; border-radius: 8px; transform: rotate(-8deg); opacity: .85; }
-  .footer { margin-top: 36px; padding-top: 14px; border-top: 1px solid #E5E7EB; text-align: center; font-size: 10px; color: #6B7280; }
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; color: #0F172A;
+    font-family: "Inter", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  .page { width: 210mm; min-height: 297mm; padding: 15mm 15mm 12mm; display: flex; flex-direction: column; }
+
+  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+  .logo { max-height: 60px; max-width: 180px; object-fit: contain; }
+  .org-big { font-size: 20px; font-weight: 800; letter-spacing: -.01em; line-height: 1.2; }
+  .meta { width: 270px; flex-shrink: 0; }
+  .meta-row { display: flex; justify-content: space-between; align-items: baseline; gap: 22px; font-size: 11.5px; padding: 8px 0; border-bottom: 1px solid #EEF2F7; }
+  .meta-row:last-of-type { border-bottom: 0; }
+  .meta-l { color: #94A3B8; font-weight: 600; }
+  .meta-v { color: #0F172A; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+  .doc-title { font-size: 22px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: ${accent}; text-align: right; margin-bottom: 10px; line-height: 1.1; }
+  .stamp { margin-top: 18px; text-align: center; }
+  .stamp img { width: 124px; height: 124px; object-fit: contain; }
+
+  .parties { display: flex; justify-content: space-between; gap: 40px; margin-top: 34px; }
+  .party { font-size: 11px; line-height: 1.6; max-width: 48%; }
+  .party.right { text-align: right; margin-left: auto; }
+  .party-h { font-size: 12.5px; font-weight: 800; margin-bottom: 7px; }
+  .party-name { font-weight: 700; font-size: 11.5px; }
+  .party-sub { color: #334155; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+  thead tr { background: ${accent}; }
+  thead th { background: transparent; border: 0; color: #fff; font-size: 9.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: 9px 12px; text-align: left; }
+  thead th.r, td.r { text-align: right; }
+  tbody td { font-size: 11px; padding: 12px 12px; border-bottom: 1px solid #E2E8F0; vertical-align: top; }
+  .item-name { font-weight: 700; }
+  .item-sub { color: #64748B; font-size: 10px; margin-top: 3px; line-height: 1.5; }
+
+  .below { display: flex; justify-content: space-between; align-items: flex-start; gap: 40px; margin-top: 34px; }
+  .notes { flex: 1; min-width: 0; }
+  .notes-h { font-size: 12.5px; font-weight: 800; margin-bottom: 8px; }
+  .notes-t { font-size: 10.5px; color: #334155; line-height: 1.7; white-space: pre-wrap; }
+  .words { font-size: 10px; color: #64748B; font-style: italic; margin-top: 12px; line-height: 1.5; }
+  .totals { width: 250px; flex-shrink: 0; }
+  .tot-row { display: flex; justify-content: space-between; font-size: 11px; padding: 5px 4px; }
+  .tot-row span:last-child { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tot-row.fx { color: #64748B; font-size: 10px; }
+  .tot-row.grand { margin-top: 12px; padding: 12px 12px; background: ${accentSoft}; font-size: 13px; font-weight: 800; }
+  .tot-row.grand span:last-child { font-weight: 800; }
+
+  .spacer { flex: 1; min-height: 24px; }
+  .footer { display: flex; justify-content: space-between; padding-top: 10px; border-top: 1px solid #E2E8F0; font-size: 9.5px; color: #94A3B8; }
 </style>
 </head>
 <body>
-  <div class="sheet">
-    <div class="head">
-      ${orgDetails?.logoUrl ? `<img class="logo" src="${escapeHtml(orgDetails.logoUrl)}" />` : ""}
-      <div class="org">${escapeHtml(orgDetails?.companyName || "Company Name")}</div>
-      <div class="small">
-        ${orgAddress ? `<div>${escapeHtml(orgAddress)}</div>` : ""}
-        ${[
-          orgDetails?.mobile ? `Mobile: ${escapeHtml(orgDetails.mobile)}` : "",
-          orgDetails?.email ? `Email: ${escapeHtml(orgDetails.email)}` : "",
-        ]
-          .filter(Boolean)
-          .join(" &nbsp;|&nbsp; ")}
-        ${orgDetails?.gstin ? `<div>GSTIN: ${escapeHtml(orgDetails.gstin)}</div>` : ""}
-      </div>
-      <div class="doc-title">${docLabel}</div>
-    </div>
+  <div class="page">
 
-    <div class="grid2">
+    <div class="top">
       <div>
-        ${row(`${noun} No`, receiptNo)}
-        ${row("Date", formatDate(entry.date))}
-        ${row("Category", entry.category || "Uncategorised")}
-        ${row("Status", isPaid ? stamp : "PENDING")}
+        ${
+          orgDetails?.logoUrl
+            ? `<img class="logo" src="${escapeHtml(orgDetails.logoUrl)}" />`
+            : `<div class="org-big">${escapeHtml(orgName)}</div>`
+        }
       </div>
-      <div>
-        <div class="amount-box">
-          <div class="amount-label">Amount</div>
-          <div class="amount">&#8377;${money(entry.amount)}</div>
-          ${
-            isForeign
-              ? `<div class="small">${escapeHtml(entry.currency)} ${money(
-                  entry.foreignAmount
-                )} @ ${escapeHtml(String(entry.exchangeRate || 1))}</div>`
-              : ""
-          }
-        </div>
-        ${row("Mode", entry.paymentType || "—")}
-        ${row("Bank", entry.bankAccount?.bank || "")}
-        ${isPaid && entry.paymentDate ? row(isIncome ? "Received On" : "Paid On", formatDate(entry.paymentDate)) : ""}
+      <div class="meta">
+        <div class="doc-title">${docLabel}</div>
+        ${meta(isIncome ? "Receipt no." : "Voucher no.", receiptNo)}
+        ${meta("Date", formatDate(entry.date))}
+        ${meta(isIncome ? "Received on" : "Paid on", paidOn)}
       </div>
     </div>
 
-    ${
-      vendorName
-        ? `<div class="section">
-             <div class="label">${isIncome ? "Received From" : "Paid To"}</div>
-             ${row("Name", vendorName)}
-             ${row("Email", entry.vendor?.email || "")}
-             ${row("Phone", entry.vendor?.phone || "")}
-             ${row("GSTIN", entry.vendor?.gstin || "")}
-           </div>`
-        : ""
-    }
+    <div class="parties">
+      <div class="party">
+        <div class="party-h">${isIncome ? "Received By" : "Paid From"}</div>
+        <div class="party-name">${escapeHtml(orgName)}</div>
+        ${orgAddress ? `<div class="party-sub">${escapeHtml(orgAddress)}</div>` : ""}
+        ${orgContact ? `<div class="party-sub">${orgContact}</div>` : ""}
+        ${orgDetails?.gstin ? `<div class="party-sub">GSTIN: ${escapeHtml(orgDetails.gstin)}</div>` : ""}
+      </div>
+      ${
+        vendorName
+          ? `<div class="party right">
+               <div class="party-h">${isIncome ? "Received From" : "Paid To"}</div>
+               <div class="party-name">${escapeHtml(vendorName)}</div>
+               ${vendorContact ? `<div class="party-sub">${vendorContact}</div>` : ""}
+               ${entry.vendor?.gstin ? `<div class="party-sub">GSTIN: ${escapeHtml(entry.vendor.gstin)}</div>` : ""}
+             </div>`
+          : ""
+      }
+    </div>
 
-    ${
-      entry.notes || entry.paymentNotes
-        ? `<div class="section">
-             <div class="label">Notes</div>
-             <div class="notes">${escapeHtml([entry.notes, entry.paymentNotes].filter(Boolean).join("\n"))}</div>
-           </div>`
-        : ""
-    }
+    <table>
+      <thead>
+        <tr>
+          <th style="width:46%">Description</th>
+          <th>Mode</th>
+          <th>Date</th>
+          <th class="r">Amount, INR</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="item-name">${escapeHtml(description)}</div>
+            ${bankLine ? `<div class="item-sub">${escapeHtml(bankLine)}</div>` : ""}
+          </td>
+          <td>${escapeHtml(entry.paymentType || "—")}</td>
+          <td>${formatDate(entry.date)}</td>
+          <td class="r">${money(entry.amount)}</td>
+        </tr>
+      </tbody>
+    </table>
 
-    <div class="stamp"><span>${stamp}</span></div>
+    <div class="below">
+      <div class="notes">
+        <div class="notes-h">Payment instructions or other notes</div>
+        <div class="notes-t">${noteText ? escapeHtml(noteText) : "&mdash;"}</div>
+        <div class="words">${escapeHtml(amountInWords(entry.amount))}</div>
+      </div>
+      <div class="totals">
+        ${total("Subtotal", `&#8377; ${money(entry.amount)}`)}
+        ${
+          isForeign
+            ? total(
+                `${escapeHtml(entry.currency)} ${money(entry.foreignAmount)}`,
+                `@ ${escapeHtml(String(entry.exchangeRate || 1))}`,
+                "fx"
+              )
+            : ""
+        }
+        ${total("Total", `&#8377; ${money(entry.amount)}`, "grand")}
+        ${isPaid && !isIncome && PAID_STAMP ? `<div class="stamp"><img src="${PAID_STAMP}" alt="Paid" /></div>` : ""}
+      </div>
+    </div>
+
+    <div class="spacer"></div>
 
     <div class="footer">
-      This is a computer generated document and requires no signature.<br />
-      Generated on ${formatDate(new Date())}
+      <span>This is a computer generated ${isIncome ? "receipt" : "voucher"}.</span>
+      <span>${receiptNo} &nbsp;&middot;&nbsp; Generated on ${formatDate(new Date())}</span>
     </div>
+
   </div>
 </body>
 </html>`;
@@ -186,7 +277,8 @@ module.exports = async function expenseReceiptPdf(entry, orgDetails) {
     return await page.pdf({
       format: "A4",
       printBackground: true,
-      margin: { top: "16px", bottom: "16px", left: "16px", right: "16px" },
+      preferCSSPageSize: true,
+      margin: { top: 0, bottom: 0, left: 0, right: 0 },
     });
   } finally {
     await page.close();
