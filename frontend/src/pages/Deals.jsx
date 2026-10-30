@@ -2928,7 +2928,7 @@ function Deals() {
                           setDealsPerPage(parseInt(e.target.value));
                           setDealsCurrentPage(1);
                         }}
-                        className="appearance-none border border-gray-300 rounded-lg pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
+                        className="appearance-none border border-gray-300 rounded-full pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
                       >
                         <option value={10}>10 per page</option>
                         <option value={20}>20 per page</option>

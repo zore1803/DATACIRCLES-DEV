@@ -7,27 +7,13 @@ import toast from "react-hot-toast";
 import AppToaster from "../AppToaster";
 import EditIcon from "../common/EditIcon";
 
-// The industries every company form ships with. Mirrors the list CompanyFieldSettings renders as
-// "Default System Industries" - these come from the backend seed, not from /company-industries
-// (which only ever returns an org's own additions).
-const DEFAULT_INDUSTRIES = [
-  "Information Technology & Services",
-  "Finance & Banking",
-  "Healthcare & Pharmaceuticals",
-  "Education & EdTech",
-  "Retail & E-Commerce",
-  "Manufacturing",
-  "Real Estate",
-  "Marketing & Advertising",
-  "Travel & Hospitality",
-  "Nonprofit / Government / Public Sector",
-];
-
 // activeTab ("custom" | "system") is now owned by CompanyFieldSettings, which merged this
 // component's own pill switcher into its single Custom Field / Custom Section / Built-in /
 // Custom Industry / Built-in Industry bar - this just renders whichever view is asked for.
 const CompanyIndustrySettings = ({ activeTab }) => {
   const [industries, setIndustries] = useState([]);
+  // Built-in industries (with their optional sub-industries), from the backend.
+  const [defaultIndustries, setDefaultIndustries] = useState([]);
   const [newIndustryName, setNewIndustryName] = useState("");
   const [editIndex, setEditIndex] = useState(null);
   const [editValue, setEditValue] = useState("");
@@ -44,6 +30,7 @@ const CompanyIndustrySettings = ({ activeTab }) => {
       if (res.data) {
         // Filter out default industries
         setIndustries(res.data.filter(ind => !ind.isDefault) || []);
+        setDefaultIndustries(res.data.filter(ind => ind.isDefault) || []);
       }
     } catch (err) {
       console.error("Failed to fetch industries", err);
@@ -289,13 +276,18 @@ const CompanyIndustrySettings = ({ activeTab }) => {
                   </tr>
                 </thead>
                 <tbody className="bg-white">
-                  {DEFAULT_INDUSTRIES.map((name) => (
+                  {defaultIndustries.map(({ name, subIndustries = [] }) => (
                     <tr key={name} className="group hover:bg-[#F5F7FA] transition-colors border-b border-[#E1E4EA] last:border-b-0">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <span className="w-2 h-2 rounded-full flex-shrink-0 bg-gray-300" />
                           <span className="text-sm font-semibold text-gray-900">{name}</span>
                         </div>
+                        {subIndustries.length > 0 && (
+                          <p className="mt-1 ml-[18px] text-xs text-gray-500 line-clamp-2">
+                            {subIndustries.join(" · ")}
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="inline-flex items-center gap-1 text-xs text-gray-900">

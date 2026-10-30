@@ -394,7 +394,7 @@ const PaymentPage = () => {
             <select
               value={limit}
               onChange={(e) => handleLimitChange(parseInt(e.target.value))}
-              className="ml-2 border rounded-lg px-3 py-1.5 text-sm"
+              className="ml-2 border rounded-full px-3 py-1.5 text-sm"
             >
               {[10, 20, 50, 100].map((v) => (
                 <option key={v} value={v}>

@@ -297,14 +297,12 @@ function DealDetail() {
       value: `₹${formatNumberToIndian(totalInvoiced)}`,
       icon: Receipt,
     },
-    {
-      label: "Outstanding",
-      value: `₹${formatNumberToIndian(invoiceSummary.amountDue)}`,
-      icon: PdfIcon,
-    },
     { label: "Invoices", value: invoices.length, icon: Receipt },
-    { label: "Upcoming Tasks", value: upcomingTasksCount, icon: CheckSquare },
-    { label: "Upcoming Meetings", value: upcomingMeetingsCount, icon: CalendarIcon },
+    {
+      label: "Upcoming Tasks & Meetings",
+      value: upcomingTasksCount + upcomingMeetingsCount,
+      icon: CheckSquare,
+    },
   ];
 
   if (error && !deal) {
@@ -596,9 +594,9 @@ function DealDetail() {
         {showStats && activeTab === "Overview" && (
           <>
             {!statsLoading && <DealSummaryCard deal={deal} />}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
               {statsLoading || invoicesLoading
-                ? Array.from({ length: 6 }).map((_, i) => <StatTileSkeleton key={i} />)
+                ? Array.from({ length: 4 }).map((_, i) => <StatTileSkeleton key={i} />)
                 : statTiles.map((tile) => <StatTile key={tile.label} tile={tile} />)}
             </div>
           </>

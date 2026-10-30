@@ -1,5 +1,23 @@
 const NotificationSettings = require("../models/NotificationSettings");
 const Notification = require("../models/Notification");
+const User = require("../models/User");
+
+// Who may see which feed entry:
+//   - a change made by an admin is visible to admins only;
+//   - a change made by staff is visible to everyone in the org (the staff
+//     member themself, the other staff, and the admins).
+// Admins therefore see the whole feed, while a staff viewer sees everything
+// except entries whose actor is an admin. Resolved from the actor's *current*
+// role, so entries written before this rule existed are covered too.
+const feedFilterFor = async (user) => {
+  const base = { organization: user.organization };
+  if (user.role === "admin") return base;
+  const adminIds = await User.find({
+    organization: user.organization,
+    role: "admin",
+  }).distinct("_id");
+  return adminIds.length ? { ...base, actor: { $nin: adminIds } } : base;
+};
 
 // --- Activity feed (auto-generated create/update/delete notifications) -------
 
@@ -10,9 +28,7 @@ exports.getFeed = async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit, 10) || 30, 100);
     const userId = req.user._id;
 
-    const notifications = await Notification.find({
-      organization: req.user.organization,
-    })
+    const notifications = await Notification.find(await feedFilterFor(req.user))
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
@@ -34,7 +50,7 @@ exports.getFeed = async (req, res) => {
 exports.getUnreadCount = async (req, res) => {
   try {
     const unreadCount = await Notification.countDocuments({
-      organization: req.user.organization,
+      ...(await feedFilterFor(req.user)),
       readBy: { $ne: req.user._id },
     });
     res.json({ unreadCount });
@@ -47,7 +63,7 @@ exports.getUnreadCount = async (req, res) => {
 exports.markRead = async (req, res) => {
   try {
     await Notification.updateOne(
-      { _id: req.params.id, organization: req.user.organization },
+      { _id: req.params.id, ...(await feedFilterFor(req.user)) },
       { $addToSet: { readBy: req.user._id } }
     );
     res.json({ message: "Marked as read" });
@@ -59,7 +75,7 @@ exports.markRead = async (req, res) => {
 // Clear (delete) all notifications for the organization.
 exports.clearAll = async (req, res) => {
   try {
-    await Notification.deleteMany({ organization: req.user.organization });
+    await Notification.deleteMany(await feedFilterFor(req.user));
     res.json({ message: "Notifications cleared" });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -70,7 +86,7 @@ exports.clearAll = async (req, res) => {
 exports.markAllRead = async (req, res) => {
   try {
     await Notification.updateMany(
-      { organization: req.user.organization, readBy: { $ne: req.user._id } },
+      { ...(await feedFilterFor(req.user)), readBy: { $ne: req.user._id } },
       { $addToSet: { readBy: req.user._id } }
     );
     res.json({ message: "All marked as read" });

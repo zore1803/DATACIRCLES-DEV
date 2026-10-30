@@ -368,12 +368,10 @@ const ContactDetailsPage = () => {
     },
     { label: "Open Deals", value: openDealsCount, icon: BriefcaseBusiness },
     { label: "Closed Deals", value: closedDealsCount, icon: CheckSquare },
-    { label: "Upcoming Tasks", value: upcomingTasksCount, icon: CheckSquare },
-    { label: "Upcoming Meetings", value: upcomingMeetingsCount, icon: CalendarIcon },
     {
-      label: "Lifecycle Stage",
-      value: contact?.lifecycleStage || "—",
-      icon: Target,
+      label: "Upcoming Tasks & Meetings",
+      value: upcomingTasksCount + upcomingMeetingsCount,
+      icon: CheckSquare,
     },
   ];
 
@@ -791,9 +789,9 @@ const ContactDetailsPage = () => {
         {showStats && activeTab === "Overview" && (
           <>
             {!statsLoading && <ContactSummaryCard contact={contact} />}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
               {statsLoading
-                ? Array.from({ length: 6 }).map((_, i) => <StatTileSkeleton key={i} />)
+                ? Array.from({ length: 4 }).map((_, i) => <StatTileSkeleton key={i} />)
                 : statTiles.map((tile) => <StatTile key={tile.label} tile={tile} />)}
             </div>
           </>

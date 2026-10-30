@@ -1390,18 +1390,8 @@ export default function CompanyDealsKanban({
       },
       { label: "Won Deals", value: wonDeals.length, icon: WonDealIcon },
       { label: "Lost Deals", value: lostDeals.length, icon: LostDealIcon },
-      {
-        label: "Avg. Deal Size",
-        value: `₹${Math.round(avgDealSize).toLocaleString("en-IN")}`,
-        icon: AvgDealSizeIcon,
-      },
-      {
-        label: "Avg. Closing Time",
-        value: `${avgClosingDays}d`,
-        icon: CalendarClockIcon,
-      },
     ],
-    [openDeals, wonDeals, lostDeals, pipelineValue, avgDealSize, avgClosingDays],
+    [openDeals, wonDeals, lostDeals, pipelineValue],
   );
 
   // `over.id` is a column id when hovering the column body, but another deal's id
@@ -1510,15 +1500,15 @@ export default function CompanyDealsKanban({
       {/* KPI Tiles */}
       {showStats && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
             {isLoading
-              ? Array.from({ length: 6 }).map((_, i) => <StatTileSkeleton key={i} />)
+              ? Array.from({ length: 4 }).map((_, i) => <StatTileSkeleton key={i} />)
               : kpiTiles.map((tile) => (
                 <StatTile key={tile.label} tile={tile} />
               ))}
           </div>
 
-          <div className="-mx-6" style={{ marginTop: 24, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
+          <div className="-mx-6" style={{ marginTop: 16, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
         </>
       )}
 
@@ -2211,7 +2201,7 @@ export default function CompanyDealsKanban({
                   <select
                     value={limit}
                     onChange={(e) => handleLimitChange(parseInt(e.target.value))}
-                    className="ml-2 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
+                    className="ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
                   >
                     <option value={10}>10 per page</option>
                     <option value={20}>20 per page</option>

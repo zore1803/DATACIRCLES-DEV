@@ -289,6 +289,43 @@
   height: 0;
 }
 
+/* Horizontal scroller whose bar only appears while the pointer is over it
+   (PaymentsTimeline's funds cards). Must stay after the .overflow-x-auto and
+   .no-scrollbar blocks above: same specificity, later wins. */
+/* The 6px bar's space is always reserved and only its thumb is hidden until
+   hover, so showing it never changes the container's height and the content
+   inside doesn't move. The caller offsets the reserved 6px with extra top
+   padding to keep centred content exactly where it was. */
+/* Reset the thin/coloured standard scrollbar that .overflow-x-auto sets
+   globally; in Chromium those properties would otherwise override the
+   ::-webkit-scrollbar rules below. */
+.hover-scrollbar {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+
+.hover-scrollbar::-webkit-scrollbar {
+  display: block;
+  height: 6px;
+}
+
+.hover-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.hover-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+}
+
+.hover-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+}
+
+.hover-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
 /* Card-contained scroll areas (e.g. the Dashboard Top Invoices table) need a
    visible, grabbable scrollbar since the global rule above hides scrollbars
    by default. */

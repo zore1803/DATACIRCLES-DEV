@@ -1,27 +1,24 @@
 const Industry = require('../models/Industry');
 
-// Default 10 industries (seed data)
-const defaultIndustries = [
-  "Information Technology & Services",
-  "Finance & Banking",
-  "Healthcare & Pharmaceuticals",
-  "Education & EdTech",
-  "Retail & E-Commerce",
-  "Manufacturing",
-  "Real Estate",
-  "Marketing & Advertising",
-  "Travel & Hospitality",
-  "Nonprofit / Government / Public Sector"
-];
+const { DEFAULT_INDUSTRIES } = require('../constants/industries');
 
-// Seed default industries if not already added
+// Make sure every built-in industry exists with its current sub-industries and
+// order. Upserts by name, so the original ten keep their documents and any
+// industry added to the list later reaches existing databases too. Runs once
+// per server process rather than on every request.
+let defaultsSynced = false;
 const ensureDefaultIndustries = async () => {
-  const count = await Industry.countDocuments({ isDefault: true });
-  if (count === 0) {
-    const defaults = defaultIndustries.map(name => ({ name, isDefault: true }));
-    await Industry.insertMany(defaults);
-    console.log('✅ Default industries seeded');
-  }
+  if (defaultsSynced) return;
+  await Industry.bulkWrite(
+    DEFAULT_INDUSTRIES.map(({ name, subIndustries, sortOrder, region }) => ({
+      updateOne: {
+        filter: { name, isDefault: true },
+        update: { $set: { subIndustries, sortOrder, region } },
+        upsert: true,
+      },
+    }))
+  );
+  defaultsSynced = true;
 };
 
 // CREATE custom industry
@@ -67,7 +64,7 @@ const getIndustries = async (req, res) => {
         { isDefault: true },
         { organization: req.user.organization }
       ]
-    }).sort({ isDefault: -1, name: 1 });
+    }).sort({ isDefault: -1, sortOrder: 1, name: 1 });
 
     res.json(industries);
   } catch (err) {

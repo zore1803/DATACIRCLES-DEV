@@ -71,6 +71,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
   const [form, setForm] = useState({
     name: "",
     industry: "",
+    subIndustry: "",
     // Exactly one billing address (GST is derived from its state).
     billingAddress: { ...emptyAddress },
     // One or more shipping addresses; each can mirror the billing address.
@@ -106,6 +107,8 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
   const [isFormDirty, setIsFormDirty] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [industries, setIndustries] = useState([]);
+  // { "Industry name": ["Sub-industry", ...] } from /company-industries.
+  const [subIndustriesByIndustry, setSubIndustriesByIndustry] = useState({});
   const profilePictureInputRef = useRef(null);
   const nameInputRef = useRef(null);
   const emailInputRef = useRef(null);
@@ -159,6 +162,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
     setForm({
       name: editCompany.name || "",
       industry: editCompany.industry || "",
+      subIndustry: editCompany.subIndustry || "",
       billingAddress: { ...emptyAddress, ...(editCompany.billingAddress || {}) },
       shippingAddresses:
         editCompany.shippingAddresses && editCompany.shippingAddresses.length
@@ -211,6 +215,16 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
           ? data.map((item) => (typeof item === "object" ? item.name : item))
           : [];
         setIndustries(industryList);
+        // Built-in industries ship suggested sub-industries; custom ones have none.
+        const subs = {};
+        if (Array.isArray(data)) {
+          data.forEach((item) => {
+            if (item && typeof item === "object" && item.subIndustries?.length) {
+              subs[item.name] = item.subIndustries;
+            }
+          });
+        }
+        setSubIndustriesByIndustry(subs);
       }
     } catch (err) {
       console.error("Failed to fetch industries:", err);
@@ -468,6 +482,8 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
     const payload = new FormData();
     payload.append("name", form.name);
     payload.append("industry", form.industry);
+    // Optional: sent even when empty so clearing it on edit actually clears it.
+    payload.append("subIndustry", form.subIndustry || "");
     payload.append("address", legacyAddress);
     payload.append("billingAddress", JSON.stringify(form.billingAddress));
     payload.append("shippingAddresses", JSON.stringify(shippingPayload));
@@ -948,12 +964,29 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
               <CustomDropdown
                 options={industries}
                 value={form.industry}
-                onChange={(value) => handleFormChange("industry", value)}
+                onChange={(value) => {
+                  handleFormChange("industry", value);
+                  // A sub-industry belongs to one industry, so drop it on change.
+                  if (value !== form.industry) handleFormChange("subIndustry", "");
+                }}
                 placeholder="Select Industry"
                 searchable
                 buttonClassName={selectButtonCls({ hasValue: !!form.industry })}
               />
             </FormField>
+
+            {(subIndustriesByIndustry[form.industry] || []).length > 0 && (
+              <FormField label="Sub-industry (Optional)">
+                <CustomDropdown
+                  options={subIndustriesByIndustry[form.industry]}
+                  value={form.subIndustry}
+                  onChange={(value) => handleFormChange("subIndustry", value)}
+                  placeholder="Select Sub-industry"
+                  searchable
+                  buttonClassName={selectButtonCls({ hasValue: !!form.subIndustry })}
+                />
+              </FormField>
+            )}
 
             {/* WhatsApp Number — a dialable number, so it sits with the
                 company's own details rather than under Social Media Links

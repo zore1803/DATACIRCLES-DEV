@@ -790,7 +790,7 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
               )))}
           </div>
 
-          <div className="-mx-6" style={{ marginTop: 24, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
+          <div className="-mx-6" style={{ marginTop: 16, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
         </>
       )}
 
@@ -2059,7 +2059,7 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
               <select
                 value={listLimit}
                 onChange={(e) => handleListLimitChange(parseInt(e.target.value))}
-                className="ml-2 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
+                className="ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
               >
                 <option value={10}>10 per page</option>
                 <option value={20}>20 per page</option>

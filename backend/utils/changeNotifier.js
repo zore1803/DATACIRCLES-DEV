@@ -19,11 +19,21 @@ const { als } = require("../middlewares/requestContext");
 const EXCLUDED_MODELS = new Set([
   "Notification",
   "NotificationSettings",
-  "User",
   "SuperAdmin",
-  "Invited",
   "Session",
 ]);
+
+// Staff changes are reported, but User documents are also written on almost
+// every request (logins, profile sync, onboarding), so for them only a few
+// changes are worth a notification: someone being added or removed, and an
+// existing member's role / permissions changing (an upgrade or downgrade).
+const STAFF_UPDATE_FIELDS = new Set(["Role", "Permissions"]);
+
+// Friendlier names than the raw model name for the feed.
+const TYPE_LABELS = {
+  User: "Staff Member",
+  Invited: "Staff Invitation",
+};
 
 // Fields never worth reporting in an update diff.
 const FIELD_BLACKLIST = new Set([
@@ -42,6 +52,7 @@ const MAX_CHANGES = 12;
 // Turn a PascalCase model name into a friendlier label: "PurchaseOrder" -> "Purchase Order".
 function humanType(modelName) {
   if (!modelName) return "Record";
+  if (TYPE_LABELS[modelName]) return TYPE_LABELS[modelName];
   return modelName.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
@@ -177,6 +188,14 @@ async function record({ modelName, action, doc, changes, organization }) {
       const key = `${action}:${modelName}:${entityId}`;
       if (store.__notified.has(key)) return;
       store.__notified.add(key);
+    }
+
+    // User / Invited: skip routine writes. Invitations only matter when sent
+    // or withdrawn; staff updates only when role / permissions changed.
+    if (modelName === "Invited" && action === "updated") return;
+    if (modelName === "User" && action === "updated") {
+      changes = (changes || []).filter((c) => STAFF_UPDATE_FIELDS.has(c.field));
+      if (changes.length === 0) return;
     }
 
     const Notification = require("../models/Notification");

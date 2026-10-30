@@ -1203,34 +1203,12 @@ function Companies() {
     try {
       setIndustriesLoading(true);
 
-      // Default system industries
-      const defaultIndustries = [
-        "Information Technology & Services",
-        "Finance & Banking",
-        "Healthcare & Pharmaceuticals",
-        "Education & EdTech",
-        "Retail & E-Commerce",
-        "Manufacturing",
-        "Real Estate",
-        "Marketing & Advertising",
-        "Travel & Hospitality",
-        "Nonprofit / Government / Public Sector",
-      ];
-
-      // Fetch custom industries from API
+      // The API returns the built-in industries (Indian view first, then
+      // international) followed by this organization's own, already in order.
       const res = await API.get("/company-industries");
-      let customIndustries = [];
-
-      if (res.data) {
-        // Get custom industries (filter out default ones from API)
-        const custom = res.data.filter((ind) => !ind.isDefault) || [];
-        customIndustries = custom.map((ind) => ind.name);
-      }
-
-      // Combine default and custom industries, remove duplicates, and sort
       const allIndustries = [
-        ...new Set([...defaultIndustries, ...customIndustries]),
-      ].sort();
+        ...new Set((Array.isArray(res.data) ? res.data : []).map((ind) => ind.name)),
+      ];
       setIndustries(allIndustries);
     } catch (err) {
       console.error("Failed to fetch industries", err);
@@ -1666,7 +1644,7 @@ function Companies() {
               <select
                 value={limit}
                 onChange={(e) => handleLimitChange(parseInt(e.target.value))}
-                className="appearance-none border border-gray-300 rounded-lg pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
+                className="appearance-none border border-gray-300 rounded-full pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
               >
                 <option value={10}>10 per page</option>
                 <option value={20}>20 per page</option>
