@@ -164,7 +164,7 @@ export default function BankModal({ isOpen, onClose, onSave, initialData, hasExi
   return createPortal(
     <>
       <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100009]"
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100009]"
         onClick={onClose}
       />
       <div className="fixed dc-panel-card dc-panel-w z-[100010] bg-white shadow-2xl flex flex-col overflow-hidden font-inter">

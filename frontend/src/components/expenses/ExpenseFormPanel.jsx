@@ -5,7 +5,10 @@ import API from "../../services/api";
 import toast from "react-hot-toast";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 import SearchableDropdown from "../contact/SearchableDropdown";
+import BankModal from "../settings/BankModal";
 import { LABEL_CLS, inputCls as fieldInputCls, textareaCls } from "../common/form";
+
+const ADD_BANK_VALUE = "__add_bank__";
 
 /*
  * Create/edit panel for an Expense or an Indirect Income entry.
@@ -65,6 +68,7 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState([]);
   const [banks, setBanks] = useState([]);
+  const [showBankModal, setShowBankModal] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
   const categoryRef = useRef(null);
@@ -232,6 +236,23 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [categoryOpen]);
 
+  // Same create call Settings → Bank Details uses (BankModal closes itself on
+  // success); refresh the list and select the new account on this entry.
+  const handleSaveBank = async (payload) => {
+    try {
+      const res = await API.post("/bank-details", payload);
+      toast.success("Bank account added");
+      const list = await API.get("/bank-details/all");
+      setBanks(Array.isArray(list.data) ? list.data : []);
+      if (res.data?._id) set("bankAccount", res.data._id);
+    } catch (err) {
+      if (err.response?.status === 402) {
+        toast.error(err.response?.data?.message || "An active subscription is required to make changes.");
+      }
+      throw err;
+    }
+  };
+
   const handleClose = () => {
     setIsSliding(false);
     setTimeout(() => onClose(), 300);
@@ -373,7 +394,11 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
     <>
       <div
         className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100000] transition-opacity duration-300"
-        style={{ opacity: isSliding ? 1 : 0 }}
+        style={{
+          opacity: isSliding && !showBankModal ? 1 : 0,
+          // No fade while handing over to the bank modal's own backdrop, otherwise both overlap for 300ms.
+          transition: showBankModal ? "none" : undefined,
+        }}
         onClick={handleClose}
         aria-hidden="true"
       />
@@ -803,7 +828,10 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
                     <label className={labelCls}>Select Bank</label>
                     <select
                       value={form.bankAccount}
-                      onChange={(e) => set("bankAccount", e.target.value)}
+                      onChange={(e) => {
+                        if (e.target.value === ADD_BANK_VALUE) setShowBankModal(true);
+                        else set("bankAccount", e.target.value);
+                      }}
                       className={`${inputCls} bg-white`}
                     >
                       <option value="">
@@ -815,6 +843,8 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
                           {b.accountNumber ? ` (${b.accountNumber})` : ""}
                         </option>
                       ))}
+                      {/* First-time users have no accounts to pick — offer to create one. */}
+                      {!banks.length && <option value={ADD_BANK_VALUE}>+ Add new bank account</option>}
                     </select>
                     {bankLabel && (
                       <p className="mt-1 text-[11px] text-[#1F2937] opacity-50">
@@ -846,6 +876,14 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
           </button>
         </div>
       </div>
+
+      <BankModal
+        isOpen={showBankModal}
+        onClose={() => setShowBankModal(false)}
+        onSave={handleSaveBank}
+        initialData={null}
+        hasExistingDefault={banks.some((b) => b.isDefault)}
+      />
     </>
   );
 }
