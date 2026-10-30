@@ -642,7 +642,7 @@ const Settings = () => {
               <div key={category}>
                 {/* Category Header */}
                 <div className="flex items-center gap-3 mb-5">
-                  <div className="bg-[#0085FF] p-2 rounded-lg shadow-md">
+                  <div className="bg-[#0085FF] flex items-center justify-center w-12 h-12 rounded-full ring-4 ring-blue-100 shadow-md">
                     <div className="text-white">
                       {categoryIcons[category] || (
                         <SettingsIcon className="w-4 h-4" />
@@ -669,7 +669,7 @@ const Settings = () => {
                       className="group relative flex flex-col items-center gap-2 p-3 transition-colors"
                     >
                       <div
-                        className={`p-3 rounded-xl border border-[#E1E4EA] ${item.bgColor} ${item.color} group-hover:scale-110 transition-transform duration-200`}
+                        className={`flex items-center justify-center w-14 h-14 rounded-full border border-white ring-1 ring-[#E1E4EA] shadow-sm ${item.bgColor} ${item.color} group-hover:scale-110 group-hover:shadow-md group-hover:ring-blue-200 transition-all duration-200`}
                       >
                         {item.icon}
                       </div>
