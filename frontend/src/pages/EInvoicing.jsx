@@ -1,6 +1,6 @@
 import DeleteIcon from "../components/common/DeleteIcon";
 import { FaWhatsapp } from "react-icons/fa";
-import emailLogo from "../assets/email-logo.png";
+import emailLogo from "../assets/email-logo.svg";
 import Checkbox from "../components/common/Checkbox";
 import MoreIcon from "../components/common/MoreIcon";
 import DownloadIcon from "../components/common/DownloadIcon";
@@ -1504,7 +1504,7 @@ export default function EInvoicing() {
                 },
                 {
                   label: "Email",
-                  icon: <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain scale-[1.35]" />,
+                  icon: <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain" />,
                   onClick: () => { window.open(`mailto:?subject=${encodeURIComponent(emailSubject)}&body=${emailBody}`, "_blank"); closeMenu(); },
                 },
                 {

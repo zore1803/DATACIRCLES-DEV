@@ -30,7 +30,7 @@ import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 import facebookLogo from "../../assets/facebook-logo.png";
 import whatsappLogo from "../../assets/whatsapp-logo.png";
 import telegramLogo from "../../assets/telegram-logo.png";
-import emailLogo from "../../assets/email-logo.png";
+import emailLogo from "../../assets/email-logo.svg";
 import twitterLogo from "../../assets/twitter-logo.png";
 
 // Each PNG's mark fills a different fraction of its own transparent canvas

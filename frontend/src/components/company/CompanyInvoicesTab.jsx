@@ -1,6 +1,6 @@
 import PdfIcon from "../common/PdfIcon";
 import { FaWhatsapp } from "react-icons/fa";
-import emailLogo from "../../assets/email-logo.png";
+import emailLogo from "../../assets/email-logo.svg";
 import EmptyState from "../common/EmptyState";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
@@ -1464,7 +1464,7 @@ View or download it here: ${link}`;
                   const to = invoice.deal?.contact?.email || invoice.deal?.company?.email || "";
                   window.location.href = `mailto:${to}?subject=${encodeURIComponent(`Invoice ${num}`)}&body=${encodeURIComponent(message)}`;
                 }}>
-                  <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain scale-[1.35]" />
+                  <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain" />
                   Email
                 </button>
                 <button type="button" className={itemCls} onClick={async () => {

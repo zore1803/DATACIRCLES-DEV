@@ -365,7 +365,7 @@ const SearchResults = ({ isOpen, onClose, searchQuery, variant = "full" }) => {
   return (
     <>
       <div
-        className="fixed top-16 left-0 lg:left-16 right-0 bottom-0 bg-gray-50 z-[9991] transition-all duration-300 transform"
+        className="fixed top-[calc(64px+var(--dc-offline-offset,0px))] left-0 lg:left-16 right-0 bottom-0 bg-gray-50 z-[9991] transition-all duration-300 transform"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close button */}

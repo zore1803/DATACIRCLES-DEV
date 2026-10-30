@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { WifiOff } from "lucide-react";
 import useOnlineStatus from "../../hooks/useOnlineStatus";
+import { setTopBarHeight } from "../../utils/topBars";
 
 // The banner height App.jsx pushes the fixed header/sidebar down by while
 // this is showing — keep this and the h-9 class below in sync.
@@ -20,14 +21,10 @@ const OfflineBanner = () => {
   // Fixed headers/sidebar (Header.jsx, Navbar.jsx) and the page's own top
   // padding read this CSS variable to make room for the banner, instead of
   // this component reaching into their markup directly.
+  // The shared helper adds this to the profile checklist bar's height (when both show).
   useEffect(() => {
-    document.documentElement.style.setProperty(
-      "--dc-offline-offset",
-      isOnline ? "0px" : `${OFFLINE_BANNER_HEIGHT}px`
-    );
-    return () => {
-      document.documentElement.style.setProperty("--dc-offline-offset", "0px");
-    };
+    setTopBarHeight("offline", isOnline ? 0 : OFFLINE_BANNER_HEIGHT);
+    return () => setTopBarHeight("offline", 0);
   }, [isOnline]);
 
   if (isOnline) return null;

@@ -1137,9 +1137,6 @@ export default function Inventory() {
               <th
                 style={{
                   width: colWidths.selection,
-                  height: 44,
-                  maxHeight: 44,
-                  boxSizing: "border-box",
                   position: "sticky",
                   left: 0,
                   zIndex: 20,
@@ -1149,7 +1146,7 @@ export default function Inventory() {
                   // already uses box-shadow insets for exactly this reason.
                   boxShadow: "inset -1px 0 0 0 #E1E4EA",
                 }}
-                className="relative px-4 py-2 bg-[#F5F7FA] overflow-hidden"
+                className="relative px-4 py-3 bg-[#F5F7FA] overflow-hidden"
               >
                 <div className="flex justify-center items-center">
                   <Checkbox checked={filteredItems.length > 0 && selectedIds.length === filteredItems.length} onChange={handleSelectAllOnPage}  uncheckedColor="text-[#525866]"/>
@@ -1169,14 +1166,11 @@ export default function Inventory() {
                     title="Drag to move this column"
                     style={{
                       width: colWidths[col.id],
-                      height: 44,
-                      maxHeight: 44,
-                      boxSizing: "border-box",
                       opacity: isDragging ? 0.35 : 1,
                       boxShadow: "inset -1px 0 0 0 #E1E4EA",
                       ...stickyStyleFor(col.id),
                     }}
-                    className={`relative px-4 py-2 text-left text-sm font-bold text-[#525866] whitespace-nowrap overflow-hidden transition-colors ${isDragOver ? "bg-blue-100" : "bg-[#F5F7FA] hover:bg-[#EDF0F5]"} ${draggedColKey ? "cursor-grabbing" : "cursor-grab"} active:cursor-grabbing`}
+                    className={`relative px-4 py-3 text-left text-sm font-bold text-[#525866] whitespace-nowrap overflow-hidden transition-colors ${isDragOver ? "bg-blue-100" : "bg-[#F5F7FA] hover:bg-[#EDF0F5]"} ${draggedColKey ? "cursor-grabbing" : "cursor-grab"} active:cursor-grabbing`}
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="truncate flex-1">{col.label}</span>
@@ -1234,13 +1228,13 @@ export default function Inventory() {
                 <tr
                   key={item._id}
                   className={`bg-white hover:bg-blue-50 transition-colors ${selectedIds.includes(item._id) ? "!bg-blue-50" : ""}`}
-                  style={{ height: 44, maxHeight: 44 }}
+                  style={{ height: 37, maxHeight: 37 }}
                 >
                   <td
                     style={{
                       width: colWidths.selection,
-                      height: "44px",
-                      maxHeight: "44px",
+                      height: "37px",
+                      maxHeight: "37px",
                       boxSizing: "border-box",
                       position: "sticky",
                       left: 0,

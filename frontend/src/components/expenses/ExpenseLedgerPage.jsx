@@ -1,5 +1,5 @@
 import DeleteIcon from "../common/DeleteIcon";
-import emailLogo from "../../assets/email-logo.png";
+import emailLogo from "../../assets/email-logo.svg";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import EmptyState from "../common/EmptyState";
@@ -1288,7 +1288,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
                                             onClick={() => { closeRowMenu(); shareVia("email", r); }}
                                             className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                                           >
-                                            <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain scale-[1.35]" />
+                                            <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain" />
                                             Email
                                           </button>
                                           <button

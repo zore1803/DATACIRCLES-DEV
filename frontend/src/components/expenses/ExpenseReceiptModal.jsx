@@ -5,7 +5,7 @@ import {
   X, Printer, Share2, MessageSquare, Copy, Repeat,
 } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa";
-import emailLogo from "../../assets/email-logo.png";
+import emailLogo from "../../assets/email-logo.svg";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import EditIcon from "../common/EditIcon";
@@ -144,7 +144,7 @@ export default function ExpenseReceiptModal({
               }}
               className="h-9 px-3 flex items-center gap-1.5 bg-white border border-[#E1E4EA] text-[#161618] text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
             >
-              <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain scale-[1.35]" />
+              <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain" />
               Email
             </button>
             <button

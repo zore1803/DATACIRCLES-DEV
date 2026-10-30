@@ -981,7 +981,7 @@ export default function PaymentsTimeline() {
             // rect drifted the portal away from the clicked row under CSS zoom.
             const zMenu = getAncestorZoom(document.body);
             const MENU_W = 160; // matches w-40 below
-            const MENU_H = 189; // 5 buttons (~36px each) + 1 divider (~9px)
+            const MENU_H = 170; // 4 rows (~28px each) + 1 divider + padding
             const MARGIN = 8;
             const rect = e.currentTarget.getBoundingClientRect();
             const viewportH = window.innerHeight / zMenu;
@@ -998,7 +998,7 @@ export default function PaymentsTimeline() {
             setActionMenuPos({ top: calcTop, left: calcLeft });
             setOpenActionMenuId(doc._id);
           }}
-          className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+          className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
         >
           <MoreIcon className="w-4 h-4" />
         </button>
@@ -1007,43 +1007,43 @@ export default function PaymentsTimeline() {
             {/* Invisible backdrop to close menu on click-outside */}
             <div className="fixed inset-0 z-[59]" onClick={() => { setOpenActionMenuId(null); setActionMenuPos(null); }} />
             <div
-              className="fixed w-40 bg-white rounded-xl shadow-lg border border-[#E1E4EA] py-1 z-[60] overflow-hidden"
+              className="fixed w-[160px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right z-[60]"
               style={{ top: actionMenuPos.top, left: actionMenuPos.left }}
               onClick={e => e.stopPropagation()}
             >
-              <button className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 onClick={() => { setOpenActionMenuId(null); setActionMenuPos(null); handleViewReceipt(doc); }}>
-                <EyeIcon className="w-4 h-4 text-gray-400" /> View
+                <EyeIcon className="w-3.5 h-3.5 text-gray-400" /> View
               </button>
-              <button className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
+              <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 onClick={() => {
                   setOpenActionMenuId(null);
                   setActionMenuPos(null);
                   setEditingPaymentItem(doc);
                   setIsPaymentModalOpen(true);
                 }}>
-                <EditIcon className="w-4 h-4 text-gray-400" /> Edit
+                <EditIcon className="w-3.5 h-3.5 text-gray-400" /> Edit
               </button>
-              <button className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
+              <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 onClick={() => {
                   setOpenActionMenuId(null);
                   setActionMenuPos(null);
                   handleExportExcel(doc);
                 }}>
-                <DownloadIcon className="w-4 h-4 text-gray-400" /> Download
+                <DownloadIcon className="w-3.5 h-3.5 text-gray-400" /> Download
               </button>
-              <button className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 onClick={() => { setOpenActionMenuId(null); setActionMenuPos(null); toast.success("Share coming soon!"); }}>
-                <Share2 className="w-4 h-4 text-gray-400" /> Share
+                <Share2 className="w-3.5 h-3.5 text-gray-400" /> Share
               </button>
-              <div className="h-px bg-gray-100 my-1" />
-              <button className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 cursor-pointer"
+              <div className="w-full border-t border-[#F1F1F5] my-0.5" />
+              <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-red-600 hover:bg-red-50 whitespace-nowrap"
                 onClick={() => {
                   setOpenActionMenuId(null);
                   setActionMenuPos(null);
                   setDeleteConfirmState({ isOpen: true, type: "single", target: doc });
                 }}>
-                <DeleteIcon className="w-4 h-4 text-red-500" /> Delete
+                <DeleteIcon className="w-3.5 h-3.5 text-red-500" /> Delete
               </button>
             </div>
           </>,
