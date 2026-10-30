@@ -4,6 +4,7 @@
 // Quotation, Pro Forma Invoice, Delivery Challan) via the `type` prop.
 import { resolveDiscount } from "../../utils/variantResolve";
 import DeleteIcon from "../common/DeleteIcon";
+import RichDescriptionEditor from "../common/RichDescriptionEditor";
 import PlusIcon from "../common/PlusIcon";
 import SearchIcon from "../common/SearchIcon";
 import React, { useState, useEffect, useRef, useLayoutEffect, useCallback, useMemo } from "react";
@@ -2259,7 +2260,7 @@ const CreateInvoicePanel = ({
                     setFieldErrors((prev) => ({ ...prev, receiverGSTIN: false }));
                     setField("receiverGSTIN", e.target.value);
                   }}
-                  placeholder="Enter Receiver GSTIN (e.g., 22AAAAA0000A1Z5)"
+                  placeholder="e.g., 22AAAAA0000A1Z5"
                   className={`${fieldErrors.receiverGSTIN ? inputClass.replace("border-[#E1E4EA]", "border-red-400") : inputClass} flex-1 min-w-0`}
                 />
                 <div className="w-10 flex-shrink-0" aria-hidden="true" />
@@ -2402,13 +2403,13 @@ const CreateInvoicePanel = ({
               </div>
             ) : (
               <div className="overflow-x-auto pb-4 -mx-1 px-1">
-                <div className="min-w-[700px]">
+                <div className="min-w-[780px]">
                   {/* Column headers */}
-                  <div className="grid grid-cols-12 gap-3 pb-2 border-b border-[#E1E4EA] text-[11px] font-semibold text-[#525866] uppercase tracking-wide">
+                  <div className="grid grid-cols-13 gap-3 pb-2 border-b border-[#E1E4EA] text-[11px] font-semibold text-[#525866] uppercase tracking-wide">
                     <div className="col-span-3">Product Name</div>
                     <div className="col-span-2 text-center">Quantity</div>
-                    <div className="col-span-2 text-right">Unit Price</div>
-                    <div className="col-span-1 text-center">GST %</div>
+                    <div className="col-span-2 text-center">Unit Price</div>
+                    <div className="col-span-2 text-center">GST %</div>
                     <div className="col-span-2 text-center">Discount</div>
                     <div className="col-span-2 text-right">Total</div>
                   </div>
@@ -2420,7 +2421,7 @@ const CreateInvoicePanel = ({
                     const rowAmt = lineTotal(item) - itemDiscountAmount(item);
                     return (
                       <div key={realIndex} className="group/row border-b border-[#F0F1F3] last:border-b-0 py-3">
-                        <div className="grid grid-cols-12 gap-3 items-center">
+                        <div className="grid grid-cols-13 gap-3 items-center">
                           {/* Product name */}
                           <div className="col-span-3 min-w-0">
                             <input
@@ -2453,11 +2454,11 @@ const CreateInvoicePanel = ({
                               onChange={(e) => updateItem(realIndex, { rate: e.target.value })}
                               onWheel={(e) => e.target.blur()}
                               placeholder="0.00"
-                              className="w-full text-right text-[13px] border border-[#E1E4EA] rounded-lg py-1.5 px-2 bg-[#F8F9FB] focus:bg-white focus:outline-none focus:border-[#0085FF] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              className="w-full text-center text-[13px] border border-[#E1E4EA] rounded-lg py-1.5 px-2 bg-[#F8F9FB] focus:bg-white focus:outline-none focus:border-[#0085FF] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                           </div>
                           {/* GST % */}
-                          <div className="col-span-1">
+                          <div className="col-span-2">
                             {/* appearance-none + our own chevron: the native
                                 select arrow is ~20px wide and clipped "18%" to
                                 "18" in this one-column cell. */}
@@ -2465,7 +2466,7 @@ const CreateInvoicePanel = ({
                             <select
                               value={item.gstRate ?? 0}
                               onChange={(e) => updateItem(realIndex, { gstRate: parseFloat(e.target.value) })}
-                              className="w-full appearance-none text-center text-[13px] border border-[#E1E4EA] rounded-lg pl-1.5 pr-4 py-1.5 bg-[#F8F9FB] focus:bg-white focus:outline-none focus:border-[#0085FF] cursor-pointer"
+                              className="w-full appearance-none text-center text-[13px] border border-[#E1E4EA] rounded-lg pl-2 pr-6 py-1.5 bg-[#F8F9FB] focus:bg-white focus:outline-none focus:border-[#0085FF] cursor-pointer"
                             >
                               <option value={0}>0%</option>
                               <option value={5}>5%</option>
@@ -2473,7 +2474,7 @@ const CreateInvoicePanel = ({
                               <option value={18}>18%</option>
                               <option value={28}>28%</option>
                             </select>
-                            <ChevronDown className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-[#99A0AE]" />
+                            <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#99A0AE]" />
                             </div>
                           </div>
                           {/* Discount */}
@@ -2534,12 +2535,10 @@ const CreateInvoicePanel = ({
                           <div className="pt-2 pb-1">
                             <div className="flex flex-col gap-1">
                               <label className="text-[10px] font-medium text-[#525866]">Description</label>
-                              <textarea
-                                rows={2}
+                              <RichDescriptionEditor
                                 placeholder="Item description…"
                                 value={item.description}
-                                onChange={(e) => updateItem(realIndex, { description: e.target.value })}
-                                className="w-full resize-none text-[12px] text-[#525866] border-b border-[#E1E4EA] px-1 py-1 focus:outline-none focus:border-[#0085FF] bg-transparent"
+                                onChange={(html) => updateItem(realIndex, { description: html })}
                               />
                             </div>
                           </div>

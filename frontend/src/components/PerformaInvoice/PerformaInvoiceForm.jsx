@@ -1414,7 +1414,7 @@ const PerformaInvoiceForm = ({
                   </label>
                   <input
                     type="text"
-                    placeholder="Enter Receiver GSTIN (e.g., 22AAAAA0000A1Z5)"
+                    placeholder="e.g., 22AAAAA0000A1Z5"
                     value={form.receiverGSTIN}
                     onChange={(e) => {
                       setForm((prev) => ({

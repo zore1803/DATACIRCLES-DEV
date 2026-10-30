@@ -6,7 +6,7 @@ import API, { configureAxios } from "../../services/api";
 import SearchableDropdown from "../contact/SearchableDropdown";
 import QuickCompanyForm from "../company/QuickCompanyForm";
 import QuickContactForm from "../contact/QuickContactForm";
-import { X } from "lucide-react";
+import { X, Pencil } from "lucide-react";
 import toast from "react-hot-toast";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
@@ -48,6 +48,12 @@ const QuickDealForm = ({
   // Add validation errors state
   const [validationErrors, setValidationErrors] = useState({});
   const titleInputRef = useRef(null);
+  // The deal name starts as the generated "<Company> - New Deal N". The pencil
+  // beside it unlocks the field for typing; while it's unlocked a change of
+  // company must not overwrite what the user wrote (suggestDealName is async,
+  // so it reads the ref, not the state).
+  const [titleManual, setTitleManual] = useState(false);
+  const titleManualRef = useRef(false);
   const amountInputRef = useRef(null);
   const companyRef = useRef(null);
   const contactRef = useRef(null);
@@ -323,6 +329,7 @@ const QuickDealForm = ({
       // Falling back to 1 is fine — the name is a starting point the user can
       // edit, not an identifier anything depends on.
     }
+    if (titleManualRef.current) return;
     setForm((prev) => ({ ...prev, title: `${company.name} - New Deal ${next}` }));
   };
 
@@ -581,19 +588,51 @@ const QuickDealForm = ({
 
             {/* Title - Now with validation */}
             <FormField label="Deal Name" required error={validationErrors.title}>
-              {/* Generated from the company above, so it's read-only and greyed.
-                  It stays a real input so the error ref and styling keep working. */}
-              <TextInput
-                ref={titleInputRef}
-                type="text"
-                value={form.title}
-                readOnly
-                tabIndex={-1}
-                aria-readonly="true"
-                error={validationErrors.title}
-                className="bg-[#F5F6F6]! text-[#6B7280]! cursor-not-allowed"
-                placeholder="Select a company to generate the name"
-              />
+              {/* Starts as the name generated from the company above (greyed,
+                  locked). The pencil unlocks it so the user can type their own;
+                  "Auto" in unlocked mode goes back to the generated name. */}
+              <InputWithAction
+                action={
+                  titleManual ? (
+                    !isEditing && form.company ? (
+                      <FieldActionButton
+                        onClick={() => {
+                          titleManualRef.current = false;
+                          setTitleManual(false);
+                          suggestDealName(form.company);
+                        }}
+                        title="Use the generated name"
+                      >
+                        Auto
+                      </FieldActionButton>
+                    ) : null
+                  ) : (
+                    <FieldActionButton
+                      icon={<Pencil className="w-4 h-4 text-white" />}
+                      onClick={() => {
+                        titleManualRef.current = true;
+                        setTitleManual(true);
+                        setTimeout(() => titleInputRef.current?.focus(), 0);
+                      }}
+                      title="Edit deal name"
+                      aria-label="Edit deal name"
+                    />
+                  )
+                }
+              >
+                <TextInput
+                  ref={titleInputRef}
+                  type="text"
+                  value={form.title}
+                  readOnly={!titleManual}
+                  tabIndex={titleManual ? 0 : -1}
+                  aria-readonly={!titleManual}
+                  onChange={(e) => handleFormChange("title", e.target.value)}
+                  error={validationErrors.title}
+                  className={titleManual ? "" : "bg-[#F5F6F6]! text-[#6B7280]! cursor-not-allowed"}
+                  placeholder="Select a company to generate the name"
+                />
+              </InputWithAction>
             </FormField>
 
             {/* Amount - Now with validation */}

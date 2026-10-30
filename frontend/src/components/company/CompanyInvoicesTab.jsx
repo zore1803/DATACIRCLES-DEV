@@ -776,7 +776,7 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
             )}
           </div>
 
-          <div className="-mx-6" style={{ marginTop: 16, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
+          <div style={{ paddingBottom: 8 }} />
         </>
       )}
 
@@ -868,7 +868,7 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
         <div
           ref={fillContainerRef}
           style={fillStyle}
-          className="relative bg-white border border-[#E1E4EA] rounded-lg overflow-x-auto overflow-y-auto"
+          className="relative bg-white border border-[#E1E4EA] rounded-2xl overflow-x-auto overflow-y-auto"
         >
           <table
             className="w-full border-separate border-spacing-0 text-left"
@@ -882,8 +882,7 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
                 <th
                   style={{
                     width: 44,
-                    height: 56,
-                    position: "sticky",
+                                        position: "sticky",
                     left: 0,
                     zIndex: 35,
                     backgroundColor: "#F5F7FA",
@@ -906,11 +905,10 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
                       onMouseDown={(e) => startColumnDrag(e, col.id)}
                       style={{
                         width: colWidths[col.id],
-                        height: 56,
-                        opacity: isDragging ? 0.35 : 1,
+                                                opacity: isDragging ? 0.35 : 1,
                         ...getStickyStyle(col.id, true)
                       }}
-                      className={`px-3 py-2.5 font-medium text-[#525866] text-xs cursor-grab active:cursor-grabbing bg-[#F5F7FA] ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
+                      className={`px-4 py-3 font-bold text-[#525866] text-sm cursor-grab active:cursor-grabbing bg-[#F5F7FA] ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
                     >
                       <div className={`flex items-center justify-between w-full group ${loading ? "[&_button]:invisible" : ""}`}>
                         {loading ? (
@@ -1075,7 +1073,7 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
                     <tr key={invoice._id} className={`hover:bg-gray-50 transition-colors group ${isSelected ? "!bg-blue-50" : ""}`}>
                       <td
                         style={{
-                          height: 54,
+                          height: 45,
                           width: 44,
                           position: "sticky",
                           left: 0,
@@ -1083,7 +1081,7 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
                           backgroundColor: isSelected ? "#EFF6FF" : "#fff",
                           boxShadow: "inset -1px 0 0 #E1E4EA, inset 0 -1px 0 #E1E4EA",
                         }}
-                        className="px-3"
+                        className="px-4"
                       >
                         <div className="flex justify-center items-center w-full">
                           <Checkbox checked={isSelected} onChange={() => toggleItem(invoice._id)} />
@@ -1092,7 +1090,7 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
                       {orderedColumns.map((col) => {
                         const isDragging = draggedColKey === col.id;
                         const cellStyle = {
-                          height: 54,
+                          height: 45,
                           opacity: isDragging ? 0.35 : 1,
                           ...getStickyStyle(col.id, false, isSelected)
                         };
@@ -1134,12 +1132,12 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
 
                         if (col.id === "invoiceNumber") {
                           return (
-                            <td key={col.id} style={cellStyle} className="px-3 text-left">
+                            <td key={col.id} style={cellStyle} className="px-4 text-left">
                               <div className="flex items-center justify-between gap-2">
                                 <button
                                   type="button"
                                   onClick={() => setPreviewInvoice(invoice)}
-                                  className="text-[14px] leading-5 font-medium text-blue-600 hover:text-blue-700 truncate block min-w-0 text-left"
+                                  className="text-sm font-semibold text-[#0085FF] hover:underline truncate block min-w-0 text-left"
                                 >
                                   <HighlightText text={invoice.invoiceNumber || invoice._id} query={searchTerm} />
                                 </button>
@@ -1154,7 +1152,7 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
                             <td
                               key={col.id}
                               style={cellStyle}
-                              className="px-3 text-[14px] leading-5 font-medium text-[#525866] text-left"
+                              className="px-4 text-sm font-normal text-[#1C1B1F] text-left"
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <span className="truncate block min-w-0">
@@ -1171,7 +1169,7 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
                             <td
                               key={col.id}
                               style={cellStyle}
-                              className="px-3 text-[14px] leading-5 font-medium text-[#525866] whitespace-nowrap text-left"
+                              className="px-4 text-sm font-normal text-[#1C1B1F] whitespace-nowrap text-left"
                             >
                               <div className="flex items-center justify-between gap-2">
                                 {issueDate}
@@ -1186,7 +1184,7 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
                             <td
                               key={col.id}
                               style={cellStyle}
-                              className="px-3 text-[14px] leading-5 font-medium text-[#525866] whitespace-nowrap text-left"
+                              className="px-4 text-sm font-normal text-[#1C1B1F] whitespace-nowrap text-left"
                             >
                               <div className="flex items-center justify-between gap-2">
                                 {dueDate}
@@ -1198,7 +1196,7 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
                         }
                         if (col.id === "status") {
                           return (
-                            <td key={col.id} style={cellStyle} className="px-3">
+                            <td key={col.id} style={cellStyle} className="px-4">
                               <div className="flex items-center justify-between gap-2">
                                 <span
                                   style={{ padding: "5px 12px", borderRadius: 53, ...statusPillStyle(invoice.status) }}
@@ -1214,9 +1212,9 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
                         }
                         if (col.id === "amount") {
                           return (
-                            <td key={col.id} style={cellStyle} className="px-3">
+                            <td key={col.id} style={cellStyle} className="px-4">
                               <div className="flex items-center justify-between gap-2">
-                                <span className="text-[14px] leading-5 font-semibold text-[#222530] whitespace-nowrap">
+                                <span className="text-sm font-normal text-[#1C1B1F] whitespace-nowrap">
                                   ₹{(invoice.amount || 0).toLocaleString("en-IN")}
                                 </span>
                                 {isLastCol && downloadButton}
@@ -1268,7 +1266,7 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
               <select
                 value={limit}
                 onChange={(e) => handleLimitChange(parseInt(e.target.value))}
-                className="ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
+                className="select-chevron ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
               >
                 <option value={10}>10 per page</option>
                 <option value={20}>20 per page</option>

@@ -371,7 +371,7 @@ const FullWidthDocumentPanel = ({
                     setFieldErrors((prev) => ({ ...prev, receiverGSTIN: false }));
                     setField("receiverGSTIN", e.target.value);
                   }}
-                  placeholder="Enter Receiver GSTIN (e.g., 22AAAAA0000A1Z5)"
+                  placeholder="e.g., 22AAAAA0000A1Z5"
                   className={`${fieldErrors.receiverGSTIN ? "border-red-400" : "border-[#E1E4EA]"} w-full h-[38px] px-3.5 bg-white border rounded-full text-[13px] text-[#1F2937] placeholder:text-[#99A0AE] focus:outline-none focus:border-[#0085FF] focus:ring-2 focus:ring-[#0085FF]/10 transition-all flex-1 min-w-0`}
                 />
                 <div className="w-10 flex-shrink-0" aria-hidden="true" />

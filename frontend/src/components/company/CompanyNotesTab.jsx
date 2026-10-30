@@ -977,7 +977,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
               )))}
           </div>
 
-          <div className="-mx-6" style={{ marginTop: 16, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
+          <div style={{ paddingBottom: 8 }} />
         </>
       )}
 
@@ -1109,7 +1109,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
         ) : (
           <div
             className="box-border flex flex-col items-start w-full bg-white overflow-x-auto"
-            style={{ border: "1px solid #E1E4EA", borderRadius: 8 }}
+            style={{ border: "1px solid #E1E4EA", borderRadius: 16 }}
           >
             <table
               className="text-sm text-left border-collapse"
@@ -1165,7 +1165,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
           style={{
             ...fillStyle,
             border: "1px solid #E1E4EA",
-            borderRadius: 8,
+            borderRadius: 16,
           }}
         >
           <table
@@ -1183,8 +1183,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
                 <th
                   style={{
                     width: 44,
-                    height: 56,
-                    position: "sticky",
+                                        position: "sticky",
                     left: 0,
                     zIndex: 35,
                     backgroundColor: "#F5F7FA",
@@ -1207,11 +1206,10 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
                       onMouseDown={(e) => startColumnDrag(e, col.id)}
                       style={{
                         width: colWidths[col.id],
-                        height: 56,
-                        opacity: isDragging ? 0.35 : 1,
+                                                opacity: isDragging ? 0.35 : 1,
                         ...getStickyStyle(col.id, true)
                       }}
-                      className={`px-3 py-2.5 font-medium text-[#525252] text-xs cursor-grab active:cursor-grabbing bg-[#F5F7FA] ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
+                      className={`px-3 py-3 font-bold text-[#525866] text-sm cursor-grab active:cursor-grabbing bg-[#F5F7FA] ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
                     >
                       <div className={`flex items-center justify-between w-full ${showNotesSkeleton ? "[&_button]:invisible" : ""}`}>
                         {col.pinnable ? (
@@ -1368,14 +1366,14 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
                   const isSelected = selectedItems.includes(note._id);
                   const cells = {
                     title: (
-                      <td key="title" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
-                        <span className="text-sm font-medium text-gray-900 truncate block">
+                      <td key="title" style={{ height: 45 }} className="px-4 text-left border-r border-b border-[#E1E4EA]">
+                        <span className="text-sm font-normal text-[#1C1B1F] truncate block">
                           <HighlightText text={note.title || "Untitled Note"} query={searchTerm} />
                         </span>
                       </td>
                     ),
                     type: (
-                      <td key="type" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
+                      <td key="type" style={{ height: 45 }} className="px-4 text-left border-r border-b border-[#E1E4EA]">
                         <span
                           className="inline-flex items-center justify-center text-xs font-medium"
                           style={{ padding: "4px 10px", borderRadius: 53, backgroundColor: "rgba(0, 133, 255, 0.1)", color: "#0085FF" }}
@@ -1385,12 +1383,12 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
                       </td>
                     ),
                     description: (
-                      <td key="description" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
+                      <td key="description" style={{ height: 45 }} className="px-4 text-left border-r border-b border-[#E1E4EA]">
                         <span className="text-xs text-gray-500 truncate block">{note.company?.name || "{Deal Name/Activity/Invoice}"}</span>
                       </td>
                     ),
                     contacts: (
-                      <td key="contacts" style={{ height: 64 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                      <td key="contacts" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
                         <div className="flex items-center justify-start gap-1.5">
                           <div
                             className="rounded-full bg-gray-200 flex items-center justify-center text-[9px] font-semibold text-gray-600 flex-shrink-0"
@@ -1405,7 +1403,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
                       </td>
                     ),
                     company: (
-                      <td key="company" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
+                      <td key="company" style={{ height: 45 }} className="px-4 text-left border-r border-b border-[#E1E4EA]">
                         <div className="flex items-center justify-start gap-1 flex-wrap">
                           {note.taggedContacts?.length ? (
                             note.taggedContacts.slice(0, 3).map((c) => (
@@ -1424,7 +1422,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
                       </td>
                     ),
                     date: (
-                      <td key="date" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
+                      <td key="date" style={{ height: 45 }} className="px-4 text-left border-r border-b border-[#E1E4EA]">
                         <div className="flex flex-col">
                           <span className="text-xs font-medium text-gray-700 leading-tight">
                             {formatNoteDate(note.createdAt)}
@@ -1436,7 +1434,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
                       </td>
                     ),
                     year: (
-                      <td key="year" style={{ height: 64 }} className="px-3 text-left border-r border-b border-[#E1E4EA]">
+                      <td key="year" style={{ height: 45 }} className="px-4 text-left border-r border-b border-[#E1E4EA]">
                         <span className="text-xs text-gray-500">Team</span>
                       </td>
                     ),
@@ -1550,7 +1548,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
                     <tr key={note._id} className={`hover:bg-gray-50 transition-colors group ${isSelected ? "!bg-blue-50" : ""}`}>
                       <td
                         style={{
-                          height: 64,
+                          height: 45,
                           width: 44,
                           position: "sticky",
                           left: 0,
@@ -1643,7 +1641,7 @@ export default function CompanyNotesTab({ showStats = true, autoOpenCreate = fal
               <select
                 value={listLimit}
                 onChange={(e) => handleListLimitChange(parseInt(e.target.value))}
-                className="ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
+                className="select-chevron ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
               >
                 <option value={10}>10 per page</option>
                 <option value={20}>20 per page</option>

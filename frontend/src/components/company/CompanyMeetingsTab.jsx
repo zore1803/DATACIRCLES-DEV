@@ -790,7 +790,7 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
               )))}
           </div>
 
-          <div className="-mx-6" style={{ marginTop: 16, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
+          <div style={{ paddingBottom: 8 }} />
         </>
       )}
 
@@ -907,7 +907,7 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
       ) : viewMode === "list" ? (
         <div
           ref={fillContainerRef}
-          className="relative bg-white border border-[#E1E4EA] rounded-lg overflow-x-auto overflow-y-auto"
+          className="relative bg-white border border-[#E1E4EA] rounded-2xl overflow-x-auto overflow-y-auto"
           style={fillStyle}
         >
           <table className="w-full border-separate border-spacing-0 text-left" style={{ tableLayout: "fixed", minWidth: totalTableWidth }}>
@@ -919,8 +919,7 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
                 <th
                   style={{
                     width: 44,
-                    height: 56,
-                    position: "sticky",
+                                        position: "sticky",
                     left: 0,
                     zIndex: 35,
                     backgroundColor: "#F5F7FA",
@@ -943,12 +942,10 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
                       onMouseDown={(e) => startColumnDrag(e, col.id)}
                       style={{
                         width: colWidths[col.id],
-                        height: 56,
-                        opacity: isDragging ? 0.35 : 1,
+                                                opacity: isDragging ? 0.35 : 1,
                         ...getStickyStyle(col.id, true)
                       }}
-                      className={`py-2.5 font-medium text-[#525252] text-xs cursor-grab active:cursor-grabbing bg-[#F5F7FA] ${col.firstCol ? "pl-6 pr-3" : "px-3"
-                        } ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
+                      className={`py-3 font-bold text-[#525866] text-sm cursor-grab active:cursor-grabbing bg-[#F5F7FA] px-4 ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
                     >
                       <div className={`flex items-center justify-between w-full ${isLoading ? "[&_button]:invisible" : ""}`}>
                         <div
@@ -1203,14 +1200,14 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
                   );
                   const cells = {
                     title: (
-                      <td key="title" style={{ height: 60 }} className="pl-6 pr-3 border-r border-b border-[#E1E4EA]">
-                        <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#222530" }} className="truncate block">
+                      <td key="title" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
+                        <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 14, lineHeight: "20px", color: "#1C1B1F" }} className="truncate block">
                           <HighlightText text={meeting.title || "Untitled Meeting"} query={searchTerm} />
                         </span>
                       </td>
                     ),
                     type: (
-                      <td key="type" style={{ height: 60 }} className="pl-6 pr-3 border-r border-b border-[#E1E4EA]">
+                      <td key="type" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
                         <span
                           className="inline-flex items-center justify-center capitalize"
                           style={{
@@ -1229,14 +1226,14 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
                       </td>
                     ),
                     dateTime: (
-                      <td key="dateTime" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                      <td key="dateTime" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
                         <div className="flex flex-col">
-                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866" }} className="truncate">
+                          <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 14, lineHeight: "20px", color: "#1C1B1F" }} className="truncate">
                             {meeting.scheduledAt
                               ? new Date(meeting.scheduledAt).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" })
                               : "—"}
                           </span>
-                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "rgba(28, 28, 29, 0.5)" }} className="truncate">
+                          <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 14, lineHeight: "20px", color: "rgba(28, 28, 29, 0.5)" }} className="truncate">
                             {meeting.scheduledAt
                               ? new Date(meeting.scheduledAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
                               : "—"}
@@ -1245,14 +1242,14 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
                       </td>
                     ),
                     duration: (
-                      <td key="duration" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
-                        <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866" }}>
+                      <td key="duration" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
+                        <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 14, lineHeight: "20px", color: "#1C1B1F" }}>
                           {meeting.duration ? <HighlightText text={`${meeting.duration} min`} query={searchTerm} /> : "—"}
                         </span>
                       </td>
                     ),
                     attendees: (
-                      <td key="attendees" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                      <td key="attendees" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
                         {attendees.length ? (
                           <div className="flex items-center">
                             {attendees.slice(0, 3).map((p, i) => (
@@ -1281,7 +1278,7 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
                       </td>
                     ),
                     organiser: (
-                      <td key="organiser" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                      <td key="organiser" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
                         <div className="flex items-center" style={{ gap: 6 }}>
                           <div
                             className="rounded-full bg-blue-100 border border-white flex items-center justify-center text-[10px] font-semibold text-blue-700 flex-shrink-0"
@@ -1296,19 +1293,19 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
                       </td>
                     ),
                     relatedTo: (
-                      <td key="relatedTo" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                      <td key="relatedTo" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
                         <div className="flex flex-col">
                           <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#0085FF" }} className="truncate">
                             <HighlightText text={meeting.dealCode || meeting.company?.name || "—"} query={searchTerm} />
                           </span>
-                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866" }} className="truncate">
+                          <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 14, lineHeight: "20px", color: "#1C1B1F" }} className="truncate">
                             {meeting.amount ? `₹${Number(meeting.amount).toLocaleString("en-IN")}` : "—"}
                           </span>
                         </div>
                       </td>
                     ),
                     status: (
-                      <td key="status" style={{ height: 60 }} className="px-3 border-b border-[#E1E4EA]">
+                      <td key="status" style={{ height: 45 }} className="px-4 border-b border-[#E1E4EA]">
                         <div className="flex items-center justify-between w-full" style={{ gap: 8 }}>
                           <span
                             className="inline-flex items-center justify-center capitalize"
@@ -1337,7 +1334,7 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
                     >
                       <td
                         style={{
-                          height: 54,
+                          height: 45,
                           width: 44,
                           position: "sticky",
                           left: 0,
@@ -2059,7 +2056,7 @@ export default function CompanyMeetingsTab({ companyId, companyName, contactId, 
               <select
                 value={listLimit}
                 onChange={(e) => handleListLimitChange(parseInt(e.target.value))}
-                className="ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
+                className="select-chevron ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
               >
                 <option value={10}>10 per page</option>
                 <option value={20}>20 per page</option>

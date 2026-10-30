@@ -1348,14 +1348,6 @@ export default function CompanyDealsKanban({
       ),
     [deals],
   );
-  const wonDeals = useMemo(
-    () => deals.filter((d) => (d.status || "").toLowerCase() === "won"),
-    [deals],
-  );
-  const lostDeals = useMemo(
-    () => deals.filter((d) => (d.status || "").toLowerCase() === "lost"),
-    [deals],
-  );
   const pipelineValue = useMemo(
     () => openDeals.reduce((sum, d) => sum + (d.amount || 0), 0),
     [openDeals],
@@ -1388,10 +1380,18 @@ export default function CompanyDealsKanban({
         value: `₹${pipelineValue.toLocaleString("en-IN")}`,
         icon: Clock,
       },
-      { label: "Won Deals", value: wonDeals.length, icon: WonDealIcon },
-      { label: "Lost Deals", value: lostDeals.length, icon: LostDealIcon },
+      {
+        label: "Avg. Deal Size",
+        value: `₹${Math.round(avgDealSize).toLocaleString("en-IN")}`,
+        icon: AvgDealSizeIcon,
+      },
+      {
+        label: "Avg. Closing Time",
+        value: `${avgClosingDays}d`,
+        icon: CalendarClockIcon,
+      },
     ],
-    [openDeals, wonDeals, lostDeals, pipelineValue],
+    [openDeals, pipelineValue, avgDealSize, avgClosingDays],
   );
 
   // `over.id` is a column id when hovering the column body, but another deal's id
@@ -1508,7 +1508,7 @@ export default function CompanyDealsKanban({
               ))}
           </div>
 
-          <div className="-mx-6" style={{ marginTop: 16, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
+          <div style={{ paddingBottom: 8 }} />
         </>
       )}
 
@@ -1726,7 +1726,7 @@ export default function CompanyDealsKanban({
               container itself, which clips for free. */}
           <div
             className="box-border flex flex-col items-stretch bg-white self-stretch overflow-hidden"
-            style={{ border: "1px solid #E1E4EA", borderRadius: "8px" }}
+            style={{ border: "1px solid #E1E4EA", borderRadius: 16 }}
           >
             <div ref={fillContainerRef} style={fillStyle} className="w-full overflow-x-auto overflow-y-auto">
               <table
@@ -1738,7 +1738,7 @@ export default function CompanyDealsKanban({
                     {/* Page-scoped select-all: ticks exactly the rows on the CURRENT page
                         (10 per page -> 10, 50 -> 50). Distinct from the bulk strip's
                         "Select All", which spans every record across all pages. */}
-                    <th style={{ width: 44, height: 56 }} className="px-3 py-2.5 border-r border-b border-[#E1E4EA]">
+                    <th style={{ width: 44, }} className="px-4 py-3 border-r border-b border-[#E1E4EA]">
                       <div className="flex justify-center items-center w-full">
                         <Checkbox checked={selectedDeals.length > 0 && selectedDeals.length === paginatedDeals.length} onChange={handleSelectAllDeals} uncheckedColor="text-[#525866]" />
                       </div>
@@ -1757,8 +1757,8 @@ export default function CompanyDealsKanban({
                               key={col.id}
                               data-col-id={col.id}
                               onMouseDown={(e) => startColumnDrag(e, col.id, col.label, fallbackOrder)}
-                              style={{ width: colWidths[col.id], height: 56, opacity: isDragging ? 0.35 : 1, ...getDealStickyStyle(col.id, true) }}
-                              className={`px-3 py-2.5 font-medium text-[#525866] text-xs cursor-grab active:cursor-grabbing transition-colors ${isDragOver ? "bg-blue-100" : "bg-[#F5F7FA]"}`}
+                              style={{ width: colWidths[col.id], opacity: isDragging ? 0.35 : 1, ...getDealStickyStyle(col.id, true) }}
+                              className={`px-4 py-3 font-bold text-[#525866] text-sm cursor-grab active:cursor-grabbing transition-colors ${isDragOver ? "bg-blue-100" : "bg-[#F5F7FA]"}`}
                             >
                               <div className="flex items-center justify-between w-full group">
                                 {/* Not clickable — a plain click on the header does nothing now.
@@ -1928,7 +1928,7 @@ export default function CompanyDealsKanban({
                       const isSelected = selectedDeals.includes(deal._id);
                       return (
                         <tr key={deal._id} className={`hover:bg-gray-50 transition-colors group ${isSelected ? "!bg-blue-50" : ""}`}>
-                          <td style={{ height: 54, width: 44 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                          <td style={{ height: 45, width: 44 }} className="px-4 border-r border-b border-[#E1E4EA]">
                             <div className="flex justify-center items-center w-full">
                               <Checkbox checked={isSelected} onChange={() => handleSelectDeal(deal._id)} />
                             </div>
@@ -2043,8 +2043,8 @@ export default function CompanyDealsKanban({
                                 return (
                                   <td
                                     key={col.id}
-                                    style={{ height: 54, ...getDealStickyStyle(col.id, false) }}
-                                    className="px-3 text-[14px] leading-5 font-medium text-[#525866] whitespace-nowrap text-left"
+                                    style={{ height: 45, ...getDealStickyStyle(col.id, false) }}
+                                    className="px-4 text-sm font-normal text-[#1C1B1F] whitespace-nowrap text-left"
                                   >
                                     <div className="flex items-center justify-between gap-2">
                                       <HighlightText text={dealIdShort} query={searchTerm} />
@@ -2056,11 +2056,11 @@ export default function CompanyDealsKanban({
                               }
                               if (col.id === "title") {
                                 return (
-                                  <td key={col.id} style={{ height: 54, ...getDealStickyStyle(col.id, false) }} className="px-3 text-left">
+                                  <td key={col.id} style={{ height: 45, ...getDealStickyStyle(col.id, false) }} className="px-4 text-left">
                                     <div className="flex items-center justify-between gap-2">
                                       <Link
                                         to={`/deals/${deal._id}`}
-                                        className="text-[14px] leading-5 font-medium text-[#222530] hover:text-blue-600 truncate block min-w-0"
+                                        className="text-sm font-semibold text-[#0085FF] hover:underline truncate block min-w-0"
                                       >
                                         <HighlightText text={deal.title || "Deal Name"} query={searchTerm} />
                                       </Link>
@@ -2074,8 +2074,8 @@ export default function CompanyDealsKanban({
                                 return (
                                   <td
                                     key={col.id}
-                                    style={{ height: 54, ...getDealStickyStyle(col.id, false) }}
-                                    className="px-3 text-[14px] leading-5 font-medium text-[#222530] text-left"
+                                    style={{ height: 45, ...getDealStickyStyle(col.id, false) }}
+                                    className="px-4 text-sm font-normal text-[#1C1B1F] text-left"
                                   >
                                     <div className="flex items-center justify-between gap-2">
                                       <span className="truncate block min-w-0">
@@ -2089,7 +2089,7 @@ export default function CompanyDealsKanban({
                               }
                               if (col.id === "stage") {
                                 return (
-                                  <td key={col.id} style={{ height: 54, ...getDealStickyStyle(col.id, false) }} className="px-3">
+                                  <td key={col.id} style={{ height: 45, ...getDealStickyStyle(col.id, false) }} className="px-4">
                                     <div className="flex items-center justify-between gap-2">
                                       <span
                                         style={{ width: 80, height: 24, padding: "5px 12px", borderRadius: 53, ...pillStyle }}
@@ -2107,8 +2107,8 @@ export default function CompanyDealsKanban({
                                 return (
                                   <td
                                     key={col.id}
-                                    style={{ height: 54, ...getDealStickyStyle(col.id, false) }}
-                                    className="px-3 text-[14px] leading-5 font-medium text-[#525866] whitespace-nowrap text-left"
+                                    style={{ height: 45, ...getDealStickyStyle(col.id, false) }}
+                                    className="px-4 text-sm font-normal text-[#1C1B1F] whitespace-nowrap text-left"
                                   >
                                     <div className="flex items-center justify-between gap-2">
                                       <HighlightText text={`₹${(deal.amount || 0).toLocaleString("en-IN")}`} query={searchTerm} />
@@ -2122,8 +2122,8 @@ export default function CompanyDealsKanban({
                               return (
                                 <td
                                   key={col.id}
-                                  style={{ height: 54, ...getDealStickyStyle(col.id, false) }}
-                                  className="px-3 text-[14px] leading-5 font-medium text-[#525866] whitespace-nowrap"
+                                  style={{ height: 45, ...getDealStickyStyle(col.id, false) }}
+                                  className="px-4 text-sm font-normal text-[#1C1B1F] whitespace-nowrap"
                                 >
                                   <div className="flex items-center justify-between gap-2">
                                     <HighlightText text={lastUpdated} query={searchTerm} />
@@ -2201,7 +2201,7 @@ export default function CompanyDealsKanban({
                   <select
                     value={limit}
                     onChange={(e) => handleLimitChange(parseInt(e.target.value))}
-                    className="ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
+                    className="select-chevron ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
                   >
                     <option value={10}>10 per page</option>
                     <option value={20}>20 per page</option>

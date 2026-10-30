@@ -1386,7 +1386,7 @@ export default function Inventory() {
           <select
             value={pagination.limit}
             onChange={(e) => handleLimitChange(parseInt(e.target.value, 10))}
-            className="border border-gray-300 rounded-full text-sm py-1 pl-3 pr-7 focus:outline-none focus:border-[#0085FF] focus:ring-1 focus:ring-[#0085FF]"
+            className="select-chevron border border-gray-300 rounded-full text-sm py-1 pl-3 pr-7 focus:outline-none focus:border-[#0085FF] focus:ring-1 focus:ring-[#0085FF]"
           >
             {[10, 20, 50, 100].map((v) => <option key={v} value={v}>{v} per page</option>)}
           </select>

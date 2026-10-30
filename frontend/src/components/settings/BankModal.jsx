@@ -28,41 +28,6 @@ const emptyForm = {
 const ACCOUNT_NO_REGEX = /^[A-Za-z0-9]{8,16}$/;
 const stripNonAlphanumeric = (value) => value.replace(/[^A-Za-z0-9]/g, "").slice(0, 16);
 
-// Common UPI handles (PSP / bank suffixes after the "@"). A handle outside
-// this list is rejected, so add new ones here as banks/apps launch them.
-const SUPPORTED_UPI_HANDLES = new Set([
-  "upi", "ybl", "ibl", "axl", "okhdfcbank", "okicici", "oksbi", "okaxis",
-  "paytm", "pthdfc", "ptsbi", "ptyes", "apl", "waicici", "wahdfcbank",
-  "waaxis", "wasbi", "sbi", "hdfcbank", "icici", "axisbank", "kotak",
-  "yesbank", "idfcbank", "idfcfirst", "pnb", "boi", "cnrb", "canarabank",
-  "unionbank", "uboi", "indus", "indianbank", "federal", "fbl", "rbl",
-  "sib", "aubank", "bandhan", "jupiteraxis", "fam", "freecharge", "jio",
-  "airtel", "airtelpaymentsbank", "postbank", "ikwik", "abfspay", "slice",
-  "naviaxis", "tapicici", "cred", "gpay", "dbs", "citi", "hsbc", "sc",
-  "barodampay", "mahb", "psb", "cub", "kvb", "tmb", "dlb", "kbl", "jsb",
-]);
-
-const MAX_UPI_LENGTH = 255;
-
-// Returns an error message, or "" when the UPI ID is valid.
-const validateUpi = (value) => {
-  if (!value) return "";
-  if (/\s/.test(value)) return "UPI ID must not contain spaces";
-  if (value.length > MAX_UPI_LENGTH) return `UPI ID must be at most ${MAX_UPI_LENGTH} characters`;
-  if (value.split("@").length - 1 !== 1) return "UPI ID must contain exactly one @";
-  const [name, handle] = value.split("@");
-  if (!name) return "Enter the name before the @";
-  if (!handle) return "Enter the UPI handle after the @ (e.g. ybl, okhdfcbank)";
-  if (!/^[A-Za-z0-9._-]+$/.test(name)) {
-    return "Only letters, digits, '.', '-' and '_' are allowed before the @";
-  }
-  if (!/^[A-Za-z]+$/.test(handle)) return "UPI handle must contain only letters";
-  if (!SUPPORTED_UPI_HANDLES.has(handle.toLowerCase())) {
-    return `"@${handle}" is not a supported UPI handle`;
-  }
-  return "";
-};
-
 export default function BankModal({ isOpen, onClose, onSave, initialData, hasExistingDefault }) {
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
@@ -164,9 +129,10 @@ export default function BankModal({ isOpen, onClose, onSave, initialData, hasExi
 // UPI validation (optional)
     const upi = form.upi.trim();
     if (upi) {
-      const upiError = validateUpi(upi);
-      if (upiError) {
-        toast.error(upiError);
+      // No symbols before '@', no spaces, simple format check
+      const upiRegex = /^[\w.-]{2,256}@[\w.-]{2,64}$/;
+      if (!upiRegex.test(upi)) {
+        toast.error("Invalid UPI ID format");
         return;
       }
     }
@@ -365,9 +331,6 @@ export default function BankModal({ isOpen, onClose, onSave, initialData, hasExi
                 placeholder="e.g. yourname@upi"
                 className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
               />
-              {validateUpi(form.upi.trim()) && (
-                <p className="mt-1 ml-3 text-[11px] text-[#FF4935]">{validateUpi(form.upi.trim())}</p>
-              )}
               <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-gray-500">
                 <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                 This UPI ID will be used to generate Dynamic QR codes on the invoices and bills.

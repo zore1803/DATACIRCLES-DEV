@@ -31,7 +31,7 @@
  *     // Organisation and bank details
  *     org, bank,
  *     // Helpers
- *     esc, fmt, formatDate, formatPostalAddress,
+ *     esc, richText, fmt, formatDate, formatPostalAddress,
  *     // Resolved values
  *     dealName, docLabel, docNumber, copySubtitle,
  *     notes, terms,
@@ -103,6 +103,39 @@ const DOC_LABEL = {
 
 /* ------------------------------------------------------------------ utils */
 
+// Item descriptions can carry light formatting from the rich-text editor (bold,
+// italic, underline, strike, lists). Only those tags survive, and always without
+// attributes; every other tag is dropped and any stray angle bracket is escaped, so
+// stored text can never inject markup into a document. Descriptions saved as plain
+// text (no editor tags) are escaped as before, and their line breaks are kept by
+// the stylesheet.
+const RICH_TAGS = new Set(["p", "br", "strong", "b", "em", "i", "u", "s", "ol", "ul", "li"]);
+const RICH_HINT = /<\/?(p|strong|b|em|i|u|s|ol|ul|li|br)\s*\/?>|<li data-list=/i;
+// The editor (Quill 2) writes every list as <ol>, marking each item <li data-list="bullet">
+// or "ordered"; that one attribute is kept so bullets still render as bullets.
+const LIST_KIND = /data-list\s*=\s*["']?(ordered|bullet)/i;
+function richText(str) {
+  const raw = String(str ?? "");
+  if (!RICH_HINT.test(raw)) return esc(raw);
+  return raw
+    .split(/(<\/?[a-zA-Z][a-zA-Z0-9]*[^>]*>)/)
+    .map((part, i) => {
+      if (i % 2 === 0) {
+        // Text between tags: keep entities the editor already wrote, escape the rest.
+        return part
+          .replace(/&(?!#?[a-zA-Z0-9]+;)/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+      const m = /^<(\/?)([a-zA-Z][a-zA-Z0-9]*)/.exec(part);
+      const tag = m && m[2].toLowerCase();
+      if (!tag || !RICH_TAGS.has(tag)) return "";
+      const kind = tag === "li" && !m[1] ? LIST_KIND.exec(part) : null;
+      return kind ? `<li data-list="${kind[1].toLowerCase()}">` : `<${m[1]}${tag}>`;
+    })
+    .join("");
+}
+
 function esc(str) {
   return String(str ?? "").replace(
     /[&<>"']/g,
@@ -126,9 +159,15 @@ function esc(str) {
 // renders as text, not a tag) and only afterwards do the markdown-lite
 // patterns introduce real <b>/<i>/<ul>/<ol> tags — templates now receive
 // already-safe HTML in `notes`/`terms` and no longer call esc() on them.
-function formatRichText(raw) {
+export function formatRichText(raw) {
   const text = String(raw ?? "").trim();
   if (!text) return "";
+
+  // Saved from the rich-text editor: already HTML (it always opens with a
+  // paragraph or list), so it goes through the tag whitelist instead of the
+  // markdown-lite parser below. Notes saved earlier as markdown-lite text
+  // never start with a tag and keep taking the markdown path.
+  if (/^<(p|ol|ul)[\s>]/i.test(text)) return richText(text);
 
   const inline = (line) =>
     esc(line)
@@ -490,6 +529,17 @@ const BASE_CSS = `
 .dcsheet .nowrap { white-space: nowrap; }
 .dcsheet .dc-item-name { font-weight: bold; }
 .dcsheet .dc-item-desc { font-weight: normal; font-size: 9px; color: var(--muted); margin-top: 2px; white-space: pre-line; }
+.dcsheet .dc-item-desc p { margin: 0; }
+.dcsheet .dc-item-desc ol, .dcsheet .dc-item-desc ul { margin: 1px 0 0; padding-left: 14px; }
+.dcsheet .dc-item-desc li { margin: 0; }
+.dcsheet .dc-item-desc li[data-list="bullet"] { list-style-type: disc; }
+.dcsheet .dc-item-desc li[data-list="ordered"] { list-style-type: decimal; }
+/* Formatted item descriptions inside any template's item table. */
+.dcsheet td p { margin: 0; }
+.dcsheet td ol, .dcsheet td ul { margin: 1px 0 0; padding-left: 14px; }
+.dcsheet td li { margin: 0; }
+.dcsheet td li[data-list="bullet"] { list-style-type: disc; }
+.dcsheet td li[data-list="ordered"] { list-style-type: decimal; }
 
 .dcsheet .dc-totals { display: grid; grid-template-columns: 1fr 1fr; border: var(--line-w) solid var(--line); border-top: 0; }
 .dcsheet .dc-totals-left { border-right: var(--line-w) solid var(--line); padding: var(--pad); }
@@ -622,7 +672,7 @@ export function buildDocumentHtml(doc, options = {}) {
     ? t.rows.map((r, i) => `
       <tr>
         <td class="c">${i + 1}</td>
-        <td class="dc-item-name">${esc(r.name) || "&mdash;"}${r.description ? `<div class="dc-item-desc">${esc(r.description)}</div>` : ""
+        <td class="dc-item-name">${esc(r.name) || "&mdash;"}${r.description ? `<div class="dc-item-desc">${richText(r.description)}</div>` : ""
       }</td>
         <td class="c">${esc(r.hsn)}</td>
         <td class="r">${fmt(r.rate)}</td>
@@ -657,7 +707,7 @@ export function buildDocumentHtml(doc, options = {}) {
   // â”€â”€ Assemble context â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const ctx = {
     t, doc, org, bank, upiId, upiQrSvg,
-    esc, fmt, formatDate, formatPostalAddress,
+    esc, richText, fmt, formatDate, formatPostalAddress,
     dealName, docLabel, docNumber, copySubtitle,
     notes, terms,
     discountRow, hsnRows, itemRows, qrBlock,

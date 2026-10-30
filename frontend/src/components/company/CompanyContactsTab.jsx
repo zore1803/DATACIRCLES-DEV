@@ -567,7 +567,7 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
             )}
           </div>
 
-          <div className="-mx-6" style={{ marginTop: 16, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
+          <div style={{ paddingBottom: 8 }} />
         </>
       )}
 
@@ -679,7 +679,7 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
         <div
           ref={fillContainerRef}
           style={fillStyle}
-          className="relative bg-white border border-[#E1E4EA] rounded-lg overflow-x-auto overflow-y-auto"
+          className="relative bg-white border border-[#E1E4EA] rounded-2xl overflow-x-auto overflow-y-auto"
         >
           <table
             className="w-full border-separate border-spacing-0 text-left"
@@ -693,8 +693,7 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
                 <th
                   style={{
                     width: 44,
-                    height: 56,
-                    position: "sticky",
+                                        position: "sticky",
                     left: 0,
                     zIndex: 35,
                     backgroundColor: "#F5F7FA",
@@ -717,11 +716,10 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
                       onMouseDown={(e) => startColumnDrag(e, col.id)}
                       style={{
                         width: colWidths[col.id],
-                        height: 56,
-                        opacity: isDragging ? 0.35 : 1,
+                                                opacity: isDragging ? 0.35 : 1,
                         ...getStickyStyle(col.id, true)
                       }}
-                      className={`px-3 py-2.5 font-medium text-[#525866] text-xs cursor-grab active:cursor-grabbing bg-[#F5F7FA] ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
+                      className={`px-4 py-3 font-bold text-[#525866] text-sm cursor-grab active:cursor-grabbing bg-[#F5F7FA] ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
                     >
                       <div className={`flex items-center justify-between w-full group ${isLoading ? "[&_button]:invisible" : ""}`}>
                         {/* Header label swaps to a skeleton bar on the same flag as the
@@ -875,7 +873,7 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
                     <tr key={contact._id} className={`hover:bg-gray-50 transition-colors group ${isSelected ? "!bg-blue-50" : ""}`}>
                       <td
                         style={{
-                          height: 54,
+                          height: 45,
                           width: 44,
                           position: "sticky",
                           left: 0,
@@ -883,7 +881,7 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
                           backgroundColor: isSelected ? "#EFF6FF" : "#fff",
                           boxShadow: "inset -1px 0 0 #E1E4EA, inset 0 -1px 0 #E1E4EA",
                         }}
-                        className="px-3"
+                        className="px-4"
                       >
                         <div className="flex justify-center items-center w-full">
                           <Checkbox checked={isSelected} onChange={() => toggleItem(contact._id)} />
@@ -892,7 +890,7 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
                       {orderedColumns.map((col) => {
                         const isDragging = draggedColKey === col.id;
                         const cellStyle = {
-                          height: 54,
+                          height: 45,
                           opacity: isDragging ? 0.35 : 1,
                           ...getStickyStyle(col.id, false, isSelected),
                         };
@@ -916,7 +914,7 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
 
                         if (col.id === "name") {
                           return (
-                            <td key={col.id} style={cellStyle} className="px-3 text-left">
+                            <td key={col.id} style={cellStyle} className="px-4 text-left">
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center space-x-3 truncate min-w-0">
                                   <div className="flex-shrink-0">
@@ -938,11 +936,11 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
                         }
                         if (col.id === "email") {
                           return (
-                            <td key={col.id} style={cellStyle} className="px-3 text-left" title={contact.email}>
+                            <td key={col.id} style={cellStyle} className="px-4 text-left" title={contact.email}>
                               <div className="flex items-center justify-between gap-2">
                                 <a
                                   href={`mailto:${contact.email}?body=${encodeURIComponent(`Dear ${contact.name || "Sir/Madam"},\n\n\nRegards`)}`}
-                                  className="text-[14px] leading-5 font-medium text-blue-600 hover:underline transition-colors truncate block min-w-0"
+                                  className="text-sm font-semibold text-[#0085FF] hover:underline transition-colors truncate block min-w-0"
                                 >
                                   <HighlightText text={contact.email} query={searchTerm} />
                                 </a>
@@ -954,12 +952,12 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
                         }
                         if (col.id === "phone") {
                           return (
-                            <td key={col.id} style={cellStyle} className="px-3 text-left whitespace-nowrap" title={contact.phone}>
+                            <td key={col.id} style={cellStyle} className="px-4 text-left whitespace-nowrap" title={contact.phone}>
                               <div className="flex items-center justify-between gap-2">
                                 {contact.phone ? (
                                   <a
                                     href={`tel:${contact.phone}`}
-                                    className="text-[14px] leading-5 font-medium text-blue-600 hover:underline transition-colors"
+                                    className="text-sm font-semibold text-[#0085FF] hover:underline transition-colors"
                                   >
                                     <HighlightText text={contact.phone} query={searchTerm} />
                                   </a>
@@ -977,7 +975,7 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
                             <td
                               key={col.id}
                               style={cellStyle}
-                              className="px-3 text-[14px] leading-5 font-medium text-[#525866] text-left"
+                              className="px-4 text-sm font-normal text-[#1C1B1F] text-left"
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <span className="truncate block min-w-0">
@@ -991,7 +989,7 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
                         }
                         if (col.id === "status") {
                           return (
-                            <td key={col.id} style={cellStyle} className="px-3">
+                            <td key={col.id} style={cellStyle} className="px-4">
                               <div className="flex items-center justify-between gap-2">
                                 <span
                                   className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getBadgeColor(
@@ -1049,7 +1047,7 @@ export default function CompanyContactsTab({ contacts, meetings = [], tasks = []
               <select
                 value={limit}
                 onChange={(e) => handleLimitChange(parseInt(e.target.value))}
-                className="ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
+                className="select-chevron ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
               >
                 <option value={10}>10 per page</option>
                 <option value={20}>20 per page</option>

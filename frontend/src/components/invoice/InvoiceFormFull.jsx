@@ -2027,7 +2027,7 @@ const InvoiceFormFull = ({
                       setForm((prev) => ({ ...prev, receiverGSTIN: e.target.value }));
                       setHasUnsavedChanges(true);
                     }}
-                    placeholder="Enter Receiver GSTIN (e.g., 22AAAAA0000A1Z5)"
+                    placeholder="e.g., 22AAAAA0000A1Z5"
                     className="w-full h-[38px] px-3.5 bg-white border border-[#E1E4EA] rounded-full text-[13px] text-[#1F2937] placeholder:text-[#99A0AE] focus:outline-none focus:border-[#0085FF] focus:ring-2 focus:ring-[#0085FF]/10 transition-all"
                   />
                 </div>

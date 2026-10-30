@@ -167,6 +167,24 @@ async function recordOpeningStock({ organization, itemId, variantId, openingStoc
   }
 }
 
+// A product / service name is unique within an organization: once "abc" exists, no other
+// item can use it (any letter case, ignoring surrounding spaces) until that item is deleted.
+// `excludeId` lets an item keep its own name when it's edited.
+const assertUniqueItemName = async (organization, rawName, excludeId) => {
+  const name = typeof rawName === "string" ? rawName.trim() : "";
+  if (!name) return; // a missing name is reported by the schema's own required check
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const query = { organization, name: new RegExp(`^${escaped}$`, "i") };
+  if (excludeId) query._id = { $ne: excludeId };
+  const existing = await Item.findOne(query).select("_id name").lean();
+  if (existing) {
+    throw Object.assign(
+      new Error(`A product named "${existing.name}" already exists. Product names must be unique.`),
+      { status: 409 }
+    );
+  }
+};
+
 const createItem = async (req, res) => {
   try {
     const itemData = {
@@ -174,6 +192,8 @@ const createItem = async (req, res) => {
       user: req.user.id,
       organization: req.user.organization,
     };
+
+    await assertUniqueItemName(req.user.organization, itemData.name);
 
     itemData.variants = parseJsonField(itemData.variants);
     itemData.additionalFields = parseJsonField(itemData.additionalFields);
@@ -286,7 +306,7 @@ const createItem = async (req, res) => {
     res.status(201).json(item);
   } catch (err) {
     console.error("Create item error:", err);
-    res.status(400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message });
   }
 };
 
@@ -535,6 +555,8 @@ const updateItem = async (req, res) => {
       organization: req.user.organization,
     };
 
+    await assertUniqueItemName(req.user.organization, itemData.name, req.params.id);
+
     itemData.variants = parseJsonField(itemData.variants);
     itemData.additionalFields = parseJsonField(itemData.additionalFields);
     itemData.discount = parseJsonField(itemData.discount);
@@ -687,7 +709,7 @@ const updateItem = async (req, res) => {
     res.json(item);
   } catch (err) {
     console.error("Update item error:", err);
-    res.status(400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message });
   }
 };
 

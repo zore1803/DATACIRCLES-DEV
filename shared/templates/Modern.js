@@ -68,7 +68,7 @@ export const css = `
 
 export function html(ctx) {
   const {
-    t, doc, org, bank, esc, fmt, formatDate,
+    t, doc, org, bank, esc, richText, fmt, formatDate,
     dealName, docLabel, docNumber, notes, terms, copySubtitle,
     payQrSvg, upiId,
   } = ctx;
@@ -115,7 +115,7 @@ export function html(ctx) {
         <td>
           <div class="dc-item-name">${esc(r.name) || "&mdash;"}</div>
           ${r.hsn ? `<div class="dc-item-hsn">HSN: ${esc(r.hsn)}</div>` : ""}
-          ${r.description ? `<div class="dc-item-desc">${esc(r.description)}</div>` : ""}
+          ${r.description ? `<div class="dc-item-desc">${richText(r.description)}</div>` : ""}
         </td>
         <td class="r">${fmt(r.rate)}</td>
         <td class="r">${r.qty}</td>

@@ -186,7 +186,7 @@ const CategorySection = ({ title, subtitle, defs, docsByType, loading, onOpen, g
 //   vendor  → GET /{type}/vendor/:id     purchase docs on that vendor
 // Sales docs link to a Deal (not directly to a company/contact), so the
 // company/contact endpoints resolve the entity's deals server-side first.
-const DealDocumentsTab = ({ dealId, companyId, contactId, vendorId, showStats = true }) => {
+const DealDocumentsTab = ({ dealId, companyId, contactId, vendorId, showStats = true, hideDivider = false }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [docsByType, setDocsByType] = useState({});
@@ -324,7 +324,7 @@ const DealDocumentsTab = ({ dealId, companyId, contactId, vendorId, showStats = 
               ? Array.from({ length: 4 }).map((_, i) => <StatTileSkeleton key={i} />)
               : summaryTiles.map((tile) => <StatTile key={tile.label} tile={tile} />)}
           </div>
-          <div className="-mx-6" style={{ borderTop: "1px solid #E1E4EA" }} />
+          {!hideDivider && <div className="-mx-6" style={{ borderTop: "1px solid #E1E4EA" }} />}
         </div>
       )}
 

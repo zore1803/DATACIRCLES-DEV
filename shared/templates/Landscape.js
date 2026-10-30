@@ -66,7 +66,7 @@ export const css = `
 
 export function html(ctx) {
   const {
-    t, doc, org, bank, esc, fmt, formatDate,
+    t, doc, org, bank, esc, richText, fmt, formatDate,
     dealName, docLabel, docNumber, notes, terms, copySubtitle, discountRow, hsnRows,
     payQrSvg, upiId,
   } = ctx;
@@ -98,7 +98,7 @@ export function html(ctx) {
     ? t.rows.map((r, i) => `
       <tr>
         <td class="c">${i + 1}</td>
-        <td><div style="font-weight:bold;">${esc(r.name) || "&mdash;"}</div>${r.description ? `<div style="font-size:8.5px;color:var(--muted);">${esc(r.description)}</div>` : ""}</td>
+        <td><div style="font-weight:bold;">${esc(r.name) || "&mdash;"}</div>${r.description ? `<div style="font-size:8.5px;color:var(--muted);">${richText(r.description)}</div>` : ""}</td>
         <td class="c">${esc(r.hsn || "—")}</td>
         <td class="r">&#8377;${fmt(r.taxable / r.qty)}</td>
         <td class="r">${r.qty}${r.unit ? ` ${esc(r.unit)}` : ""}</td>

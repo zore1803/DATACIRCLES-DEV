@@ -52,7 +52,7 @@ export const css = `
 
 export function html(ctx) {
   const {
-    t, doc, org, bank, esc, fmt, formatDate, formatPostalAddress,
+    t, doc, org, bank, esc, richText, fmt, formatDate, formatPostalAddress,
     dealName, docLabel, docNumber, notes, terms, copySubtitle, payQrSvg,
   } = ctx;
   const sigImg = doc.signature || org.signatureUrl;
@@ -65,7 +65,7 @@ export function html(ctx) {
   const rows = t.rows.length ? t.rows.map((r, i) => `
     <tr>
       <td class="c" style="width:22px;color:#6b6355;">${i + 1}</td>
-      <td><div class="eg-iname">${esc(r.name) || "&mdash;"}</div>${r.description ? `<div class="eg-idesc">${esc(r.description)}</div>` : ""}${r.hsn ? `<div class="eg-tsub">HSN ${esc(r.hsn)}</div>` : ""}</td>
+      <td><div class="eg-iname">${esc(r.name) || "&mdash;"}</div>${r.description ? `<div class="eg-idesc">${richText(r.description)}</div>` : ""}${r.hsn ? `<div class="eg-tsub">HSN ${esc(r.hsn)}</div>` : ""}</td>
       <td class="r">${fmt(r.rate)}</td>
       <td class="r nowrap">${r.qty}${r.unit ? " " + esc(r.unit) : ""}</td>
       <td class="r">${fmt(r.taxable)}</td>

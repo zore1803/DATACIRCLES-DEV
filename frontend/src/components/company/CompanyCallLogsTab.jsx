@@ -632,7 +632,7 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
               ))
             )}
           </div>
-          <div className="-mx-6" style={{ marginTop: 16, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
+          <div style={{ paddingBottom: 8 }} />
         </>
       )}
 
@@ -847,7 +847,7 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
       ) : (
         <div
           ref={fillContainerRef}
-          className="relative bg-white border border-[#E1E4EA] rounded-lg overflow-x-auto overflow-y-auto"
+          className="relative bg-white border border-[#E1E4EA] rounded-2xl overflow-x-auto overflow-y-auto"
           style={fillStyle}
         >
           <table className="w-full border-separate border-spacing-0 text-left" style={{ tableLayout: "fixed", minWidth: totalTableWidth }}>
@@ -856,8 +856,7 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
                 <th
                   style={{
                     width: 44,
-                    height: 56,
-                    position: "sticky",
+                                        position: "sticky",
                     left: 0,
                     zIndex: 35,
                     backgroundColor: "#F5F7FA",
@@ -878,8 +877,8 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
                       key={col.id}
                       data-col-id={col.id}
                       onMouseDown={(e) => startColumnDrag(e, col.id)}
-                      style={{ width: colWidths[col.id], height: 56, opacity: isDragging ? 0.35 : 1, ...getStickyStyle(col.id, true) }}
-                      className={`py-2.5 font-medium text-[#525252] text-xs cursor-grab active:cursor-grabbing bg-[#F5F7FA] ${col.firstCol ? "pl-6 pr-3" : "px-3"} ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
+                      style={{ width: colWidths[col.id], opacity: isDragging ? 0.35 : 1, ...getStickyStyle(col.id, true) }}
+                      className={`py-3 font-bold text-[#525866] text-sm cursor-grab active:cursor-grabbing bg-[#F5F7FA] px-4 ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
                     >
                       <div className={`flex items-center justify-between w-full ${isLoading ? "[&_button]:invisible" : ""}`}>
                         <div
@@ -1112,14 +1111,14 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
 
                   const cells = {
                     purpose: (
-                      <td key="purpose" style={{ height: 60 }} className="pl-6 pr-3 border-r border-b border-[#E1E4EA]">
-                        <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#222530" }} className="truncate block">
+                      <td key="purpose" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
+                        <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 14, lineHeight: "20px", color: "#1C1B1F" }} className="truncate block">
                           <HighlightText text={log.purpose || "Phone Call"} query={searchTerm} />
                         </span>
                       </td>
                     ),
                     callType: (
-                      <td key="callType" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                      <td key="callType" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
                         <span
                           className="inline-flex items-center gap-1 capitalize"
                           style={{ padding: "5px 12px", borderRadius: 53, backgroundColor: "rgba(0, 133, 255, 0.1)", fontFamily: "Inter", fontWeight: 500, fontSize: 12, lineHeight: "120%", color: "#0085FF" }}
@@ -1130,7 +1129,7 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
                       </td>
                     ),
                     status: (
-                      <td key="status" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                      <td key="status" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
                         <span
                           className="inline-flex items-center justify-center capitalize"
                           style={{
@@ -1149,21 +1148,21 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
                       </td>
                     ),
                     duration: (
-                      <td key="duration" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
-                        <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866" }}>
+                      <td key="duration" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
+                        <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 14, lineHeight: "20px", color: "#1C1B1F" }}>
                           {log.duration ? `${Math.floor(log.duration / 60)}m ${log.duration % 60}s` : "—"}
                         </span>
                       </td>
                     ),
                     notes: (
-                      <td key="notes" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                      <td key="notes" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
                         <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 13, lineHeight: "18px", color: "#525866" }} className="truncate block">
                           {stripHtml(log.notes) ? <HighlightText text={stripHtml(log.notes)} query={searchTerm} /> : "—"}
                         </span>
                       </td>
                     ),
                     user: (
-                      <td key="user" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                      <td key="user" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
                         <div className="flex items-center" style={{ gap: 6 }}>
                           <div className="rounded-full bg-blue-100 border border-white flex items-center justify-center text-[10px] font-semibold text-blue-700 flex-shrink-0" style={{ width: 24, height: 24 }}>
                             {(loggedBy?.name || "?").charAt(0).toUpperCase()}
@@ -1175,12 +1174,12 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
                       </td>
                     ),
                     dateTime: (
-                      <td key="dateTime" style={{ height: 60 }} className="px-3 border-b border-[#E1E4EA]">
+                      <td key="dateTime" style={{ height: 45 }} className="px-4 border-b border-[#E1E4EA]">
                         <div className="flex flex-col">
-                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866" }} className="truncate">
+                          <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 14, lineHeight: "20px", color: "#1C1B1F" }} className="truncate">
                             {log.createdAt ? new Date(log.createdAt).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                           </span>
-                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "rgba(28, 28, 29, 0.5)" }} className="truncate">
+                          <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 14, lineHeight: "20px", color: "rgba(28, 28, 29, 0.5)" }} className="truncate">
                             {log.createdAt ? new Date(log.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "—"}
                           </span>
                         </div>
@@ -1196,7 +1195,7 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
                     >
                       <td
                         style={{
-                          height: 54,
+                          height: 45,
                           width: 44,
                           position: "sticky",
                           left: 0,
@@ -1277,7 +1276,7 @@ const CompanyCallLogsTab = ({ companyId, contactId, callLogs = [], setCallLogs, 
               <select
                 value={listLimit}
                 onChange={(e) => handleListLimitChange(parseInt(e.target.value))}
-                className="ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
+                className="select-chevron ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
               >
                 <option value={10}>10 per page</option>
                 <option value={20}>20 per page</option>

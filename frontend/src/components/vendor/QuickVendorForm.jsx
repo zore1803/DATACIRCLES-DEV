@@ -799,8 +799,14 @@ const QuickVendorForm = ({ onVendorCreated, onVendorUpdated, onRequestClose, edi
                   value={form.gstin}
                   ref={gstinInputRef}
                   onChange={(e) => {
-                    handleFormChange("gstin", e.target.value.toUpperCase());
+                    // Letters and digits only, upper-cased; the 15-character cap is maxLength.
+                    handleFormChange("gstin", e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, ""));
                     if (gstinFieldError) setGstinFieldError("");
+                  }}
+                  onBlur={() => {
+                    // Tell the user as soon as they leave the field, not only on Save / Fetch.
+                    const value = (form.gstin || "").trim();
+                    if (value) setGstinFieldError(gstinError(value));
                   }}
                   error={gstinFieldError}
                   placeholder="eg., 22ABCDE1234F1Z5"

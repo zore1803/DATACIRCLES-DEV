@@ -79,7 +79,7 @@ export const css = `
 
 export function html(ctx) {
   const {
-    t, doc, org, bank, esc, fmt, formatDate, formatPostalAddress,
+    t, doc, org, bank, esc, richText, fmt, formatDate, formatPostalAddress,
     dealName, docLabel, docNumber, notes, terms, copySubtitle, payQrSvg,
   } = ctx;
   const sigImg = doc.signature || org.signatureUrl;
@@ -92,7 +92,7 @@ export function html(ctx) {
   const rows = t.rows.length ? t.rows.map((r, i) => `
     <tr>
       <td class="c" style="width:22px;">${i + 1}</td>
-      <td><div class="cp-iname">${esc(r.name) || "&mdash;"}</div>${r.description ? `<div class="cp-idesc">${esc(r.description)}</div>` : ""}</td>
+      <td><div class="cp-iname">${esc(r.name) || "&mdash;"}</div>${r.description ? `<div class="cp-idesc">${richText(r.description)}</div>` : ""}</td>
       <td class="c" style="width:48px;">${esc(r.hsn || "")}</td>
       <td class="r" style="width:56px;">${fmt(r.rate)}</td>
       <td class="r nowrap" style="width:52px;">${r.qty}${r.unit ? " " + esc(r.unit) : ""}</td>

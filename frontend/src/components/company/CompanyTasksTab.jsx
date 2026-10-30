@@ -839,7 +839,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
               )))}
           </div>
 
-          <div className="-mx-6" style={{ marginTop: 16, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
+          <div style={{ paddingBottom: 8 }} />
         </>
       )}
 
@@ -951,7 +951,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
           style={{
             ...fillStyle,
             border: "1px solid #E1E4EA",
-            borderRadius: 8,
+            borderRadius: 16,
           }}
         >
           <table
@@ -972,8 +972,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
                 <th
                   style={{
                     width: 44,
-                    height: 56,
-                    position: "sticky",
+                                        position: "sticky",
                     left: 0,
                     zIndex: 35,
                     backgroundColor: "#F5F7FA",
@@ -996,12 +995,10 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
                       onMouseDown={(e) => startColumnDrag(e, col.id)}
                       style={{
                         width: colWidths[col.id],
-                        height: 56,
-                        opacity: isDragging ? 0.35 : 1,
+                                                opacity: isDragging ? 0.35 : 1,
                         ...getStickyStyle(col.id, true)
                       }}
-                      className={`py-2.5 font-medium text-[#525252] text-xs cursor-grab active:cursor-grabbing bg-[#F5F7FA] ${col.id === "title" ? "pl-6 pr-3" : "px-3"
-                        } ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
+                      className={`py-3 font-bold text-[#525866] text-sm cursor-grab active:cursor-grabbing bg-[#F5F7FA] px-4 ${isDragOver ? "bg-blue-100" : "hover:bg-gray-100"}`}
                     >
                       <div className={`flex items-center justify-between w-full ${isLoading ? "[&_button]:invisible" : ""}`}>
                         {col.pinnable ? (
@@ -1274,7 +1271,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
                     // keeps ticking a box from also firing the row's
                     // handleTaskClick and opening the task.
                     __select: (
-                      <td key="__select" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]" onClick={(e) => e.stopPropagation()}>
+                      <td key="__select" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-center items-center w-full">
                           <Checkbox checked={isSelected} onChange={(e) => {
                             e.stopPropagation();
@@ -1284,7 +1281,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
                       </td>
                     ),
                     title: (
-                      <td key="title" style={{ height: 60 }} className="pl-6 pr-3 py-3 border-r border-b border-[#E1E4EA]">
+                      <td key="title" style={{ height: 45 }} className="px-4 py-2 border-r border-b border-[#E1E4EA]">
                         <div className="flex items-start gap-3 w-full overflow-hidden">
                           <button
                             type="button"
@@ -1318,7 +1315,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
                       </td>
                     ),
                     assignedTo: (
-                      <td key="assignedTo" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                      <td key="assignedTo" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
                         {primaryAssignee ? (
                           <div className="flex items-center justify-start gap-2">
                             {avatarUrl ? (
@@ -1358,7 +1355,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
                       </td>
                     ),
                     status: (
-                      <td key="status" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                      <td key="status" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
                         <span
                           className="inline-flex items-center justify-center"
                           style={{
@@ -1377,7 +1374,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
                       </td>
                     ),
                     priority: (
-                      <td key="priority" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                      <td key="priority" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
                         {priority ? (
                           <span
                             className="inline-flex items-center justify-center"
@@ -1400,18 +1397,18 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
                       </td>
                     ),
                     dueDate: (
-                      <td key="dueDate" style={{ height: 60 }} className="px-3 border-r border-b border-[#E1E4EA]">
+                      <td key="dueDate" style={{ height: 45 }} className="px-4 border-r border-b border-[#E1E4EA]">
                         <div className="flex flex-col gap-0.5">
-                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866", textDecoration }}>
+                          <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 14, lineHeight: "20px", color: "#1C1B1F", textDecoration }}>
                             <HighlightText text={`${dueLabel.day} ${dueLabel.time}`} query={searchTerm} />
                           </span>
                           {isCompleted ? (
-                            <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#00C950" }}>
+                            <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 14, lineHeight: "20px", color: "#00C950" }}>
                               Completed
                             </span>
                           ) : (
                             isOverdue && (
-                              <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#CD3636" }}>
+                              <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 14, lineHeight: "20px", color: "#CD3636" }}>
                                 Overdue
                               </span>
                             )
@@ -1420,7 +1417,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
                       </td>
                     ),
                     progress: (
-                      <td key="progress" style={{ height: 60 }} className="px-3 border-b border-[#E1E4EA]">
+                      <td key="progress" style={{ height: 45 }} className="px-4 border-b border-[#E1E4EA]">
                         <div className="flex items-center gap-3">
                           <div className="flex-1 rounded-full overflow-hidden" style={{ height: 5, backgroundColor: "#D9D9D9" }}>
                             <div
@@ -1428,7 +1425,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
                               style={{ width: `${progress}%`, backgroundColor: progress === 100 ? "#00C950" : "#0085FF" }}
                             />
                           </div>
-                          <span style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, lineHeight: "20px", color: "#525866" }} className="flex-shrink-0">
+                          <span style={{ fontFamily: "Inter", fontWeight: 400, fontSize: 14, lineHeight: "20px", color: "#1C1B1F" }} className="flex-shrink-0">
                             {progress}%
                           </span>
                         </div>
@@ -1527,7 +1524,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
               <select
                 value={listLimit}
                 onChange={(e) => handleListLimitChange(parseInt(e.target.value))}
-                className="ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
+                className="select-chevron ml-2 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
               >
                 <option value={10}>10 per page</option>
                 <option value={20}>20 per page</option>

@@ -1420,13 +1420,12 @@ const FormsList = () => {
               <select
                 value={pagination.limit}
                 onChange={(e) => handleLimitChange(parseInt(e.target.value, 10))}
-                className="appearance-none border border-gray-300 rounded-full pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                className="select-chevron appearance-none border border-gray-300 rounded-full pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
               >
                 {[10, 20, 50, 100].map((n) => (
                   <option key={n} value={n}>{n} per page</option>
                 ))}
               </select>
-              <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
             </div>
           </div>
 

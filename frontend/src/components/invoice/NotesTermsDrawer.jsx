@@ -3,11 +3,13 @@ import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, ChevronDown, Check, ArrowLeft, Bold, Italic, List, ListOrdered } from "lucide-react";
+import { X, ChevronDown, Check, ArrowLeft } from "lucide-react";
 import toast from "react-hot-toast";
 import API from "../../services/api";
 import EditIcon from "../common/EditIcon";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
+import RichDescriptionEditor from "../common/RichDescriptionEditor";
+import { formatRichText } from "../../../../shared/documentTemplates.js";
 
 /*
  * Right-hand drawer for the saved Notes / Terms blocks that print in a
@@ -79,7 +81,6 @@ const NotesTermsDrawer = ({
   const tabRefs = useRef({});
   const typeRef = useRef(null);
   const titleRef = useRef(null);
-  const bodyRef = useRef(null);
   const [indicator, setIndicator] = useState({ left: 0, width: 0 });
 
   const tab = useMemo(() => TABS.find((t) => t.key === active) || TABS[0], [active]);
@@ -149,53 +150,6 @@ const NotesTermsDrawer = ({
       document.removeEventListener("mousedown", onClick);
     };
   }, [isOpen, onClose, typeOpen, editing]);
-
-  // Wraps the current selection with `marker` on both sides (or, with
-  // nothing selected, inserts an empty pair and leaves the cursor between
-  // them). Reused for both bold (**) and italic (*).
-  const wrapSelection = (marker) => {
-    const el = bodyRef.current;
-    if (!el) return;
-    const { selectionStart: start, selectionEnd: end, value } = el;
-    const selected = value.slice(start, end);
-    const newValue = value.slice(0, start) + marker + selected + marker + value.slice(end);
-    setEditing((p) => ({ ...p, body: newValue }));
-    requestAnimationFrame(() => {
-      el.focus();
-      const newStart = start + marker.length;
-      el.setSelectionRange(newStart, newStart + selected.length);
-    });
-  };
-
-  // Prefixes every line the selection touches (or just the current line,
-  // with no selection) with "- " or an auto-incrementing "1. ", "2. " etc.
-  // Re-running it re-normalizes an already-prefixed block rather than
-  // double-prefixing it.
-  const applyLinePrefix = (kind) => {
-    const el = bodyRef.current;
-    if (!el) return;
-    const { selectionStart: start, selectionEnd: end, value } = el;
-    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
-    const nextBreak = value.indexOf("\n", end);
-    const lineEnd = nextBreak === -1 ? value.length : nextBreak;
-
-    let n = 1;
-    const newBlock = value
-      .slice(lineStart, lineEnd)
-      .split("\n")
-      .map((line) => {
-        const stripped = line.replace(/^\s*(-|\d+[.)])\s+/, "");
-        return kind === "bullet" ? `- ${stripped}` : `${n++}. ${stripped}`;
-      })
-      .join("\n");
-
-    const newValue = value.slice(0, lineStart) + newBlock + value.slice(lineEnd);
-    setEditing((p) => ({ ...p, body: newValue }));
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(lineStart, lineStart + newBlock.length);
-    });
-  };
 
   const handleSave = async () => {
     if (!editing.body?.trim()) return toast.error(`${tab.label} text can't be empty.`);
@@ -325,53 +279,17 @@ const NotesTermsDrawer = ({
                 placeholder={`${tab.noun} name (optional), e.g. "Export terms"`}
                 className="w-full h-10 px-3 rounded-lg border border-[#E1E4EA] text-[13px] placeholder:text-[#99A0AE] focus:outline-none focus:border-[#0085FF] flex-shrink-0"
               />
-              {/* Basic formatting — a markdown-lite subset (**bold**, *italic*,
-                  "- " bullets, "1. " numbers) parsed centrally in
-                  shared/documentTemplates.js (formatRichText) so the PDF and
-                  the live preview render real <b>/<i>/<ul>/<ol>, not the raw
-                  markers. Buttons wrap the current selection rather than
-                  requiring the user to type the syntax by hand. */}
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => wrapSelection("**")}
-                  title="Bold"
-                  className="w-8 h-8 flex items-center justify-center rounded-md text-[#525866] hover:bg-gray-100 hover:text-[#1F2937] transition-colors"
-                >
-                  <Bold className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => wrapSelection("*")}
-                  title="Italic"
-                  className="w-8 h-8 flex items-center justify-center rounded-md text-[#525866] hover:bg-gray-100 hover:text-[#1F2937] transition-colors"
-                >
-                  <Italic className="w-4 h-4" />
-                </button>
-                <span className="w-px h-5 bg-[#E1E4EA] mx-1" />
-                <button
-                  type="button"
-                  onClick={() => applyLinePrefix("bullet")}
-                  title="Bullet list"
-                  className="w-8 h-8 flex items-center justify-center rounded-md text-[#525866] hover:bg-gray-100 hover:text-[#1F2937] transition-colors"
-                >
-                  <List className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyLinePrefix("number")}
-                  title="Numbered list"
-                  className="w-8 h-8 flex items-center justify-center rounded-md text-[#525866] hover:bg-gray-100 hover:text-[#1F2937] transition-colors"
-                >
-                  <ListOrdered className="w-4 h-4" />
-                </button>
-              </div>
-              <textarea
-                ref={bodyRef}
-                value={editing.body || ""}
-                onChange={(e) => setEditing((p) => ({ ...p, body: e.target.value }))}
+              {/* Real rich-text editing (bold, italic, underline, strike, lists). The
+                  saved body is HTML, which shared/documentTemplates.js (formatRichText)
+                  renders on the invoice. Notes written earlier as markdown-lite text
+                  (**bold**, "- " bullets) are converted when opened. */}
+              <RichDescriptionEditor
+                className="flex-1 min-h-0 flex flex-col"
+                minHeight={180}
+                maxHeight={0}
                 placeholder={PLACEHOLDER[active]}
-                className="flex-1 min-h-[180px] w-full px-3 py-2 rounded-lg border border-[#E1E4EA] text-[13px] leading-relaxed placeholder:text-[#99A0AE] focus:outline-none focus:border-[#0085FF] resize-none"
+                value={/^\s*<(p|ol|ul)[\s>]/i.test(editing.body || "") ? editing.body : formatRichText(editing.body)}
+                onChange={(html) => setEditing((p) => ({ ...p, body: html }))}
               />
 
               <div className="flex flex-col gap-2 flex-shrink-0">
@@ -398,7 +316,7 @@ const NotesTermsDrawer = ({
                 type="button"
                 onClick={handleSave}
                 disabled={saving}
-                className="h-9 px-5 rounded-lg bg-[#0085FF] hover:bg-blue-600 text-white text-[13px] font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="h-9 px-5 rounded-full bg-[#0085FF] hover:bg-blue-600 text-white text-[13px] font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {saving ? "Saving..." : "Save"}
               </button>

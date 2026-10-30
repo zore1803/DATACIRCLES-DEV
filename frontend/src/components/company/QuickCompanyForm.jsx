@@ -993,6 +993,7 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                 (which holds profile URLs). */}
             <div>
               <FormLabel
+                className="!text-[#25D366]"
                 icon={
                   <span className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center">
                     <FaWhatsapp className="w-[18px] h-[18px]" />
@@ -1010,7 +1011,12 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                       countryCode: e.target.value,
                     })
                   }
-                  className={PHONE_SELECT_CLS}
+                  className={`${PHONE_SELECT_CLS} appearance-none !pl-4 !pr-9 bg-no-repeat`}
+                  style={{
+                    backgroundImage:
+                      "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231F2937' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
+                    backgroundPosition: "right 14px center",
+                  }}
                 >
                   {COUNTRY_DIAL_CODES.map((c) => (
                     <option key={`${c.iso}-${c.code}`} value={c.code}>
@@ -1052,8 +1058,16 @@ const QuickCompanyForm = ({ onCompanyCreated, onCompanyUpdated, onRequestClose, 
                   ref={gstinInputRef}
                   maxLength={15}
                   onChange={(e) => {
-                    handleFormChange("gstin", e.target.value.toUpperCase());
+                    // Letters and digits only, upper-cased; the 15-character cap is maxLength.
+                    handleFormChange("gstin", e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, ""));
                     if (gstinFieldError) setGstinFieldError("");
+                  }}
+                  onBlur={() => {
+                    // Tell the user as soon as they leave the field, not only on Save / Fetch.
+                    const value = (form.gstin || "").trim();
+                    const unchangedOnEdit =
+                      isEditing && value === (editCompany?.gstin || "").trim().toUpperCase();
+                    if (value && !unchangedOnEdit) setGstinFieldError(gstinError(value));
                   }}
                   error={gstinFieldError}
                   placeholder="eg., 22ABCDE1234F1Z5"

@@ -93,7 +93,7 @@ export const css = `
 
 export function html(ctx) {
   const {
-    t, doc, org, bank, upiId, payQrSvg, esc, fmt, formatDate,
+    t, doc, org, bank, upiId, payQrSvg, esc, richText, fmt, formatDate,
     dealName, docLabel, docNumber, notes, terms, copySubtitle,
   } = ctx;
   const sigImg = doc.signature || org.signatureUrl;
@@ -137,7 +137,7 @@ export function html(ctx) {
         <td class="c">${i + 1}</td>
         <td>
           <div class="dc-item-name">${esc(r.name) || "&mdash;"}</div>
-          ${r.description ? `<div class="dc-item-desc">${esc(r.description)}</div>` : ""}
+          ${r.description ? `<div class="dc-item-desc">${richText(r.description)}</div>` : ""}
         </td>
         <td class="c">${esc(r.hsn || "—")}</td>
         <td class="r">${fmt(r.rate)}</td>

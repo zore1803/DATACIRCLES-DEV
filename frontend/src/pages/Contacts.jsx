@@ -1502,7 +1502,7 @@ function Contacts() {
               <select
                 value={limit}
                 onChange={(e) => handleLimitChange(parseInt(e.target.value))}
-                className="appearance-none border border-gray-300 rounded-full pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
+                className="select-chevron appearance-none border border-gray-300 rounded-full pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
               >
                 <option value={10}>10 per page</option>
                 <option value={20}>20 per page</option>
@@ -1510,7 +1510,6 @@ function Contacts() {
                 <option value={100}>100 per page</option>
                 <option value={150}>150 per page</option>
               </select>
-              <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
             </div>
           </div>
           <div className="flex items-center gap-2">

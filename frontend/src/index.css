@@ -506,7 +506,7 @@
 .form-theme-scope select.form-input {
   appearance: none;
   -webkit-appearance: none;
-  padding-right: 2.25rem;
+  padding-right: 2.75rem;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.9rem center;
@@ -1001,4 +1001,54 @@ body.success-modal-open > * {
 body.success-modal-open > #success-modal-portal {
   filter: none !important;
   pointer-events: auto;
-}
+}
+/* Pill <select> with the dropdown arrow drawn 16px in from the right edge
+   instead of the browser's own, which sits hard against the border. Used by the
+   "per page" selectors. Unlayered on purpose: it must beat the padding
+   utilities (px, pl, pr) already on those elements. */
+.select-chevron {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231F2937' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  padding-left: 1rem;
+  padding-right: 2.5rem;
+}
+
+/* Item-description rich-text editor (RichDescriptionEditor): a slim toolbar and a
+   short editing area, so it fits inside an invoice line item's "More Details". */
+.dc-rich-description .ql-toolbar.ql-snow {
+  border: 0;
+  border-bottom: 1px solid #E1E4EA;
+  padding: 2px 0;
+}
+.dc-rich-description .ql-toolbar.ql-snow .ql-formats {
+  margin-right: 8px;
+}
+.dc-rich-description .ql-toolbar.ql-snow button {
+  width: 24px;
+  height: 22px;
+  padding: 2px 3px;
+}
+.dc-rich-description .ql-container.ql-snow {
+  border: 0;
+  border-bottom: 1px solid #E1E4EA;
+  font-family: inherit;
+  font-size: 12px;
+  color: #525866;
+}
+.dc-rich-description .ql-container.ql-snow:focus-within {
+  border-bottom-color: #0085FF;
+}
+.dc-rich-description .ql-editor {
+  min-height: var(--rd-min, 48px);
+  max-height: var(--rd-max, 140px);
+  overflow-y: auto;
+  padding: 6px 4px;
+}
+.dc-rich-description .ql-editor.ql-blank::before {
+  left: 4px;
+  font-style: normal;
+  color: #9CA3AF;
+}

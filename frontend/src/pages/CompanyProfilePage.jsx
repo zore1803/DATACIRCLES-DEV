@@ -1270,8 +1270,6 @@ const CompanyProfilePage = () => {
           </div>
         </div>
 
-        <div className="border-b border-gray-200 mb-4 -mx-6"></div>
-
         {/* Company Summary (collapsible) + KPI Row */}
         {showStats && activeTab === "Overview" && (
           <>
@@ -1997,7 +1995,7 @@ const CompanyProfilePage = () => {
             />
           )}
           {activeTab === "Documents" && (
-            <DealDocumentsTab companyId={id} showStats={showStats} />
+            <DealDocumentsTab companyId={id} showStats={showStats} hideDivider />
           )}
           {activeTab === "Notes" && (
             <CompanyNotesTab

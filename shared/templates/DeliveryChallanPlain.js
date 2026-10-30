@@ -19,7 +19,7 @@ export const blurb = "Dispatch-only layout — item, HSN/SAC, quantity and unit,
 
 export function html(ctx) {
   const {
-    t, doc, org, esc, formatDate, formatPostalAddress,
+    t, doc, org, esc, richText, formatDate, formatPostalAddress,
     dealName, docLabel, docNumber, notes, terms,
   } = ctx;
 
@@ -30,7 +30,7 @@ export function html(ctx) {
       <tr>
         <td class="c">${i + 1}</td>
         <td class="dc-item-name">${esc(r.name) || "&mdash;"}${
-          r.description ? `<div class="dc-item-desc">${esc(r.description)}</div>` : ""
+          r.description ? `<div class="dc-item-desc">${richText(r.description)}</div>` : ""
         }</td>
         <td class="c">${esc(r.hsn)}</td>
         <td class="r">${r.qty}</td>
