@@ -1,4 +1,6 @@
 import DeleteIcon from "../components/common/DeleteIcon";
+import { FaWhatsapp } from "react-icons/fa";
+import emailLogo from "../assets/email-logo.png";
 import Checkbox from "../components/common/Checkbox";
 import MoreIcon from "../components/common/MoreIcon";
 import DownloadIcon from "../components/common/DownloadIcon";
@@ -15,8 +17,8 @@ import {
   Clock,
   Copy,
   EyeOff,
-  Mail,
-  MessageCircle,
+  
+  
   MessageSquare,
   Pin,
   PinOff,
@@ -1198,12 +1200,12 @@ export default function EInvoicing() {
                     <MoreIcon className="w-4 h-4" />
                   </button>
                   {isMoreMenuOpen && (
-                    <div className="absolute right-0 z-50 mt-2 w-52 bg-white border border-gray-100 rounded-xl shadow-xl py-2 animate-in fade-in zoom-in duration-200 origin-top-right">
+                    <div className="absolute right-0 z-50 mt-2 w-[180px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right">
                       <button
                         onClick={() => { setShowAdvancedFilters(true); setIsMoreMenuOpen(false); }}
-                        className="lg:hidden w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                       >
-                        <FilterIcon size={16} />
+                        <FilterIcon size={14} />
                         Filters
                         {activeFilters.length > 0 && (
                           <span className="ml-auto bg-blue-100 text-blue-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
@@ -1213,28 +1215,28 @@ export default function EInvoicing() {
                       </button>
                       <button
                         onClick={() => { toast("Import — coming soon.", { icon: "🚧" }); setIsMoreMenuOpen(false); }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                       >
-                        <UploadIcon className="w-4 h-4 text-gray-400" />
+                        <UploadIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                         Import
                       </button>
                       <div className="relative" ref={exportButtonRef}>
                         <button
                           onClick={() => setShowExportMenu((prev) => !prev)}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                         >
-                          <DownloadIcon className="w-4 h-4 text-gray-400" />
+                          <DownloadIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                           Export
                         </button>
                         {showExportMenu && (
-                          <div className="absolute left-full top-0 ml-1 z-10 w-44 bg-white border border-gray-200 rounded-lg shadow-xl">
+                          <div className="absolute left-full top-0 ml-1 z-10 w-[160px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5">
                             <button
                               onClick={() => {
                                 handleExport("excel");
                                 setShowExportMenu(false);
                                 setIsMoreMenuOpen(false);
                               }}
-                              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors first:rounded-t-lg flex items-center gap-2"
+                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                             >
                               Export as Excel
                             </button>
@@ -1244,7 +1246,7 @@ export default function EInvoicing() {
                                 setShowExportMenu(false);
                                 setIsMoreMenuOpen(false);
                               }}
-                              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors last:rounded-b-lg flex items-center gap-2"
+                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                             >
                               Export as PDF
                             </button>
@@ -1253,9 +1255,9 @@ export default function EInvoicing() {
                       </div>
                       <button
                         onClick={() => { setShowColumnSettings(true); setIsMoreMenuOpen(false); }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                       >
-                        <SettingsIcon className="w-4 h-4 text-gray-400" />
+                        <SettingsIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                         Columns
                       </button>
                     </div>
@@ -1497,12 +1499,12 @@ export default function EInvoicing() {
               const items = [
                 {
                   label: "WhatsApp",
-                  icon: <MessageCircle className="w-3.5 h-3.5 text-green-600" />,
+                  icon: <FaWhatsapp className="w-3.5 h-3.5 text-[#25D366]" />,
                   onClick: () => { window.open(`https://wa.me/?text=${encodeURIComponent(waMsg)}`, "_blank"); closeMenu(); },
                 },
                 {
                   label: "Email",
-                  icon: <Mail className="w-3.5 h-3.5 text-blue-600" />,
+                  icon: <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain scale-[1.35]" />,
                   onClick: () => { window.open(`mailto:?subject=${encodeURIComponent(emailSubject)}&body=${emailBody}`, "_blank"); closeMenu(); },
                 },
                 {

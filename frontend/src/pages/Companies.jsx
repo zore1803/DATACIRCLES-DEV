@@ -2097,17 +2097,17 @@ function Companies() {
                         )}
                       </button>
                       {isMoreMenuOpen && (
-                        <div className="absolute right-0 z-50 mt-2 w-44 bg-white border border-gray-100 rounded-xl shadow-xl py-2 animate-in fade-in zoom-in duration-200 origin-top-right">
-                          <div className="pt-1">
+                        <div className="absolute right-0 z-50 mt-2 w-[180px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 animate-in fade-in zoom-in duration-150 origin-top-right">
+                          <div className="flex flex-col gap-0.5">
                             {/* Filters + Hotlist: mobile-only entries */}
                             <button
                               onClick={() => {
                                 setShowAdvancedFilters(true);
                                 setIsMoreMenuOpen(false);
                               }}
-                              className="lg:hidden w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                             >
-                              <FilterIcon size={16} />
+                              <FilterIcon size={14} />
                               Filters
                               {activeFilters.length > 0 && (
                                 <span className="ml-auto bg-[#0085FF] text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
@@ -2120,9 +2120,9 @@ function Companies() {
                                 setShowHotlist((prev) => !prev);
                                 setIsMoreMenuOpen(false);
                               }}
-                              className="lg:hidden w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                             >
-                              <HotlistIcon className="w-4 h-4 text-[#1D4ED8] flex-shrink-0" />
+                              <HotlistIcon className="w-3.5 h-3.5 text-[#1D4ED8] flex-shrink-0" />
                               {showHotlist ? "Hide Hotlist" : "Hotlist"}
                             </button>
                             <button
@@ -2130,9 +2130,9 @@ function Companies() {
                                 setShowColumnSettings(true);
                                 setIsMoreMenuOpen(false);
                               }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                             >
-                              <SettingsIcon className="w-4 h-4 text-gray-400" />
+                              <SettingsIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                               Columns
                             </button>
                             <button
@@ -2140,21 +2140,22 @@ function Companies() {
                                 setShowImport(true);
                                 setIsMoreMenuOpen(false);
                               }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                             >
-                              <UploadIcon className="w-4 h-4 text-gray-400" />
+                              <UploadIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                               Import
                             </button>
                             <ExportSubmenu
                               onExport={handleExportAll}
                               onDone={() => setIsMoreMenuOpen(false)}
+                              compact
                             />
                             <Link
                               to="/settings/company-fields"
                               onClick={() => setIsMoreMenuOpen(false)}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                             >
-                              <Database className="w-4 h-4 text-gray-400" />
+                              <Database className="w-3.5 h-3.5 text-[#1C1B1F]" />
                               Add/View Custom Fields
                             </Link>
                           </div>

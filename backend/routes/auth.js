@@ -222,7 +222,10 @@ router.delete("/link-google", requireAuth, authController.unlinkGoogleAccount);
 router.post("/complete-registration", authMiddleware, authController.completeRegistration);
 
 // Email/password self-serve signup (UserRegister.jsx -> Verification.jsx)
-router.post("/register", globalOtpLimiter, sendOtpLimiter, authController.register);
+// Email is verified inline on the signup form BEFORE the account exists.
+router.post("/signup/send-otp", globalOtpLimiter, sendOtpLimiter, authController.signupSendOtp);
+router.post("/signup/verify-otp", globalOtpLimiter, verifyOtpLimiter, authController.signupVerifyOtp);
+router.post("/register", globalOtpLimiter, authController.register);
 router.post("/verify-email", globalOtpLimiter, verifyOtpLimiter, authController.verifyEmail);
 router.post("/resend-otp", globalOtpLimiter, sendOtpLimiter, authController.resendOtp);
 

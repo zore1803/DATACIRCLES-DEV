@@ -3365,16 +3365,16 @@ function Tasks() {
               <MoreIcon className="w-4 h-4 text-[#525866]" />
             </button>
             {isMoreMenuOpen && (
-              <div className="absolute right-0 z-50 mt-2 w-56 bg-white border border-gray-100 rounded-xl shadow-xl py-1 animate-in fade-in zoom-in duration-200 origin-top-right">
+              <div className="absolute right-0 z-50 mt-2 w-[180px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right">
                 {/* Filters + View switcher: mobile-only (desktop has its own toolbar controls) */}
                 <button
                   onClick={() => {
                     setShowMobileFilters(true);
                     setIsMoreMenuOpen(false);
                   }}
-                  className="lg:hidden w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
-                  <FilterIcon size={16} />
+                  <FilterIcon size={14} />
                   Filters
                   {activeAdvancedFilters.length > 0 && (
                     <span className="ml-auto bg-[#0085FF] text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
@@ -3386,17 +3386,17 @@ function Tasks() {
                   <>
                     <button
                       onClick={() => { setShowKanban(false); setIsMoreMenuOpen(false); }}
-                      className="lg:hidden w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                     >
-                      <TableViewIcon size={16} className="flex-shrink-0 text-gray-400" />
+                      <TableViewIcon size={14} className="flex-shrink-0 text-[#1C1B1F]" />
                       List View
                       {!showKanban && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600" />}
                     </button>
                     <button
                       onClick={() => { setShowKanban(true); setIsMoreMenuOpen(false); }}
-                      className="lg:hidden w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                     >
-                      <KanbanViewIcon size={16} className="flex-shrink-0 text-gray-400" />
+                      <KanbanViewIcon size={14} className="flex-shrink-0 text-[#1C1B1F]" />
                       Kanban View
                       {showKanban && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600" />}
                     </button>
@@ -3405,7 +3405,7 @@ function Tasks() {
                   <>
                     <button
                       onClick={() => { setShowMeetingCalendar(false); setIsMoreMenuOpen(false); }}
-                      className="lg:hidden w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                     >
                       <CustomListIcon width={14} height={14} style={{ color: "#9CA3AF" }} />
                       List View
@@ -3413,15 +3413,15 @@ function Tasks() {
                     </button>
                     <button
                       onClick={() => { setShowMeetingCalendar(true); setIsMoreMenuOpen(false); }}
-                      className="lg:hidden w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                     >
-                      <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
+                      <CalendarIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                       View in Calendar
                       {showMeetingCalendar && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600" />}
                     </button>
                   </>
                 )}
-                <div className="border-t border-gray-100 my-1" />
+                <div className="w-full border-t border-[#F1F1F5] my-0.5" />
                 <input
                   ref={taskImportInputRef}
                   type="file"
@@ -3437,12 +3437,12 @@ function Tasks() {
                   }}
                   disabled={activeTab !== "tasks" || taskImportBusy}
                   title={activeTab !== "tasks" ? "Meeting import isn't available yet — each meeting needs a linked company/contact/vendor" : undefined}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm ${activeTab !== "tasks" ? "text-gray-300 cursor-not-allowed" : "text-gray-700 hover:bg-gray-50"}`}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap ${activeTab !== "tasks" ? "text-gray-300 cursor-not-allowed" : "text-[#161618] hover:bg-gray-50"}`}
                 >
-                  <UploadIcon className="w-4 h-4 text-gray-400" />
+                  <UploadIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                   {taskImportBusy ? "Importing…" : "Import"}
                 </button>
-                <ExportSubmenu
+                <ExportSubmenu compact
                   onExport={(format) => handleExportAll(format)}
                   onDone={() => setIsMoreMenuOpen(false)}
                 />
@@ -3451,9 +3451,9 @@ function Tasks() {
                     setShowColumnsPanel(true);
                     setIsMoreMenuOpen(false);
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
-                  <SettingsIcon className="w-4 h-4 text-gray-400" />
+                  <SettingsIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                   Columns
                 </button>
               </div>

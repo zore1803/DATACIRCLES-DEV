@@ -507,7 +507,7 @@ export default function Inventory() {
   const openColumnMenu = (e, colId) => {
     e.stopPropagation();
     const zMenu = getAncestorZoom(document.body);
-    const MENU_W = 220;
+    const MENU_W = 160;
     const rect = e.currentTarget.getBoundingClientRect();
     let calcLeft = rect.right / zMenu - MENU_W;
     calcLeft = Math.min(calcLeft, window.innerWidth / zMenu - MENU_W - 8);
@@ -763,14 +763,18 @@ export default function Inventory() {
             e.stopPropagation();
             if (isOpen) { setOpenActionMenuId(null); setActionMenuPos(null); return; }
             const zMenu = getAncestorZoom(document.body);
-            const MENU_W = 176;
-            const MENU_H = 130;
+            const MENU_W = 160;
+            // 3 items (Stock In, Stock Out, Stock History) + one divider + container padding.
+            const MENU_H = 118;
             const MARGIN = 8;
             const rect = e.currentTarget.getBoundingClientRect();
             const viewportH = window.innerHeight / zMenu;
             const viewportW = window.innerWidth / zMenu;
-            const rowCenter = (rect.top + rect.bottom) / (2 * zMenu);
-            let calcTop = rowCenter - MENU_H / 2;
+            // Same placement as the Companies row menu: below the button, flipping up when short on room.
+            const top = rect.bottom / zMenu + 4;
+            const bottomAnchor = rect.top / zMenu - 4;
+            const openUp = viewportH - top < MENU_H + MARGIN;
+            let calcTop = openUp ? bottomAnchor - MENU_H : top;
             calcTop = Math.max(MARGIN, Math.min(calcTop, viewportH - MENU_H - MARGIN));
             let calcLeft = rect.right / zMenu - MENU_W;
             calcLeft = Math.min(calcLeft, viewportW - MENU_W - MARGIN);
@@ -778,42 +782,43 @@ export default function Inventory() {
             setActionMenuPos({ top: calcTop, left: calcLeft });
             setOpenActionMenuId(item._id);
           }}
-          className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+          className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+          title="More actions"
         >
           <MoreIcon className="w-4 h-4" />
         </button>
         {isOpen && actionMenuPos && createPortal(
           <>
-            <div className="fixed inset-0 z-[59]" onClick={() => { setOpenActionMenuId(null); setActionMenuPos(null); }} />
+            <div className="fixed inset-0 z-[9998]" onClick={() => { setOpenActionMenuId(null); setActionMenuPos(null); }} />
             <div
-              className="fixed w-44 bg-white rounded-xl shadow-lg border border-[#E1E4EA] py-1 z-[60] overflow-hidden"
+              className="fixed w-[160px] z-[9999] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right"
               style={{ top: actionMenuPos.top, left: actionMenuPos.left }}
               onClick={(e) => e.stopPropagation()}
             >
               <button
-                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 onClick={() => {
                   setOpenActionMenuId(null); setActionMenuPos(null);
                   setStockModal({ open: true, item, direction: "in" });
                 }}
               >
-                <PlusIcon className="w-4 h-4 text-green-600" /> Stock In
+                <PlusIcon className="w-3.5 h-3.5 text-[#1C1B1F]" /> Stock In
               </button>
               <button
-                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 onClick={() => {
                   setOpenActionMenuId(null); setActionMenuPos(null);
                   setStockModal({ open: true, item, direction: "out" });
                 }}
               >
-                <Minus className="w-4 h-4 text-red-600" /> Stock Out
+                <Minus className="w-3.5 h-3.5 text-[#1C1B1F]" /> Stock Out
               </button>
-              <div className="h-px bg-gray-100 my-1" />
+              <div className="w-full border-t border-[#F1F1F5] my-0.5" />
               <button
-                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 onClick={() => { setOpenActionMenuId(null); setActionMenuPos(null); openHistory(item); }}
               >
-                <HistoryIcon className="w-4 h-4 text-gray-400" /> Stock History
+                <HistoryIcon className="w-3.5 h-3.5 text-[#1C1B1F]" /> Stock History
               </button>
             </div>
           </>,
@@ -830,9 +835,6 @@ export default function Inventory() {
       case "item":
         content = (
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0 uppercase">
-              {(item.name || "?").slice(0, 2)}
-            </div>
             <div className="flex flex-col min-w-0">
               <span className="text-sm font-semibold text-gray-900 truncate">
                 <HighlightText text={item.name} query={searchQuery} />
@@ -860,7 +862,7 @@ export default function Inventory() {
         const qty = getItemStock(item);
         content = (
           <div className="flex items-baseline gap-1.5">
-            <span className={`text-sm font-bold ${qty <= 0 ? "text-red-600" : "text-gray-900"}`}>{qty}</span>
+            <span className={`text-sm ${qty <= 0 ? "text-red-600" : "text-gray-700"}`}>{qty}</span>
             <span className="text-[10px] font-medium text-gray-400 uppercase truncate">{item.primaryUnit || ""}</span>
           </div>
         );
@@ -894,7 +896,7 @@ export default function Inventory() {
         const { min, max, hasVariants } = getItemPriceRange(item, colId);
         content = (
           <div className="flex flex-col">
-            <span className="text-sm font-medium text-gray-800">
+            <span className="text-sm text-gray-700">
               {min === max ? money(min) : `${money(min)} – ${money(max)}`}
             </span>
             {item.gstRate ? (
@@ -910,13 +912,13 @@ export default function Inventory() {
       }
       case "stockValue":
         content = (
-          <span className="text-sm font-semibold text-gray-900">
+          <span className="text-sm text-gray-700">
             {money(getItemStockValue(item))}
           </span>
         );
         break;
       case "lastUpdated":
-        content = <span className="text-sm text-gray-600">{relativeTime(item.inventory?.lastMovementAt)}</span>;
+        content = <span className="text-sm text-gray-700">{relativeTime(item.inventory?.lastMovementAt)}</span>;
         break;
       default:
         content = (
@@ -1063,28 +1065,28 @@ export default function Inventory() {
               <MoreIcon className="w-4 h-4" />
             </button>
             {isMoreMenuOpen && (
-              <div className="absolute right-0 z-50 mt-2 w-56 bg-white border border-gray-100 rounded-xl shadow-xl py-1 animate-in fade-in zoom-in duration-200 origin-top-right">
+              <div className="absolute right-0 z-50 mt-2 w-[180px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right">
                 <button
                   onClick={() => { setShowColumnSettings(true); setIsMoreMenuOpen(false); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
-                  <SettingsIcon className="w-4 h-4 text-gray-400" /> Columns
+                  <SettingsIcon className="w-3.5 h-3.5 text-[#1C1B1F]" /> Columns
                 </button>
                 <button
                   onClick={() => { setShowStats((p) => !p); setIsMoreMenuOpen(false); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
-                  <EyeIcon className="w-4 h-4 text-gray-400" /> {showStats ? "Hide KPIs" : "Unhide KPIs"}
+                  <EyeIcon className="w-3.5 h-3.5 text-[#1C1B1F]" /> {showStats ? "Hide KPIs" : "Unhide KPIs"}
                 </button>
-                <ExportSubmenu
+                <ExportSubmenu compact
                   onExport={handleExportAll}
                   onDone={() => setIsMoreMenuOpen(false)}
                 />
 
                 {/* Stock-status filter — moved in here off the toolbar, where its pill-shaped
                     <select> broke the 40px round-icon rhythm the other list pages share. */}
-                <div className="h-px bg-gray-100 my-1" />
-                <p className="px-3 pt-1 pb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                <div className="w-full border-t border-[#F1F1F5] my-0.5" />
+                <p className="px-2 pt-1 pb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
                   Stock status
                 </p>
                 {[
@@ -1096,10 +1098,10 @@ export default function Inventory() {
                   <button
                     key={opt.value || "all"}
                     onClick={() => { setStockStatusFilter(opt.value); setIsMoreMenuOpen(false); }}
-                    className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                   >
                     {opt.label}
-                    {stockStatusFilter === opt.value && <Check className="w-4 h-4 text-[#0085FF]" />}
+                    {stockStatusFilter === opt.value && <Check className="w-3.5 h-3.5 text-[#0085FF]" />}
                   </button>
                 ))}
               </div>
@@ -1286,29 +1288,29 @@ export default function Inventory() {
         <>
           <div className="fixed inset-0 z-[9998]" onClick={closeColumnMenu} />
           <div
-            className="fixed w-[220px] bg-white rounded-xl shadow-lg border border-[#E1E4EA] py-1 z-[9999]"
+            className="fixed w-[160px] z-[9999] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right"
             style={{ top: columnMenuPos.top, left: columnMenuPos.left }}
             onClick={(e) => e.stopPropagation()}
           >
             {(() => {
               const col = ALL_COLUMNS.find((c) => c.id === openColumnMenuKey);
               if (!col) return null;
-              const itemClass = "w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors";
+              const itemClass = "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal whitespace-nowrap";
               return (
                 <>
                   <button
                     onClick={() => { closeColumnMenu(); setColumnPin(col.id, "left"); }}
                     className={`${itemClass} ${pinnedCols[col.id] === "left" ? "bg-blue-50 text-blue-700 font-medium" : "text-[#161618] hover:bg-gray-50"}`}
                   >
-                    {pinnedCols[col.id] === "left" ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-                    {pinnedCols[col.id] === "left" ? "Unpin from left" : "Pin left"}
+                    {pinnedCols[col.id] === "left" ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5 text-[#1C1B1F]" />}
+                    Pin to Left
                   </button>
                   <button
                     onClick={() => { closeColumnMenu(); setColumnPin(col.id, "right"); }}
                     className={`${itemClass} ${pinnedCols[col.id] === "right" ? "bg-blue-50 text-blue-700 font-medium" : "text-[#161618] hover:bg-gray-50"}`}
                   >
-                    {pinnedCols[col.id] === "right" ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-                    {pinnedCols[col.id] === "right" ? "Unpin from right" : "Pin right"}
+                    {pinnedCols[col.id] === "right" ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5 text-[#1C1B1F]" />}
+                    Pin to Right
                   </button>
                   <div className="w-full border-t border-[#F1F1F5] my-0.5" />
                   <button
@@ -1319,7 +1321,7 @@ export default function Inventory() {
                     }}
                     className={`${itemClass} ${sortConfig.key === col.id && sortConfig.direction === "asc" ? "bg-blue-50 text-blue-700 font-medium" : "text-[#161618] hover:bg-gray-50"}`}
                   >
-                    <ChevronUp className="w-3.5 h-3.5" /> Sort Ascending
+                    <ChevronUp className="w-3.5 h-3.5 text-[#1C1B1F]" /> Sort Ascending
                   </button>
                   <button
                     onClick={() => {
@@ -1329,15 +1331,15 @@ export default function Inventory() {
                     }}
                     className={`${itemClass} ${sortConfig.key === col.id && sortConfig.direction === "desc" ? "bg-blue-50 text-blue-700 font-medium" : "text-[#161618] hover:bg-gray-50"}`}
                   >
-                    <ChevronDown className="w-3.5 h-3.5" /> Sort Descending
+                    <ChevronDown className="w-3.5 h-3.5 text-[#1C1B1F]" /> Sort Descending
                   </button>
                   <div className="w-full border-t border-[#F1F1F5] my-0.5" />
                   <button
                     onClick={() => { closeColumnMenu(); saveColumns(columns.map((c) => (c.key === col.id ? { ...c, visible: false } : c))); }}
                     disabled={columns.find((c) => c.key === col.id)?.required}
-                    className={`${itemClass} text-[#161618] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
+                    className={`${itemClass} text-[#161618] hover:bg-gray-50 disabled:text-gray-300 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
                   >
-                    <EyeOff className="w-3.5 h-3.5" /> Hide Column
+                    <EyeOff className="w-3.5 h-3.5 text-[#1C1B1F]" /> Hide Column
                   </button>
                 </>
               );

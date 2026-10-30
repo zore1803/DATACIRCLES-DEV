@@ -1198,31 +1198,31 @@ const SalesSubscription = () => {
                         <MoreIcon className="w-4 h-4" />
                       </button>
                       {isMoreMenuOpen && (
-                        <div className="absolute right-0 z-50 mt-2 w-52 bg-white border border-gray-100 rounded-xl shadow-xl py-2 animate-in fade-in zoom-in duration-200 origin-top-right">
+                        <div className="absolute right-0 z-50 mt-2 w-[180px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right">
                           <button
                             onClick={() => { setShowAdvancedFilters(true); setIsMoreMenuOpen(false); }}
-                            className="lg:hidden w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                           >
-                            <FilterIcon size={16} />
+                            <FilterIcon size={14} />
                             Filters
                           </button>
                           <button
                             disabled
                             title="Bulk import for subscriptions isn't built yet"
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-400 cursor-not-allowed"
+                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-gray-300 cursor-not-allowed whitespace-nowrap"
                           >
-                            <UploadIcon className="w-4 h-4" />
+                            <UploadIcon className="w-3.5 h-3.5" />
                             Import (soon)
                           </button>
-                          <ExportSubmenu
+                          <ExportSubmenu compact
                             onExport={handleExportAll}
                             onDone={() => setIsMoreMenuOpen(false)}
                           />
                           <button
                             onClick={() => { setShowColumnSettings(true); setIsMoreMenuOpen(false); }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                           >
-                            <SettingsIcon className="w-4 h-4 text-gray-400" />
+                            <SettingsIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
                             Columns
                           </button>
                         </div>

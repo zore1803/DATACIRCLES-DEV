@@ -86,7 +86,7 @@ const TagInput = ({ value, onChange, placeholder }) => {
   const removeTag = (idx) => onChange(tags.filter((_, i) => i !== idx));
 
   return (
-    <div className="w-full border border-gray-300 rounded-lg text-sm px-2 py-1.5 focus-within:ring-2 focus-within:ring-blue-500 flex flex-wrap items-center gap-1.5 min-h-[38px]">
+    <div className="w-full border border-[#1F2937]/10 rounded-[19px] text-[13px] px-3 py-1.5 focus-within:ring-1 focus-within:ring-blue-500 flex flex-wrap items-center gap-1.5 min-h-[38px]">
       {tags.map((tag, idx) => (
         <span
           key={`${tag}-${idx}`}
@@ -150,7 +150,7 @@ const SearchableColumnSelect = ({ columns, value, onChange }) => {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between border border-gray-300 rounded-lg text-sm px-3 py-2 bg-white hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
+        className="w-full flex items-center justify-between border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] px-3 h-[38px] bg-white hover:bg-gray-50 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
       >
         <span className="truncate pr-2">
           {selectedColumn ? selectedColumn.label : "Select column..."}
@@ -375,30 +375,29 @@ export default function AdvancedFilterPanel({
       <div
         className="fixed dc-panel-card dc-panel-w bg-white shadow-2xl z-[9997] flex flex-col overflow-hidden animate-slideInRight"
       >
-        <div className="flex items-center justify-between p-5 border-b border-gray-200 bg-gray-50/50">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <FilterIcon size={16} />
-            </div>
-            <div>
-              {/* USE DYNAMIC TITLE & SUBTITLE HERE */}
-              <h2 className="text-lg font-bold text-gray-900 font-sf">
-                {title}
-              </h2>
-              <p className="text-xs text-gray-500 font-inter">{subtitle}</p>
-            </div>
+        {/* Header — same spec as the other side panels (BankModal, ColumnSettingsPanel) */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
+          <div className="flex flex-col min-w-0">
+            {/* USE DYNAMIC TITLE & SUBTITLE HERE */}
+            <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide truncate">
+              {title}
+            </h2>
+            <p className="text-xs text-[#78788D] font-inter truncate">{subtitle}</p>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+            title="Close"
+            className="w-5 h-5 flex items-center justify-center text-[#1C1B1F] hover:opacity-70 transition-opacity flex-shrink-0"
+            aria-label="Close"
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <X className="w-[18px] h-[18px]" strokeWidth={2} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-gray-50/30">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-4 bg-white">
           {localFilters.length === 0 ? (
-            <div className="text-center py-10 px-4 border-2 border-dashed border-gray-200 rounded-xl bg-white">
+            <div className="text-center py-10 px-4 border border-dashed border-gray-200 rounded-lg bg-white">
               <FilterIcon size={16} className="mx-auto mb-3" />
               <h3 className="text-sm font-semibold text-gray-700">
                 No filters applied
@@ -409,7 +408,7 @@ export default function AdvancedFilterPanel({
               </p>
               <button
                 onClick={addFilter}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+                className="inline-flex items-center gap-2 px-6 py-2 bg-white border border-gray-200 rounded-[25px] text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 <PlusIcon className="w-4 h-4" /> Add Rule
               </button>
@@ -433,7 +432,7 @@ export default function AdvancedFilterPanel({
               return (
                 <div
                   key={filter.id}
-                  className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm relative group"
+                  className="bg-white p-4 rounded-lg border border-[#E1E4EA] relative group"
                 >
                   <button
                     onClick={() => removeFilter(filter.id)}
@@ -445,7 +444,7 @@ export default function AdvancedFilterPanel({
 
                   <div className="space-y-3">
                     <div>
-                      <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">
+                      <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2 block">
                         Where
                       </label>
                       <SearchableColumnSelect
@@ -460,7 +459,7 @@ export default function AdvancedFilterPanel({
                     <div className="flex gap-2">
                       {!isDateRange && (
                       <div className="w-[45%]">
-                        <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">
+                        <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2 block">
                           Condition
                         </label>
                         <select
@@ -468,7 +467,7 @@ export default function AdvancedFilterPanel({
                           onChange={(e) =>
                             updateFilter(filter.id, "operator", e.target.value)
                           }
-                          className="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                          className="w-full border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] px-3 h-[38px] bg-white focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                         >
                           {availableOps.map((op) => (
                             <option key={op} value={op}>
@@ -480,7 +479,7 @@ export default function AdvancedFilterPanel({
                       )}
 
                       <div className={isDateRange ? "w-full" : "w-[55%]"}>
-                        <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">
+                        <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2 block">
                           Value
                         </label>
                         {isDateRange ? (
@@ -493,7 +492,7 @@ export default function AdvancedFilterPanel({
                                   preset: e.target.value,
                                 })
                               }
-                              className="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                              className="w-full border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] px-3 h-[38px] bg-white focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                             >
                               <option value="">Select...</option>
                               {DUE_DATE_PRESETS.map((p) => (
@@ -502,7 +501,7 @@ export default function AdvancedFilterPanel({
                             </select>
                             {rangeValue.preset === "custom" && (
                               <div className="flex gap-2">
-                                <label className="flex-1 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                                <label className="flex-1 text-[13px] font-medium text-[#161618] tracking-[-0.05em]">
                                   From
                                   <input
                                     type="date"
@@ -510,10 +509,10 @@ export default function AdvancedFilterPanel({
                                     onChange={(e) =>
                                       updateFilter(filter.id, "value", { ...rangeValue, from: e.target.value })
                                     }
-                                    className="mt-1 w-full border border-gray-300 rounded-lg text-sm font-normal normal-case tracking-normal text-gray-800 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="mt-1 w-full border border-gray-300 rounded-lg text-sm font-normal normal-case tracking-normal text-gray-800 px-3 py-2 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                                   />
                                 </label>
-                                <label className="flex-1 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                                <label className="flex-1 text-[13px] font-medium text-[#161618] tracking-[-0.05em]">
                                   To
                                   <input
                                     type="date"
@@ -522,7 +521,7 @@ export default function AdvancedFilterPanel({
                                     onChange={(e) =>
                                       updateFilter(filter.id, "value", { ...rangeValue, to: e.target.value })
                                     }
-                                    className="mt-1 w-full border border-gray-300 rounded-lg text-sm font-normal normal-case tracking-normal text-gray-800 px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="mt-1 w-full border border-gray-300 rounded-lg text-sm font-normal normal-case tracking-normal text-gray-800 px-3 py-2 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                                   />
                                 </label>
                               </div>
@@ -555,7 +554,7 @@ export default function AdvancedFilterPanel({
                                 onChange={(e) =>
                                   updateFilter(filter.id, "value", e.target.value)
                                 }
-                                className="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                className="w-full border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] px-3 h-[38px] bg-white focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                               >
                                 <option value="">Select...</option>
                                 {opts.map((opt) => (
@@ -572,7 +571,7 @@ export default function AdvancedFilterPanel({
                                 onChange={(e) =>
                                   updateFilter(filter.id, "value", e.target.value)
                                 }
-                                className="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                className="w-full border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] px-3 h-[38px] focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                               />
                             );
                           }
@@ -585,7 +584,7 @@ export default function AdvancedFilterPanel({
                                   updateFilter(filter.id, "value", e.target.value)
                                 }
                                 placeholder="Enter a number..."
-                                className="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                className="w-full border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] px-3 h-[38px] focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                               />
                             );
                           }
@@ -597,7 +596,7 @@ export default function AdvancedFilterPanel({
                                 updateFilter(filter.id, "value", e.target.value)
                               }
                               placeholder="Enter value..."
-                              className="w-full border border-gray-300 rounded-lg text-sm px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                              className="w-full border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] px-3 h-[38px] focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                             />
                           );
                         })()}
@@ -612,25 +611,26 @@ export default function AdvancedFilterPanel({
           {localFilters.length > 0 && (
             <button
               onClick={addFilter}
-              className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-blue-200 bg-blue-50/50 rounded-xl text-sm font-medium text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-blue-200 bg-blue-50/50 rounded-lg text-sm font-medium text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-colors"
             >
               <PlusIcon className="w-4 h-4" /> Add Another Rule
             </button>
           )}
         </div>
 
-        <div className="p-5 border-t border-gray-200 flex gap-3 bg-white">
+        {/* Footer — compact, right-aligned pill buttons like the other panels */}
+        <div className="flex-shrink-0 py-2.5 px-4 border-t border-gray-100 bg-white flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={handleClear}
-            className="flex-1 py-2.5 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
+            className="px-6 py-2 border border-gray-200 text-gray-700 rounded-[25px] text-sm font-bold hover:bg-gray-50 transition-colors"
           >
             Clear All
           </button>
           <button
             type="button"
             onClick={handleApply}
-            className="flex-[2] py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+            className="px-6 py-2 bg-[#158FFF] text-white rounded-[25px] text-sm font-bold hover:opacity-90 transition-colors"
           >
             Apply Filters
           </button>

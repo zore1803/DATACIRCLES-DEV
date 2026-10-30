@@ -2,7 +2,9 @@
 // Company and Deal pages: one copy so both screens get the same toolbar
 // (copy types, edit, download, share, convert) and the same edge-to-edge PDF.
 import React, { useState, useEffect } from "react";
-import { Repeat, X, Share2, MessageCircle, Mail, Printer, MessageSquare, Copy } from "lucide-react";
+import { FaWhatsapp } from "react-icons/fa";
+import emailLogo from "../../assets/email-logo.png";
+import { Repeat, X, Share2, Printer, MessageSquare, Copy } from "lucide-react";
 import { PDFDocument } from "pdf-lib";
 import toast from "react-hot-toast";
 import API from "../../services/api";
@@ -206,17 +208,17 @@ const InvoiceViewer = ({
               {onSend && (
               <button
                 onClick={onSend}
-                className="h-9 px-3 flex items-center gap-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                className="h-9 px-3 flex items-center gap-1.5 bg-white border border-[#E1E4EA] text-[#161618] text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
               >
-                <Mail className="w-3.5 h-3.5" />
+                <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain scale-[1.35]" />
                 Email
               </button>
               )}
               <button
                 onClick={handleWhatsAppShare}
-                className="h-9 px-3 flex items-center gap-1.5 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600 transition-colors"
+                className="h-9 px-3 flex items-center gap-1.5 bg-white border border-[#E1E4EA] text-[#161618] text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
               >
-                <MessageCircle className="w-3.5 h-3.5" />
+                <FaWhatsapp className="w-3.5 h-3.5 text-[#25D366]" />
                 Whatsapp
               </button>
               <button
