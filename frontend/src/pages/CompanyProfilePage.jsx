@@ -325,18 +325,12 @@ const CompanyProfilePage = () => {
       value: `₹${(invoiceSummary?.totalAmount || 0).toLocaleString("en-IN")}`,
       icon: LifetimeRevenueIcon,
     },
-    {
-      label: "Outstanding",
-      value: `₹${(invoiceSummary?.amountDue || 0).toLocaleString("en-IN")}`,
-      icon: OutstandingIcon,
-    },
     { label: "Open Deals", value: openDealsCount, icon: OpenDealsIcon },
     { label: "Closed Deals", value: closedDealsCount, icon: ClosedDealsIcon },
-    { label: "Upcoming Tasks", value: upcomingTasksCount, icon: UpcomingTasksIcon },
     {
-      label: "Upcoming Meetings",
-      value: upcomingMeetingsCount,
-      icon: UpcomingMeetingsIcon,
+      label: "Upcoming Tasks & Meetings",
+      value: upcomingTasksCount + upcomingMeetingsCount,
+      icon: UpcomingTasksIcon,
     },
   ];
 
@@ -1285,9 +1279,9 @@ const CompanyProfilePage = () => {
         {showStats && activeTab === "Overview" && (
           <>
             {!showOverviewSkeleton && <CompanySummaryCard company={company} />}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
               {showOverviewSkeleton
-                ? Array.from({ length: 6 }).map((_, i) => <StatTileSkeleton key={i} />)
+                ? Array.from({ length: 4 }).map((_, i) => <StatTileSkeleton key={i} />)
                 : statTiles.map((tile) => (
                   <StatTile key={tile.label} tile={tile} />
                 ))}

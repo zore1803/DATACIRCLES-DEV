@@ -282,11 +282,30 @@ const DealDocumentsTab = ({ dealId, companyId, contactId, vendorId, showStats = 
     ? summaryTypes.reduce((sum, d) => sum + sumAmount(docsByType[d.key] || [], d.amountField), 0)
     : sumAmount(docsByType.invoice || [], "amount");
 
+  // Money still to be collected on invoices — invoice amount minus the payments
+  // recorded against it, the same math the backend summary uses. Drafts and
+  // cancelled invoices were never owed, so they're left out.
+  const outstandingValue = (docsByType.invoice || []).reduce((sum, inv) => {
+    const status = String(inv?.status || "").toLowerCase();
+    if (status === "draft" || status === "cancelled") return sum;
+    const paid = (inv?.payments || []).reduce((s, p) => s + (Number(p?.amount) || 0), 0);
+    const remaining = (Number(inv?.amount) || 0) - paid;
+    return remaining > 0.01 ? sum + remaining : sum;
+  }, 0);
+  const draftCount = summaryTypes.reduce(
+    (n, d) => n + (docsByType[d.key] || []).filter((r) => String(r?.status || "").toLowerCase() === "draft").length,
+    0,
+  );
+
   const summaryTiles = [
     // "4 of 5" = how many of the section's document types have at least one doc.
     { label: "Document Types Used", value: `${typesWithDocs} of ${summaryTypes.length}`, icon: PdfIcon },
     { label: isVendor ? "Purchase Documents" : "Sales Documents", value: totalDocs, icon: FilesIcon },
     { label: isVendor ? "Procurement Value" : "Invoiced Value", value: `₹${formatNumberToIndian(summaryValue)}`, icon: IndianRupeeIcon },
+    // Sales: what's still unpaid. Vendor: purchase documents not yet finalised.
+    isVendor
+      ? { label: "Draft Documents", value: draftCount, icon: FileText }
+      : { label: "Outstanding", value: `₹${formatNumberToIndian(outstandingValue)}`, icon: Receipt },
   ];
 
   // Sections sit at their natural height and the page ends after the cards — no
@@ -295,10 +314,17 @@ const DealDocumentsTab = ({ dealId, companyId, contactId, vendorId, showStats = 
   return (
     <div className="font-sf space-y-6">
       {showStats && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {loading
-            ? Array.from({ length: 3 }).map((_, i) => <StatTileSkeleton key={i} />)
-            : summaryTiles.map((tile) => <StatTile key={tile.label} tile={tile} />)}
+        // Wrapped so the 16px gap under the tiles is set here rather than by the
+        // parent's space-y-6, which (Tailwind v4) adds 24px as a bottom margin to
+        // every child. 16px matches the gap above the tiles, so the row sits
+        // centred between the two lines, like the other company tabs.
+        <div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            {loading
+              ? Array.from({ length: 4 }).map((_, i) => <StatTileSkeleton key={i} />)
+              : summaryTiles.map((tile) => <StatTile key={tile.label} tile={tile} />)}
+          </div>
+          <div className="-mx-6" style={{ borderTop: "1px solid #E1E4EA" }} />
         </div>
       )}
 

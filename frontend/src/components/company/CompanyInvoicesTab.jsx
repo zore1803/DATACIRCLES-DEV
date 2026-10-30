@@ -774,7 +774,7 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
             )}
           </div>
 
-          <div className="-mx-6" style={{ marginTop: 24, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
+          <div className="-mx-6" style={{ marginTop: 16, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
         </>
       )}
 

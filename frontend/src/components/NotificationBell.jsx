@@ -1,8 +1,31 @@
-import DeleteIcon from "./common/DeleteIcon";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Pencil, CheckCircle, X } from "lucide-react";
-import PlusIcon from "./common/PlusIcon";
+import {
+  Pencil,
+  CheckCircle,
+  X,
+  Plus,
+  Trash2,
+  Handshake,
+  Building2,
+  User,
+  Package,
+  Wallet,
+  Receipt,
+  FileText,
+  CheckSquare,
+  CalendarDays,
+  StickyNote,
+  UserCog,
+  Store,
+  Landmark,
+  CreditCard,
+  ShoppingCart,
+  ClipboardList,
+  Folder,
+  Phone,
+  Bell,
+} from "lucide-react";
 import BellIcon from "./common/BellIcon";
 import API from "../services/api";
 import useBodyScrollLock from "../hooks/useBodyScrollLock";
@@ -21,24 +44,126 @@ import useBodyScrollLock from "../hooks/useBodyScrollLock";
 
 const POLL_MS = 15000;
 
+// Colour of the entity icon follows the action: green = added, blue = edited,
+// red = removed. The small badge on the icon repeats the action as a glyph.
 const actionStyle = {
-  created: { Icon: PlusIcon, cls: "bg-[#E7F7EE] text-[#12B76A]" },
-  updated: { Icon: Pencil, cls: "bg-[#EAF3FF] text-[#0085FF]" },
-  deleted: { Icon: DeleteIcon, cls: "bg-[#FDECEC] text-[#DF120B]" },
+  created: { Badge: Plus, cls: "bg-[#E7F7EE] text-[#12B76A]", badge: "bg-[#12B76A]" },
+  updated: { Badge: Pencil, cls: "bg-[#EAF3FF] text-[#0085FF]", badge: "bg-[#0085FF]" },
+  deleted: { Badge: Trash2, cls: "bg-[#FDECEC] text-[#DF120B]", badge: "bg-[#DF120B]" },
 };
 
-const timeAgo = (iso) => {
-  const diff = Date.now() - new Date(iso).getTime();
-  if (Number.isNaN(diff)) return "";
-  const s = Math.round(diff / 1000);
-  if (s < 60) return "just now";
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.round(h / 24);
-  if (d < 7) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString();
+// One icon per kind of record, matched on the entity type's name. Order
+// matters: the first match wins, so specific names come before general ones.
+const ENTITY_ICONS = [
+  [/staff|invit|user/i, UserCog],
+  [/deal/i, Handshake],
+  [/compan|organi/i, Building2],
+  [/contact|customer|lead/i, User],
+  [/vendor|supplier/i, Store],
+  [/item|product|stock/i, Package],
+  [/payment|wallet|expense|journal|transaction|refund/i, Wallet],
+  [/bank/i, Landmark],
+  [/subscription|billing|plan|coupon/i, CreditCard],
+  [/invoice|quotation|proforma|challenge|delivery|credit|return|receipt/i, Receipt],
+  [/purchase|order/i, ShoppingCart],
+  [/task/i, CheckSquare],
+  [/meeting|calendar/i, CalendarDays],
+  [/note/i, StickyNote],
+  [/call/i, Phone],
+  [/form|submission/i, ClipboardList],
+  [/folder|document/i, Folder],
+  [/template|file/i, FileText],
+];
+const iconForEntity = (type) =>
+  (ENTITY_ICONS.find(([re]) => re.test(type || "")) || [null, Bell])[1];
+
+const timeOfDay = (iso) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }).toUpperCase();
+};
+
+// Section heading for the day a notification landed on: Today / Yesterday /
+// the full date.
+const dayLabel = (iso) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Earlier";
+  const startOf = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOf(new Date()) - startOf(d)) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+};
+
+const VERB = { created: "created", updated: "updated", deleted: "deleted" };
+
+const changeOf = (n, re) => (n.changes || []).find((c) => re.test(c.field || ""));
+const isCancelled = (n) => {
+  const status = changeOf(n, /^status$/i);
+  return !!status && /cancel/i.test(String(status.value));
+};
+
+// Short header: only says what happened ("A deal was created"). The record's
+// name goes in the description below.
+const titleFor = (n) => {
+  const type = n.entityType || "Item";
+  const lower = type.toLowerCase();
+  const article = /^[aeiou]/.test(lower) ? "An" : "A";
+  const plural = /s$/i.test(type) && !/ss$/i.test(type);
+
+  // Business events that read better than a bare "created / updated".
+  if (n.action === "created" && /payment/i.test(type)) return "A payment was made";
+  if (n.action === "updated" && /payment|invoice|subscription/i.test(type) && isCancelled(n)) {
+    return `${article} ${lower} was cancelled`;
+  }
+  if (/staff member/i.test(type) && n.action === "updated") {
+    const role = changeOf(n, /^role$/i);
+    if (role) return /admin/i.test(String(role.value)) ? "A staff member was upgraded" : "A staff member's role was changed";
+    return "A staff member's access was changed";
+  }
+  if (/staff invitation/i.test(type)) {
+    return n.action === "deleted" ? "A staff invitation was withdrawn" : "A staff member was invited";
+  }
+  if (/staff member/i.test(type)) {
+    return n.action === "deleted" ? "A staff member was removed" : "A staff member was added";
+  }
+
+  const verb = VERB[n.action] || "updated";
+  if (plural) return `${type} were ${verb}`;
+  return `${article} ${lower} was ${verb}`;
+};
+
+// Longer (up to two lines) description: which record, who did it and, for
+// updates, what changed.
+const describe = (n) => {
+  const type = (n.entityType || "item").toLowerCase();
+  const name = n.entityLabel ? `${type} "${n.entityLabel}"` : `the ${type}`;
+  const by = n.actorName ? ` by ${n.actorName}` : "";
+  if (n.action === "created") {
+    if (/payment/i.test(type)) return `A new ${name} was recorded in your workspace${by}.`;
+    if (/staff member/i.test(type)) return `${n.entityLabel || "A new member"} was added to your team${by}.`;
+    if (/staff invitation/i.test(type)) return `An invitation was sent to ${n.entityLabel || "a new member"}${by}.`;
+    return `A new ${name} was added to your workspace${by}.`;
+  }
+  if (n.action === "deleted") {
+    if (/staff member/i.test(type)) return `${n.entityLabel || "A member"} was removed from your team${by}.`;
+    return `The ${name === `the ${type}` ? type : name} was permanently removed from your workspace${by}.`;
+  }
+  if (n.action === "updated") {
+    if (isCancelled(n)) return `The ${name === `the ${type}` ? type : name} was marked as cancelled${by}.`;
+    const role = changeOf(n, /^role$/i);
+    if (role && /staff member/i.test(type)) {
+      return `${n.entityLabel || "A member"} now has the ${String(role.value)} role${by}.`;
+    }
+    const fields = (n.changes || []).map((c) => c.field).filter(Boolean);
+    if (fields.length > 0) {
+      const shown = fields.slice(0, 4).join(", ");
+      const extra = fields.length > 4 ? ` and ${fields.length - 4} more` : "";
+      return `${shown}${extra} ${fields.length === 1 ? "was" : "were"} changed on ${name}${by}.`;
+    }
+    return `Details of ${name} were updated${by}.`;
+  }
+  return "";
 };
 
 const NotificationBell = ({ variant = "desktop" }) => {
@@ -203,7 +328,14 @@ const NotificationBell = ({ variant = "desktop" }) => {
                 )}
               </div>
 
-              <div className="inline-flex items-center gap-1 p-1 bg-gray-100 rounded-lg ml-auto">
+              {/* Sliding switch: two equal columns, with a white pill that glides
+                  between them (its width is one column, so 100% = one step). */}
+              <div className="relative grid grid-cols-2 p-1 bg-gray-100 rounded-full ml-auto">
+                <span
+                  aria-hidden="true"
+                  className="absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-full bg-white shadow-sm transition-transform duration-300 ease-out pointer-events-none"
+                  style={{ transform: filter === "all" ? "translateX(100%)" : "translateX(0)" }}
+                />
                 {[
                   { key: "unread", label: `Unread${unreadInList ? ` (${unreadInList})` : ""}` },
                   { key: "all", label: "All" },
@@ -212,9 +344,9 @@ const NotificationBell = ({ variant = "desktop" }) => {
                     key={tab.key}
                     type="button"
                     onClick={() => setFilter(tab.key)}
-                    className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                    className={`relative z-10 px-4 py-1 text-sm font-medium rounded-full whitespace-nowrap transition-colors duration-300 ${
                       filter === tab.key
-                        ? "bg-white text-gray-900 shadow-sm"
+                        ? "text-gray-900"
                         : "text-gray-500 hover:text-gray-700"
                     }`}
                   >
@@ -247,46 +379,67 @@ const NotificationBell = ({ variant = "desktop" }) => {
                   </span>
                 </div>
               ) : (
-                visibleItems.map((n) => {
-                  const style = actionStyle[n.action] || actionStyle.updated;
-                  const Icon = style.Icon;
-                  const fields = (n.changes || []).map((c) => c.field);
-                  return (
-                    <div
-                      key={n._id}
-                      onClick={() => markOneRead(n)}
-                      className={`w-full flex items-start gap-3 px-5 py-4 border-b border-gray-50 last:border-b-0 transition-colors ${
-                        n.read ? "hover:bg-gray-50" : "bg-[#F5FAFF] hover:bg-[#EAF3FF] cursor-pointer"
-                      }`}
-                    >
-                      <div
-                        className={`mt-0.5 flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 ${style.cls}`}
-                      >
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className={`text-sm text-gray-900 ${
-                            n.read ? "font-normal" : "font-semibold"
+                <div className="px-4 pb-4">
+                  {visibleItems.map((n, idx) => {
+                    const style = actionStyle[n.action] || actionStyle.updated;
+                    const Icon = iconForEntity(n.entityType);
+                    const Badge = style.Badge;
+                    const day = dayLabel(n.createdAt);
+                    const showDay = idx === 0 || dayLabel(visibleItems[idx - 1].createdAt) !== day;
+                    const description = describe(n);
+                    return (
+                      <div key={n._id}>
+                        {showDay && (
+                          <p className="px-1 pt-4 pb-2 text-xs font-medium text-gray-400">{day}</p>
+                        )}
+                        <div
+                          onClick={() => markOneRead(n)}
+                          className={`flex items-start gap-3 px-4 py-3 mb-2 rounded-2xl border transition-colors ${
+                            n.read
+                              ? "bg-white border-gray-100 hover:bg-gray-50"
+                              : "bg-[#F5FAFF] border-[#DCEBFF] hover:bg-[#EAF3FF] cursor-pointer"
                           }`}
                         >
-                          {n.message}
-                        </p>
-                        {fields.length > 0 && (
-                          <p className="text-xs text-gray-500 mt-0.5 truncate">
-                            Changed: {fields.join(", ")}
-                          </p>
-                        )}
-                        <p className="text-[11px] text-gray-400 mt-0.5">
-                          {timeAgo(n.createdAt)}
-                        </p>
+                          <div
+                            className={`relative flex items-center justify-center w-10 h-10 rounded-full flex-shrink-0 ${style.cls}`}
+                          >
+                            <Icon className="w-5 h-5" />
+                            <span
+                              className={`absolute -bottom-0.5 -right-0.5 flex items-center justify-center w-4 h-4 rounded-full border-2 border-white text-white ${style.badge}`}
+                            >
+                              <Badge className="w-2.5 h-2.5" strokeWidth={3} />
+                            </span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <p
+                                className={`text-sm text-gray-900 truncate ${
+                                  n.read ? "font-medium" : "font-semibold"
+                                }`}
+                              >
+                                {titleFor(n)}
+                              </p>
+                              <span className="text-[11px] text-gray-400 flex-shrink-0 mt-0.5">
+                                {timeOfDay(n.createdAt)}
+                              </span>
+                            </div>
+                            <div className="flex items-end justify-between gap-3 mt-0.5">
+                              <p className="text-xs text-gray-500 leading-snug line-clamp-2">
+                                {description}
+                              </p>
+                              {!n.read && (
+                                <span
+                                  className="w-2.5 h-2.5 mb-0.5 rounded-full bg-[#0085FF] flex-shrink-0"
+                                  title="Unread"
+                                />
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      {!n.read && (
-                        <span className="mt-1.5 w-2 h-2 rounded-full bg-[#0085FF] flex-shrink-0" />
-                      )}
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                </div>
               )}
             </div>
           </aside>

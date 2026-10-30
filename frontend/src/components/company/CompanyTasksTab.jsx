@@ -839,7 +839,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
               )))}
           </div>
 
-          <div className="-mx-6" style={{ marginTop: 24, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
+          <div className="-mx-6" style={{ marginTop: 16, paddingBottom: 24, borderTop: "1px solid #E1E4EA" }} />
         </>
       )}
 
