@@ -128,6 +128,13 @@ API.interceptors.request.use(
       const method = (config.method || "get").toLowerCase();
       const isMutating = !["get", "head", "options"].includes(method);
       const url = config.url || "";
+
+      // Which of the person's organizations a Google (Auth0) session is working in. Password and
+      // phone tokens already name their record, so this only matters to Auth0 sessions. The server
+      // honours it only when it is one of that person's own records.
+      const activeUserId = localStorage.getItem("activeUserId");
+      if (activeUserId) config.headers["X-Active-User"] = activeUserId;
+
       const isPreSessionEndpoint =
         url.includes("/session/") || url.includes("/auth/");
       if (isMutating) {
@@ -271,6 +278,7 @@ API.interceptors.response.use(
           console.error("Token refresh failed:", refreshError);
           localStorage.removeItem("token");
           localStorage.removeItem("user");
+          localStorage.removeItem("activeUserId");
 
           // Only redirect if not already on login page
           if (!window.location.pathname.includes("/login")) {

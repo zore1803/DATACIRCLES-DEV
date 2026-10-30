@@ -34,9 +34,14 @@ import {
   Crown,
   Pin,
   PinOff,
+  Check,
+  Plus,
+  Loader2,
 } from "lucide-react";
 import { useAuth0 } from "@auth0/auth0-react";
 import API from "../services/api";
+import CreateOrganizationModal from "./common/CreateOrganizationModal";
+import { applyOrganizationSwitch } from "../utils/organizations";
 import DashboardIcon from "./common/DashboardIcon";
 /*
  * Clicking the nav entry for the page you're already on is a no-op as far as
@@ -241,6 +246,10 @@ const Navbar = () => {
   const [branding, setBranding] = useState(null);
   const [isLoadingBranding, setIsLoadingBranding] = useState(false);
   const [isCompanyMenuOpen, setIsCompanyMenuOpen] = useState(false);
+  // The signed-in person's organizations (GET /auth/my-organizations), loaded when the menu opens.
+  const [orgList, setOrgList] = useState([]);
+  const [switchingId, setSwitchingId] = useState(null);
+  const [isCreateOrgOpen, setIsCreateOrgOpen] = useState(false);
 
   // The menu is anchored to the switcher button, so once the sidebar
   // collapses (unpinned + mouse left, or mobile panel closed) it's no
@@ -331,6 +340,32 @@ const Navbar = () => {
     document.documentElement.style.removeProperty("--btn-primary");
     document.documentElement.style.removeProperty("--btn-primary-hover");
   }, [branding?.colors?.primary]);
+
+  useEffect(() => {
+    if (!isCompanyMenuOpen) return undefined;
+    let cancelled = false;
+    API.get("/auth/my-organizations")
+      .then((res) => {
+        if (!cancelled) setOrgList(res.data?.organizations || []);
+      })
+      .catch(() => {
+        // Keep whatever was last loaded: the menu still shows the current organization.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCompanyMenuOpen]);
+
+  const handleSwitchOrg = async (userId) => {
+    setSwitchingId(userId);
+    try {
+      const res = await API.post("/auth/switch-org", { userId });
+      applyOrganizationSwitch(res.data);
+    } catch {
+      setSwitchingId(null);
+    }
+  };
+
 
   // Absolute URL for the uploaded logo: data/blob/http URLs are used as-is, a
 // server-relative path gets the API origin in front (same rule Header uses).
@@ -924,11 +959,10 @@ const getInitials = (name) => {
             </button>
             )}
 
-            {/* There's no multi-organization API yet, so the menu shows the
-                current workspace and a way to edit it rather than inventing
-                companies to switch between. Anchored to the switcher button
-                itself (top-full), not the strip around it, so it always opens
-                flush below the button regardless of the strip's height. */}
+            {/* One row per organization the signed-in person belongs to; picking another moves the whole
+                app to it (utils/organizations.js). Anchored to the switcher button itself (top-full),
+                not the strip around it, so it always opens flush below the button regardless of the
+                strip's height. */}
             {!isSuperAdmin && isCompanyMenuOpen && (isHovered || isMobileOpen) && (
               <>
                 <div
@@ -936,24 +970,68 @@ const getInitials = (name) => {
                   onClick={() => setIsCompanyMenuOpen(false)}
                 />
                 <div className="absolute left-0 right-0 top-full mt-1 z-[9997] bg-white border border-[#E5E5E5] rounded-md shadow-lg py-1">
-                  <div className="flex items-center gap-1.5 px-2 py-2 bg-[#F5FAFF]">
-                    <OrgMark branding={branding} className="w-7 h-7" />
-                    <span className="text-[14px] font-medium text-[#0A0A0A] truncate">
-                      {branding?.companyName || "Company"}
-                    </span>
+                  <div className="max-h-[260px] overflow-y-auto">
+                    {(orgList.length
+                      ? orgList
+                      : [{ userId: "current", name: branding?.companyName || "Company", role: "", isCurrent: true }]
+                    ).map((org) => {
+                      // The current organization's name comes from live branding, so a rename in
+                      // Settings shows immediately without waiting for the list to reload.
+                      const displayName = org.isCurrent ? branding?.companyName || org.name : org.name;
+                      return (
+                        <button
+                          key={org.userId}
+                          type="button"
+                          disabled={org.isCurrent || switchingId !== null}
+                          onClick={() => handleSwitchOrg(org.userId)}
+                          className={`w-full flex items-center gap-1.5 px-2 py-2 text-left disabled:cursor-default ${
+                            org.isCurrent ? "bg-[#F5FAFF]" : "hover:bg-gray-50"
+                          }`}
+                        >
+                          {/* The current organization shows its uploaded logo (OrgMark falls back to initials);
+                              the others only have a name here, so they get initials. */}
+                          {org.isCurrent ? (
+                            <OrgMark branding={branding} className="w-7 h-7" />
+                          ) : (
+                            <span
+                              className="flex items-center justify-center w-7 h-7 flex-shrink-0 rounded text-white text-[14px] font-medium leading-[102%]"
+                              style={{ background: "var(--btn-primary)" }}
+                            >
+                              {getInitials(displayName)}
+                            </span>
+                          )}
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[14px] font-medium text-[#0A0A0A] truncate">{displayName}</span>
+                            {org.role && (
+                              <span className="block text-[11px] capitalize text-[#78788D]">{org.role}</span>
+                            )}
+                          </span>
+                          {org.isCurrent ? (
+                            <Check className="w-4 h-4 flex-shrink-0 text-[#0085FF]" />
+                          ) : switchingId === org.userId ? (
+                            <Loader2 className="w-4 h-4 flex-shrink-0 animate-spin text-[#0085FF]" />
+                          ) : null}
+                        </button>
+                      );
+                    })}
                   </div>
+                  <div className="my-1 border-t border-[#F1F1F5]" />
                   <button
                     type="button"
                     onClick={() => {
                       setIsCompanyMenuOpen(false);
-                      navigate("/settings");
+                      setIsCreateOrgOpen(true);
                     }}
-                    className="w-full text-left px-3 py-2 text-[13px] text-[#525866] hover:bg-gray-50"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-[13px] font-medium text-[#0085FF] hover:bg-gray-50"
                   >
-                    Company settings
+                    <Plus className="w-4 h-4" />
+                    Create organization
                   </button>
                 </div>
               </>
+            )}
+            {!isSuperAdmin && (
+              <CreateOrganizationModal isOpen={isCreateOrgOpen} onClose={() => setIsCreateOrgOpen(false)} />
             )}
           </div>
 

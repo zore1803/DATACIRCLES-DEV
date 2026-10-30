@@ -270,6 +270,7 @@ const Profile = () => {
     }
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    localStorage.removeItem("activeUserId");
     // Clear browser history to prevent back button access
     window.history.replaceState(null, "", window.location.href);
     logout({ logoutParams: { returnTo: window.location.origin } });

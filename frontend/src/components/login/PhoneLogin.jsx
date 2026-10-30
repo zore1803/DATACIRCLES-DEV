@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../../services/api";
+import OrganizationPicker from "../common/OrganizationPicker";
 
 // Wired up from the "Phone" icon on UserLogin/UserRegister's "or continue with" row —
 // that icon had no onClick at all until now. Two steps in one component (phone number,
@@ -18,6 +19,10 @@ export default function PhoneLogin() {
   const navigate = useNavigate();
 
   const [step, setStep] = useState("phone"); // "phone" | "otp" | "password"
+  // Set when this number belongs to more than one organization: { selectionToken, organizations }.
+  const [orgChoice, setOrgChoice] = useState(null);
+  const [pickingId, setPickingId] = useState(null);
+  const [pickError, setPickError] = useState("");
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -104,6 +109,10 @@ export default function PhoneLogin() {
       setIsVerifying(true);
       setOtpError("");
       const res = await API.post("/auth/verify-otp", { phone: phone.trim(), otp: enteredCode });
+      if (res.data.requiresOrgSelection) {
+        setOrgChoice({ selectionToken: res.data.selectionToken, organizations: res.data.organizations });
+        return;
+      }
       localStorage.setItem("token", res.data.token);
       // Only phone accounts that have never set one land here — one with a
       // password already goes straight in, same as every other login.
@@ -120,6 +129,20 @@ export default function PhoneLogin() {
       setOtpError(error.response?.data?.message || "Invalid or expired code.");
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  const handleSelectOrg = async (userId) => {
+    setPickingId(userId);
+    setPickError("");
+    try {
+      const res = await API.post("/auth/select-org", { selectionToken: orgChoice.selectionToken, userId });
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("activeUserId", String(userId));
+      navigate("/");
+    } catch (error) {
+      setPickError(error.response?.data?.message || "Could not continue. Please sign in again.");
+      setPickingId(null);
     }
   };
 
@@ -145,6 +168,15 @@ export default function PhoneLogin() {
 
   return (
     <div className="h-screen w-full bg-[#EAEAEA] p-0 font-inter overflow-hidden flex items-center justify-center">
+      {orgChoice && (
+        <OrganizationPicker
+          organizations={orgChoice.organizations}
+          onSelect={handleSelectOrg}
+          onCancel={() => { setOrgChoice(null); setPickError(""); }}
+          busyId={pickingId}
+          error={pickError}
+        />
+      )}
       <div className="flex w-full h-full items-stretch gap-4 flex-col lg:flex-row">
 
         {/* LEFT SECTION */}

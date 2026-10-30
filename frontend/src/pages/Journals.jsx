@@ -701,13 +701,13 @@ export default function Journals() {
     const closeMenu = () => { setOpenActionMenuId(null); setActionMenuPos(null); };
     const openPay = (payType) => { closeMenu(); setPayModal({ open: true, journal: j, type: payType }); };
     return (
-      <div className="relative flex-shrink-0 flex items-center">
+      <div className="relative flex-shrink-0 flex items-center -my-1.5">
         <button
           onClick={(e) => {
             e.stopPropagation();
             if (isOpen) { closeMenu(); return; }
             const zMenu = getAncestorZoom(document.body);
-            const MENU_W = 176;
+            const MENU_W = 160;
             const MENU_H = j.status === "cancelled" ? 210 : 250;
             const MARGIN = 8;
             const rect = e.currentTarget.getBoundingClientRect();
@@ -722,7 +722,7 @@ export default function Journals() {
             setActionMenuPos({ top: calcTop, left: calcLeft });
             setOpenActionMenuId(j._id);
           }}
-          className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+          className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
         >
           <MoreIcon className="w-4 h-4" />
         </button>
@@ -730,58 +730,58 @@ export default function Journals() {
           <>
             <div className="fixed inset-0 z-[59]" onClick={closeMenu} />
             <div
-              className="fixed w-44 bg-white rounded-xl shadow-lg border border-[#E1E4EA] py-1 z-[60] overflow-hidden"
+              className="fixed w-[160px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right z-[60]"
               style={{ top: actionMenuPos.top, left: actionMenuPos.left }}
               onClick={(e) => e.stopPropagation()}
             >
               <button
-                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 onClick={() => { closeMenu(); setEditingJournal(j); setShowQuickAdd(true); }}
               >
-                <EditIcon className="w-4 h-4 text-blue-600" /> Edit
+                <EditIcon className="w-3.5 h-3.5 text-blue-600" /> Edit
               </button>
-              <button className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => openPay("payin")}>
-                <ArrowDownCircle className="w-4 h-4 text-green-600" /> You Received
+              <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap" onClick={() => openPay("payin")}>
+                <ArrowDownCircle className="w-3.5 h-3.5 text-green-600" /> You Received
               </button>
-              <button className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => openPay("payout")}>
-                <ArrowUpCircle className="w-4 h-4 text-red-600" /> You Gave
+              <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap" onClick={() => openPay("payout")}>
+                <ArrowUpCircle className="w-3.5 h-3.5 text-red-600" /> You Gave
               </button>
               <button
-                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 onClick={() => { closeMenu(); setLedgerJournalId(j._id); }}
               >
-                <EyeIcon className="w-4 h-4 text-gray-400" /> Ledger
+                <EyeIcon className="w-3.5 h-3.5 text-gray-400" /> Ledger
               </button>
-              <div className="h-px bg-gray-100 my-1" />
+              <div className="w-full border-t border-[#F1F1F5] my-0.5" />
               {j.status === "active" && (
                 <>
                   <button
-                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                     onClick={() => { closeMenu(); handleCloseJournal(j); }}
                   >
-                    <Lock className="w-4 h-4 text-orange-500" /> Close Journal
+                    <Lock className="w-3.5 h-3.5 text-orange-500" /> Close Journal
                   </button>
                   <button
-                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                     onClick={() => { closeMenu(); handleCancelJournal(j); }}
                   >
-                    <EyeOff className="w-4 h-4 text-gray-400" /> Cancel Journal
+                    <EyeOff className="w-3.5 h-3.5 text-gray-400" /> Cancel Journal
                   </button>
                 </>
               )}
               {(j.status === "cancelled" || j.status === "settled") && (
                 <button
-                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                   onClick={() => { closeMenu(); handleReopenJournal(j); }}
                 >
-                  <Unlock className="w-4 h-4 text-green-500" /> Reopen Journal
+                  <Unlock className="w-3.5 h-3.5 text-green-500" /> Reopen Journal
                 </button>
               )}
               <button
-                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-red-600 hover:bg-red-50 whitespace-nowrap"
                 onClick={() => { closeMenu(); handleDeleteJournal(j); }}
               >
-                <DeleteIcon className="w-4 h-4" /> Delete
+                <DeleteIcon className="w-3.5 h-3.5" /> Delete
               </button>
             </div>
           </>,

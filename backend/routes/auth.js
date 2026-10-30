@@ -27,6 +27,13 @@ router.delete("/google/disconnect", requireAuth, authController.googleDisconnect
 // Email/password login
 router.post("/login", authController.login);
 
+// Multi-organization: a person can belong to several. select-org completes a sign-in that matched
+// more than one; the rest act on the signed-in person's own organizations.
+router.post("/select-org", globalOtpLimiter, authController.selectOrganization);
+router.get("/my-organizations", requireAuth, authController.listMyOrganizations);
+router.post("/switch-org", requireAuth, authController.switchOrganization);
+router.post("/organizations", requireAuth, authController.createOrganization);
+
 // Get current user
 router.get("/me", requireAuth, authController.getCurrentUser);
 

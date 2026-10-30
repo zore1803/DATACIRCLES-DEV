@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
 import API from "../services/api";
+import OrganizationPicker from "../components/common/OrganizationPicker";
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
@@ -12,6 +13,25 @@ export default function Login() {
   const [password, setPassword] = useState("");
 
   const navigate = useNavigate();
+
+  // Set when the password matched more than one organization: { selectionToken, organizations }.
+  const [orgChoice, setOrgChoice] = useState(null);
+  const [pickingId, setPickingId] = useState(null);
+  const [pickError, setPickError] = useState("");
+
+  const handleSelectOrg = async (userId) => {
+    setPickingId(userId);
+    setPickError("");
+    try {
+      const res = await API.post("/auth/select-org", { selectionToken: orgChoice.selectionToken, userId });
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("activeUserId", String(userId));
+      navigate("/");
+    } catch (error) {
+      setPickError(error.response?.data?.message || "Could not continue. Please sign in again.");
+      setPickingId(null);
+    }
+  };
 
    // ==================================================
   // AUTH0
@@ -72,6 +92,12 @@ export default function Login() {
         password,
       });
 
+      // The password belongs to more than one organization: let the person choose which to enter.
+      if (res.data.requiresOrgSelection) {
+        setOrgChoice({ selectionToken: res.data.selectionToken, organizations: res.data.organizations });
+        return;
+      }
+
       // User is already verified, so go directly to dashboard (the "/" route, not "/dashboard" —
       // there is no route by that name).
       localStorage.setItem("token", res.data.token);
@@ -95,6 +121,15 @@ export default function Login() {
 
   return (
     <div className="h-screen w-full bg-[#EAEAEA] p-0 font-inter overflow-hidden flex items-center justify-center">
+      {orgChoice && (
+        <OrganizationPicker
+          organizations={orgChoice.organizations}
+          onSelect={handleSelectOrg}
+          onCancel={() => { setOrgChoice(null); setPickError(""); }}
+          busyId={pickingId}
+          error={pickError}
+        />
+      )}
       <div className="flex w-full h-full items-stretch gap-4 flex-col lg:flex-row">
 
         {/* ==================================================

@@ -21,6 +21,7 @@ import { useTopLoadingSignal } from "../components/common/TopLoadingBar";
 import { useSubscription } from "../contexts/SubscriptionContext";
 import { hasMinPlan } from "../utils/subscriptionHelpers";
 import UpgradeRequiredModal from "../components/subscription/UpgradeRequiredModal";
+import ProfileChecklistCard from "../components/dashboard/ProfileChecklistCard";
 
 const getRootZoom = () => {
   if (typeof window === "undefined") return 1;
@@ -1524,7 +1525,7 @@ function Dashboard() {
           className="box-border flex flex-row justify-between items-center px-4 sm:px-6 lg:px-8"
           style={{
             position: "fixed",
-            top: 64,
+            top: "calc(64px + var(--dc-offline-offset, 0px))",
             left: "var(--sidebar-width, 0px)",
             right: 0,
             zIndex: 40,
@@ -2219,6 +2220,11 @@ function Dashboard() {
       </div>
       {/* Spacer to offset the fixed header bar */}
       <div className="h-[72px] lg:h-16" />
+
+      {/* Profile completeness: renders nothing once the profile is complete enough. */}
+      <div style={{ marginTop: 16 }}>
+        <ProfileChecklistCard />
+      </div>
 
       {/* KPI Cards — Overview's own four, plus the Companies/Contacts/Meetings/Tasks row that
           used to live on the CRM tab, as a second row in the same section (no divider between

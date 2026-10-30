@@ -584,7 +584,7 @@ const AdminCalendar = () => {
       <div
         className="fixed flex flex-col flex-shrink-0"
         style={{
-          top: "64px",
+          top: "calc(64px + var(--dc-offline-offset, 0px))",
           left: "var(--sidebar-width, 0px)",
           right: 0,
           background: "#FFFFFF",

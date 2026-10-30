@@ -3,7 +3,7 @@
 // (copy types, edit, download, share, convert) and the same edge-to-edge PDF.
 import React, { useState, useEffect } from "react";
 import { FaWhatsapp } from "react-icons/fa";
-import emailLogo from "../../assets/email-logo.png";
+import emailLogo from "../../assets/email-logo.svg";
 import { Repeat, X, Share2, Printer, MessageSquare, Copy } from "lucide-react";
 import { PDFDocument } from "pdf-lib";
 import toast from "react-hot-toast";
@@ -210,7 +210,7 @@ const InvoiceViewer = ({
                 onClick={onSend}
                 className="h-9 px-3 flex items-center gap-1.5 bg-white border border-[#E1E4EA] text-[#161618] text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
               >
-                <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain scale-[1.35]" />
+                <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain" />
                 Email
               </button>
               )}

@@ -1,6 +1,6 @@
 import ExportSubmenu from "../components/common/ExportSubmenu";
 import { FaWhatsapp } from "react-icons/fa";
-import emailLogo from "../assets/email-logo.png";
+import emailLogo from "../assets/email-logo.svg";
 import DeleteIcon from "../components/common/DeleteIcon";
 import EmptyState from "../components/common/EmptyState";
 import Checkbox from "../components/common/Checkbox";
@@ -1452,7 +1452,7 @@ const PurchaseReturn = () => {
 
               const items = [
                 { label: "WhatsApp", icon: <FaWhatsapp className="w-3.5 h-3.5 text-[#25D366]" />, onClick: () => openChannel("whatsapp") },
-                { label: "Email", icon: <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain scale-[1.35]" />, onClick: () => openChannel("email") },
+                { label: "Email", icon: <img src={emailLogo} alt="" className="w-3.5 h-3.5 object-contain" />, onClick: () => openChannel("email") },
                 { label: "SMS", icon: <MessageSquare className="w-3.5 h-3.5 text-purple-600" />, onClick: () => openChannel("sms") },
                 { label: "Copy Link", icon: <Copy className="w-3.5 h-3.5 text-gray-500" />, onClick: () => { navigator.clipboard.writeText(link).catch(() => {}); toast.success("Link copied"); closeMenu(); } },
               ];

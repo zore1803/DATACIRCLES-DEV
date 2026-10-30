@@ -3,6 +3,7 @@ import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import PageSkeleton from "./components/common/PageSkeleton";
 import OfflineBanner from "./components/common/OfflineBanner";
+import { ProfileChecklistProvider } from "./contexts/ProfileChecklistContext";
 import ResetPassword from "./pages/ResetPassword";
 import {
   BrowserRouter as Router,
@@ -410,6 +411,14 @@ function AppInner() {
 
   return (
       <TopLoadingBarProvider>
+      <ProfileChecklistProvider
+        enabled={
+          userIsAuthenticated &&
+          isSetupComplete &&
+          !isSuperAdminAuthenticated &&
+          !shouldHideNavigation
+        }
+      >
       <div className="min-h-screen bg-white relative">
         {/* Single global toaster. Many page/tab components also mount their
             own <AppToaster/> (pre-existing duplication) — each mounted
@@ -875,6 +884,7 @@ function AppInner() {
           isSetupComplete={isSetupComplete}
         />
       </div>
+      </ProfileChecklistProvider>
       </TopLoadingBarProvider>
   );
 }

@@ -3,12 +3,15 @@ import { useAuth0 } from "@auth0/auth0-react";
 import { useEffect, useState, useRef } from "react";
 import API, { configureAxios, setCsrfToken } from "../services/api";
 import SplashLoader from "./common/SplashLoader";
+import OrganizationPicker from "./common/OrganizationPicker";
 
 function PrivateRoute({ children }) {
   const { isAuthenticated, isLoading, getAccessTokenSilently, logout } =
     useAuth0();
   const navigate = useNavigate();
   const [isAuthorized, setIsAuthorized] = useState(null);
+  // A Google sign-in that matches several organizations: the server answers 409 with the list.
+  const [orgChoice, setOrgChoice] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [retryCount, setRetryCount] = useState(0);
   // A network failure (no err.response — the request never reached the
@@ -122,6 +125,13 @@ function PrivateRoute({ children }) {
           return;
         }
 
+        // The identity belongs to more than one organization and none has been chosen yet:
+        // show the picker, then reload with that record named in X-Active-User.
+        if (err.response?.status === 409 && errorData?.code === "ORG_SELECTION_REQUIRED") {
+          setOrgChoice(errorData.organizations || []);
+          return;
+        }
+
         // Handle specific error cases
         if (errorData?.error === "EMAIL_REQUIRED" && errorData?.requiresEmail) {
           navigate("/login", {
@@ -171,6 +181,7 @@ function PrivateRoute({ children }) {
     if (phoneToken) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
+      localStorage.removeItem("activeUserId");
       window.location.replace("/login");
     } else {
       logout({ logoutParams: { returnTo: window.location.origin } });
@@ -183,6 +194,19 @@ function PrivateRoute({ children }) {
     setRetryCount(0);
     isCheckingRef.current = false;
   };
+
+  if (orgChoice) {
+    return (
+      <OrganizationPicker
+        organizations={orgChoice}
+        onSelect={(userId) => {
+          localStorage.setItem("activeUserId", String(userId));
+          window.location.reload();
+        }}
+        onCancel={handleLogout}
+      />
+    );
+  }
 
   // Show loading state
   if (
@@ -220,7 +244,7 @@ function PrivateRoute({ children }) {
   // Show error state with manual retry option
   if (!isAuthorized && isAuthorized !== null) {
     return (
-      <div className="fixed bg-gray-50 flex items-center justify-center px-4 z-20" style={{ top: 64, left: "var(--sidebar-width, 0px)", right: 0, bottom: 0 }}>
+      <div className="fixed bg-gray-50 flex items-center justify-center px-4 z-20" style={{ top: "calc(64px + var(--dc-offline-offset, 0px))", left: "var(--sidebar-width, 0px)", right: 0, bottom: 0 }}>
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-8 text-center max-w-md w-full">
           <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${isOfflineError ? "bg-gray-100" : "bg-red-100"}`}>
             {isOfflineError ? (

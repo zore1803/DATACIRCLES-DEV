@@ -1,6 +1,6 @@
 import DeleteIcon from "../common/DeleteIcon";
 import { FaWhatsapp } from "react-icons/fa";
-import emailLogo from "../../assets/email-logo.png";
+import emailLogo from "../../assets/email-logo.svg";
 import NotesTermsDrawer from "../invoice/NotesTermsDrawer";
 import PdfIcon from "../common/PdfIcon";
 import PlusIcon from "../common/PlusIcon";
@@ -985,7 +985,7 @@ function DocumentSettings() {
         {/* Tab bar */}
         <div className="flex items-center border-b border-gray-200 mb-5">
           {[
-            { key: "email",     label: "Email",     icon: <img src={emailLogo} alt="" className="w-4 h-4 object-contain scale-[1.35]" /> },
+            { key: "email",     label: "Email",     icon: <img src={emailLogo} alt="" className="w-4 h-4 object-contain" /> },
             { key: "whatsapp",  label: "WhatsApp",  icon: <FaWhatsapp className="w-4 h-4 text-[#25D366]" /> },
             { key: "sms",       label: "SMS",       icon: <MessageSquare className="w-4 h-4 text-purple-600" /> },
           ].map(({ key, label, icon }) => (
