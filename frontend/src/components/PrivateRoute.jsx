@@ -1,7 +1,7 @@
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useEffect, useState, useRef } from "react";
-import API, { configureAxios, setCsrfToken } from "../services/api";
+import API, { configureAxios, setCsrfToken, establishSession } from "../services/api";
 import SplashLoader from "./common/SplashLoader";
 import OrganizationPicker from "./common/OrganizationPicker";
 
@@ -106,7 +106,15 @@ function PrivateRoute({ children }) {
             const csrfRes = await API.get("/session/csrf-token");
             setCsrfToken(csrfRes.data.csrfToken);
           } catch {
-            // No session established for this browser yet — nothing to do.
+            // No live session for this browser yet: this is a fresh login.
+            // Establishing one signs the user out of every other browser
+            // (one active browser per user).
+            if (localStorage.getItem("superAdminToken")) return;
+            try {
+              await establishSession();
+            } catch (e) {
+              console.error("Could not establish session:", e);
+            }
           }
         })();
         setIsOfflineError(false);

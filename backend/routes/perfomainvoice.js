@@ -31,6 +31,16 @@ router.get(
   performaInvoiceController.getAllPerformaInvoices
 );
 
+// GET /api/performa-invoices/filter-options — suggestions + amount bounds for Advanced Filters
+router.get(
+  "/filter-options",
+  requireAuth,
+  subscriptionGate,
+  restrictByPlan("invoices", "read"),
+  checkPermission("invoices", "readonly"),
+  performaInvoiceController.getPerformaInvoiceFilterOptions
+);
+
 // GET /api/performa-invoices/pagination (Paginated - requires read permission)
 router.get(
   "/pagination",

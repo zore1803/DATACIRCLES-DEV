@@ -99,7 +99,7 @@ async function syncFooterTemplates(organization, kind, byType) {
 
 exports.updateDocumentSettings = async (req, res) => {
   try {
-    const { invoicePrefix, invoiceSuffix, nextInvoiceNumber, documentTypeSettings, invoicePrefixes, invoiceSuffixes, defaultNotes, defaultTerms, defaultNotesByType, defaultTermsByType, defaultDueDateDays, customFields, whatsappTemplate, whatsappLine1, whatsappLine2, smsTemplate, emailSubjectTemplate, emailBodyTemplate, whatsappTemplates, smsTemplates, emailTemplates, pdfFilenameFormats } = req.body || {};
+    const { invoicePrefix, invoiceSuffix, nextInvoiceNumber, documentTypeSettings, invoicePrefixes, invoiceSuffixes, defaultNotes, defaultTerms, defaultNotesByType, defaultTermsByType, defaultDueDateDays, customFields, customSections, whatsappTemplate, whatsappLine1, whatsappLine2, smsTemplate, emailSubjectTemplate, emailBodyTemplate, whatsappTemplates, smsTemplates, emailTemplates, pdfFilenameFormats } = req.body || {};
     const saved = await saveDocumentSettingsForOrganization(req.user.organization, {
       invoicePrefix,
       invoiceSuffix,
@@ -113,6 +113,7 @@ exports.updateDocumentSettings = async (req, res) => {
       defaultTermsByType,
       defaultDueDateDays,
       customFields,
+      customSections,
       whatsappTemplate,
       whatsappLine1,
       whatsappLine2,

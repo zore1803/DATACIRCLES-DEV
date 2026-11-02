@@ -30,6 +30,14 @@ router.get(
   quotationController.getAllQuotations
 );
 router.get(
+  "/filter-options",
+  requireAuth,
+  subscriptionGate,
+  restrictByPlan("quotations", "read"),
+  checkPermission("quotations", "readonly"),
+  quotationController.getQuotationFilterOptions
+);
+router.get(
   "/pagination",
   requireAuth,
   subscriptionGate,

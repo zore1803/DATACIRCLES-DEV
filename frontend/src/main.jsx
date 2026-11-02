@@ -38,6 +38,39 @@ import AppWrapper from './App.jsx'
   }
 })();
 
+// Browsers let a native date input take up to six year digits (e.g.
+// 20255-01-01). One capture-phase listener fixes every date / datetime-local
+// field in the app: it trims the year to four digits before React reads the
+// value, so no individual form needs its own max/maxLength handling.
+(function limitDateYearToFourDigits() {
+  document.addEventListener(
+    'input',
+    (e) => {
+      const el = e.target;
+      if (!el || el.tagName !== 'INPUT') return;
+      if (el.type !== 'date' && el.type !== 'datetime-local') return;
+      const match = /^(\d{5,6})(-.*)$/.exec(el.value);
+      if (match) el.value = match[1].slice(0, 4) + match[2];
+    },
+    true,
+  );
+
+  // An impossible date (e.g. 31-09-275760) reports an empty value while the
+  // field still shows the typed text, so the trim above can't see it. When
+  // the user leaves the field with such an entry, clear it instead of
+  // leaving a bogus date on screen.
+  document.addEventListener(
+    'focusout',
+    (e) => {
+      const el = e.target;
+      if (!el || el.tagName !== 'INPUT') return;
+      if (el.type !== 'date' && el.type !== 'datetime-local') return;
+      if (el.validity && el.validity.badInput) el.value = '';
+    },
+    true,
+  );
+})();
+
 createRoot(document.getElementById('root')).render(
 
     <AppWrapper />

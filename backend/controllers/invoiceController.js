@@ -20,6 +20,12 @@ const { renderEmail } = require("../utils/emailLayout");
 const { syncDocumentStock } = require("../utils/inventorySync");
 const { getOwnedDealIds } = require("../utils/ownedCompanies");
 const allocationService = require("../services/paymentAllocationService");
+const { parseAdvancedFiltersParam } = require("../utils/dateRangeFilter");
+
+// Invoices no longer have a "Sent" status; it is filed as "Pending". "Draft"
+// is kept. Applied to every status that comes in from a client.
+const normalizeInvoiceStatus = (status) =>
+  !status || status === "Sent" ? "Pending" : status;
 
 const calculateItemAmount = (item) => {
   const rate = parseFloat(item.rate) || 0;
@@ -209,7 +215,7 @@ const createInvoice = async (req, res) => {
       dueDate,
       amount,
       discount,
-      status,
+      status: normalizeInvoiceStatus(status),
       items,
       reference: reference || "",
       notes,
@@ -553,6 +559,130 @@ const getCompanyInvoiceSummary = async (req, res) => {
   }
 };
 
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Prefix = everything before the first digit, suffix = everything after the
+// last digit ("GG-55-26-27" has prefix "GG-" and no suffix; "INV-0012/A" has
+// prefix "INV-" and suffix "/A").
+const splitInvoiceNumber = (num) => {
+  const m = /^(\D*)(.*?)(\D*)$/.exec(String(num || ""));
+  return { prefix: m ? m[1] : "", suffix: m ? m[3] : "" };
+};
+
+// GET /api/invoices/filter-options — values the Advanced Filter panel offers
+// as suggestions/dropdowns, plus the amount bounds for its slider.
+const getInvoiceFilterOptions = async (req, res) => {
+  try {
+    const match = { organization: req.user.organization };
+    if (req.ownOnly) {
+      const ownedDealIds = await getOwnedDealIds(req.user._id, req.user.organization);
+      match.$or = [{ user: req.user._id }, { deal: { $in: ownedDealIds } }];
+    }
+
+    const [numbers, dealIds, bounds] = await Promise.all([
+      Invoice.find(match).sort({ createdAt: -1 }).limit(1000).distinct("invoiceNumber"),
+      Invoice.find(match).distinct("deal"),
+      Invoice.aggregate([
+        { $match: match },
+        { $group: { _id: null, min: { $min: "$amount" }, max: { $max: "$amount" } } },
+      ]),
+    ]);
+
+    const deals = await Deal.find(
+      { _id: { $in: dealIds }, organization: req.user.organization },
+      { title: 1 }
+    ).lean();
+
+    const prefixes = new Set();
+    const suffixes = new Set();
+    numbers.forEach((n) => {
+      const { prefix, suffix } = splitInvoiceNumber(n);
+      if (prefix) prefixes.add(prefix);
+      if (suffix) suffixes.add(suffix);
+    });
+    // Also offer the prefixes/suffixes configured in Document Settings.
+    try {
+      const settings = await getDocumentSettingsForOrganization(req.user.organization);
+      const inv = settings?.documentTypeSettings?.invoice || {};
+      (inv.prefixes || (inv.prefix ? [inv.prefix] : [])).forEach((p) => p && prefixes.add(p));
+      (inv.suffixes || (inv.suffix ? [inv.suffix] : [])).forEach((s) => s && suffixes.add(s));
+    } catch (_) { /* settings are only a bonus source of suggestions */ }
+
+    res.json({
+      numbers: numbers.sort(),
+      prefixes: [...prefixes].sort(),
+      suffixes: [...suffixes].sort(),
+      deals: deals.map((d) => ({ value: d.title, label: d.title })).sort((a, b) => a.label.localeCompare(b.label)),
+      amountMin: Math.floor(bounds[0]?.min ?? 0),
+      amountMax: Math.ceil(bounds[0]?.max ?? 0),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Turns Advanced Filter rules into Mongo conditions (ANDed together).
+//   invoiceNumber: contains / starts_with / ends_with / is / is_not / in / not_in
+//   deal:          is / is_not / contains  (by deal title)
+//   date, dueDate: { from, to } resolved by the browser (to exclusive)
+//   amount:        { min, max } (either may be null)
+//   status:        is / is_not / in / not_in
+const buildInvoiceAdvancedConditions = async (rules, organization) => {
+  const conditions = [];
+  for (const rule of rules) {
+    if (!rule || !rule.column) continue;
+    const { column, operator, value } = rule;
+    const list = Array.isArray(value)
+      ? value
+      : String(value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+
+    if (column === "invoiceNumber") {
+      const v = String(Array.isArray(value) ? "" : value ?? "").trim();
+      const re = (src) => new RegExp(src, "i");
+      switch (operator) {
+        case "contains": if (v) conditions.push({ invoiceNumber: re(escapeRegex(v)) }); break;
+        case "not_contains": if (v) conditions.push({ invoiceNumber: { $not: re(escapeRegex(v)) } }); break;
+        case "starts_with": if (v) conditions.push({ invoiceNumber: re(`^${escapeRegex(v)}`) }); break;
+        case "ends_with": if (v) conditions.push({ invoiceNumber: re(`${escapeRegex(v)}$`) }); break;
+        case "is": if (v) conditions.push({ invoiceNumber: re(`^${escapeRegex(v)}$`) }); break;
+        case "is_not": if (v) conditions.push({ invoiceNumber: { $not: re(`^${escapeRegex(v)}$`) } }); break;
+        case "in": if (list.length) conditions.push({ invoiceNumber: { $in: list.map((x) => re(`^${escapeRegex(x)}$`)) } }); break;
+        case "not_in": if (list.length) conditions.push({ invoiceNumber: { $nin: list.map((x) => re(`^${escapeRegex(x)}$`)) } }); break;
+        default: break;
+      }
+    } else if (column === "deal") {
+      const v = String(Array.isArray(value) ? "" : value ?? "").trim();
+      if (!v) continue;
+      const titleMatch =
+        operator === "contains"
+          ? { $regex: escapeRegex(v), $options: "i" }
+          : { $regex: `^${escapeRegex(v)}$`, $options: "i" };
+      const ids = (await Deal.find({ organization, title: titleMatch }, { _id: 1 }).lean()).map((d) => d._id);
+      conditions.push({ deal: operator === "is_not" ? { $nin: ids } : { $in: ids } });
+    } else if (column === "date" || column === "dueDate") {
+      const from = rule.from ? new Date(rule.from) : null;
+      const to = rule.to ? new Date(rule.to) : null;
+      const range = {};
+      if (from && !Number.isNaN(from.getTime())) range.$gte = from;
+      if (to && !Number.isNaN(to.getTime())) range.$lt = to;
+      if (Object.keys(range).length) conditions.push({ [column]: range });
+    } else if (column === "amount") {
+      const min = value && value.min != null && value.min !== "" ? Number(value.min) : null;
+      const max = value && value.max != null && value.max !== "" ? Number(value.max) : null;
+      const range = {};
+      if (Number.isFinite(min)) range.$gte = min;
+      if (Number.isFinite(max)) range.$lte = max;
+      if (Object.keys(range).length) conditions.push({ amount: range });
+    } else if (column === "status") {
+      if (operator === "is" && value) conditions.push({ status: value });
+      else if (operator === "is_not" && value) conditions.push({ status: { $ne: value } });
+      else if (operator === "in" && list.length) conditions.push({ status: { $in: list } });
+      else if (operator === "not_in" && list.length) conditions.push({ status: { $nin: list } });
+    }
+  }
+  return conditions;
+};
+
 const getAllInvoicesPaginated = async (req, res) => {
   try {
     // Pagination parameters
@@ -596,8 +726,33 @@ const getAllInvoicesPaginated = async (req, res) => {
     }
 
     // Status filter
-    if (status) {
+    // Issue-date range (dateFrom inclusive, dateTo exclusive), resolved in the
+    // user's own timezone by the browser.
+    const dateRange = {};
+    const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom) : null;
+    const dateTo = req.query.dateTo ? new Date(req.query.dateTo) : null;
+    if (dateFrom && !Number.isNaN(dateFrom.getTime())) dateRange.$gte = dateFrom;
+    if (dateTo && !Number.isNaN(dateTo.getTime())) dateRange.$lt = dateTo;
+    if (Object.keys(dateRange).length > 0) query.date = dateRange;
+
+    if (status === "Overdue") {
+      // Overdue is derived, not stored: still unpaid and past the due date.
+      query.status = { $in: ["Pending", "Partially Paid"] };
+      query.dueDate = { $lt: new Date() };
+    } else if (status) {
       query.status = status;
+    }
+
+    // Advanced Filter panel rules, ANDed with everything above.
+    const advancedRules = parseAdvancedFiltersParam(req.query.advancedFilters);
+    if (advancedRules === null) {
+      return res.status(400).json({ error: "Invalid advancedFilters" });
+    }
+    if (advancedRules.length > 0) {
+      const advancedConditions = await buildInvoiceAdvancedConditions(advancedRules, req.user.organization);
+      if (advancedConditions.length > 0) {
+        query.$and = query.$and ? [...query.$and, ...advancedConditions] : advancedConditions;
+      }
     }
 
     // own-only: restrict to invoices this user owns, or whose deal belongs
@@ -950,7 +1105,7 @@ const updateInvoice = async (req, res) => {
     invoice.dueDate = dueDate;
     invoice.amount = amount;
     invoice.discount = discount;
-    invoice.status = status;
+    invoice.status = normalizeInvoiceStatus(status);
     invoice.items = items;
     if (reference !== undefined) invoice.reference = reference;
     invoice.notes = notes;
@@ -1025,7 +1180,7 @@ const updateStatus = async (req, res) => {
   let committed = false;
 
   try {
-    const { status } = req.body;
+    const status = normalizeInvoiceStatus(req.body.status);
 
     const invoice = await Invoice.findOne({
       _id: req.params.id,
@@ -1640,6 +1795,7 @@ module.exports = {
   duplicateInvoice,
   getAllInvoices,
   getAllInvoicesPaginated,
+  getInvoiceFilterOptions,
   getMyInvoices,
   downloadInvoice,
   deleteInvoice,

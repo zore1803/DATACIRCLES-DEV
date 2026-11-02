@@ -73,6 +73,9 @@ import SearchIcon from "../components/common/SearchIcon";
 import SettingsIcon from "../components/common/SettingsIcon";
 import FilterIcon from "../components/common/FilterIcon";
 import AdvancedFilterPanel from "../components/common/AdvancedFilterPanel";
+import DocumentDetailModal from "../components/common/DocumentDetailModal";
+import DateRangeFilterButton, { thisMonthRange } from "../components/common/DateRangeFilterButton";
+import { toServerDueDateFilter } from "../utils/dueDateFilter";
 import UploadIcon from "../components/common/UploadIcon";
 import EyeIcon from "../components/common/EyeIcon";
 import EditIcon from "../components/common/EditIcon";
@@ -178,7 +181,15 @@ const PurchaseOrderPage = () => {
     return text.substring(0, maxLength) + "...";
   };
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
-  // filterStatus removed — status filtering now done via AdvancedFilterPanel rule builder.
+  // Status pills and the order-date range sit under the header; both are sent
+  // to the server together with the Advanced Filter rules.
+  const [filterStatus, setFilterStatus] = useState("");
+  // The purchase order whose detail card is open (clicked row).
+  const [detailPoId, setDetailPoId] = useState(null);
+  const [dateRange, setDateRange] = useState(thisMonthRange);
+  const dateFromMs = dateRange.from ? dateRange.from.getTime() : 0;
+  const dateToMs = dateRange.to ? dateRange.to.getTime() : 0;
+  const [filterOptions, setFilterOptions] = useState(null);
   const [selectedPO, setSelectedPO] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -188,6 +199,7 @@ const PurchaseOrderPage = () => {
   const moreMenuRef = useRef(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState([]);
+  const activeFiltersKey = JSON.stringify(activeFilters);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const tableScrollRef = useRef(null);
@@ -351,15 +363,71 @@ const PurchaseOrderPage = () => {
     { value: "Delivered", label: "Delivered", icon: Truck, className: "bg-[#E6F8FD] text-[#27B4EA]" },
   ];
 
-  // Columns available in the rule-builder filter panel (mirrors Companies.jsx pattern).
-  const poFilterColumns = [
-    { key: "poNumber", label: "PO Number" },
-    { key: "vendor", label: "Vendor" },
-    { key: "status", label: "Status", options: statusOptions.map((s) => s.value).filter(Boolean) },
-    { key: "totalAmount", label: "Total Amount" },
-    { key: "paymentTerms", label: "Payment Terms" },
-    { key: "notes", label: "Notes" },
-  ];
+  // Columns offered by the Filters drawer: the same inputs as the Invoices list
+  // (number with prefix/suffix suggestions, vendor to type or pick, calendar,
+  // amount slider, status dropdown). Suggestions come from the server.
+  useEffect(() => {
+    API.get("/purchase-orders/filter-options")
+      .then((res) => setFilterOptions(res.data))
+      .catch((err) => console.error("Failed to load purchase order filter options", err));
+  }, []);
+
+  const poFilterColumns = useMemo(() => {
+    const o = filterOptions || {};
+    return [
+      {
+        key: "poNumber",
+        label: "PO Number",
+        type: "text",
+        combo: true,
+        operators: ["contains", "starts_with", "ends_with", "is", "is_not", "in", "not_in"],
+        options: o.numbers || [],
+        suggestionsByOperator: { starts_with: o.prefixes || [], ends_with: o.suffixes || [] },
+      },
+      {
+        key: "vendor",
+        label: "Vendor",
+        type: "text",
+        combo: true,
+        operators: ["contains", "is", "is_not"],
+        options: o.deals || [],
+      },
+      { key: "date", label: "Order Date", type: "dateRange" },
+      {
+        key: "amount",
+        label: "Total Amount",
+        type: "range",
+        min: o.amountMin ?? 0,
+        max: o.amountMax ?? 0,
+        step: Math.max(Math.round(((o.amountMax ?? 0) - (o.amountMin ?? 0)) / 200), 1),
+      },
+      {
+        key: "status",
+        label: "Status",
+        type: "select",
+        operators: ["is", "is_not"],
+        options: statusOptions.map((s) => s.value),
+      },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterOptions]);
+
+  // Everything the list request needs besides paging and sorting: status pill,
+  // date range and the drawer's rules. Date rules are resolved to concrete
+  // instants here, in the user's own timezone.
+  const appendFilterParams = (params) => {
+    if (filterStatus) params.append("status", filterStatus);
+    if (dateRange.from) params.append("dateFrom", dateRange.from.toISOString());
+    if (dateRange.to) params.append("dateTo", dateRange.to.toISOString());
+    const rules = activeFilters
+      .map((f) =>
+        f.column === "date"
+          ? { ...toServerDueDateFilter(f.value), column: "date" }
+          : { column: f.column, operator: f.operator, value: f.value },
+      )
+      .filter((f) => f && (f.column !== "date" || f.from || f.to));
+    if (rules.length > 0) params.append("advancedFilters", JSON.stringify(rules));
+  };
 
   // Column list handed to the shared ExportModal — same shape Vendors/Companies use.
   const exportColumns = [
@@ -405,6 +473,7 @@ const PurchaseOrderPage = () => {
     try {
       const params = new URLSearchParams({ allIds: "true" });
       if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
+      appendFilterParams(params);
       const res = await API.get(`/purchase-orders/pagination?${params.toString()}`);
       setSelectedPurchaseOrders(res.data.ids || []);
     } catch (err) {
@@ -431,7 +500,8 @@ const PurchaseOrderPage = () => {
     }
     exitSelectionMode();
     setPagination((prev) => ({ ...prev, currentPage: 1 }));
-  }, [debouncedSearchTerm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearchTerm, filterStatus, dateFromMs, dateToMs, activeFiltersKey]);
 
   // Fetch data
   useEffect(() => {
@@ -442,6 +512,10 @@ const PurchaseOrderPage = () => {
     pagination.limit,
     sortConfig,
     debouncedSearchTerm,
+    filterStatus,
+    dateFromMs,
+    dateToMs,
+    activeFiltersKey,
   ]);
 
   useEffect(() => {
@@ -487,6 +561,7 @@ const PurchaseOrderPage = () => {
         params.append("sortOrder", "desc");
       }
       if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
+      appendFilterParams(params);
 
       const res = await API.get(
         `/purchase-orders/pagination?${params.toString()}`,
@@ -614,7 +689,8 @@ const PurchaseOrderPage = () => {
         params.append("sortOrder", "desc");
       }
       if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
-      const rows = applyActiveFilters(await fetchAllPages("/purchase-orders/pagination", params, "purchaseOrders"));
+      appendFilterParams(params);
+      const rows = await fetchAllPages("/purchase-orders/pagination", params, "purchaseOrders");
       toast.dismiss(loadingToast);
       await exportClientSide(format, {
         rows,
@@ -1358,36 +1434,7 @@ const PurchaseOrderPage = () => {
     searchTerm,
   ]);
 
-  // Client-side advanced filter — applied on top of the server-fetched page.
-  const applyActiveFilters = (list) => {
-    if (!activeFilters || activeFilters.length === 0) return list;
-    return list.filter((row) =>
-      activeFilters.every((f) => {
-        let rawVal;
-        if (f.column === "vendor") {
-          rawVal = typeof row.vendor === "object"
-            ? (row.vendor?.name || "")
-            : (row.vendor || "");
-        } else {
-          rawVal = row[f.column];
-        }
-        const val = String(rawVal ?? "").toLowerCase().trim();
-        const filterVal = String(f.value ?? "").toLowerCase().trim();
-        switch (f.operator) {
-          case "contains": return val.includes(filterVal);
-          case "not_contains": return !val.includes(filterVal);
-          case "is": return val === filterVal;
-          case "is_not": return val !== filterVal;
-          case "in": return filterVal.split(",").map((s) => s.trim()).some((s) => val === s);
-          case "not_in": return !filterVal.split(",").map((s) => s.trim()).some((s) => val === s);
-          case "is_empty": return val === "" || rawVal == null;
-          case "is_not_empty": return val !== "" && rawVal != null;
-          default: return true;
-        }
-      }),
-    );
-  };
-  const filteredPurchaseOrders = useMemo(() => applyActiveFilters(purchaseOrders), [purchaseOrders, activeFilters]); // eslint-disable-line react-hooks/exhaustive-deps
+  const filteredPurchaseOrders = purchaseOrders;
 
   const table = useReactTable({
     data: filteredPurchaseOrders,
@@ -1640,7 +1687,7 @@ const PurchaseOrderPage = () => {
       <div className="bg-white overflow-visible">
         {/* Toolbar (Title + Search + Buttons) */}
         <div
-          className={`fixed right-0 h-16 px-4 sm:px-6 lg:px-8 border-b flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E1E4EA]`}
+          className={`fixed right-0 h-16 px-4 sm:px-6 lg:px-8 flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white`}
           style={{
             left: "var(--sidebar-width, 0px)",
             zIndex: 40,
@@ -1866,9 +1913,42 @@ const PurchaseOrderPage = () => {
           )}
         </div>
 
+        {/* Status pills + order-date range, same strip as the Invoices list */}
+        <div
+          className="fixed right-0 h-14 px-4 sm:px-6 lg:px-8 bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+          style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
+        >
+          <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
+            {[{ label: "All", value: "" }, ...statusOptions.map((o) => ({ label: o.label, value: o.value }))].map((tab) => {
+              const selected = filterStatus === tab.value;
+              return (
+                <button
+                  key={tab.label}
+                  type="button"
+                  onClick={() => setFilterStatus(tab.value)}
+                  className={`h-9 flex-shrink-0 whitespace-nowrap rounded-full px-5 text-sm font-medium transition-colors ${selected
+                    ? "bg-white text-[#0085FF] shadow-sm"
+                    : "text-[#0E121B] hover:bg-white/60"
+                    }`}
+                >
+                  {tab.label}
+                  {tab.value === "" && selected && (
+                    <span className="ml-2 rounded-md bg-[#F1F1F5] px-1.5 py-0.5 text-xs font-medium text-[#525866]">
+                      {pagination.totalCount ?? 0}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="ml-3">
+            <DateRangeFilterButton value={dateRange} onChange={setDateRange} />
+          </div>
+        </div>
+
         <div
           ref={tableScrollRef}
-          className="overflow-x-auto overflow-y-auto top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+          className="overflow-x-auto overflow-y-auto top-[calc(174px+var(--dc-offline-offset,0px))] lg:top-[calc(184px+var(--dc-offline-offset,0px))]"
           style={{
             position: "fixed",
             left: "var(--sidebar-width, 0px)",
@@ -2002,7 +2082,14 @@ const PurchaseOrderPage = () => {
                         table.getRowModel().rows.map((row) => (
                           <tr
                             key={row.id}
-                            className={`bg-white hover:bg-blue-50 transition-colors ${selectedPOSet.has(row.original._id) ? "!bg-blue-50" : ""}`}
+                            onClick={(e) => {
+                              // A click on the row itself (not a control inside it, and
+                              // not the checkbox column) opens the detail card.
+                              if (e.target.closest("button, a, input, label, [data-no-row-click]")) return;
+                              if (e.target.closest("td")?.cellIndex === 0) return;
+                              setDetailPoId(row.original._id);
+                            }}
+                            className={`cursor-pointer bg-white hover:bg-blue-50 transition-colors ${selectedPOSet.has(row.original._id) ? "!bg-blue-50" : ""}`}
                             style={{ height: 37, maxHeight: 37 }}
                           >
                             {row.getVisibleCells().map((cell) => {
@@ -2128,6 +2215,62 @@ const PurchaseOrderPage = () => {
         exportUrl="/purchase-orders/export-selected"
         fileName="Exported_PurchaseOrders.csv"
       />
+
+      {(() => {
+        const detailIndex = filteredPurchaseOrders.findIndex((p) => p._id === detailPoId);
+        if (detailIndex < 0) return null;
+        const po = filteredPurchaseOrders[detailIndex];
+        // The shared detail card speaks in invoice terms, so map the order onto it.
+        const stripHtml = (h) =>
+          String(h || "")
+            .replace(/<br\s*\/?>/gi, "\n")
+            .replace(/<\/p>/gi, "\n")
+            .replace(/<[^>]+>/g, "")
+            .replace(/&nbsp;/g, " ")
+            .trim();
+        const detailDoc = {
+          _id: po._id,
+          poNumber: po.poNumber,
+          date: po.orderDate || po.createdAt,
+          dueDate: null,
+          amount: po.grandTotal || po.totalAmount,
+          status: po.status,
+          deal: { title: po.vendor?.name || "—" },
+          items: (po.items || []).map((i) => ({
+            _id: i._id,
+            name: i.name,
+            description: i.sku ? `SKU ${i.sku}` : "",
+            rate: i.unitPrice,
+            quantity: i.quantity,
+            gstRate: i.gstRate,
+            discount: 0,
+          })),
+          notes: stripHtml(po.notes),
+        };
+        return (
+          <DocumentDetailModal
+            doc={detailDoc}
+            type="purchaseOrder"
+            docLabel="Purchase Order"
+            numberKey="poNumber"
+            steps={["Pending", "Approved", "Delivered"]}
+            paymentTerms={po.paymentTerms || ""}
+            hideAddresses
+            position={{ index: detailIndex, total: filteredPurchaseOrders.length }}
+            onClose={() => setDetailPoId(null)}
+            onPrev={detailIndex > 0 ? () => setDetailPoId(filteredPurchaseOrders[detailIndex - 1]._id) : null}
+            onNext={
+              detailIndex < filteredPurchaseOrders.length - 1
+                ? () => setDetailPoId(filteredPurchaseOrders[detailIndex + 1]._id)
+                : null
+            }
+            onEdit={() => {
+              setDetailPoId(null);
+              handleEdit(po);
+            }}
+          />
+        );
+      })()}
 
       <AdvancedFilterPanel
         isOpen={showAdvancedFilters}

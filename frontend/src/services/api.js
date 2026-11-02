@@ -198,6 +198,22 @@ API.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // This browser's session was replaced by a login on another browser.
+    // Drop every local credential (including Auth0's cached tokens) and go
+    // to the login page; refreshing the token would just log back in.
+    if (error.response?.data?.code === "SESSION_REVOKED") {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      localStorage.removeItem("activeUserId");
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("@@auth0spajs@@"))
+        .forEach((k) => localStorage.removeItem(k));
+      if (!window.location.pathname.includes("/login")) {
+        window.location.href = "/login?reason=session_replaced";
+      }
+      return Promise.reject(error);
+    }
+
     // Handle 401 Unauthorized errors
     if (error.response?.status === 401 && !originalRequest._retry) {
       // Don't retry for specific endpoints to avoid infinite loops

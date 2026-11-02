@@ -3,7 +3,9 @@
 // its own copy of {label, value} so renaming or deleting a field later never
 // rewrites documents that were already issued.
 
-const MAX_FIELDS = 20;
+const MAX_FIELDS = 20; // per document
+const MAX_FIELD_DEFINITIONS = 60;
+const MAX_SECTIONS = 20;
 const FIELD_TYPES = ["text", "number", "date", "dropdown"];
 const DOC_TYPES = ["tax", "performa", "quotation", "deliveryChallan"];
 
@@ -30,8 +32,20 @@ function sanitizeFieldDefinitions(input) {
       // Empty means "every document type".
       docTypes: docTypes.length ? docTypes : DOC_TYPES,
       showOnDocument: raw?.showOnDocument !== false,
+      section: clip(raw?.section, 40),
     });
-    if (out.length >= MAX_FIELDS) break;
+    if (out.length >= MAX_FIELD_DEFINITIONS) break;
+  }
+  return out;
+}
+
+// Section names per document type, as saved from Settings > Accounting Fields.
+function sanitizeCustomSections(input) {
+  const out = {};
+  if (!input || typeof input !== "object") return out;
+  for (const type of DOC_TYPES) {
+    const names = Array.isArray(input[type]) ? input[type] : [];
+    out[type] = [...new Set(names.map((n) => clip(n, 40)).filter(Boolean))].slice(0, MAX_SECTIONS);
   }
   return out;
 }
@@ -56,4 +70,4 @@ function sanitizeCustomFields(input) {
   return out;
 }
 
-module.exports = { sanitizeFieldDefinitions, sanitizeCustomFields, FIELD_TYPES, DOC_TYPES };
+module.exports = { sanitizeFieldDefinitions, sanitizeCustomSections, sanitizeCustomFields, FIELD_TYPES, DOC_TYPES };

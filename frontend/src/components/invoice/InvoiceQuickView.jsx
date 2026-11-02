@@ -6,7 +6,7 @@ import EyeIcon from "../common/EyeIcon";
 import EditIcon from "../common/EditIcon";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 
-const STATUS_OPTIONS = ["Pending", "Sent", "Paid", "Overdue", "Cancelled"];
+const STATUS_OPTIONS = ["Draft", "Pending", "Paid", "Overdue", "Cancelled"];
 
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" }) : "—";

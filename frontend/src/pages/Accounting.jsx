@@ -1,4 +1,8 @@
 import CalendarIcon from "../components/common/CalendarIcon";
+import DateRangeFilterButton, { thisMonthRange } from "../components/common/DateRangeFilterButton";
+import AdvancedFilterPanel from "../components/common/AdvancedFilterPanel";
+import DocumentDetailModal from "../components/common/DocumentDetailModal";
+import { toServerDueDateFilter } from "../utils/dueDateFilter";
 import { FaWhatsapp } from "react-icons/fa";
 import emailLogo from "../assets/email-logo.svg";
 import EmptyState from "../components/common/EmptyState";
@@ -19,6 +23,7 @@ import React, {
 import {
   ChevronUp,
   ChevronDown,
+  Tag,
   ChevronLeft,
   ChevronRight,
   Send,
@@ -135,11 +140,47 @@ const TABS = [
   { label: "Delivery Challans", key: "deliveryChallan" },
 ];
 
+/* Status tabs shown under the header on the Invoices list. "Overdue" is not a
+   stored status: the server treats it as unpaid invoices past their due date. */
+/* Pro forma invoices: only the four statuses the app really sets. */
+const PERFORMA_STATUS_TABS = [
+  { label: "All", value: "" },
+  { label: "Draft", value: "Draft" },
+  { label: "Pending", value: "Pending" },
+  { label: "Sent", value: "Sent" },
+  { label: "Paid", value: "Paid" },
+];
+
+/* Quotations: Sent and Void are not offered as filters. */
+const QUOTATION_STATUS_TABS = [
+  { label: "All", value: "" },
+  { label: "Draft", value: "Draft" },
+  { label: "Pending", value: "Pending" },
+  { label: "Accepted", value: "Accepted" },
+  { label: "Rejected", value: "Rejected" },
+];
+
+/* Delivery challans: Sent is not offered as a filter. */
+const CHALLAN_STATUS_TABS = [
+  { label: "All", value: "" },
+  { label: "Draft", value: "Draft" },
+  { label: "Pending", value: "Pending" },
+  { label: "Delivered", value: "Delivered" },
+  { label: "Cancelled", value: "Cancelled" },
+];
+
+const INVOICE_STATUS_TABS = [
+  { label: "All", value: "" },
+  { label: "Draft", value: "Draft" },
+  { label: "Paid", value: "Paid" },
+  { label: "Pending", value: "Pending" },
+  { label: "Cancelled", value: "Cancelled" },
+];
+
 const statusOptions = [
   "Draft",
   "Pending",
   "Sent",
-  "Partially Paid",
   "Paid",
   "Accepted",
   "Rejected",
@@ -242,7 +283,26 @@ const fieldFor = (col, tab) =>
 
 /* Plain-text value for a cell — used by the drag ghost so the floating panel
    shows the column's real contents while it's being moved. */
+/* Custom fields (Settings > Accounting Fields) become list columns with ids
+   "cf:<fieldId>". Each document stores its own {id, label, value} copy. */
+const CUSTOM_COL_WIDTH = 180;
+const customFieldValue = (doc, colId, def) => {
+  const id = colId.slice(3);
+  const hit = (doc.customFields || []).find(
+    (f) => f.id === id || (def && !f.id && f.label === def.label),
+  );
+  const raw = hit?.value ?? "";
+  if (raw && def?.type === "date") {
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    }
+  }
+  return raw;
+};
+
 const cellText = (colId, doc, tab) => {
+  if (colId.startsWith("cf:")) return customFieldValue(doc, colId) || "—";
   switch (colId) {
     case "number":
       return `#${doc[numberKeyFor(tab)] ?? ""}`;
@@ -544,6 +604,117 @@ const Accounting = ({ fixedTab = null }) => {
   const [searchTerms, setSearchTerms] = useState(emptyByType);
   const [debouncedSearchTerms, setDebouncedSearchTerms] = useState(emptyByType);
   const [filterStatuses, setFilterStatuses] = useState(emptyByType);
+  // Issue-date range for the Invoices list; defaults to the current month.
+  const [dateRangeByType, setDateRangeByType] = useState(() => ({
+    tax: thisMonthRange(),
+    performa: thisMonthRange(),
+    quotation: thisMonthRange(),
+    deliveryChallan: thisMonthRange(),
+  }));
+  const invoiceDateRange = dateRangeByType[activeTab];
+  const setInvoiceDateRange = (range) =>
+    setDateRangeByType((prev) => ({ ...prev, [activeTab]: range }));
+  const invoiceDateFrom = invoiceDateRange.from ? invoiceDateRange.from.getTime() : 0;
+  const invoiceDateTo = invoiceDateRange.to ? invoiceDateRange.to.getTime() : 0;
+
+  // The document whose detail card is open (clicked row).
+  const [detailDocId, setDetailDocId] = useState(null);
+
+  // Which document tabs show the status pill switcher under the header.
+  const statusTabs =
+    activeTab === "tax"
+      ? INVOICE_STATUS_TABS
+      : activeTab === "performa"
+        ? PERFORMA_STATUS_TABS
+        : activeTab === "quotation"
+          ? QUOTATION_STATUS_TABS
+          : activeTab === "deliveryChallan"
+            ? CHALLAN_STATUS_TABS
+            : null;
+
+  // Advanced Filters (Invoices list): the rules the panel applied, plus the
+  // suggestions/amount bounds the server offers for them.
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  // Rules applied from the Filters drawer, kept per document tab so switching
+  // tabs doesn't carry one tab's rules onto another.
+  const [advancedFiltersByType, setAdvancedFiltersByType] = useState({
+    tax: [],
+    performa: [],
+    quotation: [],
+    deliveryChallan: [],
+  });
+  const advancedFilters = advancedFiltersByType[activeTab] || [];
+  const setAdvancedFilters = (rules) =>
+    setAdvancedFiltersByType((prev) => ({ ...prev, [activeTab]: rules }));
+  const advancedFiltersKey = JSON.stringify(advancedFilters);
+
+  // Suggestions + amount bounds the server offers for each document type.
+  const [filterOptionsByType, setFilterOptionsByType] = useState({});
+  const invoiceFilterOptions = filterOptionsByType[activeTab] || null;
+
+  useEffect(() => {
+    if (filterOptionsByType[activeTab]) return;
+    const type = activeTab;
+    API.get(`/${apiPathFor(type)}/filter-options`)
+      .then((res) => setFilterOptionsByType((prev) => ({ ...prev, [type]: res.data })))
+      .catch((err) => console.error("Failed to load filter options", err));
+  }, [activeTab, filterOptionsByType]);
+
+  const STATUS_FILTER_OPTIONS = {
+    tax: ["Draft", "Pending", "Paid", "Cancelled"],
+    performa: ["Draft", "Pending", "Sent", "Paid"],
+    quotation: ["Draft", "Pending", "Accepted", "Rejected"],
+    deliveryChallan: ["Draft", "Pending", "Delivered", "Cancelled"],
+  };
+
+  const invoiceFilterColumns = useMemo(() => {
+    const o = filterOptionsByType[activeTab] || {};
+    const textOps = ["contains", "starts_with", "ends_with", "is", "is_not", "in", "not_in"];
+    return [
+      {
+        key: numberKeyFor(activeTab),
+        label: activeTab === "tax" ? "Invoice ID" : "Document ID",
+        icon: PdfIcon,
+        type: "text",
+        combo: true,
+        operators: textOps,
+        options: o.numbers || [],
+        suggestionsByOperator: {
+          starts_with: o.prefixes || [],
+          ends_with: o.suffixes || [],
+        },
+      },
+      {
+        key: "deal",
+        label: "Deal",
+        icon: Briefcase,
+        type: "text",
+        combo: true,
+        operators: ["contains", "is", "is_not"],
+        options: o.deals || [],
+      },
+      { key: "date", label: "Issue Date", icon: CalendarIcon, type: "dateRange" },
+      { key: "dueDate", label: "Due Date", icon: Clock, type: "dateRange" },
+      {
+        key: "amount",
+        label: "Amount",
+        icon: IndianRupee,
+        type: "range",
+        min: o.amountMin ?? 0,
+        max: o.amountMax ?? 0,
+        step: Math.max(Math.round(((o.amountMax ?? 0) - (o.amountMin ?? 0)) / 200), 1),
+      },
+      {
+        key: "status",
+        label: "Status",
+        icon: CheckCircle2,
+        type: "select",
+        operators: ["is", "is_not"],
+        options: STATUS_FILTER_OPTIONS[activeTab] || [],
+      },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterOptionsByType, activeTab]);
   const [debouncedFilterStatuses, setDebouncedFilterStatuses] =
     useState(emptyByType);
   const [paginations, setPaginations] = useState({
@@ -621,10 +792,26 @@ const Accounting = ({ fixedTab = null }) => {
   const dragOverRef = useRef(null);
   const ghostElRef = useRef(null);
 
+  // The organisation's custom fields for the tab being viewed, as columns.
+  const [customFieldDefs, setCustomFieldDefs] = useState([]);
+  const customColumns = useMemo(
+    () =>
+      customFieldDefs
+        .filter((d) => d.id && (!d.docTypes?.length || d.docTypes.includes(activeTab)))
+        .map((d) => ({ id: `cf:${d.id}`, label: d.label, icon: Tag, field: null, isCustom: true, def: d })),
+    [customFieldDefs, activeTab],
+  );
+  const allColumnDefs = useMemo(() => [...COLUMN_DEFS, ...customColumns], [customColumns]);
+  // New custom columns join the end of the saved order straight away.
+  const effectiveOrder = useMemo(
+    () => [...columnOrder, ...allColumnDefs.map((c) => c.id).filter((id) => !columnOrder.includes(id))],
+    [columnOrder, allColumnDefs],
+  );
+
   const orderedColumns = useMemo(
     () =>
-      columnOrder
-        .map((id) => COLUMN_DEFS.find((c) => c.id === id))
+      effectiveOrder
+        .map((id) => allColumnDefs.find((c) => c.id === id))
         .filter((c) => c && !hiddenCols.includes(c.id))
         .sort((a, b) => {
           const rank = (c) =>
@@ -635,7 +822,7 @@ const Accounting = ({ fixedTab = null }) => {
                 : 1;
           return rank(a) - rank(b);
         }),
-    [columnOrder, hiddenCols, pinnedCols]
+    [effectiveOrder, allColumnDefs, hiddenCols, pinnedCols]
   );
 
   /* Pinned columns ride along on horizontal scroll. The selection checkbox is
@@ -647,14 +834,14 @@ const Accounting = ({ fixedTab = null }) => {
     for (const c of orderedColumns) {
       if (pinnedCols[c.id] === "left") {
         map[c.id] = { position: "sticky", left: leftOffset, zIndex: 15 };
-        leftOffset += colWidths[c.id];
+        leftOffset += colWidths[c.id] ?? CUSTOM_COL_WIDTH;
       }
     }
     let rightOffset = 0;
     for (const c of [...orderedColumns].reverse()) {
       if (pinnedCols[c.id] === "right") {
         map[c.id] = { position: "sticky", right: rightOffset, zIndex: 15 };
-        rightOffset += colWidths[c.id];
+        rightOffset += colWidths[c.id] ?? CUSTOM_COL_WIDTH;
       }
     }
     return map;
@@ -712,7 +899,7 @@ const Accounting = ({ fixedTab = null }) => {
   const handleColumnReorder = useCallback((draggedKey, targetKey) => {
     if (!draggedKey || draggedKey === targetKey) return;
     setColumnOrder((prev) => {
-      const next = [...prev];
+      const next = [...prev, ...allColumnDefs.map((c) => c.id).filter((id) => !prev.includes(id))];
       const from = next.indexOf(draggedKey);
       const to = next.indexOf(targetKey);
       if (from === -1 || to === -1) return prev;
@@ -720,7 +907,7 @@ const Accounting = ({ fixedTab = null }) => {
       next.splice(to, 0, moved);
       return next;
     });
-  }, []);
+  }, [allColumnDefs]);
 
   /* Press-and-drag column reorder, same mechanics as Contacts.jsx: a 5px
      movement threshold so a plain click never starts a drag, a body-portalled
@@ -765,7 +952,7 @@ const Accounting = ({ fixedTab = null }) => {
       closeColumnMenu();
 
       const rect = th.getBoundingClientRect();
-      const col = COLUMN_DEFS.find((c) => c.id === colId);
+      const col = allColumnDefs.find((c) => c.id === colId);
       const label =
         typeof col?.label === "function" ? col.label(activeTab) : col?.label;
       const previewRows = (documents[activeTab] || []).map((doc) =>
@@ -833,8 +1020,10 @@ const Accounting = ({ fixedTab = null }) => {
   );
 
   const tableWidth = useMemo(
-    () => Object.values(colWidths).reduce((a, b) => a + b, 0),
-    [colWidths]
+    () =>
+      Object.values(colWidths).reduce((a, b) => a + b, 0) +
+      customColumns.filter((c) => colWidths[c.id] == null).length * CUSTOM_COL_WIDTH,
+    [colWidths, customColumns]
   );
 
   // UI state
@@ -1046,7 +1235,7 @@ const Accounting = ({ fixedTab = null }) => {
     fetchData(activeTab);
     // One request effect covers paging, sorting, search and status changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePage, activeLimit, activeSort.key, activeSort.direction, activeSearch, activeStatusFilter, activeTab]);
+  }, [activePage, activeLimit, activeSort.key, activeSort.direction, activeSearch, activeStatusFilter, activeTab, invoiceDateFrom, invoiceDateTo, advancedFiltersKey]);
 
   useEffect(() => {
     fetchDocSettings();
@@ -1075,6 +1264,7 @@ const Accounting = ({ fixedTab = null }) => {
       ]);
       const res = settingsRes;
       setDocumentTypeSettings(res.data?.documentTypeSettings || {});
+      setCustomFieldDefs(Array.isArray(res.data?.customFields) ? res.data.customFields : []);
       if (res.data && res.data.defaultDueDateDays != null) {
         setDefaultDueDateDays(res.data.defaultDueDateDays);
       }
@@ -1122,6 +1312,23 @@ const Accounting = ({ fixedTab = null }) => {
     }
     if (debouncedFilterStatuses[type]) {
       params.append("status", debouncedFilterStatuses[type]);
+    }
+    {
+      const range = dateRangeByType[type];
+      if (range?.from) params.append("dateFrom", range.from.toISOString());
+      if (range?.to) params.append("dateTo", range.to.toISOString());
+    }
+    {
+      // Date rules are resolved to concrete from/to instants here, in the
+      // user's own timezone, so "Today" means the user's today.
+      const serverRules = (advancedFiltersByType[type] || [])
+        .map((f) =>
+          f.column === "date" || f.column === "dueDate"
+            ? { ...toServerDueDateFilter(f.value), column: f.column }
+            : { column: f.column, operator: f.operator, value: f.value },
+        )
+        .filter((f) => f && (f.column === "date" || f.column === "dueDate" ? f.from || f.to : true));
+      if (serverRules.length > 0) params.append("advancedFilters", JSON.stringify(serverRules));
     }
 
     try {
@@ -2036,12 +2243,21 @@ const Accounting = ({ fixedTab = null }) => {
 
   const renderCell = (colId, doc) => {
     const searchQuery = searchTerms[activeTab];
+    if (colId.startsWith("cf:")) {
+      const text = customFieldValue(doc, colId, allColumnDefs.find((c) => c.id === colId)?.def);
+      return (
+        <span className="block truncate text-sm text-gray-700" title={text || undefined}>
+          {text || "—"}
+        </span>
+      );
+    }
     switch (colId) {
       case "number":
         return (
           <div className="flex items-center gap-2">
             <span
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation(); // don't also open the row's detail card
                 // All document types open the same full two-pane edit screen;
                 // the panel adapts its fields to the active tab's type.
                 if (isSettledInvoice(doc, activeTab)) return refuseSettledEdit();
@@ -2293,7 +2509,7 @@ const Accounting = ({ fixedTab = null }) => {
         )}
         {/* 2nd Header - Tab Bar & Actions Row */}
         <div
-          className="fixed right-0 h-16 px-4 sm:px-6 lg:px-8 border-b border-[#E1E4EA] bg-white flex items-center justify-between gap-3 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
+          className={`fixed right-0 h-16 px-4 sm:px-6 lg:px-8 bg-white flex items-center justify-between gap-3 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]`}
           style={{ left: "var(--sidebar-width, 0px)", zIndex: 39 }}
         >
           {/* Mobile-only page title — fills the same left slot the tab pill
@@ -2385,40 +2601,20 @@ const Accounting = ({ fixedTab = null }) => {
                   title="Filter by status"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setShowFilterMenu((v) => !v);
+                    setShowAdvancedFilters(true);
                   }}
-                  className={`flex items-center justify-center w-10 h-10 rounded-full border transition-colors bg-white ${filterStatuses[activeTab]
+                  className={`relative flex items-center justify-center w-10 h-10 rounded-full border transition-colors bg-white ${advancedFilters.length > 0
                     ? "border-[#0085FF] text-[#0085FF]"
                     : "border-[#E1E4EA] text-gray-500 hover:bg-gray-50"
                     }`}
                 >
-                  <FilterIcon size={16} className={filterStatuses[activeTab] ? "text-[#0085FF]" : ""} />
+                  <FilterIcon size={16} className={advancedFilters.length > 0 ? "text-[#0085FF]" : ""} />
+                  {advancedFilters.length > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#0085FF] px-1 text-[10px] font-semibold text-white">
+                      {advancedFilters.length}
+                    </span>
+                  )}
                 </button>
-                {showFilterMenu && (
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg border border-[#E1E4EA] py-1 z-50"
-                  >
-                    {["", ...statusOptions].map((status) => (
-                      <button
-                        key={status || "all"}
-                        onClick={() => {
-                          setFilterStatuses((prev) => ({
-                            ...prev,
-                            [activeTab]: status,
-                          }));
-                          setShowFilterMenu(false);
-                        }}
-                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${filterStatuses[activeTab] === status
-                          ? "text-[#0085FF] font-medium"
-                          : "text-gray-700"
-                          }`}
-                      >
-                        {status || "All Statuses"}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
 
               {/* More Options Button */}
@@ -2446,7 +2642,18 @@ const Accounting = ({ fixedTab = null }) => {
 
                     {/* Filter by status — folded in here on mobile since the
                         standalone filter button is hidden below lg. */}
-                    <div className="lg:hidden flex flex-col gap-0.5 pb-1.5 mb-1.5 border-b border-[#F1F1F5] max-h-48 overflow-y-auto">
+                    {(
+                      <button
+                        onClick={() => {
+                          setShowMoreMenu(false);
+                          setShowAdvancedFilters(true);
+                        }}
+                        className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                      >
+                        <FilterIcon size={14} /> Filters{advancedFilters.length > 0 ? ` (${advancedFilters.length})` : ""}
+                      </button>
+                    )}
+                    <div className={`lg:hidden flex flex-col gap-0.5 pb-1.5 mb-1.5 border-b border-[#F1F1F5] max-h-48 overflow-y-auto !hidden`}>
                       {["", ...statusOptions].map((status) => (
                         <button
                           key={status || "all"}
@@ -2513,11 +2720,79 @@ const Accounting = ({ fixedTab = null }) => {
           )}
         </div>
 
+        {/* Status tabs (Invoices and Pro Forma): clicking one filters the list by
+            that status. */}
+        {(
+          <div
+            className="fixed right-0 h-14 px-4 sm:px-6 lg:px-8 bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+            style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
+          >
+            {statusTabs && (
+            <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
+              {statusTabs.map((tab) => {
+                const selected = (filterStatuses[activeTab] || "") === tab.value;
+                return (
+                  <button
+                    key={tab.label}
+                    type="button"
+                    onClick={() =>
+                      setFilterStatuses((prev) => ({ ...prev, [activeTab]: tab.value }))
+                    }
+                    className={`h-9 flex-shrink-0 whitespace-nowrap rounded-full px-5 text-sm font-medium transition-colors ${selected
+                      ? "bg-white text-[#0085FF] shadow-sm"
+                      : "text-[#0E121B] hover:bg-white/60"
+                      }`}
+                  >
+                    {tab.label}
+                    {tab.value === "" && selected && (
+                      <span className="ml-2 rounded-md bg-[#F1F1F5] px-1.5 py-0.5 text-xs font-medium text-[#525866]">
+                        {paginations[activeTab]?.totalCount ?? 0}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            )}
+            <div className={statusTabs ? "ml-3" : ""}>
+              <DateRangeFilterButton
+                value={invoiceDateRange}
+                onChange={(range) => {
+                  setInvoiceDateRange(range);
+                  setPaginations((prev) => ({
+                    ...prev,
+                    [activeTab]: { ...prev[activeTab], currentPage: 1 },
+                  }));
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {(
+          <AdvancedFilterPanel
+            isOpen={showAdvancedFilters && !!invoiceFilterOptions}
+            onClose={() => setShowAdvancedFilters(false)}
+            columns={invoiceFilterColumns}
+            filters={advancedFilters}
+            setFilters={setAdvancedFilters}
+            onApply={() =>
+              setPaginations((prev) => ({
+                ...prev,
+                [activeTab]: { ...prev[activeTab], currentPage: 1 },
+              }))
+            }
+            title={`${docNameFor(activeTab)} Filters`}
+            subtitle="Narrow the list by any column"
+            emptyStateText="Set a value on any column to filter the list."
+          />
+        )}
+
         {/* Main Content Area — full-bleed table, no card. Same fixed scroll
             region Companies.jsx uses: edge to edge under the tab bar, stopping
             above the pagination bar. */}
         <div
-          className="fixed right-0 overflow-x-auto overflow-y-auto bg-white top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+          className={`fixed right-0 overflow-x-auto overflow-y-auto bg-white top-[calc(174px+var(--dc-offline-offset,0px))] lg:top-[calc(184px+var(--dc-offline-offset,0px))]`}
           style={{ left: "var(--sidebar-width, 0px)", bottom: 64, paddingLeft: "var(--content-inset, 16px)" }}
         >
           <table
@@ -2559,7 +2834,7 @@ const Accounting = ({ fixedTab = null }) => {
                       onMouseDown={(e) => startColumnDrag(e, col.id)}
                       title="Drag to move this column"
                       style={{
-                        width: colWidths[col.id],
+                        width: colWidths[col.id] ?? CUSTOM_COL_WIDTH,
                         opacity: isDragging ? 0.35 : 1,
                         ...stickyStyleFor(col.id),
                       }}
@@ -2606,7 +2881,7 @@ const Accounting = ({ fixedTab = null }) => {
               {showLoadingSkeleton && (
                 <TableSkeletonRows
                   numRows={pagination.limit}
-                  columns={orderedColumns.map((c) => colWidths[c.id])}
+                  columns={orderedColumns.map((c) => colWidths[c.id] ?? CUSTOM_COL_WIDTH)}
                   hasCheckbox
                   checkboxWidth={colWidths.selection}
                 />
@@ -2626,7 +2901,14 @@ const Accounting = ({ fixedTab = null }) => {
               {!showLoadingSkeleton && currentDocuments.map((doc) => (
                 <tr
                   key={doc?._id}
-                  className={`bg-white hover:bg-blue-50 transition-colors ${selectedIds.includes(doc._id) ? "!bg-blue-50" : ""
+                  onClick={(e) => {
+                    // Clicking the row (not a control inside it, and not the
+                    // checkbox column) opens the full detail card.
+                    if (e.target.closest("button, a, input, label, [data-no-row-click]")) return;
+                    if (e.target.closest("td")?.cellIndex === 0) return;
+                    setDetailDocId(doc._id);
+                  }}
+                  className={`cursor-pointer bg-white hover:bg-blue-50 transition-colors ${selectedIds.includes(doc._id) ? "!bg-blue-50" : ""
                     }`}
                   style={{ height: 37, maxHeight: 37 }}
                 >
@@ -2650,7 +2932,7 @@ const Accounting = ({ fixedTab = null }) => {
                       <td
                         key={col.id}
                         style={{
-                          width: colWidths[col.id],
+                          width: colWidths[col.id] ?? CUSTOM_COL_WIDTH,
                           ...stickyStyleFor(col.id),
                         }}
                         className="relative px-4 py-2 align-middle whitespace-nowrap border-b border-r border-[#E1E4EA] bg-inherit"
@@ -2677,6 +2959,32 @@ const Accounting = ({ fixedTab = null }) => {
           </table>
         </div>
 
+        {(() => {
+          const detailIndex = currentDocuments.findIndex((d) => d._id === detailDocId);
+          if (detailIndex < 0) return null;
+          const detailDoc = currentDocuments[detailIndex];
+          return (
+            <DocumentDetailModal
+              doc={detailDoc}
+              type={activeTab}
+              position={{ index: detailIndex, total: currentDocuments.length }}
+              onClose={() => setDetailDocId(null)}
+              onPrev={detailIndex > 0 ? () => setDetailDocId(currentDocuments[detailIndex - 1]._id) : null}
+              onNext={
+                detailIndex < currentDocuments.length - 1
+                  ? () => setDetailDocId(currentDocuments[detailIndex + 1]._id)
+                  : null
+              }
+              onEdit={() => {
+                if (isSettledInvoice(detailDoc, activeTab)) return refuseSettledEdit();
+                setDetailDocId(null);
+                setEditPanelDoc(detailDoc);
+                setShowCreatePanel(true);
+              }}
+            />
+          );
+        })()}
+
         {/* Shared column popup — one menu, used by every column on all four
             tabs. Opens on a single click of the header's chevron button. */}
         {openColumnMenuKey &&
@@ -2693,7 +3001,7 @@ const Accounting = ({ fixedTab = null }) => {
                 className="w-[176px] z-[9999] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5"
               >
                 {(() => {
-                  const col = COLUMN_DEFS.find(
+                  const col = allColumnDefs.find(
                     (c) => c.id === openColumnMenuKey
                   );
                   if (!col) return null;

@@ -129,7 +129,7 @@ const OverdueInvoicesIcon = ({ size = 20, ...props }) => (
 // The panel now merges these with the values actually present in the data
 // (see ToolbarFilterGroup), so this list is a display ORDER hint plus a
 // guarantee that the common statuses are offered even when none are loaded.
-const INVOICE_STATUS_OPTIONS = ["Draft", "Pending", "Sent", "Paid", "Overdue", "Accepted", "Rejected", "Delivered", "Void"];
+const INVOICE_STATUS_OPTIONS = ["Draft", "Pending", "Paid", "Overdue", "Cancelled"];
 
 const AMOUNT_RANGES = [
   { label: "Under ₹10,000", test: (v) => v < 10000 },
@@ -660,7 +660,7 @@ export default function CompanyInvoicesTab({ invoices, summary, loading, showSta
       "Deal": inv.deal?.title || "",
       "Invoice Date": inv.date ? new Date(inv.date).toLocaleDateString() : "",
       "Due Date": inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : "",
-      "Status": inv.status || "Draft",
+      "Status": inv.status || "Pending",
       "Amount": inv.amount || 0,
     }));
     const headers = Object.keys(dataToExport[0] || {}).join(",");

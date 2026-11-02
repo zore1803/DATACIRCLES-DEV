@@ -185,7 +185,7 @@ const ItemSearchSelect = ({ value, onSelect, onAddNew, error = null }) => {
         />
       </div>
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
           {loading ? (
             <div className="p-4 text-center text-gray-500 text-sm">
               Loading...
@@ -196,25 +196,21 @@ const ItemSearchSelect = ({ value, onSelect, onAddNew, error = null }) => {
                 key={i}
                 type="button"
                 onClick={() => handleItemClick(item)}
-                className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors"
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors"
               >
-                <div className="flex justify-between">
-                  <div>
-                    <div className="font-medium text-gray-800 text-sm">
-                      {item.name}
-                    </div>
-                    {item.sku && (
-                      <div className="text-xs text-gray-500">
-                        SKU: {item.sku}
-                      </div>
-                    )}
-                    {item.type === "product" && (
-                      <div className="text-xs font-medium text-slate-600 mt-0.5">
-                        Stock: {item.stock ?? 0}
-                      </div>
+                {/* One compact line per item: name + muted details, price on the right */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 truncate text-[13px] leading-5">
+                    <span className="font-medium text-gray-800">{item.name}</span>
+                    {(item.sku || item.type === "product") && (
+                      <span className="ml-2 text-[11px] text-gray-400">
+                        {[item.sku && `SKU: ${item.sku}`, item.type === "product" && `Stock: ${item.stock ?? 0}`]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
                     )}
                   </div>
-                  <div className="text-sm font-semibold text-gray-700">
+                  <div className="flex-shrink-0 text-[13px] font-semibold text-gray-700">
                     ₹{item.unitPrice}
                   </div>
                 </div>

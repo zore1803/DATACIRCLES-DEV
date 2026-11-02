@@ -61,6 +61,16 @@ router.get(
   listDocsByDealEntity(Invoice, "contact")
 );
 
+// GET /api/invoices/filter-options — suggestions + amount bounds for Advanced Filters
+router.get(
+  "/filter-options",
+  requireAuth,
+  subscriptionGate,
+  restrictByPlan("invoices", "read"),
+  checkPermission("invoices", "readonly"),
+  invoiceController.getInvoiceFilterOptions
+);
+
 // GET /api/invoices/pagination (Paginated - requires read permission)
 router.get(
   "/pagination",

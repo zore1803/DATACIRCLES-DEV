@@ -27,6 +27,15 @@ router.get("/",
   purchaseOrderController.getAllPurchaseOrders
 );
 
+// Suggestions + amount bounds for the Advanced Filter panel (before /:id)
+router.get("/filter-options",
+  requireAuth,
+  subscriptionGate,
+  restrictByPlan('purchases', 'read'),
+  checkPermission("purchase-orders", "readonly"),
+  purchaseOrderController.getPurchaseOrderFilterOptions
+);
+
 // Get All Purchase Orders with Pagination (specific route before generic /:id)
 router.get("/pagination",
   requireAuth,

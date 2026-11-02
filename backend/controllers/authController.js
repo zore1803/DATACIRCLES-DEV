@@ -33,6 +33,7 @@ const PlanAddon = require("../models/PlanAddon");
 const { startAddonPurchase } = require('../utils/addonPurchaseLifecycle');
 const Notification = require("../models/Notification");
 const { renderEmail } = require("../utils/emailLayout");
+const { sendNewAccountAlert } = require("../utils/internalAlertEmails");
 
 // Emails + writes an in-app Notification when a new staff member joins an
 // organization (via invite or company code). Best-effort — callers must
@@ -1901,6 +1902,9 @@ exports.completeRegistration = async (req, res) => {
       notifyAdminsOfNewStaff({ organization, staffUser: user }).catch((err) =>
         console.error("Failed to notify admins of new staff:", err.message)
       );
+    } else {
+      // A brand-new organisation: tell the DataCircles team.
+      sendNewAccountAlert(user, organization);
     }
 
     console.log(
@@ -2639,6 +2643,9 @@ exports.register = async (req, res) => {
         notifyAdminsOfNewStaff({ organization: organizationId, staffUser: user }).catch((err) =>
           console.error("Failed to notify admins of new staff:", err.message)
         );
+      } else {
+        // A brand-new organisation: tell the DataCircles team.
+        sendNewAccountAlert(user, organizationId);
       }
     }
 

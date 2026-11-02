@@ -7,6 +7,16 @@ const Branding = require("../models/Branding");
 const purchaseDocumentPdf = require("../utils/purchaseDocumentPdf");
 const { syncDocumentStock } = require("../utils/inventorySync");
 const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
+const { parseAdvancedFiltersParam } = require("../utils/dateRangeFilter");
+const { buildDocumentAdvancedConditions, createFilterOptionsHandler, parseIssueDateRange, PURCHASE_ORDER_OPTS } = require("../utils/documentAdvancedFilters");
+
+// GET /api/purchase-orders/filter-options — suggestions + amount bounds for Advanced Filters
+exports.getPurchaseOrderFilterOptions = createFilterOptionsHandler({
+  Model: PurchaseOrder,
+  numberField: "poNumber",
+  settingsKey: "purchaseOrder",
+  purchase: true,
+});
 
 // Generates the Purchase Order number using the org's configured PO prefix/suffix
 // (Settings → Numbering, key "purchaseOrder") as a prefix + suffix + financial-year
@@ -276,6 +286,22 @@ exports.getAllPurchaseOrdersWithPagination = async (req, res) => {
     // Status filter
     if (status) {
       query.status = status;
+    }
+
+    // Order-date range from the list's date button (from inclusive, to exclusive).
+    const orderDateRange = parseIssueDateRange(req.query);
+    if (orderDateRange) query.orderDate = orderDateRange;
+
+    // Advanced Filter panel rules, ANDed with everything else.
+    const advancedRules = parseAdvancedFiltersParam(req.query.advancedFilters);
+    if (advancedRules === null) {
+      return res.status(400).json({ error: "Invalid advancedFilters" });
+    }
+    if (advancedRules.length > 0) {
+      const advancedConditions = await buildDocumentAdvancedConditions(advancedRules, req.user.organization, "poNumber", PURCHASE_ORDER_OPTS);
+      if (advancedConditions.length > 0) {
+        query.$and = query.$and ? [...query.$and, ...advancedConditions] : advancedConditions;
+      }
     }
     
     // Build sort object

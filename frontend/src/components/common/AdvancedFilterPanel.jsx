@@ -21,6 +21,8 @@ const OPERATOR_LABELS = {
   less_than: "Less than (<)",
   in: "In (any of)",
   not_in: "Not in (none of)",
+  starts_with: "Starts with (prefix)",
+  ends_with: "Ends with (suffix)",
   is_empty: "Is empty",
   is_not_empty: "Is not empty",
 };
@@ -39,6 +41,9 @@ const OPERATORS_BY_TYPE = {
   // the Condition dropdown is hidden and the value is a {preset, from, to}
   // object. Date maths lives in utils/dueDateFilter.js.
   dateRange: ["is"],
+  // Min/Max slider pair: one implicit condition ("is between"); the value is
+  // { min, max } within the column's own `min`/`max` bounds.
+  range: ["is"],
 };
 
 // A column can narrow its own condition list (e.g. Assignee: only Is / Is not)
@@ -64,6 +69,8 @@ const getColumnType = (colDef) => {
   if (colDef?.type && OPERATORS_BY_TYPE[colDef.type]) return colDef.type;  if (colDef?.options && colDef.options.length > 0) return "select";
   return "text";
 };
+
+const isRangeColumn = (colDef) => getColumnType(colDef) === "range";
 
 const isMultiValueOperator = (op) => op === "in" || op === "not_in";
 const isNoValueOperator = (op) => op === "is_empty" || op === "is_not_empty";
@@ -139,10 +146,15 @@ const SuggestInput = ({ value, onChange, suggestions, placeholder }) => {
   }, []);
 
   const typed = String(value ?? "").trim().toLowerCase();
-  const matches = suggestions
-    .map((o) => String(optLabel(o)))
-    .filter((label) => label && label.toLowerCase() !== typed && label.toLowerCase().includes(typed))
-    .slice(0, 8);
+  // Every typed word must appear somewhere in the suggestion (so "deal 100"
+  // finds "Amber Collective 143 Deal 100"); duplicates are shown once.
+  const words = typed.split(/s+/).filter(Boolean);
+  const matches = [...new Set(suggestions.map((o) => String(optLabel(o))))]
+    .filter((label) => {
+      const l = label.toLowerCase();
+      return label && l !== typed && words.every((w) => l.includes(w));
+    })
+    .slice(0, 60);
 
   return (
     <div className="relative" ref={ref}>
@@ -157,6 +169,8 @@ const SuggestInput = ({ value, onChange, suggestions, placeholder }) => {
         onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
         placeholder={placeholder}
         autoComplete="off"
+        name="dc-filter-suggest"
+        data-lpignore="true"
         className="w-full border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] px-3 h-[38px] focus:ring-1 focus:ring-blue-500 outline-none transition-all"
       />
       {open && matches.length > 0 && (
@@ -173,6 +187,135 @@ const SuggestInput = ({ value, onChange, suggestions, placeholder }) => {
                 className="block w-full truncate px-3 py-2 text-left text-[13px] text-gray-700 hover:bg-blue-50"
               >
                 {m}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
+
+// --- Min / Max slider pair for numeric ranges (e.g. invoice amount). Drag
+// either handle or type exact numbers; the two can never cross. ---
+const RangeSlider = ({ value, onChange, min, max, step = 1 }) => {
+  const num = (v, fallback) =>
+    v === "" || v == null || !Number.isFinite(Number(v)) ? fallback : Number(v);
+  const lo = num(value?.min, min);
+  const hi = num(value?.max, max);
+  const span = Math.max(max - min, 1);
+  const pct = (n) => ((Math.min(Math.max(n, min), max) - min) / span) * 100;
+  const set = (nextLo, nextHi) => onChange({ min: nextLo, max: nextHi });
+  const fmt = (n) => Number(n).toLocaleString("en-IN");
+
+  return (
+    <div>
+      <div className="relative h-6">
+        <div className="absolute left-0 right-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[#E1E4EA]" />
+        <div
+          className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[#0085FF]"
+          style={{ left: `${pct(lo)}%`, width: `${Math.max(pct(hi) - pct(lo), 0)}%` }}
+        />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={lo}
+          onChange={(e) => set(Math.min(Number(e.target.value), hi), hi)}
+          aria-label="Minimum"
+          className="dc-range-thumb pointer-events-none absolute inset-0 w-full appearance-none bg-transparent"
+          style={{ zIndex: lo >= hi ? 5 : 3 }}
+        />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={hi}
+          onChange={(e) => set(lo, Math.max(Number(e.target.value), lo))}
+          aria-label="Maximum"
+          className="dc-range-thumb pointer-events-none absolute inset-0 w-full appearance-none bg-transparent"
+          style={{ zIndex: 4 }}
+        />
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <label className="flex-1 text-[11px] font-medium uppercase tracking-wide text-[#78788D]">
+          Min
+          <input
+            type="number"
+            value={lo}
+            min={min}
+            max={hi}
+            onChange={(e) => set(Math.min(Math.max(num(e.target.value, min), min), hi), hi)}
+            className="mt-1 w-full rounded-full border border-[#1F2937]/10 px-3 h-[34px] text-[13px] font-normal normal-case tracking-normal text-[#1F2937] outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </label>
+        <span className="pt-5 text-[#78788D]">–</span>
+        <label className="flex-1 text-[11px] font-medium uppercase tracking-wide text-[#78788D]">
+          Max
+          <input
+            type="number"
+            value={hi}
+            min={lo}
+            max={max}
+            onChange={(e) => set(lo, Math.max(Math.min(num(e.target.value, max), max), lo))}
+            className="mt-1 w-full rounded-full border border-[#1F2937]/10 px-3 h-[34px] text-[13px] font-normal normal-case tracking-normal text-[#1F2937] outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </label>
+      </div>
+      <p className="mt-1 text-[11px] text-[#99A0AE]">
+        ₹{fmt(lo)} to ₹{fmt(hi)} (available: ₹{fmt(min)} – ₹{fmt(max)})
+      </p>
+    </div>
+  );
+};
+
+// --- Pill-shaped dropdown with a rounded list, used for the Condition, preset
+// and value pickers. options: [{ value, label }]. ---
+const RoundedSelect = ({ value, onChange, options, placeholder = "Select..." }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+  const current = options.find((o) => o.value === value);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`flex w-full items-center justify-between gap-2 rounded-full border bg-white px-3 h-[38px] text-[13px] outline-none transition-all ${
+          open ? "border-[#0085FF] ring-1 ring-[#0085FF]" : "border-[#1F2937]/10"
+        }`}
+      >
+        <span className={`truncate ${current ? "text-[#1F2937]" : "text-[#1F2937]/50"}`}>
+          {current ? current.label : placeholder}
+        </span>
+        <ChevronDown className={`h-4 w-4 flex-shrink-0 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <ul className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-56 overflow-y-auto rounded-2xl border border-gray-200 bg-white p-1.5 shadow-xl">
+          {options.map((o) => (
+            <li key={String(o.value)}>
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(o.value);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center rounded-xl px-3 py-2 text-left text-[13px] ${
+                  o.value === value
+                    ? "bg-[#E8F3FF] font-semibold text-[#0085FF]"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                {o.label}
               </button>
             </li>
           ))}
@@ -315,7 +458,12 @@ export default function AdvancedFilterPanel({
       id: Math.random().toString(36).substr(2, 9),
       column: col.key,
       operator: getAvailableOps(col, type)[0],
-      value: type === "dateRange" ? emptyDueDateFilter() : "",
+      value:
+        type === "dateRange"
+          ? emptyDueDateFilter()
+          : type === "range"
+            ? { min: col.min ?? 0, max: col.max ?? 0 }
+            : "",
     };
   };
 
@@ -366,21 +514,17 @@ export default function AdvancedFilterPanel({
           updated.value =
             newType === "dateRange"
               ? emptyDueDateFilter()
-              : isMultiValueOperator(updated.operator)
+              : newType === "range"
+                ? { min: newDef?.min ?? 0, max: newDef?.max ?? 0 }
+                : isMultiValueOperator(updated.operator)
                 ? []
                 : "";
         }
 
         if (field === "operator") {
-          if (isNoValueOperator(value)) {
-            updated.value = "";
-          } else if (isMultiValueOperator(value) && !Array.isArray(updated.value)) {
-            // Coming from a single-value operator — carry over whatever was
-            // typed as the first tag instead of silently discarding it.
-            updated.value = updated.value ? [String(updated.value)] : [];
-          } else if (!isMultiValueOperator(value) && Array.isArray(updated.value)) {
-            updated.value = updated.value[0] || "";
-          }
+          // A different condition means a different question, so the old value
+          // (e.g. "Amber" typed for Contains) is cleared rather than carried over.
+          updated.value = isMultiValueOperator(value) ? [] : "";
         }
 
         return updated;
@@ -420,6 +564,11 @@ export default function AdvancedFilterPanel({
   const isFilterValueFilled = (f) => {
     if (getColumnType(getColumnDef(f.column)) === "dateRange") {
       return isDueDateFilterActive(f.value);
+    }
+    const def = getColumnDef(f.column);
+    if (isRangeColumn(def)) {
+      // Sliders still at the full bounds are not a filter.
+      return Number(f.value?.min) > Number(def.min ?? 0) || Number(f.value?.max) < Number(def.max ?? 0);
     }
     if (isNoValueOperator(f.operator)) return true;
     if (Array.isArray(f.value)) return f.value.length > 0;
@@ -522,8 +671,10 @@ export default function AdvancedFilterPanel({
               const colType = getColumnType(col);
               const availableOps = getAvailableOps(col, colType);
               const isDateRange = colType === "dateRange";
+              const isRange = colType === "range";
+              const hideCondition = isDateRange || isRange;
               const active = rules.some(isFilterValueFilled);
-              const TYPE_LABEL = { text: "Text", number: "Number", date: "Date", select: "List", dateRange: "Date" };
+              const TYPE_LABEL = { text: "Text", number: "Number", date: "Date", select: "List", dateRange: "Date", range: "Range" };
 
               return (
                 <section
@@ -565,24 +716,18 @@ export default function AdvancedFilterPanel({
 
                       return (
                         <div key={filter.id} className="flex items-start gap-2">
-                          {!isDateRange && (
+                          {!hideCondition && (
                             <div className="w-[42%] flex-shrink-0">
                               {idx === 0 && (
                                 <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#78788D]">
                                   Condition
                                 </label>
                               )}
-                              <select
+                              <RoundedSelect
                                 value={filter.operator}
-                                onChange={(e) => updateFilter(filter.id, "operator", e.target.value)}
-                                className="w-full border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] px-3 h-[38px] bg-white focus:ring-1 focus:ring-blue-500 outline-none transition-all"
-                              >
-                                {availableOps.map((op) => (
-                                  <option key={op} value={op}>
-                                    {OPERATOR_LABELS[op]}
-                                  </option>
-                                ))}
-                              </select>
+                                onChange={(op) => updateFilter(filter.id, "operator", op)}
+                                options={availableOps.map((op) => ({ value: op, label: OPERATOR_LABELS[op] }))}
+                              />
                             </div>
                           )}
 
@@ -592,23 +737,23 @@ export default function AdvancedFilterPanel({
                                 Value
                               </label>
                             )}
-                        {isDateRange ? (
+                        {isRange ? (
+                          <RangeSlider
+                            value={filter.value}
+                            onChange={(val) => updateFilter(filter.id, "value", val)}
+                            min={Number(col.min ?? 0)}
+                            max={Number(col.max ?? 0)}
+                            step={col.step || 1}
+                          />
+                        ) : isDateRange ? (
                           <div className="space-y-2">
-                            <select
+                            <RoundedSelect
                               value={rangeValue.preset || ""}
-                              onChange={(e) =>
-                                updateFilter(filter.id, "value", {
-                                  ...rangeValue,
-                                  preset: e.target.value,
-                                })
+                              onChange={(preset) =>
+                                updateFilter(filter.id, "value", { ...rangeValue, preset })
                               }
-                              className="w-full border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] px-3 h-[38px] bg-white focus:ring-1 focus:ring-blue-500 outline-none transition-all"
-                            >
-                              <option value="">Select...</option>
-                              {DUE_DATE_PRESETS.map((p) => (
-                                <option key={p.value} value={p.value}>{p.label}</option>
-                              ))}
-                            </select>
+                              options={[{ value: "", label: "Select..." }, ...DUE_DATE_PRESETS.map((p) => ({ value: p.value, label: p.label }))]}
+                            />
                             {rangeValue.preset === "custom" && (
                               <div className="flex gap-2">
                                 <label className="flex-1 text-[13px] font-medium text-[#161618] tracking-[-0.05em]">
@@ -619,7 +764,7 @@ export default function AdvancedFilterPanel({
                                     onChange={(e) =>
                                       updateFilter(filter.id, "value", { ...rangeValue, from: e.target.value })
                                     }
-                                    className="mt-1 w-full border border-gray-300 rounded-lg text-sm font-normal normal-case tracking-normal text-gray-800 px-3 py-2 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                                    className="mt-1 w-full border border-[#1F2937]/10 rounded-full text-[13px] font-normal normal-case tracking-normal text-[#1F2937] px-3 h-[38px] focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                                   />
                                 </label>
                                 <label className="flex-1 text-[13px] font-medium text-[#161618] tracking-[-0.05em]">
@@ -631,7 +776,7 @@ export default function AdvancedFilterPanel({
                                     onChange={(e) =>
                                       updateFilter(filter.id, "value", { ...rangeValue, to: e.target.value })
                                     }
-                                    className="mt-1 w-full border border-gray-300 rounded-lg text-sm font-normal normal-case tracking-normal text-gray-800 px-3 py-2 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                                    className="mt-1 w-full border border-[#1F2937]/10 rounded-full text-[13px] font-normal normal-case tracking-normal text-[#1F2937] px-3 h-[38px] focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                                   />
                                 </label>
                               </div>
@@ -652,6 +797,26 @@ export default function AdvancedFilterPanel({
                           />
                         ) : (() => {
                           const opts = getColumnOptions(filter.column);
+                          // Columns marked `combo` get a type-or-pick box;
+                          // `suggestionsByOperator` lets "Starts with" offer the
+                          // known prefixes and "Ends with" the known suffixes.
+                          if (col.combo && ["contains", "not_contains", "starts_with", "ends_with", "is", "is_not"].includes(filter.operator)) {
+                            const sugg = col.suggestionsByOperator?.[filter.operator] || opts || [];
+                            return (
+                              <SuggestInput
+                                value={filter.value}
+                                onChange={(val) => updateFilter(filter.id, "value", val)}
+                                suggestions={sugg}
+                                placeholder={
+                                  filter.operator === "starts_with"
+                                    ? "Type or pick a prefix..."
+                                    : filter.operator === "ends_with"
+                                      ? "Type or pick a suffix..."
+                                      : "Type or pick a value..."
+                                }
+                              />
+                            );
+                          }
                           // A dropdown of known values only makes sense for
                           // exact-match conditions — "Greater than 250" or
                           // "Contains ..." against a closed option list would
@@ -659,18 +824,11 @@ export default function AdvancedFilterPanel({
                           // fall through to the type-appropriate input below.
                           if (colType !== "date" && opts && opts.length > 0 && (filter.operator === "is" || filter.operator === "is_not")) {
                             return (
-                              <select
+                              <RoundedSelect
                                 value={filter.value}
-                                onChange={(e) =>
-                                  updateFilter(filter.id, "value", e.target.value)
-                                }
-                                className="w-full border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] px-3 h-[38px] bg-white focus:ring-1 focus:ring-blue-500 outline-none transition-all"
-                              >
-                                <option value="">Select...</option>
-                                {opts.map((opt) => (
-                                  <option key={optValue(opt)} value={optValue(opt)}>{optLabel(opt)}</option>
-                                ))}
-                              </select>
+                                onChange={(val) => updateFilter(filter.id, "value", val)}
+                                options={[{ value: "", label: "Select..." }, ...opts.map((opt) => ({ value: optValue(opt), label: optLabel(opt) }))]}
+                              />
                             );
                           }
                           if (colType === "date") {
@@ -737,7 +895,7 @@ export default function AdvancedFilterPanel({
                     })}
                   </div>
 
-                  {!isDateRange && active && (
+                  {!hideCondition && active && (
                     <button
                       type="button"
                       onClick={() => addCondition(col.key)}

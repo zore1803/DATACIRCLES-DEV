@@ -30,6 +30,14 @@ router.get(
   deliveryChallanController.getAllDeliveryChallans
 );
 router.get(
+  "/filter-options",
+  requireAuth,
+  subscriptionGate,
+  restrictByPlan("delivery-challans", "read"),
+  checkPermission("delivery-challans", "readonly"),
+  deliveryChallanController.getDeliveryChallanFilterOptions
+);
+router.get(
   "/pagination",
   requireAuth,
   subscriptionGate,

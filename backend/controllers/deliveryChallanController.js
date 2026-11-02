@@ -11,6 +11,15 @@ const mongoose = require("mongoose");
 const Deal = require("../models/Deal");
 const { getDocumentSettingsForOrganization, resolveDocumentNumber, raiseInvoiceSeriesTo } = require("../utils/documentNumbering");
 const { getOwnedDealIds } = require("../utils/ownedCompanies");
+const { parseAdvancedFiltersParam } = require("../utils/dateRangeFilter");
+const { buildDocumentAdvancedConditions, createFilterOptionsHandler, parseIssueDateRange } = require("../utils/documentAdvancedFilters");
+
+// GET /api/delivery-challans/filter-options — suggestions + amount bounds for Advanced Filters
+exports.getDeliveryChallanFilterOptions = createFilterOptionsHandler({
+  Model: DeliveryChallan,
+  numberField: "deliveryChallanNumber",
+  settingsKey: "deliveryChallan",
+});
 
 // A user with own-only permission may only touch delivery challans they
 // own. record.user may be a raw ObjectId or, if a caller populates it, a
@@ -377,6 +386,21 @@ exports.getAllDeliveryChallansPaginated = async (req, res) => {
     }
 
     if (status) query.status = status;
+
+    const issueDateRange = parseIssueDateRange(req.query);
+    if (issueDateRange) query.date = issueDateRange;
+
+    // Advanced Filter panel rules, ANDed with everything else.
+    const advancedRules = parseAdvancedFiltersParam(req.query.advancedFilters);
+    if (advancedRules === null) {
+      return res.status(400).json({ error: "Invalid advancedFilters" });
+    }
+    if (advancedRules.length > 0) {
+      const advancedConditions = await buildDocumentAdvancedConditions(advancedRules, req.user.organization, "deliveryChallanNumber");
+      if (advancedConditions.length > 0) {
+        query.$and = query.$and ? [...query.$and, ...advancedConditions] : advancedConditions;
+      }
+    }
 
     const sortObj = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
 

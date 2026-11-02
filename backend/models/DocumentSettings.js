@@ -129,10 +129,14 @@ const documentSettingsSchema = new mongoose.Schema(
           options: [String],
           docTypes: [String],
           showOnDocument: { type: Boolean, default: true },
+          // Custom section (group) the field is filed under in Settings > Accounting Fields.
+          section: { type: String, default: "" },
         },
       ],
       default: [],
     },
+    // Section names per document type: { tax: ["Shipping"], quotation: [...] }.
+    customSections: { type: Object, default: {} },
     defaultDueDateDays: {
       type: Number,
       default: null,

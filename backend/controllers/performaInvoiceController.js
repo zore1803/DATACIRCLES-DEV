@@ -11,6 +11,15 @@ const { getDocumentSettingsForOrganization, resolveDocumentNumber, raiseInvoiceS
 const sendGridMail = require("../utils/sendGridMail");
 const { renderEmail } = require("../utils/emailLayout");
 const { getOwnedDealIds } = require("../utils/ownedCompanies");
+const { parseAdvancedFiltersParam } = require("../utils/dateRangeFilter");
+const { buildDocumentAdvancedConditions, createFilterOptionsHandler, parseIssueDateRange } = require("../utils/documentAdvancedFilters");
+
+// GET /api/performa-invoices/filter-options — suggestions + amount bounds for Advanced Filters
+const getPerformaInvoiceFilterOptions = createFilterOptionsHandler({
+  Model: PerformaInvoice,
+  numberField: "performaInvoiceNumber",
+  settingsKey: "proformaInvoice",
+});
 const { resolveDocCustomer } = require("../utils/resolveDocCustomer");
 
 // Utility function to format date as YYYYMMDD
@@ -374,6 +383,21 @@ const getAllPerformaInvoicesPaginated = async (req, res) => {
     // Status filter
     if (status) {
       query.status = status;
+    }
+
+    const issueDateRange = parseIssueDateRange(req.query);
+    if (issueDateRange) query.date = issueDateRange;
+
+    // Advanced Filter panel rules, ANDed with everything else.
+    const advancedRules = parseAdvancedFiltersParam(req.query.advancedFilters);
+    if (advancedRules === null) {
+      return res.status(400).json({ error: "Invalid advancedFilters" });
+    }
+    if (advancedRules.length > 0) {
+      const advancedConditions = await buildDocumentAdvancedConditions(advancedRules, req.user.organization, "performaInvoiceNumber");
+      if (advancedConditions.length > 0) {
+        query.$and = query.$and ? [...query.$and, ...advancedConditions] : advancedConditions;
+      }
     }
 
     // own-only: restrict to proforma invoices this user owns, or whose deal
@@ -908,6 +932,7 @@ module.exports = {
   duplicatePerformaInvoice,
   getAllPerformaInvoices,
   getAllPerformaInvoicesPaginated,
+  getPerformaInvoiceFilterOptions,
   getMyPerformaInvoices,
   downloadPerformaInvoice,
   deletePerformaInvoice,

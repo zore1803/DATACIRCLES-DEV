@@ -19,7 +19,6 @@ import toast from "react-hot-toast";
 import ReactQuill from "react-quill-new";
 
 import SearchIcon from "../common/SearchIcon";
-import FilterIcon from "../common/FilterIcon";
 import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 import { useNavigate } from "react-router-dom";
 import DocumentNumberHeader from "../common/DocumentNumberHeader";
@@ -171,7 +170,7 @@ const ItemSearchSelect = ({ value, onSelect, onAddNew, error = null }) => {
         />
       </div>
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
           {loading ? (
             <div className="p-4 text-center text-gray-500 text-sm">
               Loading...
@@ -182,25 +181,21 @@ const ItemSearchSelect = ({ value, onSelect, onAddNew, error = null }) => {
                 key={i}
                 type="button"
                 onClick={() => handleItemClick(item)}
-                className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors"
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors"
               >
-                <div className="flex justify-between">
-                  <div>
-                    <div className="font-medium text-gray-800 text-sm">
-                      {item.name}
-                    </div>
-                    {item.sku && (
-                      <div className="text-xs text-gray-500">
-                        SKU: {item.sku}
-                      </div>
-                    )}
-                    {item.type === "product" && (
-                      <div className="text-xs font-medium text-slate-600 mt-0.5">
-                        Stock: {item.stock ?? 0}
-                      </div>
+                {/* One compact line per item: name + muted details, price on the right */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 truncate text-[13px] leading-5">
+                    <span className="font-medium text-gray-800">{item.name}</span>
+                    {(item.sku || item.type === "product") && (
+                      <span className="ml-2 text-[11px] text-gray-400">
+                        {[item.sku && `SKU: ${item.sku}`, item.type === "product" && `Stock: ${item.stock ?? 0}`]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
                     )}
                   </div>
-                  <div className="text-sm font-semibold text-gray-700">
+                  <div className="flex-shrink-0 text-[13px] font-semibold text-gray-700">
                     ₹{item.unitPrice}
                   </div>
                 </div>
@@ -618,7 +613,7 @@ const PurchaseOrderForm = ({
 
                   {/* Item Search */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
+                    <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                       Item <span className="text-red-500">*</span>
                     </label>
                     <ItemSearchSelect
@@ -632,7 +627,7 @@ const PurchaseOrderForm = ({
                   </div>
                   {/* Description */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
+                    <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                       Description <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -642,34 +637,54 @@ const PurchaseOrderForm = ({
                       onChange={(e) =>
                         updateItem(index, "description", e.target.value)
                       }
-                      className="w-full px-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                      className="w-full px-3 h-[38px] bg-white border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
                     />
                   </div>
 
                   <div className="grid grid-cols-3 gap-3">
                     {/* Quantity */}
                     <div>
-                      <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
+                      <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                         Quantity
                       </label>
-                      <div className="relative">
+                      {/* − / + stepper in place of the browser's tiny spinner arrows */}
+                      <div className="flex h-[38px] items-center rounded-full border border-[#1F2937]/10 bg-white focus-within:ring-1 focus-within:ring-blue-500">
+                        <button
+                          type="button"
+                          aria-label="Decrease quantity"
+                          onClick={() =>
+                            updateItem(index, "quantity", Math.max((parseFloat(item.quantity) || 0) - 1, 0))
+                          }
+                          className="h-full w-8 flex-shrink-0 rounded-l-full text-base text-gray-500 hover:bg-gray-100"
+                        >
+                          −
+                        </button>
                         <input
                           type="number"
+                          min="0"
+                          step="any"
                           value={item.quantity}
                           onChange={(e) =>
                             updateItem(index, "quantity", e.target.value)
                           }
-                          className="w-full px-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                          className="h-full min-w-0 flex-1 bg-transparent text-center text-[13px] text-[#1F2937] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                           placeholder="01"
                         />
-                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-                          <FilterIcon size={16} />
-                        </div>
+                        <button
+                          type="button"
+                          aria-label="Increase quantity"
+                          onClick={() =>
+                            updateItem(index, "quantity", (parseFloat(item.quantity) || 0) + 1)
+                          }
+                          className="h-full w-8 flex-shrink-0 rounded-r-full text-base text-gray-500 hover:bg-gray-100"
+                        >
+                          +
+                        </button>
                       </div>
                     </div>
                     {/* Unit Price */}
                     <div>
-                      <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
+                      <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                         Unit Price <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
@@ -679,17 +694,17 @@ const PurchaseOrderForm = ({
                           onChange={(e) =>
                             updateItem(index, "unitPrice", e.target.value)
                           }
-                          className="w-full pl-7 pr-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                          className="w-full pl-7 pr-3 h-[38px] bg-white border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
                           placeholder="0"
                         />
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-[12px]">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-[13px]">
                           ₹
                         </span>
                       </div>
                     </div>
                     {/* GST % */}
                     <div>
-                      <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
+                      <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                         GST %
                       </label>
                       <div className="relative">
@@ -699,10 +714,10 @@ const PurchaseOrderForm = ({
                           onChange={(e) =>
                             updateItem(index, "gstRate", e.target.value)
                           }
-                          className="w-full pl-3 pr-7 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                          className="w-full pl-3 pr-7 h-[38px] bg-white border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
                           placeholder="0"
                         />
-                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-[12px]">
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 font-medium text-[13px]">
                           %
                         </span>
                       </div>
@@ -710,7 +725,7 @@ const PurchaseOrderForm = ({
                         <Checkbox checked={item.taxInclusive || false} onChange={(e) =>
                             updateItem(index, "taxInclusive", e.target.checked)
                           } />
-                        <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">
+                        <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
                           Tax Inc.
                         </span>
                       </label>
@@ -720,10 +735,10 @@ const PurchaseOrderForm = ({
                   {/* Amount — read-only. Always quantity × unitPrice; edit Unit Price to
                       change it. */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
+                    <label className="flex items-center gap-0.5 text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                       Amount
                     </label>
-                    <div className="w-full px-3 h-8 flex items-center bg-gray-100 border border-[#1F2937]/10 rounded-full text-[12px] font-semibold text-gray-800">
+                    <div className="w-full px-3 h-[38px] flex items-center bg-gray-100 border border-[#1F2937]/10 rounded-full text-[13px] font-semibold text-gray-800">
                       ₹
                       {formatNumberFixed(
                         (parseFloat(item.quantity) || 0) *
@@ -752,7 +767,7 @@ const PurchaseOrderForm = ({
 
             <div>
               <FormLabel>Notes</FormLabel>
-              <div className="border border-[#1F2937]/10 rounded-xl bg-white">
+              <div className="border border-[#1F2937]/10 rounded-2xl bg-white overflow-hidden [&_.ql-toolbar.ql-snow]:!border-0 [&_.ql-toolbar.ql-snow]:!border-b [&_.ql-toolbar.ql-snow]:!border-gray-100 [&_.ql-container.ql-snow]:!border-0">
                 <ReactQuill
                   theme="snow"
                   value={notes}

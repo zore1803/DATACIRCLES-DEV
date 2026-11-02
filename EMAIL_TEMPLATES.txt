@@ -1,0 +1,537 @@
+DATACIRCLES - EMAIL TEMPLATES
+================================================================
+All mails are sent via SendGrid (backend/utils/sendGridMail.js)
+from "DataCircles <noreply@datacircles.in>" unless noted.
+All use one common layout (backend/utils/emailLayout.js):
+  logo header > greeting > body > [button] > "Regards" > footer
+  (DataCircles Technology, Thane address, phone, website, GSTIN)
+
+Legend:  <x> = filled in automatically    [Button] = clickable button
+
+IMPORTANT: There is NO email for plan purchase, autopay renewal,
+payment failure, add-on purchase or signup welcome. These do not
+exist in the code yet.
+
+----------------------------------------------------------------
+INDEX
+----------------------------------------------------------------
+ 1. SUBSCRIPTION & BILLING
+    1.1  Trial started
+    1.2  Trial ending soon (48h / 24h)
+    1.3  Trial expired
+    1.4  Renewal due (manual billing)
+    1.5  Renewal overdue reminder (manual billing)
+    1.6  Workspace read-only (manual billing)
+    1.7  Trial extended/reduced by support
+    1.8  Trial ended by support
+    1.9  Subscription cancelled by support
+    1.10 [INTERNAL] New free trial started  -> yash.mishra@datacircles.in
+    1.11 [INTERNAL] New subscription purchased -> yash.mishra@datacircles.in
+    1.12 [INTERNAL] New account created -> yash.mishra@datacircles.in
+ 2. ACCOUNT & LOGIN
+    2.1  Verification code (OTP)
+    2.2  Reset password
+    2.3  Team invitation
+    2.4  New team member joined
+    2.5  Delete account / reset data request
+ 3. REFERRAL & WALLET
+    3.1  Referral invitation
+    3.2  Wallet low balance
+ 4. TASKS & MEETINGS
+    4.1  Task assigned
+    4.2  Task due reminder
+    4.3  Meeting scheduled
+    4.4  Meeting updated
+    4.5  Meeting cancelled
+    4.6  Meeting completed
+    4.7  Meeting reminder (1 hour before)
+ 5. DEALS
+    5.1  Deal stage changed - to staff
+    5.2  Deal stage changed - to customer
+ 6. DOCUMENTS SENT TO CUSTOMERS
+    6.1  Quotation
+    6.2  Proforma invoice
+    6.3  Delivery challan
+    6.4  Invoices (bulk)
+    6.5  Payment receipt
+    6.6  Any sales/purchase document (compose panel)
+    6.7  Free-form email to company/contact/vendor
+
+
+################################################################
+1. SUBSCRIPTION & BILLING
+################################################################
+
+1.1  TRIAL STARTED
+  When     : New organisation's free trial begins (or super admin starts one)
+  From->To : DataCircles -> organisation admin
+  Subject  : Your DataCircles trial is active
+  Body     :
+    Hello <name>,
+    Your 7-day free trial for <organisation> is now active, with full
+    access to all <Plan> plan features.
+    Your trial ends on <date>. You can choose a plan at any time from
+    Settings > Subscription, and your data and setup carry over.
+    Regards, Team DataCircles
+
+1.2  TRIAL ENDING SOON
+  When     : Automatic, 48 hours and again 24 hours before trial end (once each)
+  From->To : DataCircles -> organisation admin
+  Subject  : Your DataCircles trial ends on <date>
+  Body     :
+    Hello <name>,
+    Your free trial for <organisation> ends in about <48/24> hours, on <date>.
+    To keep adding and editing data after that, choose a plan. Your
+    existing data stays available to view either way.
+    [Choose a plan]
+    Regards, Team DataCircles
+
+1.3  TRIAL EXPIRED
+  When     : Automatic, when the trial end date passes
+  From->To : DataCircles -> organisation admin
+  Subject  : Your DataCircles trial has ended
+  Body     :
+    Hello <name>,
+    Your free trial for <organisation> has ended. Your data is safe and
+    you can still sign in to view everything you've added.
+    To start adding and editing again, choose a plan that fits your team.
+    [Choose a plan]
+    Regards, Team DataCircles
+
+1.4  RENEWAL DUE (manual-billing plans only)
+  When     : Automatic, on the renewal date
+  From->To : DataCircles -> organisation admin
+  Subject  : Your DataCircles renewal of <Rs amount> is due
+  Body     :
+    Hello <name>,
+    Your <Plan> plan for <organisation> renews on <date>. The amount due
+    is <Rs amount> (incl. GST).
+    Pay any time before <date + 7 days> with UPI, card, net banking or
+    wallet. After that the workspace becomes read-only until the payment
+    is made.
+    [Pay now]
+    Regards, Team DataCircles
+
+1.5  RENEWAL OVERDUE REMINDER (manual-billing plans only)
+  When     : Automatic, 3 days and 6 days after the due date if unpaid
+  From->To : DataCircles -> organisation admin
+  Subject  : Reminder: DataCircles renewal of <Rs amount> is overdue
+  Body     :
+    Hello <name>,
+    Your renewal payment of <Rs amount> was due on <date>.
+    Please pay before <date + 7 days> to avoid your workspace becoming
+    read-only.
+    [Pay now]
+    Regards, Team DataCircles
+
+1.6  WORKSPACE READ-ONLY (manual-billing plans only)
+  When     : Automatic, 7 days after the due date if still unpaid
+  From->To : DataCircles -> organisation admin
+  Subject  : Your DataCircles workspace is now read-only
+  Body     :
+    Hello <name>,
+    The renewal payment of <Rs amount> due on <date> hasn't been
+    received, so your workspace is now read-only.
+    Your data is safe. Pay the renewal to restore full access immediately.
+    [Pay now]
+    Regards, Team DataCircles
+
+1.7  TRIAL EXTENDED / REDUCED BY SUPPORT
+  When     : Super admin changes the trial days
+  From->To : DataCircles -> organisation admin
+  Subject  : Your DataCircles trial now ends on <new date>
+  Body     :
+    Hello <name>,
+    Our support team has <extended/reduced> the free trial for
+    <organisation> by <N> day(s).
+    Your trial now ends on <new date>.
+    Questions? Reply to this email or contact support@datacircles.in.
+    Regards, Team DataCircles
+
+1.8  TRIAL ENDED BY SUPPORT
+  When     : Super admin ends the trial immediately
+  From->To : DataCircles -> organisation admin
+  Subject  : Your DataCircles trial has ended
+  Body     :
+    Hello <name>,
+    Our support team has ended the free trial for <organisation>. Your
+    data is safe and remains available to view.
+    To continue adding and editing data, choose a plan.
+    [Choose a plan]
+    Questions? Contact support@datacircles.in.
+    Regards, Team DataCircles
+
+1.9  SUBSCRIPTION CANCELLED BY SUPPORT
+  When     : Super admin cancels a trial or paid subscription
+  From->To : DataCircles -> organisation admin
+  Subject  : Your DataCircles subscription has been cancelled
+  Body (trial):
+    Hello <name>,
+    Our support team has cancelled the trial for <organisation>. Your
+    data stays available to view in read-only mode.
+    If this was unexpected, contact support@datacircles.in and we'll be
+    glad to help.
+    Regards, Team DataCircles
+  Body (paid plan):
+    Hello <name>,
+    Our support team has cancelled the DataCircles subscription for
+    <organisation>.
+    You'll keep full access until <period end date>. After that, your
+    data stays available to view in read-only mode.
+    If this was unexpected, contact support@datacircles.in and we'll be
+    glad to help.
+    Regards, Team DataCircles
+
+1.10 [INTERNAL] NEW FREE TRIAL STARTED
+  When     : Any organisation's free trial starts (self-serve, or started
+             by super admin)
+  From->To : DataCircles -> yash.mishra@datacircles.in
+             (env SALES_ALERT_EMAIL, comma-separated for more people)
+  Subject  : New free trial started: <organisation>
+  Body     :
+    A new customer has started a free trial on DataCircles.
+      Organisation / Name / Contact / Plan trialled / Trial ends
+    Regards, Team DataCircles
+
+1.11 [INTERNAL] NEW SUBSCRIPTION PURCHASED
+  When     : An organisation's first subscription payment is confirmed
+             (sent once per subscription)
+  From->To : DataCircles -> yash.mishra@datacircles.in
+             (env SALES_ALERT_EMAIL, comma-separated for more people)
+  Subject  : New subscription purchased: <organisation> (<Plan>)
+  Body     :
+    A customer has bought a DataCircles subscription.
+      Organisation / Admin / Contact / Plan / Billing cycle / Amount /
+      Purchased on
+    Regards, Team DataCircles
+
+1.12 [INTERNAL] NEW ACCOUNT CREATED
+  When     : Someone signs up and creates a new organisation (email signup,
+             Google/phone registration). Not sent when a person joins an
+             existing organisation.
+  From->To : DataCircles -> yash.mishra@datacircles.in (env SALES_ALERT_EMAIL)
+  Subject  : New account created: <organisation>
+  Body     :
+    A new account has been created on DataCircles.
+      Organisation / Name / Contact / Phone / Created on
+    Regards, Team DataCircles
+
+
+################################################################
+2. ACCOUNT & LOGIN
+################################################################
+
+2.1  VERIFICATION CODE (OTP)
+  When     : Signup email check; Profile > verify email; Profile > change
+             email; confirming an email/phone change request
+  From->To : DataCircles -> the email being verified
+  Subject  : Your DataCircles verification code
+  Body     :
+    [Hello <name>,]   (not shown during signup)
+    Use this code to verify your email address and finish setting up your
+    DataCircles account:      (wording varies slightly per case)
+        [ 6-DIGIT CODE ]
+    This code expires in 10 minutes. If you didn't request it, you can
+    ignore this email.
+    Regards, Team DataCircles
+
+2.2  RESET PASSWORD
+  When     : User clicks "Forgot password"
+  From->To : DataCircles -> that user
+  Subject  : Reset your DataCircles password
+  Body     :
+    Hello <name>,
+    We received a request to reset the password for your DataCircles
+    account. Enter the code below to choose a new one, or use the button.
+        [ 6-DIGIT CODE ]
+    [Reset password]
+    The code expires in 10 minutes and the link in 1 hour. If you didn't
+    make this request, no action is needed and your password stays the same.
+    Regards, Team DataCircles
+
+2.3  TEAM INVITATION
+  When     : Admin invites a colleague (if an extra paid seat is needed,
+             sent only after that payment succeeds)
+  From->To : DataCircles -> invited person
+  Subject  : <inviter> has invited you to join <organisation> on DataCircles
+  Body     :
+    <inviter> has invited you to join <organisation> on DataCircles, the
+    CRM the team uses to manage contacts, deals and day-to-day sales work.
+    Once you accept, you'll be able to work with <organisation>'s
+    contacts, companies and deals, shared sales pipelines and team
+    workflows, real-time collaboration, and reporting and analytics tools.
+    [Accept invitation]
+    (fallback link text) This invitation link is unique to you. If you
+    weren't expecting it, you can ignore this email.
+    New to DataCircles? Sign in with Google, Facebook, GitHub or LinkedIn,
+    or create an account with your phone number.
+    Regards, Team DataCircles
+
+2.4  NEW TEAM MEMBER JOINED
+  When     : Invited person accepts and joins
+  From->To : DataCircles -> all admins of that organisation
+  Subject  : <staff name> has joined <organisation>
+  Body     :
+    <staff name> (<email/phone>) has accepted their invitation and is now
+    a member of <organisation> on DataCircles.
+      Team member / Contact / Organisation
+    Review or adjust what they can access from Settings > User Management.
+    Regards, Team DataCircles
+
+2.5  DELETE ACCOUNT / RESET DATA REQUEST
+  When     : User submits the request in settings
+  From->To : DataCircles -> organisation admins + support email
+  Subject  : Account deletion request - <organisation>
+             (or) Data reset request - <organisation>
+  Body     :
+    <requester> (<contact>) has requested to <delete the account / reset
+    account data> for <organisation> on DataCircles.
+      Requested by / Contact / Organisation / Request type
+    Delete: This is irreversible - please verify the request with the
+    organisation before acting on it. Processed within 5-7 business days.
+    Reset: This wipes all companies, deals, contacts and other records -
+    please verify first. Processed within 5-7 business days.
+    Regards, Team DataCircles
+
+
+################################################################
+3. REFERRAL & WALLET
+################################################################
+
+3.1  REFERRAL INVITATION
+  When     : Customer enters a friend's email under Refer & Earn
+  From->To : DataCircles (for the referring user) -> the friend
+  Subject  : <sender> thinks DataCircles could help your team
+  Body     :
+    <sender> from <organisation> uses DataCircles to manage their sales
+    and customer relationships, and thought it could be a good fit for
+    your business.
+    "<optional personal message>"
+    In DataCircles you can manage customers and deals, sales pipelines,
+    invoices and quotations, and reports and team collaboration.
+    [See how it works]
+    If you sign up and become a paying customer, both you and
+    <organisation> receive a referral reward.
+    This invitation was sent by <sender>. If it is not relevant to you,
+    you can ignore this email.
+    Regards, Team DataCircles
+
+3.2  WALLET LOW BALANCE
+  When     : Wallet balance drops to/below the reminder level set by the
+             organisation (sent once per dip)
+  From->To : DataCircles -> reminder email saved on the wallet
+  Subject  : DataCircles wallet balance is running low
+  Body (plain text):
+    Your wallet balance has dropped to <balance> credits, at or below
+    your reminder threshold of <threshold> credits. Add credits to avoid
+    interruption.
+
+
+################################################################
+4. TASKS & MEETINGS
+(only to users who have that notification turned ON in settings)
+################################################################
+
+4.1  TASK ASSIGNED
+  When     : Task created with assignees, or new assignee added
+  From->To : DataCircles -> the assigned user
+  Subject  : You've been assigned a task: "<task title>"
+  Body     :
+    Hello <name>,
+    You have been assigned a task in DataCircles. The details are below.
+      Task / Due date / Description / Related to
+    Open the task in DataCircles to review it or update its status.
+    Regards, Team DataCircles
+
+4.2  TASK DUE REMINDER
+  When     : Automatic, hourly - task due within next 24h and not completed
+  From->To : DataCircles -> the task's user
+  Subject  : Reminder: "<task title>" is due <date>
+  Body     :
+    This is a reminder that the following task is due on <date>.
+      Task / Due date / Details
+    Open it in DataCircles to update its status.
+    Regards, Team DataCircles
+
+4.3  MEETING SCHEDULED
+  When     : A meeting is created
+  From->To : DataCircles -> meeting creator, contact and participants
+  Subject  : Meeting scheduled: <title>
+  Body     :
+    A meeting has been scheduled: <title>. The details are below.
+      Date and time / Duration / Location / Type / Related record /
+      Participants / Description
+    Add it to your calendar so you have time to prepare.
+    Regards, Team DataCircles
+
+4.4  MEETING UPDATED
+  When     : Meeting title/time/location/duration edited
+  From->To : same people as 4.3
+  Subject  : Meeting updated: <title>
+  Body     :
+    A meeting has been updated: <title>. The current details are below.
+      Date and time / Duration / Location
+    What changed:  <field>: <old> to <new>
+    Update your calendar to match.
+    Regards, Team DataCircles
+
+4.5  MEETING CANCELLED
+  When     : Meeting cancelled
+  From->To : same people as 4.3
+  Subject  : Meeting cancelled: <title>
+  Body     :
+    The meeting <title> has been cancelled. You can remove it from your
+    calendar.
+      Was scheduled for / Duration / Location
+    Regards, Team DataCircles
+
+4.6  MEETING COMPLETED
+  When     : Meeting marked complete
+  From->To : same people as 4.3
+  Subject  : Meeting completed: <title>
+  Body     :
+    The meeting <title> is marked complete.
+      Meeting / Was scheduled for / Notes / Outcome
+    Regards, Team DataCircles
+
+4.7  MEETING REMINDER
+  When     : Meeting starts in ~1 hour. Sent when the "send reminders" API
+             is called (no automatic cron calls it today)
+  From->To : same people as 4.3
+  Subject  : Reminder: <title> starts in 1 hour
+  Body     :
+    Your meeting <title> starts in about 1 hour.
+      Date and time / Duration / Location / Type / Description
+    Prepare any materials you need for this meeting.
+    Regards, Team DataCircles
+
+
+################################################################
+5. DEALS
+################################################################
+
+5.1  DEAL STAGE CHANGED - STAFF
+  When     : A deal moves to another stage
+  From->To : DataCircles -> staff with deal notifications ON
+  Subject  : Deal "<deal title>" moved to <new stage>
+  Body     :
+    Hello <name>,
+    The deal <deal title> has moved from <old stage> to <new stage>.
+      Deal title / Old status / New status / Amount / Company / Contact /
+      Updated at
+    Review the updated deal and take any next steps.
+    Regards, Team DataCircles
+  Note     : If the organisation created a custom template for this exact
+             stage change, its own subject/body is used instead.
+             Placeholders: {{userName}} {{dealTitle}} {{oldStatus}}
+             {{newStatus}} {{amount}} {{companyName}} {{contactName}}
+             {{updatedAt}}
+
+5.2  DEAL STAGE CHANGED - CUSTOMER
+  When     : Same event as 5.1, if the deal contact has an email
+  From->To : Organisation (via DataCircles) -> deal contact
+  Subject  : Update on <deal title> from <your company>
+  Body     :
+    Hello <contact name>,
+    There is an update on <deal title>: it has moved from <old stage> to
+    <new stage>.
+      Deal / Previous status / Current status / Value
+    We will be in touch with the next steps. Reply to this email if you
+    have any questions.
+    Regards, <your company>
+  Note     : Custom template (see 5.1) overrides this if one exists.
+
+
+################################################################
+6. DOCUMENTS SENT TO CUSTOMERS
+(sent by a DataCircles user to THEIR customer; replies go to the user;
+ PDF attached; sign-off is the user's company name)
+################################################################
+
+6.1  QUOTATION
+  When     : User clicks "Email quotation" (status becomes Sent)
+  From->To : User's company -> deal/contact email
+  Subject  : Quotation <number> from <company>
+  Body     :
+    Hello <contact>,
+    Please find attached quotation <number>, dated <date>, for a total of
+    <amount>.
+    This quotation is valid until <date>.
+    Let us know if you would like any changes.
+      Quotation / Date / Total / Valid until
+    Regards, <company>
+  Attachment: Quotation-<number>.pdf
+
+6.2  PROFORMA INVOICE
+  When     : User emails a proforma invoice (status becomes Sent)
+  From->To : User's company -> deal/contact email
+  Subject  : Proforma Invoice <number> from <company>
+  Body     :
+    Hello <contact>,
+    Please find attached proforma invoice <number>, dated <date>, for a
+    total of <amount>.
+    To confirm this order, please arrange payment as per the details on
+    the invoice. Contact us if anything needs adjusting.
+      Proforma invoice / Date / Total
+    Regards, <company>
+  Attachment: ProformaInvoice-<number>.pdf
+  Note     : User can type their own subject/body instead.
+
+6.3  DELIVERY CHALLAN
+  When     : User emails a delivery challan (status becomes Sent)
+  From->To : User's company -> deal contact email
+  Subject  : Delivery Challan <number> from <company>
+  Body     :
+    Hello <contact>,
+    Please find attached delivery challan <number>, dated <date>, covering
+    the items dispatched to you.
+      Delivery challan / Date
+    Regards, <company>
+  Attachment: DeliveryChallan-<number>.pdf
+
+6.4  INVOICES (BULK)
+  When     : User selects invoices > Send by email (one mail per customer)
+  From->To : User's company -> customer email
+  Subject  : Invoice(s) from <company>
+  Body     :
+    Hello <customer>,
+    Please find attached <N> invoice(s) from <company>, totalling <total>.
+    Payment terms and bank details are on each invoice. Reply to this
+    email with any questions.
+      Invoices / Total
+    Regards, <company>
+  Attachment: Invoice-<number>.pdf (one per invoice)
+
+6.5  PAYMENT RECEIPT
+  When     : User records a payment on an invoice with "notify by email" ticked
+  From->To : User's company -> customer email
+  Subject  : <company>: payment received for invoice <number>
+  Body     :
+    Hello <customer>,
+    Thank you. We have recorded your payment against invoice <number>.
+      Invoice number / Amount received / Payment date / Method /
+      Reference-UTR / Balance on this invoice
+    "This invoice is now fully paid."  OR
+    "This is a part payment; <balance> remains outstanding."
+    [Authorised signature image if set]
+    This receipt is generated automatically. Please keep it for your records.
+    Regards, <company>
+
+6.6  ANY SALES / PURCHASE DOCUMENT (compose panel)
+  When     : User emails a document (quotation, invoice, challan, sales
+             return, purchase order, etc.), optional Cc/Bcc
+  From->To : User's company -> typed recipient
+  Subject  : <Document name> <number> from <company>   (editable)
+  Body     :
+    Hello <contact/vendor>,
+    Please find attached <document name> <number>, dated <date>, for <amount>.
+      <Document name> / Date / Amount
+    Regards, <company>
+  Note     : If the user types their own message, that text replaces the
+             default body.
+
+6.7  FREE-FORM EMAIL TO COMPANY / CONTACT / VENDOR
+  When     : User composes an email from a company/contact/vendor record
+  From->To : User -> that record's email
+  Subject  : whatever the user types
+  Body     : whatever the user types (no automatic greeting or sign-off)

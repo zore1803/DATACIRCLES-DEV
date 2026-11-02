@@ -9,6 +9,7 @@
 
 const sendGridMail = require('./sendGridMail');
 const { renderEmail } = require('./emailLayout');
+const { sendNewTrialAlert } = require('./internalAlertEmails');
 
 function fmtDate(d) {
   return new Date(d).toLocaleDateString('en-IN', {
@@ -27,6 +28,10 @@ function getUserEmail(user) {
 }
 
 async function sendTrialStartedEmail(user, organization, trialEnd, planName) {
+  // Internal heads-up to the DataCircles team; independent of whether the
+  // customer themself has an email address.
+  await sendNewTrialAlert(user, organization, trialEnd, planName);
+
   const toEmail = getUserEmail(user);
   if (!toEmail) {
     console.warn(`[trialEmails] No email found for user ${user?._id}, skipping trial-started email`);

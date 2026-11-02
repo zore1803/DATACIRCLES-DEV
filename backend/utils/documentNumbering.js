@@ -95,6 +95,7 @@ function normalizeInvoiceNumberSettings(settings = {}) {
     documentTypes: Object.entries(DEFAULT_DOCUMENT_TYPES).map(([key, value]) => ({ key, label: value.label })),
     defaultDueDateDays: settings.defaultDueDateDays != null ? Number(settings.defaultDueDateDays) : null,
     customFields: Array.isArray(settings.customFields) ? settings.customFields : [],
+    customSections: settings.customSections && typeof settings.customSections === "object" ? settings.customSections : {},
     whatsappTemplate: settings.whatsappTemplate != null ? String(settings.whatsappTemplate) : null,
     whatsappLine1: settings.whatsappLine1 != null ? String(settings.whatsappLine1) : 'Thanks for your business!',
     whatsappLine2: settings.whatsappLine2 != null ? String(settings.whatsappLine2) : '',
@@ -710,6 +711,9 @@ async function saveDocumentSettingsForOrganization(organizationId, payload = {})
   if (payload.customFields !== undefined) {
     settingsPayload.customFields = require('./documentCustomFields').sanitizeFieldDefinitions(payload.customFields);
   }
+  if (payload.customSections !== undefined) {
+    settingsPayload.customSections = require("./documentCustomFields").sanitizeCustomSections(payload.customSections);
+  }
   if (payload.defaultDueDateDays !== undefined) {
     settingsPayload.defaultDueDateDays = payload.defaultDueDateDays != null ? Number(payload.defaultDueDateDays) : null;
   }
@@ -764,7 +768,7 @@ async function saveDocumentSettingsForOrganization(organizationId, payload = {})
     Object.assign(existing, settingsPayload);
     // Schema type Object: mongoose won't diff the nested keys on its own, so
     // say explicitly that these paths changed or the save is a no-op.
-    for (const p of ['documentTypeSettings', 'defaultNotesByType', 'defaultTermsByType', 'pdfFilenameFormats']) {
+    for (const p of ['documentTypeSettings', 'defaultNotesByType', 'defaultTermsByType', 'pdfFilenameFormats', 'customSections']) {
       if (settingsPayload[p] !== undefined) existing.markModified(p);
     }
     await existing.save();

@@ -117,6 +117,9 @@ app.use(compression());
 const cookieParser = require('cookie-parser');
 app.use(cookieParser());
 
+// Signs out a browser whose session was replaced by a newer login elsewhere.
+app.use(require('./middlewares/sessionGuard'));
+
 // Establish a per-request context (AsyncLocalStorage) so the change-notifier
 // plugin can attribute DB writes to the current user. Must wrap all routes.
 const { requestContext } = require('./middlewares/requestContext');

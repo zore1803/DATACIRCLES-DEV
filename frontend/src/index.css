@@ -1052,3 +1052,27 @@ body.success-modal-open > #success-modal-portal {
   font-style: normal;
   color: #9CA3AF;
 }
+
+/* Two-handle range slider (AdvancedFilterPanel): the stacked inputs ignore
+   pointer events so only the round thumbs are draggable. */
+.dc-range-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid #0085ff;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.dc-range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid #0085ff;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}

@@ -165,6 +165,9 @@ const subscriptionSchema = new mongoose.Schema({
   isTrialActive: { type: Boolean, default: false },
   trialUsed: { type: Boolean, default: false },
   trialReminder48hSent: { type: Boolean, default: false },
+  // Set once the internal "new subscription purchased" alert has gone out,
+  // so the repeated first-payment settlement calls only ever send it once.
+  purchaseAlertSent: { type: Boolean, default: false },
   trialReminder24hSent: { type: Boolean, default: false },
   cancelAtPeriodEnd: { type: Boolean, default: false },
   cancelledAt: { type: Date },

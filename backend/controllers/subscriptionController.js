@@ -7,6 +7,7 @@ const Organization = require("../models/Organization");
 const razorpay = require("../config/razorpay");
 const crypto = require("crypto");
 const { sendTrialStartedEmail } = require('../utils/trialEmails');
+const { sendNewSubscriptionAlert } = require('../utils/internalAlertEmails');
 const seedTrialData = require('../utils/seedTrialData');
 const { deleteTrialDemoData } = require('../utils/seedTrialData');
 const {
@@ -1170,6 +1171,20 @@ async function runFirstPaymentSettlement(subscription) {
     } catch (err) {
       console.error(`runFirstPaymentSettlement: reward consumption failed for ${subscription._id}:`, err.message);
     }
+  }
+  // Internal "new subscription purchased" alert. The atomic claim makes it
+  // fire exactly once even though several racing paths call this function.
+  try {
+    const claimed = await Subscription.findOneAndUpdate(
+      { _id: subscription._id, purchaseAlertSent: { $ne: true } },
+      { $set: { purchaseAlertSent: true } },
+    );
+    if (claimed) {
+      subscription.purchaseAlertSent = true;
+      await sendNewSubscriptionAlert(subscription);
+    }
+  } catch (err) {
+    console.error(`runFirstPaymentSettlement: purchase alert failed for ${subscription._id}:`, err.message);
   }
 }
 // ============================================================

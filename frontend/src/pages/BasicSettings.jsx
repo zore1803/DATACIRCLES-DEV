@@ -9,6 +9,7 @@ import {
   Briefcase,
   Contact,
   Database,
+  Calculator,
   ArrowLeft,
   HelpCircle,
   Workflow,
@@ -24,6 +25,7 @@ import {
 import SettingsIcon from "../components/common/SettingsIcon";
 import KanbanSettings from "../components/settings/KanbanSettings";
 import CompanyFieldSettings from "../components/settings/CompanyFieldSettings";
+import AccountingFieldSettings from "../components/settings/AccountingFieldSettings";
 import ContactFieldSettings from "../components/settings/ContactFieldSettings";
 import DealFieldSettings from "../components/settings/DealFieldSettings";
 import HelpCenter from "../components/settings/HelpCenter";
@@ -116,6 +118,18 @@ const BasicSettings = () => {
       borderColor: "border-cyan-200",
       hoverBg: "hover:bg-cyan-50",
       component: <CompanyFieldSettings />,
+      category: "Customization",
+    },
+    {
+      id: "accounting-fields",
+      icon: <Calculator className="w-5 h-5" />,
+      label: "Accounting Fields",
+      description: "Customize fields for invoices, pro forma, quotations and challans",
+      color: "text-emerald-600",
+      bgColor: "bg-emerald-50",
+      borderColor: "border-emerald-200",
+      hoverBg: "hover:bg-emerald-50",
+      component: <AccountingFieldSettings />,
       category: "Customization",
     },
     {
