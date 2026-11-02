@@ -94,6 +94,7 @@ function normalizeInvoiceNumberSettings(settings = {}) {
     defaultTermsByType: normalizeFooterMap(settings.defaultTermsByType),
     documentTypes: Object.entries(DEFAULT_DOCUMENT_TYPES).map(([key, value]) => ({ key, label: value.label })),
     defaultDueDateDays: settings.defaultDueDateDays != null ? Number(settings.defaultDueDateDays) : null,
+    customFields: Array.isArray(settings.customFields) ? settings.customFields : [],
     whatsappTemplate: settings.whatsappTemplate != null ? String(settings.whatsappTemplate) : null,
     whatsappLine1: settings.whatsappLine1 != null ? String(settings.whatsappLine1) : 'Thanks for your business!',
     whatsappLine2: settings.whatsappLine2 != null ? String(settings.whatsappLine2) : '',
@@ -705,6 +706,9 @@ async function saveDocumentSettingsForOrganization(organizationId, payload = {})
       ...(existing?.defaultTermsByType || {}),
       ...normalizeFooterMap(payload.defaultTermsByType),
     };
+  }
+  if (payload.customFields !== undefined) {
+    settingsPayload.customFields = require('./documentCustomFields').sanitizeFieldDefinitions(payload.customFields);
   }
   if (payload.defaultDueDateDays !== undefined) {
     settingsPayload.defaultDueDateDays = payload.defaultDueDateDays != null ? Number(payload.defaultDueDateDays) : null;

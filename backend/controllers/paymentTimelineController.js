@@ -4,11 +4,13 @@ const Invoice = require("../models/Invoice");
 const Purchase = require("../models/Purchase");
 const SubscriptionPayment = require("../models/SubscriptionPayment.js");
 const BankDetails = require("../models/BankDetails");
+const CreditCard = require("../models/CreditCard");
 const Wallet = require("../models/Wallet");
 const Company = require("../models/Company");
 const Contact = require("../models/Contact");
 const Deal = require("../models/Deal");
 const PaymentAllocation = require("../models/PaymentAllocation");
+const { getLedgerRows, rowBelongsToBank, rowBelongsToCard, cardLabel } = require("../utils/expenseLedger");
 const allocationService = require("../services/paymentAllocationService");
 
 exports.getPaymentsTimeline = async (req, res) => {
@@ -31,7 +33,7 @@ exports.getPaymentsTimeline = async (req, res) => {
     }
 
     // Fetch from all relevant collections concurrently
-    const [payments, invoices, purchases, subPayments, bankAccounts, wallet, allocations] = await Promise.all([
+    const [payments, invoices, purchases, subPayments, bankAccounts, wallet, allocations, ledgerRows, creditCards] = await Promise.all([
       Payment.find({ organization: orgId })
         .populate("vendor", "name companyName")
         .populate("party", "name companyName"),
@@ -46,7 +48,9 @@ exports.getPaymentsTimeline = async (req, res) => {
       SubscriptionPayment.find({ organization: orgId }),
       BankDetails.find({ organization: orgId }),
       Wallet.findOne({ organization: orgId }),
-      PaymentAllocation.find({ organization: orgId }).select("documentPaymentId payment documentType").lean()
+      PaymentAllocation.find({ organization: orgId }).select("documentPaymentId payment documentType").lean(),
+      getLedgerRows(orgId),
+      CreditCard.find({ organization: orgId })
     ]);
 
     // The timeline reads both the Payment collection and the subdocs those
@@ -211,7 +215,8 @@ exports.getPaymentsTimeline = async (req, res) => {
       ...formattedPayments,
       ...formattedInvoices,
       ...formattedPurchases,
-      ...formattedSubs
+      ...formattedSubs,
+      ...ledgerRows
     ];
 
     // Category = what KIND of movement a row is (distinct from `type`, which is
@@ -339,11 +344,7 @@ exports.getPaymentsTimeline = async (req, res) => {
       const opening = Number(b.openingBalance) || 0;
 
       // Filter all transactions linked to this bank
-      const bankTx = allTransactions.filter((t) => {
-        if (!t.bank) return false;
-        const bName = t.bank.toLowerCase();
-        return bName.includes(bankName.toLowerCase()) || bName.includes((b.accountNumber || "").toLowerCase());
-      });
+      const bankTx = allTransactions.filter((t) => rowBelongsToBank(t, b));
 
       const inSum = bankTx.filter((t) => t.direction === "IN").reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
       const outSum = bankTx.filter((t) => t.direction === "OUT").reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
@@ -358,6 +359,24 @@ exports.getPaymentsTimeline = async (req, res) => {
         openingBalance: opening,
         currentBalance,
         isDefault: b.isDefault || false
+      };
+    });
+
+    // Credit cards: spend goes out, refunds/payments come in, so the balance is
+    // negative by whatever is still owed on the card.
+    const cardSummaries = creditCards.map((c) => {
+      const cardTx = allTransactions.filter((t) => rowBelongsToCard(t, c));
+      const inSum = cardTx.filter((t) => t.direction === "IN").reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+      const outSum = cardTx.filter((t) => t.direction === "OUT").reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+      return {
+        id: c._id,
+        type: "card",
+        title: c.bank,
+        accountNumber: `•••• ${c.last4}`,
+        accountHolder: c.cardHolder || "",
+        cardLabel: cardLabel(c),
+        currentBalance: inSum - outSum,
+        isDefault: c.isDefault || false,
       };
     });
 
@@ -385,7 +404,7 @@ exports.getPaymentsTimeline = async (req, res) => {
       currentBalance: cashIn - cashOut,
     };
 
-    const accountsSummary = [walletSummary, cashSummary, ...bankSummaries];
+    const accountsSummary = [walletSummary, cashSummary, ...bankSummaries, ...cardSummaries];
 
     res.json({
       documents: paginatedTransactions,

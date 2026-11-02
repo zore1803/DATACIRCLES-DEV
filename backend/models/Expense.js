@@ -98,6 +98,9 @@ const expenseSchema = new mongoose.Schema(
     // The bank account the money moved through, so these entries can feed the
     // per-account balances the payments timeline already computes.
     bankAccount: { type: mongoose.Schema.Types.ObjectId, ref: "BankDetails", default: null },
+    // Set instead of bankAccount when the entry was paid by credit card, so the
+    // spend is tied to the card without touching any bank balance.
+    creditCard: { type: mongoose.Schema.Types.ObjectId, ref: "CreditCard", default: null },
     paymentNotes: { type: String, trim: true, default: "" },
 
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

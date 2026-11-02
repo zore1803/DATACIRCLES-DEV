@@ -12,6 +12,7 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
   const [isSliding, setIsSliding] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [banks, setBanks] = useState([]);
+  const [cards, setCards] = useState([]);
   const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
   const notesEditorRef = useRef(null);
   const openedAtRef = useRef(0);
@@ -73,6 +74,12 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
       }
     } catch (err) {
       console.error("Fetch banks failed", err);
+    }
+    try {
+      const res = await API.get("/credit-cards");
+      setCards(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error("Fetch credit cards failed", err);
     }
   };
 
@@ -308,6 +315,11 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
     (p.name || "").toLowerCase().includes(partySearch.toLowerCase())
   );
 
+  // Cards are recorded the way the payments timeline expects: a label with the
+  // bank and last four, which it matches back to the card (see
+  // backend/utils/expenseLedger.js).
+  const cardLabelOf = (c) => `${c.bank} Credit Card ••••${c.last4}`;
+  const selectedCardObj = cards.find(c => `card:${c._id}` === selectedBankId);
   const selectedBankObj = banks.find(bk => bk._id === selectedBankId);
 
   return (
@@ -487,14 +499,21 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
             </div>
 
             <div>
-              <FormLabel>Select Bank Account</FormLabel>
+              <FormLabel>Select Bank Account/Credit Card</FormLabel>
               <div className="relative w-full">
                 <button
                   type="button"
                   onClick={() => setBankDropdownOpen(!bankDropdownOpen)}
                   className="w-full flex items-center justify-between border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all bg-white"
                 >
-                  {selectedBankObj ? (
+                  {selectedCardObj ? (
+                    <div className="flex items-center gap-2 min-w-0">
+                      <BankLogo bankName={selectedCardObj.bank} size={20} />
+                      <span className="text-[12px] font-medium text-[#1F2937] truncate">
+                        {selectedCardObj.bank} Credit Card - XXXX{selectedCardObj.last4}
+                      </span>
+                    </div>
+                  ) : selectedBankObj ? (
                     <div className="flex items-center gap-2 min-w-0">
                       <BankLogo bankName={selectedBankObj.bankName || selectedBankObj.bank || ""} size={20} />
                       <span className="text-[12px] font-medium text-[#1F2937] truncate">
@@ -504,7 +523,7 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
                       </span>
                     </div>
                   ) : (
-                    <span className="text-[#1F2937] opacity-50 text-[12px]">Select a bank...</span>
+                    <span className="text-[#1F2937] opacity-50 text-[12px]">Select a bank or card...</span>
                   )}
                   <ChevronDown className={`w-3.5 h-3.5 flex-shrink-0 text-gray-400 transition-transform ${bankDropdownOpen ? "rotate-180" : ""}`} />
                 </button>
@@ -531,6 +550,22 @@ export default function PaymentFormModal({ isOpen, onClose, onSuccess }) {
                         </button>
                       );
                     })}
+                    {cards.map(c => (
+                      <button
+                        key={c._id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedBankId(`card:${c._id}`);
+                          setFormData(p => ({ ...p, bank: cardLabelOf(c) }));
+                          setBankDropdownOpen(false);
+                        }}
+                        className="flex items-center gap-2.5 w-full px-4 py-2.5 text-[12px] hover:bg-gray-50 text-left transition-colors"
+                      >
+                        <BankLogo bankName={c.bank} size={20} />
+                        <span className="font-medium text-[#1F2937]">{c.bank} Credit Card{c.isDefault ? " (Default)" : ""}</span>
+                        <span className="text-[#1F2937] opacity-50 text-[11px] ml-auto">XXXX{c.last4}</span>
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>

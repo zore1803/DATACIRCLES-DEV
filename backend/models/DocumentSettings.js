@@ -117,6 +117,22 @@ const documentSettingsSchema = new mongoose.Schema(
         createdAt: { type: Date, default: Date.now },
       },
     ],
+    // Fields the organization adds to its documents. Definitions only; each
+    // document stores its own values (see utils/documentCustomFields.js).
+    customFields: {
+      type: [
+        {
+          _id: false,
+          id: String,
+          label: String,
+          type: { type: String, default: 'text' },
+          options: [String],
+          docTypes: [String],
+          showOnDocument: { type: Boolean, default: true },
+        },
+      ],
+      default: [],
+    },
     defaultDueDateDays: {
       type: Number,
       default: null,

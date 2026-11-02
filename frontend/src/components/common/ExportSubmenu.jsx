@@ -40,7 +40,10 @@ export default function ExportSubmenu({ onExport, onDone, disabled = false, item
   };
 
   return (
-    <div className="relative" ref={ref}>
+    // mousedown is not allowed to move focus: some parent menus (Expenses' ⋮ menu)
+    // close themselves when their trigger button loses focus, which would tear this
+    // flyout down before the click on "Export as Excel/PDF" could land.
+    <div className="relative" ref={ref} onMouseDown={(e) => e.preventDefault()}>
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}

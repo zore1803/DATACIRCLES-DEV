@@ -54,6 +54,18 @@ const proformaInvoiceSchema = new mongoose.Schema({
   // Free-text footer blocks, printed on the document when present.
   notes: { type: String, default: '' },
   terms: { type: String, default: '' },
+  // Values for the organization's document custom fields (Settings > Document
+  // Settings). A per-document copy of label + value, so later edits to the field
+  // definitions never change an issued document.
+  customFields: [
+    {
+      _id: false,
+      id: { type: String, default: '' },
+      label: { type: String, required: true },
+      value: { type: String, default: '' },
+      showOnDocument: { type: Boolean, default: true },
+    },
+  ],
   bankDetails: { type: mongoose.Schema.Types.ObjectId, ref: 'BankDetails', default: null },
   // Round Off chosen on the form. No default: documents saved before this field existed stay
   // unrounded in their PDF, exactly as before.

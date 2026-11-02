@@ -1,3 +1,4 @@
+const { sanitizeCustomFields } = require("../utils/documentCustomFields");
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const DeliveryChallan = require("../models/deliveryChallan");
 const getDefaultBankDetails = require("../utils/getDefaultBankDetails");
@@ -52,6 +53,7 @@ exports.createDeliveryChallan = async (req, res) => {
       items,
       notes,
       terms,
+      customFields,
       signature,
       signatureType,
       discount,
@@ -148,6 +150,7 @@ exports.createDeliveryChallan = async (req, res) => {
       items,
       notes: notes || "",
       terms: terms || "",
+      customFields: sanitizeCustomFields(customFields),
       reference: reference || "",
       signature,
       signatureType: signatureType || "text",
@@ -237,10 +240,11 @@ exports.duplicateDeliveryChallan = async (req, res) => {
       deliveryChallanNumber: newDeliveryChallanNumber,
       date: new Date(),
       amount: source.amount,
-      status: "Draft",
+      status: "Pending",
       items: source.items,
       notes: source.notes,
       terms: source.terms,
+      customFields: source.customFields,
       reference: source.reference,
       signature: source.signature,
       signatureType: normalizedSignatureType,
@@ -492,6 +496,7 @@ exports.updateDeliveryChallan = async (req, res) => {
       items,
       notes,
       terms,
+      customFields,
       signature,
       signatureType,
       discount,
@@ -567,6 +572,7 @@ exports.updateDeliveryChallan = async (req, res) => {
         items,
         notes,
         terms,
+        ...(customFields !== undefined && { customFields: sanitizeCustomFields(customFields) }),
         reference: reference || "",
         signature,
         signatureType,
@@ -717,6 +723,11 @@ exports.updateDeliveryChallanNumber = async (req, res) => {
     }
 
     const normalized = deliveryChallanNumber.trim();
+    // The prefix/suffix the new number was built from, so the document's stored
+    // series fields keep matching its number. Both optional.
+    const seriesFields = {};
+    if (typeof req.body.prefix === "string") seriesFields.deliveryChallanPrefix = req.body.prefix.trim();
+    if (typeof req.body.suffix === "string") seriesFields.deliveryChallanSuffix = req.body.suffix.trim();
 
     // Check duplicate
     const exists = await DeliveryChallan.findOne({
@@ -733,7 +744,7 @@ exports.updateDeliveryChallanNumber = async (req, res) => {
 
     const updated = await DeliveryChallan.findOneAndUpdate(
       { _id: id, organization: req.user.organization },
-      { deliveryChallanNumber: normalized },
+      { deliveryChallanNumber: normalized, ...seriesFields },
       { new: true }
     );
 

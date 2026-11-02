@@ -6,6 +6,7 @@ const { EXPENSE_CATEGORIES, INCOME_CATEGORIES } = require("../models/Expense");
 // otherwise fail with MissingSchemaError.
 require("../models/Vendor");
 require("../models/BankDetails");
+require("../models/CreditCard");
 const Deal = require("../models/Deal");
 const mongoose = require("mongoose");
 const Branding = require("../models/Branding");
@@ -90,17 +91,104 @@ const normalizePaymentFields = (body, target) => {
   if (isPaid) {
     target.paymentDate = body.paymentDate ? new Date(body.paymentDate) : new Date();
     target.paymentType = body.paymentType || "UPI";
-    target.bankAccount = body.bankAccount || null;
+    // A card payment is tied to the card, never to a bank balance.
+    const byCard = Boolean(body.creditCard);
+    target.creditCard = byCard ? body.creditCard : null;
+    target.bankAccount = byCard ? null : body.bankAccount || null;
     target.paymentNotes = body.paymentNotes || "";
   } else {
     target.paymentDate = null;
     target.paymentType = "";
     target.bankAccount = null;
+    target.creditCard = null;
     target.paymentNotes = "";
   }
 };
 
-// GET /api/expenses?kind=expense|income&search=&status=&page=&limit=
+
+// Advanced-filter rules from the list page: [{ column, operator, value }], all
+// of which must match. Only the columns below are filterable, and each maps onto
+// a stored field, so a rule can never reach an arbitrary field.
+const FILTER_FIELDS = {
+  category: { path: "category", type: "text" },
+  notes: { path: "notes", type: "text" },
+  paymentType: { path: "paymentType", type: "text" },
+  currency: { path: "currency", type: "text" },
+  amount: { path: "amount", type: "number" },
+  date: { path: "date", type: "date" },
+};
+
+const escapeRx = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const asList = (v) => (Array.isArray(v) ? v : String(v ?? "").split(",")).map((x) => String(x).trim()).filter(Boolean);
+
+// One calendar day, [start, next day), so "is 5 Nov" matches any time on the 5th.
+const dayRange = (v) => {
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return null;
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return { start, end: new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1) };
+};
+
+const ruleToCondition = (rule) => {
+  const def = FILTER_FIELDS[rule?.column];
+  if (!def) return null;
+  const { path, type } = def;
+  const op = rule.operator;
+  const raw = rule.value;
+
+  if (op === "is_empty") return { $or: [{ [path]: { $in: [null, ""] } }, { [path]: { $exists: false } }] };
+  if (op === "is_not_empty") return { [path]: { $nin: [null, ""], $exists: true } };
+
+  if (type === "text") {
+    const val = String(raw ?? "").trim();
+    if (op === "contains") return val ? { [path]: new RegExp(escapeRx(val), "i") } : null;
+    if (op === "not_contains") return val ? { [path]: { $not: new RegExp(escapeRx(val), "i") } } : null;
+    if (op === "is") return val ? { [path]: new RegExp(`^${escapeRx(val)}$`, "i") } : null;
+    if (op === "is_not") return val ? { [path]: { $not: new RegExp(`^${escapeRx(val)}$`, "i") } } : null;
+    if (op === "in" || op === "not_in") {
+      const list = asList(raw).map((x) => new RegExp(`^${escapeRx(x)}$`, "i"));
+      if (!list.length) return null;
+      return op === "in" ? { [path]: { $in: list } } : { [path]: { $nin: list } };
+    }
+    return null;
+  }
+
+  if (type === "number") {
+    const n = Number(raw);
+    if (op === "in" || op === "not_in") {
+      const list = asList(raw).map(Number).filter((x) => !Number.isNaN(x));
+      if (!list.length) return null;
+      return { [path]: { [op === "in" ? "$in" : "$nin"]: list } };
+    }
+    if (raw === "" || raw == null || Number.isNaN(n)) return null;
+    if (op === "is") return { [path]: n };
+    if (op === "is_not") return { [path]: { $ne: n } };
+    if (op === "greater_than") return { [path]: { $gt: n } };
+    if (op === "less_than") return { [path]: { $lt: n } };
+    return null;
+  }
+
+  // date
+  const range = dayRange(raw);
+  if (!range) return null;
+  if (op === "is") return { [path]: { $gte: range.start, $lt: range.end } };
+  if (op === "is_not") return { $or: [{ [path]: { $lt: range.start } }, { [path]: { $gte: range.end } }] };
+  if (op === "greater_than") return { [path]: { $gte: range.end } };
+  if (op === "less_than") return { [path]: { $lt: range.start } };
+  return null;
+};
+
+const parseFilterRules = (raw) => {
+  if (!raw) return [];
+  try {
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list.map(ruleToCondition).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+};
+
+// GET /api/expenses?kind=expense|income&search=&status=&rules=&page=&limit=
 exports.list = async (req, res) => {
   try {
     const orgId = req.user.organization;
@@ -136,6 +224,9 @@ exports.list = async (req, res) => {
       ];
     }
 
+    const ruleConditions = parseFilterRules(req.query.rules);
+    if (ruleConditions.length) query.$and = [...(query.$and || []), ...ruleConditions];
+
     // Current-month window for the "This Month" KPI.
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -145,6 +236,7 @@ exports.list = async (req, res) => {
       Expense.find(query)
         .populate("vendor", "name companyName email phone gstin")
         .populate("bankAccount", "bank accountNumber")
+        .populate("creditCard", "bank last4 cardHolder")
         .populate("deal", "title")
         .sort({ date: -1, createdAt: -1 })
         .skip((page - 1) * limit)
@@ -378,7 +470,8 @@ exports.receipt = async (req, res) => {
       organization: req.user.organization,
     })
       .populate("vendor", "name companyName email phone gstin")
-      .populate("bankAccount", "bank accountNumber");
+      .populate("bankAccount", "bank accountNumber")
+        .populate("creditCard", "bank last4 cardHolder");
 
     if (!entry) return res.status(404).json({ error: "Record not found" });
 

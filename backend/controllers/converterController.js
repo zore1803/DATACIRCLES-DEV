@@ -133,7 +133,7 @@ exports.convertToQuotation = async (req, res) => {
       ...invoice.toObject(),
       _id: newId,
       quotationNumber,
-      status: 'Draft',
+      status: 'Pending',
       createdAt: undefined,
       updatedAt: undefined,
     };
@@ -184,7 +184,7 @@ exports.convertToDeliveryChallan = async (req, res) => {
       ...invoice.toObject(),
       _id: newId,
       deliveryChallanNumber,
-      status: 'Draft',
+      status: 'Pending',
       items: invoice.items.map(item => ({
         ...item,
         hsn: undefined, // Remove HSN for Delivery Challan
@@ -290,7 +290,7 @@ exports.convertProformaToQuotation = async (req, res) => {
       ...proformaInvoice.toObject(),
       _id: newId,
       quotationNumber,
-      status: 'Draft',
+      status: 'Pending',
       createdAt: undefined,
       updatedAt: undefined,
     };
@@ -341,7 +341,7 @@ exports.convertProformaToDeliveryChallan = async (req, res) => {
       ...proformaInvoice.toObject(),
       _id: newId,
       deliveryChallanNumber,
-      status: 'Draft',
+      status: 'Pending',
       items: proformaInvoice.items.map(item => ({
         ...item,
         hsn: undefined, // Remove HSN for Delivery Challan
@@ -514,7 +514,7 @@ exports.convertQuotationToDeliveryChallan = async (req, res) => {
       ...quotation.toObject(),
       _id: newId,
       deliveryChallanNumber,
-      status: 'Draft',
+      status: 'Pending',
       items: quotation.items.map(item => ({
         ...item,
         hsn: undefined, // Remove HSN for Delivery Challan
@@ -688,7 +688,7 @@ exports.convertDeliveryChallanToQuotation = async (req, res) => {
       ...deliveryChallan.toObject(),
       _id: newId,
       quotationNumber,
-      status: 'Draft',
+      status: 'Pending',
       createdAt: undefined,
       updatedAt: undefined,
     };
@@ -847,7 +847,7 @@ exports.bulkConvertInvoiceToDeliveryChallan = async (req, res) => {
         ...invoice.toObject(),
         _id: newId,
         deliveryChallanNumber,
-        status: 'Draft',
+        status: 'Pending',
         items: invoice.items.map(item => ({
           ...item,
           hsn: undefined,

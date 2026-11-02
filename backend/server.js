@@ -223,6 +223,8 @@ app.use('/api/document-settings', documentSettingsRoutes);
 
 const bankDetailsRoutes = require("./routes/bankDetails");
 app.use("/api/bank-details", bankDetailsRoutes);
+const creditCardRoutes = require("./routes/creditCards");
+app.use("/api/credit-cards", creditCardRoutes);
 
 const documentTemplateSettingsRoutes = require("./routes/documentTemplateSettings");
 app.use("/api/document-templates", documentTemplateSettingsRoutes);

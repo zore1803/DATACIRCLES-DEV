@@ -1,4 +1,6 @@
 import DeleteIcon from "../common/DeleteIcon";
+import DocumentNumberEditor, { joinDocumentNumber } from "../common/DocumentNumberEditor";
+import DocumentCustomFieldInputs from "../common/DocumentCustomFieldInputs";
 import { resolveField, resolveDiscount, resolveMaxDiscountPercent } from "../../utils/variantResolve";
 import PdfIcon from "../common/PdfIcon";
 import PlusIcon from "../common/PlusIcon";
@@ -33,6 +35,7 @@ import BankModal from "../settings/BankModal";
 import SignatureModal from "../settings/SignatureModal";
 import toast from "react-hot-toast";
 import { computeDocument, GST_RATES } from "../../../../shared/documentTemplates";
+import NoteField from "../common/NoteField";
 import { PREDEFINED_NOTES, PREDEFINED_TERMS } from "../../utils/documentDefaultText";
 
 import SearchIcon from "../common/SearchIcon";
@@ -486,23 +489,19 @@ const InvoiceFormFull = ({
   // Renaming a saved document's number, same flow as the split-view panel:
   // the prefix stays fixed and only the numeric part is editable.
   const [docNumber, setDocNumber] = useState(editingInvoice?.invoiceNumber || "");
-  const [numberDraft, setNumberDraft] = useState(null); // null = not renaming
+  const [renamingNumber, setRenamingNumber] = useState(false);
   const [savingNumber, setSavingNumber] = useState(false);
-  const numberPrefix = docNumber.includes("-")
-    ? docNumber.slice(0, docNumber.lastIndexOf("-") + 1)
-    : "";
-  const numberSuffix = docNumber.slice(numberPrefix.length);
-
-  const saveDocNumber = async () => {
-    const suffix = (numberDraft || "").trim();
-    if (!suffix) return toast.error("Invoice number cannot be empty.");
-    const next = `${numberPrefix}${suffix}`;
-    if (next === docNumber) return setNumberDraft(null);
+  const saveDocNumber = async ({ seq, prefix, suffix }) => {
+    if (!seq) return toast.error("Invoice number cannot be empty.");
+    const next = joinDocumentNumber(prefix, seq, suffix);
+    const unchangedSeries = (prefix || "") === (form.invoicePrefix || "") && (suffix || "") === (form.invoiceSuffix || "");
+    if (next === docNumber && unchangedSeries) return setRenamingNumber(false);
     try {
       setSavingNumber(true);
-      await API.patch(`/invoices/number/${editingInvoice._id}`, { invoiceNumber: next });
+      await API.patch(`/invoices/number/${editingInvoice._id}`, { invoiceNumber: next, prefix, suffix });
       setDocNumber(next);
-      setNumberDraft(null);
+      setForm((prev) => ({ ...prev, invoicePrefix: prefix, invoiceSuffix: suffix }));
+      setRenamingNumber(false);
       toast.success("Invoice number updated.");
       fetchData?.();
     } catch (err) {
@@ -707,6 +706,7 @@ const InvoiceFormFull = ({
         transactionType: sourceData.transactionType || "intra",
         notes: sourceData.notes || "",
         terms: sourceData.terms || "",
+        customFields: sourceData.customFields || [],
         attachments: sourceData.attachments || [],
         bankDetails: sourceData.bankDetails?._id || sourceData.bankDetails || "",
         // Same rule as invoiceNumber above: only an actual edit keeps the
@@ -1332,6 +1332,7 @@ const InvoiceFormFull = ({
 
     try {
       const payload = {
+        customFields: form.customFields || [],
         deal: form.deal,
         date: form.date,
         dueDate: form.dueDate,
@@ -1562,7 +1563,7 @@ const InvoiceFormFull = ({
               <div className="flex items-center gap-4">
                 {editingInvoice ? (
                   <div className="flex flex-col">
-                    {numberDraft === null ? (
+                    {!renamingNumber ? (
                       <div className="flex items-center gap-1.5 min-w-0">
                         <h2 className="text-xl font-medium text-[#1F2937] truncate">
                           {docNumber || "Edit Invoice"}
@@ -1570,7 +1571,7 @@ const InvoiceFormFull = ({
                         {docNumber && (
                           <button
                             type="button"
-                            onClick={() => setNumberDraft(numberSuffix)}
+                            onClick={() => setRenamingNumber(true)}
                             title="Rename this invoice"
                             aria-label="Rename this invoice"
                             className="p-1 rounded-md text-gray-400 hover:text-[#0085FF] hover:bg-blue-50 transition-colors flex-shrink-0"
@@ -1580,39 +1581,18 @@ const InvoiceFormFull = ({
                         )}
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1 min-w-0">
-                        <div className="flex items-center h-9 pl-2.5 pr-1 border border-gray-300 rounded-lg focus-within:border-[#0085FF] min-w-0">
-                          <span className="text-xl font-medium text-[#99A0AE] flex-shrink-0">
-                            {numberPrefix}
-                          </span>
-                          <input
-                            autoFocus
-                            value={numberDraft}
-                            disabled={savingNumber}
-                            onChange={(e) => setNumberDraft(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") saveDocNumber();
-                              if (e.key === "Escape") setNumberDraft(null);
-                            }}
-                            className="w-28 min-w-0 px-1 text-xl font-medium text-[#1F2937] outline-none bg-transparent"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={saveDocNumber}
-                          disabled={savingNumber}
-                          className="h-7 px-2 flex items-center justify-center rounded-full bg-[#0085FF] hover:bg-blue-600 text-white text-xs font-semibold transition-colors disabled:opacity-60 flex-shrink-0"
-                        >
-                          {savingNumber ? "..." : "Save"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNumberDraft(null)}
-                          className="h-7 px-2 text-xs font-medium text-gray-500 hover:text-gray-800 flex-shrink-0"
-                        >
-                          Cancel
-                        </button>
-                      </div>
+                      <DocumentNumberEditor
+                        docNumber={docNumber}
+                        prefix={form.invoicePrefix}
+                        suffix={form.invoiceSuffix}
+                        settingsKey="invoice"
+                        fallbackPrefixes={prefixOptions}
+                        fallbackSuffixes={suffixOptions}
+                        docName="Invoice"
+                        saving={savingNumber}
+                        onSave={saveDocNumber}
+                        onCancel={() => setRenamingNumber(false)}
+                      />
                     )}
                   </div>
                 ) : (
@@ -2307,12 +2287,11 @@ const InvoiceFormFull = ({
                       + Add Notes
                     </button>
                   </div>
-                  <textarea
+                  <NoteField
                     placeholder="Enter your notes, say thanks, or anything else"
-                    rows={3}
                     value={form.notes}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, notes: e.target.value }));
+                    onChange={(v) => {
+                      setForm((prev) => ({ ...prev, notes: v }));
                       setHasUnsavedChanges(true);
                     }}
                     className="w-full px-3 py-2.5 rounded-2xl border border-[#1F2937]/10 text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-y"
@@ -2331,17 +2310,25 @@ const InvoiceFormFull = ({
                       + Add Terms
                     </button>
                   </div>
-                  <textarea
+                  <NoteField
                     placeholder="Enter terms & conditions"
-                    rows={3}
                     value={form.terms}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, terms: e.target.value }));
+                    onChange={(v) => {
+                      setForm((prev) => ({ ...prev, terms: v }));
                       setHasUnsavedChanges(true);
                     }}
                     className="w-full px-3 py-2.5 rounded-2xl border border-[#1F2937]/10 text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-y"
                   />
                 </div>
+
+                <DocumentCustomFieldInputs
+                  docType="tax"
+                  value={form.customFields}
+                  onChange={(v) => {
+                    setForm((prev) => ({ ...prev, customFields: v }));
+                    setHasUnsavedChanges(true);
+                  }}
+                />
 
               </div>
 

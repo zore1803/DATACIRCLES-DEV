@@ -1,3 +1,4 @@
+const { sanitizeCustomFields } = require("../utils/documentCustomFields");
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const PerformaInvoice = require("../models/ProformaInvoice");
 const getDefaultBankDetails = require("../utils/getDefaultBankDetails");
@@ -37,6 +38,7 @@ const createPerformaInvoice = async (req, res) => {
       items,
       notes,
       terms,
+      customFields,
       transactionType,
       placeOfSupply,
       placeOfSupplyStateCode,
@@ -144,6 +146,7 @@ const createPerformaInvoice = async (req, res) => {
       items,
       notes: notes || "",
       terms: terms || "",
+      customFields: sanitizeCustomFields(customFields),
       reference: reference || "",
       transactionType: transactionType || 'intra',
       // Resolved on the form from the shipping address and stored as sent, so the
@@ -237,10 +240,11 @@ const duplicatePerformaInvoice = async (req, res) => {
       contact: source.contact || null,
       date: new Date(),
       amount: source.amount,
-      status: "Draft",
+      status: "Pending",
       items: source.items,
       notes: source.notes,
       terms: source.terms,
+      customFields: source.customFields,
       reference: source.reference,
       placeOfSupply: source.placeOfSupply,
       placeOfSupplyStateCode: source.placeOfSupplyStateCode,
@@ -549,6 +553,7 @@ const updatePerformaInvoice = async (req, res) => {
       items,
       notes,
       terms,
+      customFields,
       transactionType,
       placeOfSupply,
       placeOfSupplyStateCode,
@@ -636,6 +641,7 @@ const updatePerformaInvoice = async (req, res) => {
         items,
         notes,
         terms,
+        ...(customFields !== undefined && { customFields: sanitizeCustomFields(customFields) }),
         reference: reference || "",
         transactionType,
         // Only written when sent, so an update without them leaves the saved values alone.
@@ -706,6 +712,11 @@ const updateStatus = async (req, res) => {
 const updatePerformaInvoiceNumber = async (req, res) => {
   try {
     const { performaInvoiceNumber } = req.body;
+    // The prefix/suffix the new number was built from, so the document's stored
+    // series fields keep matching its number. Both optional.
+    const seriesFields = {};
+    if (typeof req.body.prefix === "string") seriesFields.performaInvoicePrefix = req.body.prefix.trim();
+    if (typeof req.body.suffix === "string") seriesFields.performaInvoiceSuffix = req.body.suffix.trim();
     const { id } = req.params;
 
     if (!performaInvoiceNumber) {
@@ -734,6 +745,7 @@ const updatePerformaInvoiceNumber = async (req, res) => {
       },
       {
         performaInvoiceNumber,
+        ...seriesFields,
       },
       { new: true }
     );

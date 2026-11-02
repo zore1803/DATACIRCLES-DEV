@@ -151,12 +151,21 @@ const NotesTermsDrawer = ({
     };
   }, [isOpen, onClose, typeOpen, editing]);
 
+  // "Note 2", "Terms 3", ...: one more than the saved list, skipping any name
+  // already taken.
+  const nextTitle = () => {
+    const taken = new Set(templates.map((t) => (t.title || "").trim().toLowerCase()));
+    let n = templates.length + 1;
+    while (taken.has(`${tab.noun} ${n}`.toLowerCase())) n += 1;
+    return `${tab.noun} ${n}`;
+  };
+
   const handleSave = async () => {
     if (!editing.body?.trim()) return toast.error(`${tab.label} text can't be empty.`);
     setSaving(true);
     try {
       const payload = {
-        title: editing.title || "",
+        title: editing.title?.trim() || (editing._id ? "" : nextTitle()),
         body: editing.body,
         isDefault: !!editing.isDefault,
         isActive: editing.isActive !== false,
@@ -180,6 +189,10 @@ const NotesTermsDrawer = ({
     try {
       await API.delete(`/document-footers/${t._id}`);
       toast.success(`${tab.noun} deleted`);
+      // A deleted block must not linger on the document that was using it.
+      if (t.body && t.body === appliedBody) {
+        (active === "notes" ? onApplyNotes : onApplyTerms)?.("");
+      }
       await load();
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to delete");
@@ -360,7 +373,7 @@ const NotesTermsDrawer = ({
               <button
                 type="button"
                 onClick={() =>
-                  setEditing({ title: "", body: "", isDefault: false, isActive: true })
+                  setEditing({ title: nextTitle(), body: "", isDefault: false, isActive: true })
                 }
                 className="inline-flex items-center gap-1.5 h-10 px-4 rounded-full bg-[#0085FF] hover:bg-blue-600 text-white text-[13px] font-medium transition-colors flex-shrink-0"
               >
@@ -416,7 +429,14 @@ const NotesTermsDrawer = ({
                           </Badge>
                         </div>
                         <p className="text-[12px] text-[#525866] mt-1 line-clamp-2 whitespace-pre-line">
-                          {t.body}
+                          {/^\s*<(p|ol|ul)[\s>]/i.test(t.body || "")
+                            ? new DOMParser()
+                                .parseFromString(
+                                  (t.body || "").replace(/<\/(p|li)>/gi, "$&\n"),
+                                  "text/html"
+                                )
+                                .body.textContent.trim()
+                            : t.body}
                         </p>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">

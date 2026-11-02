@@ -1,5 +1,6 @@
 import CalendarIcon from "../common/CalendarIcon";
 // components/settings/SubscriptionPlans.jsx
+import { markPlanPurchased } from "../subscription/PlanUpgradeCelebration";
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Gift, Building2, Crown, CheckCircle, AlertCircle, X, Users, ShieldCheck, RotateCcw, ReceiptText } from "lucide-react";
@@ -475,6 +476,7 @@ const SubscriptionPlans = () => {
     }).then((result) => {
       if (cancelled || pollCancelledRef.current) return;
       if (result.settled) {
+        markPlanPurchased();
         setCheckoutJourneyState('success');
         setMessage({ type: "success", text: "Mandate confirmed! Subscription activated." });
         // Fix (found via live QA): this was the one 'success' path with no
@@ -1071,6 +1073,7 @@ const SubscriptionPlans = () => {
           if (verificationResult.data.success) {
             setMessage({ type: "success", text: "Payment confirmed! Subscription updated successfully." });
             setPaymentInProgress(false);
+            markPlanPurchased();
             setCheckoutJourneyState('success');
             await fetchSubscription();
             setTimeout(() => { 
@@ -1428,6 +1431,7 @@ const SubscriptionPlans = () => {
                 if (pollCancelledRef.current) return;
                 setPaymentInProgress(false);
                 if (settleResult.settled) {
+                  markPlanPurchased();
                   setCheckoutJourneyState("success");
                   setMessage({ type: "success", text: "You're now on annual billing!" });
                   setTimeout(() => {
@@ -1771,6 +1775,7 @@ const SubscriptionPlans = () => {
         if (recon?.data?.reconciled || recon?.data?.alreadyConfirmed) {
           if (preopenedPopup && !preopenedPopup.closed) preopenedPopup.close();
           await fetchSubscription();
+          markPlanPurchased();
           setCheckoutJourneyState('success');
           setMessage({ type: "success", text: "Payment received - your subscription is active." });
           setProcessing(false);
@@ -1889,6 +1894,7 @@ const SubscriptionPlans = () => {
     if (pollCancelledRef.current) return;
     setPaymentInProgress(false);
     if (result.settled) {
+      markPlanPurchased();
       setCheckoutJourneyState('success');
       setMessage({ type: "success", text: "Payment confirmed! Subscription updated successfully." });
       setTimeout(() => {
@@ -1952,6 +1958,7 @@ const SubscriptionPlans = () => {
       const latest = await reconcileThenFetch();
       if (pollCancelledRef.current) return;
       if (latest?.subscription?.isPaymentConfirmed) {
+        markPlanPurchased();
         setCheckoutJourneyState('success');
         setMessage({ type: "success", text: "Payment confirmed! Subscription updated successfully." });
         setTimeout(() => {
@@ -1975,6 +1982,7 @@ const SubscriptionPlans = () => {
 
     const result = outcome.result;
     if (result.settled) {
+      markPlanPurchased();
       setCheckoutJourneyState('success');
       setMessage({ type: "success", text: "Payment confirmed! Subscription updated successfully." });
       setTimeout(() => {

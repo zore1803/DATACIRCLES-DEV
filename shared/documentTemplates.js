@@ -716,12 +716,25 @@ export function buildDocumentHtml(doc, options = {}) {
     upiQrSvg, payQrSvg, eInvoiceQrSvg,
   };
 
+  // Organization-defined custom fields (Document Settings). Rendered the same way
+  // for every template, as a compact label/value strip under the template's own
+  // content, so no individual layout has to know about them.
+  const customFieldItems = (Array.isArray(doc.customFields) ? doc.customFields : []).filter(
+    (f) => f && f.label && String(f.value ?? "").trim() && f.showOnDocument !== false
+  );
+  const customFieldsBlock = customFieldItems.length
+    ? `<div class="dc-customfields" style="margin-top:10px;padding-top:8px;border-top:1px solid #D9D9D9;font-size:11px;line-height:1.5;display:flex;flex-wrap:wrap;gap:3px 28px;">${customFieldItems
+        .map((f) => `<span><b>${esc(f.label)}:</b> ${esc(f.value)}</span>`)
+        .join("")}</div>`
+    : "";
+
   const css = BASE_CSS + (tpl.css || "");
 
   return `<style>${css}</style>
 <div class="dcsheet t-${tplName}">
   <div class="dcsheet-body" style="flex:1;">
     ${tpl.html(ctx)}
+    ${customFieldsBlock}
   </div>
   <div class="dc-page-footer">Page 1 / 1&nbsp;&nbsp;This is a digitally signed document.</div>
 </div>`;

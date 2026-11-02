@@ -1,4 +1,5 @@
 import React, { useState, useEffect, lazy, Suspense } from "react";
+import PlanUpgradeCelebration from "./components/subscription/PlanUpgradeCelebration";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import PageSkeleton from "./components/common/PageSkeleton";
@@ -446,6 +447,7 @@ function AppInner() {
             </button>
           </div>
         )}
+        {userIsAuthenticated && !isSuperAdminAuthenticated && <PlanUpgradeCelebration />}
         {userIsAuthenticated &&
           (isSetupComplete || isSuperAdminAuthenticated) &&
           !shouldHideNavigation && <Header />}
@@ -641,6 +643,38 @@ function AppInner() {
               element={
                 <PrivateRoute>
                   <Accounting />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/invoices"
+              element={
+                <PrivateRoute>
+                  <Accounting fixedTab="tax" />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/proforma-invoices"
+              element={
+                <PrivateRoute>
+                  <Accounting fixedTab="performa" />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/quotations"
+              element={
+                <PrivateRoute>
+                  <Accounting fixedTab="quotation" />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/delivery-challans"
+              element={
+                <PrivateRoute>
+                  <Accounting fixedTab="deliveryChallan" />
                 </PrivateRoute>
               }
             />

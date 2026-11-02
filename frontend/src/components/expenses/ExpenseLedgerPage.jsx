@@ -2,6 +2,8 @@ import DeleteIcon from "../common/DeleteIcon";
 import emailLogo from "../../assets/email-logo.svg";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
+import FilterIcon from "../common/FilterIcon";
+import AdvancedFilterPanel from "../common/AdvancedFilterPanel";
 import EmptyState from "../common/EmptyState";
 import MoreIcon from "../common/MoreIcon";
 import DownloadIcon from "../common/DownloadIcon";
@@ -162,6 +164,23 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
   const [pinnedCols, setPinnedCols] = useState({});
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  // Advanced filter rules ([{ column, operator, value }]); applied on the server so
+  // they cover every page of results and the export, not just the rows on screen.
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [activeFilters, setActiveFilters] = useState([]);
+  // Columns the filter can use; each maps to a stored field on the server.
+  const filterColumns = [
+    { key: "category", label: "Category" },
+    { key: "notes", label: "Notes" },
+    { key: "paymentType", label: "Mode", options: ["UPI", "Cash", "Card", "Net Banking", "Cheque", "EMI"] },
+    { key: "amount", label: "Amount", type: "number" },
+    { key: "date", label: "Date", type: "date" },
+    { key: "currency", label: "Currency" },
+  ];
+  const filterRulesParam = useMemo(
+    () => (activeFilters.length ? JSON.stringify(activeFilters.map(({ column, operator, value }) => ({ column, operator, value }))) : undefined),
+    [activeFilters]
+  );
   // Show/hide the KPI band, remembered per page (per viewer).
   const STATS_KEY = `expenseLedger:showStats:${kind}`;
   const [showStats, setShowStats] = useState(() => {
@@ -424,6 +443,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
         params: {
           kind,
           search: searchTerm || undefined,
+          rules: filterRulesParam,
           page: pagination.currentPage,
           limit: pagination.limit,
         },
@@ -441,11 +461,11 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
     } finally {
       setLoading(false);
     }
-  }, [kind, searchTerm, title, pagination.currentPage, pagination.limit]);
+  }, [kind, searchTerm, filterRulesParam, title, pagination.currentPage, pagination.limit]);
 
   useEffect(() => {
     setPagination((p) => (p.currentPage === 1 ? p : { ...p, currentPage: 1 }));
-  }, [searchTerm]);
+  }, [searchTerm, filterRulesParam]);
 
   // Debounced so typing in the search box doesn't fire a request per keystroke.
   useEffect(() => {
@@ -666,6 +686,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
       try {
         const params = new URLSearchParams({ kind });
         if (searchTerm) params.append("search", searchTerm);
+        if (filterRulesParam) params.append("rules", filterRulesParam);
         chosen = sortRows(await fetchAllPages("/expenses", params, "documents"));
         toast.dismiss(loadingToast);
       } catch (err) {
@@ -792,6 +813,24 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
               </button>
             )}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowAdvancedFilters(true)}
+            title="Filters"
+            className={`relative flex flex-shrink-0 items-center justify-center w-10 h-10 rounded-full border bg-white transition-colors ${
+              activeFilters.length > 0
+                ? "border-[#0085FF] text-[#0085FF]"
+                : "border-[#E1E4EA] text-gray-500 hover:bg-gray-50"
+            }`}
+          >
+            <FilterIcon size={16} className={activeFilters.length > 0 ? "text-[#0085FF]" : ""} />
+            {activeFilters.length > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#0085FF] text-[9px] font-bold text-white">
+                {activeFilters.length}
+              </span>
+            )}
+          </button>
 
           <div className="relative flex-shrink-0">
             <button
@@ -1665,6 +1704,20 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
         loading={bulkDeleting}
         onCancel={() => setShowBulkDeleteModal(false)}
         onConfirm={executeBulkDelete}
+      />
+
+      <AdvancedFilterPanel
+        isOpen={showAdvancedFilters}
+        onClose={() => setShowAdvancedFilters(false)}
+        columns={filterColumns}
+        data={rows}
+        getFieldValue={(row, key) => row[key]}
+        filters={activeFilters}
+        setFilters={setActiveFilters}
+        onApply={(newFilters) => setActiveFilters(newFilters)}
+        title={`Filter ${title}`}
+        subtitle={`Find specific ${title.toLowerCase()} quickly`}
+        emptyStateText={`Add a rule to narrow down your ${title.toLowerCase()}.`}
       />
 
     </div>

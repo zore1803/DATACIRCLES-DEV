@@ -235,10 +235,12 @@ const Navbar = () => {
     () => localStorage.getItem("sidebarPinned") === "true"
   );
   const [isHovered, setIsHovered] = useState(() => isPinned);
+  const [accountingOpen, setAccountingOpen] = useState(false);
   const [salesOpen, setSalesOpen] = useState(false);
   const [procurementOpen, setProcurementOpen] = useState(false);
   const [paymentsOpen, setPaymentsOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [hoveredAccountingIndex, setHoveredAccountingIndex] = useState(null);
   const [hoveredChildIndex, setHoveredChildIndex] = useState(null);
   const [hoveredProcurementIndex, setHoveredProcurementIndex] = useState(null);
   const [hoveredPaymentsIndex, setHoveredPaymentsIndex] = useState(null);
@@ -436,7 +438,12 @@ const getInitials = (name) => {
       dropdownType: "activity",
     },
     { name: "Accounts", isHeader: true },
-    { name: "Accounting", href: "/accounting", icon: AccountingIcon },
+    {
+      name: "Accounting",
+      icon: AccountingIcon,
+      isDropdown: true,
+      dropdownType: "accounting",
+    },
     { name: "Vendors", href: "/vendors", icon: VendorsIcon },
     { name: "Sales", icon: SalesIcon, isDropdown: true, dropdownType: "sales" },
     {
@@ -462,6 +469,14 @@ const getInitials = (name) => {
   const activityChildren = [
     { name: "Tasks and Meetings", href: "/tasks" },
     { name: "Calendar", href: "/calendar" },
+  ];
+
+  // Each document type has its own page (see the routes in App.jsx).
+  const accountingChildren = [
+    { name: "Invoices", href: "/invoices" },
+    { name: "Pro Forma Invoices", href: "/proforma-invoices" },
+    { name: "Quotations", href: "/quotations" },
+    { name: "Delivery Challans", href: "/delivery-challans" },
   ];
 
   const salesChildren = [
@@ -506,6 +521,7 @@ const getInitials = (name) => {
   // Re-run on every route change, not just mount — otherwise a dropdown left
   // open survives browser Back/Forward and shows out of sync with the page.
   useEffect(() => {
+    setAccountingOpen(false);
     setSalesOpen(false);
     setProcurementOpen(false);
     setPaymentsOpen(false);
@@ -533,11 +549,18 @@ const getInitials = (name) => {
 
   const isChildActive = (children) =>
     children.some((child) => {
-      const childPath = child.href.split("?")[0];
-      return (
+      const [childPath, childQuery] = child.href.split("?");
+      const onPath =
         location.pathname === childPath ||
-        location.pathname.startsWith(`${childPath}/`)
-      );
+        location.pathname.startsWith(`${childPath}/`) ||
+        (childPath === "/invoices" && location.pathname === "/accounting");
+      if (!onPath) return false;
+      // Several children can share one page and differ only by ?tab= (Accounting),
+      // so those also have to agree on the tab; no tab in the URL means the first one.
+      const wanted = childQuery ? new URLSearchParams(childQuery).get("tab") : null;
+      if (!wanted) return true;
+      const current = new URLSearchParams(location.search).get("tab") || "tax";
+      return current === wanted;
     });
 
   const handleLogout = async () => {
@@ -1110,7 +1133,16 @@ const getInitials = (name) => {
                     )}
                   </li>
                 ) : item.isDropdown ? (
-                  item.dropdownType === "sales" ? (
+                  item.dropdownType === "accounting" ? (
+                    renderDropdown(
+                      item,
+                      accountingOpen,
+                      setAccountingOpen,
+                      accountingChildren,
+                      hoveredAccountingIndex,
+                      setHoveredAccountingIndex,
+                    )
+                  ) : item.dropdownType === "sales" ? (
                     renderDropdown(
                       item,
                       salesOpen,

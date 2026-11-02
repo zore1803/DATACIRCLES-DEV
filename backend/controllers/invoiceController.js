@@ -1,3 +1,4 @@
+const { sanitizeCustomFields } = require("../utils/documentCustomFields");
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const { parsePickerLimit } = require('../utils/pickerLimit');
 const Invoice = require("../models/Invoice");
@@ -49,6 +50,7 @@ const createInvoice = async (req, res) => {
       reference,
       notes,
       terms,
+      customFields,
       bankDetails,
       qrNote,
       signature,
@@ -212,6 +214,7 @@ const createInvoice = async (req, res) => {
       reference: reference || "",
       notes,
       terms,
+      customFields: sanitizeCustomFields(customFields),
       bankDetails: bankDetails || null,
       ...(isRoundOff !== undefined && { isRoundOff: !!isRoundOff }),
       qrNote: qrNote || "",
@@ -273,7 +276,7 @@ const createInvoice = async (req, res) => {
       ...invoiceObj,
       _id: new mongoose.Types.ObjectId(),
       deliveryChallanNumber,
-      status: "Draft",
+      status: "Pending",
       items: invoiceObj.items.map((item) => ({ ...item, hsn: undefined })),
       createdAt: undefined,
       updatedAt: undefined,
@@ -357,11 +360,12 @@ const duplicateInvoice = async (req, res) => {
       amount: source.amount,
       discount: source.discount,
       isRoundOff: source.isRoundOff,
-      status: "Draft",
+      status: "Pending",
       items: source.items,
       reference: source.reference,
       notes: source.notes,
       terms: source.terms,
+      customFields: source.customFields,
       signature: source.signature,
       signatureType: normalizedSignatureType,
       receiverGSTIN: source.receiverGSTIN,
@@ -808,6 +812,7 @@ const updateInvoice = async (req, res) => {
       reference,
       notes,
       terms,
+      customFields,
       bankDetails,
       qrNote,
       signature,
@@ -950,6 +955,7 @@ const updateInvoice = async (req, res) => {
     if (reference !== undefined) invoice.reference = reference;
     invoice.notes = notes;
     invoice.terms = terms;
+    if (customFields !== undefined) invoice.customFields = sanitizeCustomFields(customFields);
     invoice.bankDetails = bankDetails || null;
     if (isRoundOff !== undefined) invoice.isRoundOff = !!isRoundOff;
     invoice.qrNote = qrNote || "";
@@ -1213,6 +1219,11 @@ const updateInvoiceNumber = async (req, res) => {
     }
 
     const normalized = invoiceNumber.trim();
+    // The prefix/suffix the new number was built from, so the document's stored
+    // series fields keep matching its number. Both optional.
+    const seriesFields = {};
+    if (typeof req.body.prefix === "string") seriesFields.invoicePrefix = req.body.prefix.trim();
+    if (typeof req.body.suffix === "string") seriesFields.invoiceSuffix = req.body.suffix.trim();
 
     const current = await Invoice.findOne({ _id: invoiceId, organization: req.user.organization }).select("date");
     if (!current) {
@@ -1237,7 +1248,7 @@ const updateInvoiceNumber = async (req, res) => {
         _id: invoiceId,
         organization: req.user.organization,
       },
-      { invoiceNumber: normalized },
+      { invoiceNumber: normalized, ...seriesFields },
       { new: true }
     );
 

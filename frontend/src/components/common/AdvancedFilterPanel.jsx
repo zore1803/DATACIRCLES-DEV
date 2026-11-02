@@ -123,6 +123,65 @@ const TagInput = ({ value, onChange, placeholder }) => {
   );
 };
 
+// --- Text input that suggests values already present in the column. Used for the
+// "Contains" / "Does not contain" conditions: type to narrow the list, click one to
+// fill it in, or keep typing any text of your own. ---
+const SuggestInput = ({ value, onChange, suggestions, placeholder }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const onDown = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
+
+  const typed = String(value ?? "").trim().toLowerCase();
+  const matches = suggestions
+    .map((o) => String(optLabel(o)))
+    .filter((label) => label && label.toLowerCase() !== typed && label.toLowerCase().includes(typed))
+    .slice(0, 8);
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
+        placeholder={placeholder}
+        autoComplete="off"
+        className="w-full border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] px-3 h-[38px] focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+      />
+      {open && matches.length > 0 && (
+        <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+          {matches.map((m) => (
+            <li key={m}>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onChange(m);
+                  setOpen(false);
+                }}
+                className="block w-full truncate px-3 py-2 text-left text-[13px] text-gray-700 hover:bg-blue-50"
+              >
+                {m}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
+
 // --- Custom Searchable Dropdown Sub-Component ---
 const SearchableColumnSelect = ({ columns, value, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -221,6 +280,7 @@ export default function AdvancedFilterPanel({
   getFieldValue = null,
 }) {
   const [localFilters, setLocalFilters] = useState([]);
+  const [sectionQuery, setSectionQuery] = useState("");
   useBodyScrollLock(isOpen);
 
   // Compute available dropdown options for each column
@@ -247,14 +307,29 @@ export default function AdvancedFilterPanel({
 
   const getColumnDef = (colKey) => columns.find((c) => c.key === colKey);
 
+  // A rule with no value yet. Every column gets one so it has a section to fill in;
+  // blank rules are dropped when the filters are applied (see handleApply).
+  const blankRule = (col) => {
+    const type = getColumnType(col);
+    return {
+      id: Math.random().toString(36).substr(2, 9),
+      column: col.key,
+      operator: getAvailableOps(col, type)[0],
+      value: type === "dateRange" ? emptyDueDateFilter() : "",
+    };
+  };
+
   useEffect(() => {
     if (isOpen) {
       const filtersWithIds = (filters || []).map((f) => ({
         ...f,
         id: Math.random().toString(36).substr(2, 9),
       }));
-      setLocalFilters(filtersWithIds);
+      const missing = columns.filter((c) => !filtersWithIds.some((f) => f.column === c.key)).map(blankRule);
+      setLocalFilters([...filtersWithIds, ...missing]);
+      setSectionQuery("");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, filters]);
 
   const addFilter = () => {
@@ -313,8 +388,33 @@ export default function AdvancedFilterPanel({
     );
   };
 
+  // Removing a column's only rule resets it to blank (the section stays); removing
+  // one of several just deletes that row.
   const removeFilter = (id) => {
-    setLocalFilters((prev) => prev.filter((f) => f.id !== id));
+    setLocalFilters((prev) => {
+      const target = prev.find((f) => f.id === id);
+      if (!target) return prev;
+      const siblings = prev.filter((f) => f.column === target.column);
+      if (siblings.length > 1) return prev.filter((f) => f.id !== id);
+      return prev.map((f) => (f.id === id ? blankRule(getColumnDef(f.column)) : f));
+    });
+  };
+
+  const clearColumn = (colKey) => {
+    setLocalFilters((prev) => [
+      ...prev.filter((f) => f.column !== colKey),
+      blankRule(getColumnDef(colKey)),
+    ]);
+  };
+
+  // A second condition on the same column, e.g. an amount range: > 500 and < 900.
+  const addCondition = (colKey) => {
+    setLocalFilters((prev) => {
+      const lastIdx = prev.map((f) => f.column).lastIndexOf(colKey);
+      const next = [...prev];
+      next.splice(lastIdx + 1, 0, blankRule(getColumnDef(colKey)));
+      return next;
+    });
   };
 
   const isFilterValueFilled = (f) => {
@@ -355,7 +455,7 @@ export default function AdvancedFilterPanel({
   };
 
   const handleClear = () => {
-    setLocalFilters([]);
+    setLocalFilters(columns.map(blankRule));
     setFilters([]);
     onApply([]);
   };
@@ -395,93 +495,103 @@ export default function AdvancedFilterPanel({
           </button>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-4 bg-white">
-          {localFilters.length === 0 ? (
-            <div className="text-center py-10 px-4 border border-dashed border-gray-200 rounded-lg bg-white">
-              <FilterIcon size={16} className="mx-auto mb-3" />
-              <h3 className="text-sm font-semibold text-gray-700">
-                No filters applied
-              </h3>
-              {/* USE DYNAMIC EMPTY STATE TEXT HERE */}
-              <p className="text-xs text-gray-500 mt-1 mb-4">
-                {emptyStateText}
-              </p>
-              <button
-                onClick={addFilter}
-                className="inline-flex items-center gap-2 px-6 py-2 bg-white border border-gray-200 rounded-[25px] text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <PlusIcon className="w-4 h-4" /> Add Rule
-              </button>
-            </div>
-          ) : (
-            localFilters.map((filter) => {
-              const colDef = getColumnDef(filter.column);
-              const colType = getColumnType(colDef);
-              const availableOps = getAvailableOps(colDef, colType);
+        <div className="flex-shrink-0 border-b border-[#F1F2F4] px-6 py-3 bg-white">
+          <div className="flex items-center gap-2 rounded-full border border-[#1F2937]/10 px-3 h-[38px] focus-within:ring-1 focus-within:ring-blue-500">
+            <SearchIcon className="w-4 h-4 text-[#525866] flex-shrink-0" />
+            <input
+              type="text"
+              value={sectionQuery}
+              onChange={(e) => setSectionQuery(e.target.value)}
+              placeholder="Search fields..."
+              className="w-full bg-transparent text-[13px] outline-none"
+            />
+          </div>
+          <p className="mt-2 text-[11.5px] text-[#78788D]">
+            {(() => {
+              const n = localFilters.filter(isFilterValueFilled).length;
+              return n ? `${n} condition${n > 1 ? "s" : ""} set` : emptyStateText;
+            })()}
+          </p>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-3 bg-[#FAFAFB]">
+          {columns
+            .filter((c) => c.label.toLowerCase().includes(sectionQuery.trim().toLowerCase()))
+            .map((col) => {
+              const rules = localFilters.filter((f) => f.column === col.key);
+              const colType = getColumnType(col);
+              const availableOps = getAvailableOps(col, colType);
               const isDateRange = colType === "dateRange";
-              const rangeValue = isDateRange ? filter.value || emptyDueDateFilter() : null;
-              const rangeInvalid =
-                isDateRange &&
-                rangeValue.preset === "custom" &&
-                rangeValue.from &&
-                rangeValue.to &&
-                rangeValue.from > rangeValue.to;
-              const isValueDisabled = isNoValueOperator(filter.operator);
-              const isMultiValue = isMultiValueOperator(filter.operator);
+              const active = rules.some(isFilterValueFilled);
+              const TYPE_LABEL = { text: "Text", number: "Number", date: "Date", select: "List", dateRange: "Date" };
 
               return (
-                <div
-                  key={filter.id}
-                  className="bg-white p-4 rounded-lg border border-[#E1E4EA] relative group"
+                <section
+                  key={col.key}
+                  className={`rounded-xl border bg-white p-4 transition-colors ${
+                    active ? "border-[#0085FF]/50 shadow-[0_0_0_3px_rgba(0,133,255,0.06)]" : "border-[#E1E4EA]"
+                  }`}
                 >
-                  <button
-                    onClick={() => removeFilter(filter.id)}
-                    className="absolute -top-2 -right-2 bg-white border border-gray-200 p-1.5 rounded-full text-red-500 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-all shadow-sm z-10"
-                    title="Remove filter"
-                  >
-                    <DeleteIcon className="w-4 h-4" />
-                  </button>
-
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2 block">
-                        Where
-                      </label>
-                      <SearchableColumnSelect
-                        columns={columns}
-                        value={filter.column}
-                        onChange={(val) =>
-                          updateFilter(filter.id, "column", val)
-                        }
-                      />
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      {col.icon && <col.icon className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                      <h3 className="truncate text-[13.5px] font-semibold text-[#161618]">{col.label}</h3>
+                      <span className="flex-shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                        {col.isCustomField ? "Custom" : TYPE_LABEL[colType] || "Text"}
+                      </span>
                     </div>
+                    {active && (
+                      <button
+                        type="button"
+                        onClick={() => clearColumn(col.key)}
+                        className="flex-shrink-0 text-[12px] font-medium text-[#0085FF] hover:underline"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
 
-                    <div className="flex gap-2">
-                      {!isDateRange && (
-                      <div className="w-[45%]">
-                        <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2 block">
-                          Condition
-                        </label>
-                        <select
-                          value={filter.operator}
-                          onChange={(e) =>
-                            updateFilter(filter.id, "operator", e.target.value)
-                          }
-                          className="w-full border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] px-3 h-[38px] bg-white focus:ring-1 focus:ring-blue-500 outline-none transition-all"
-                        >
-                          {availableOps.map((op) => (
-                            <option key={op} value={op}>
-                              {OPERATOR_LABELS[op]}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      )}
+                  <div className="space-y-2">
+                    {rules.map((filter, idx) => {
+                      const rangeValue = isDateRange ? filter.value || emptyDueDateFilter() : null;
+                      const rangeInvalid =
+                        isDateRange &&
+                        rangeValue.preset === "custom" &&
+                        rangeValue.from &&
+                        rangeValue.to &&
+                        rangeValue.from > rangeValue.to;
+                      const isValueDisabled = isNoValueOperator(filter.operator);
+                      const isMultiValue = isMultiValueOperator(filter.operator);
 
-                      <div className={isDateRange ? "w-full" : "w-[55%]"}>
-                        <label className="text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2 block">
-                          Value
-                        </label>
+                      return (
+                        <div key={filter.id} className="flex items-start gap-2">
+                          {!isDateRange && (
+                            <div className="w-[42%] flex-shrink-0">
+                              {idx === 0 && (
+                                <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#78788D]">
+                                  Condition
+                                </label>
+                              )}
+                              <select
+                                value={filter.operator}
+                                onChange={(e) => updateFilter(filter.id, "operator", e.target.value)}
+                                className="w-full border border-[#1F2937]/10 rounded-full text-[13px] text-[#1F2937] px-3 h-[38px] bg-white focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                              >
+                                {availableOps.map((op) => (
+                                  <option key={op} value={op}>
+                                    {OPERATOR_LABELS[op]}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          <div className="min-w-0 flex-1">
+                            {idx === 0 && (
+                              <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#78788D]">
+                                Value
+                              </label>
+                            )}
                         {isDateRange ? (
                           <div className="space-y-2">
                             <select
@@ -588,6 +698,16 @@ export default function AdvancedFilterPanel({
                               />
                             );
                           }
+                          if ((filter.operator === "contains" || filter.operator === "not_contains") && opts && opts.length > 0) {
+                            return (
+                              <SuggestInput
+                                value={filter.value}
+                                onChange={(val) => updateFilter(filter.id, "value", val)}
+                                suggestions={opts}
+                                placeholder="Type or pick a value..."
+                              />
+                            );
+                          }
                           return (
                             <input
                               type="text"
@@ -600,21 +720,38 @@ export default function AdvancedFilterPanel({
                             />
                           );
                         })()}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
+                          </div>
 
-          {localFilters.length > 0 && (
-            <button
-              onClick={addFilter}
-              className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-blue-200 bg-blue-50/50 rounded-lg text-sm font-medium text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-colors"
-            >
-              <PlusIcon className="w-4 h-4" /> Add Another Rule
-            </button>
+                          {rules.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeFilter(filter.id)}
+                              title="Remove condition"
+                              className={`${idx === 0 ? "mt-[19px]" : ""} flex h-[38px] w-8 flex-shrink-0 items-center justify-center rounded-full text-red-500 hover:bg-red-50`}
+                            >
+                              <DeleteIcon className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {!isDateRange && active && (
+                    <button
+                      type="button"
+                      onClick={() => addCondition(col.key)}
+                      className="mt-3 inline-flex items-center gap-1 text-[12px] font-medium text-[#0085FF] hover:underline"
+                    >
+                      <PlusIcon className="w-3 h-3" /> Add another condition
+                    </button>
+                  )}
+                </section>
+              );
+            })}
+
+          {columns.filter((c) => c.label.toLowerCase().includes(sectionQuery.trim().toLowerCase())).length === 0 && (
+            <p className="py-10 text-center text-sm text-gray-400">No fields match "{sectionQuery}"</p>
           )}
         </div>
 

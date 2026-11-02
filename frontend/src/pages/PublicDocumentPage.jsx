@@ -8,6 +8,7 @@ const API_BASE = (import.meta.env.VITE_APP_API_URL || "").replace(/\/$/, "");
 
 const STATUS_CONFIG = {
   Draft:    { color: "text-[#56698A]",    bg: "bg-[#EEF2F9]",   icon: <Clock className="w-3.5 h-3.5" /> },
+  Pending:  { color: "text-amber-600",    bg: "bg-amber-50",     icon: <Clock className="w-3.5 h-3.5" /> },
   Sent:     { color: "text-[#27B4EA]",    bg: "bg-[#E6F8FD]",    icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
   Accepted: { color: "text-[#1FA971]",   bg: "bg-[#E6F7EF]",   icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
   Rejected: { color: "text-[#EA4B4B]",     bg: "bg-[#FCEAEA]",     icon: <XCircle className="w-3.5 h-3.5" /> },

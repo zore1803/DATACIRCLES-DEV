@@ -2,6 +2,10 @@
 // the same file as the InvoiceForm component). Pure move: no logic changed.
 // Shared two-pane create/edit form used by all document types (Invoice,
 // Quotation, Pro Forma Invoice, Delivery Challan) via the `type` prop.
+import DocumentNumberEditor, { joinDocumentNumber } from "../common/DocumentNumberEditor";
+import DocumentCustomFieldInputs from "../common/DocumentCustomFieldInputs";
+import emptyBoxImg from "../../assets/empty-box.png";
+import NoteField from "../common/NoteField";
 import { resolveDiscount } from "../../utils/variantResolve";
 import DeleteIcon from "../common/DeleteIcon";
 import RichDescriptionEditor from "../common/RichDescriptionEditor";
@@ -20,7 +24,6 @@ import {
   Maximize2,
   Minimize2,
   ChevronsLeftRight,
-  Inbox,
 } from "lucide-react";
 import API from "../../services/api";
 import { itemPickerParams, itemsByIdsParams, itemsFromResponse, ITEM_PICKER_DEBOUNCE_MS } from "../../utils/itemPicker";
@@ -311,6 +314,7 @@ const CreateInvoicePanel = ({
           isRoundOff: sourceDoc.isRoundOff !== undefined ? sourceDoc.isRoundOff : true,
           notes: sourceDoc.notes || "",
           terms: sourceDoc.terms || "",
+          customFields: sourceDoc.customFields || [],
           bankDetails: sourceDoc.bankDetails?._id || sourceDoc.bankDetails || "",
           // Only an actual edit keeps the source's note — a different type or
           // Duplicate starts blank since a custom note almost always
@@ -339,6 +343,7 @@ const CreateInvoicePanel = ({
           isRoundOff: true,
           notes: defaultNotesForNewDoc,
           terms: defaultTermsForNewDoc,
+          customFields: [],
           bankDetails: "",
           qrNote: "",
           signature: "",
@@ -468,11 +473,7 @@ const CreateInvoicePanel = ({
   // the document type and must survive any rename.
   const numberKey = numberKeyFor(type);
   const [docNumber, setDocNumber] = useState(initialDoc?.[numberKey] || "");
-  const numberPrefix = docNumber.includes("-")
-    ? docNumber.slice(0, docNumber.lastIndexOf("-") + 1)
-    : "";
-  const numberSuffix = docNumber.slice(numberPrefix.length);
-  const [numberDraft, setNumberDraft] = useState(null); // null = not editing
+  const [renamingNumber, setRenamingNumber] = useState(false);
   const [savingNumber, setSavingNumber] = useState(false);
   const [quickAddId, setQuickAddId] = useState(null);
   const [quickAddQty, setQuickAddQty] = useState(1);
@@ -484,18 +485,21 @@ const CreateInvoicePanel = ({
   const quickAddRequestRef = useRef(0);
   const [showQuickItemDrawer, setShowQuickItemDrawer] = useState(false);
 
-  const saveDocNumber = async () => {
-    const suffix = (numberDraft || "").trim();
-    if (!suffix) return toast.error(`${docName} number cannot be empty.`);
-    const next = `${numberPrefix}${suffix}`;
-    if (next === docNumber) return setNumberDraft(null);
+  const saveDocNumber = async ({ seq, prefix, suffix }) => {
+    if (!seq) return toast.error(`${docName} number cannot be empty.`);
+    const next = joinDocumentNumber(prefix, seq, suffix);
+    const unchangedSeries = (prefix || "") === (form.invoicePrefix || "") && (suffix || "") === (form.invoiceSuffix || "");
+    if (next === docNumber && unchangedSeries) return setRenamingNumber(false);
     try {
       setSavingNumber(true);
       await API.patch(`/${apiPathFor(type)}/number/${initialDoc._id}`, {
         [numberKey]: next,
+        prefix,
+        suffix,
       });
       setDocNumber(next);
-      setNumberDraft(null);
+      setForm((prev) => ({ ...prev, invoicePrefix: prefix, invoiceSuffix: suffix }));
+      setRenamingNumber(false);
       toast.success(`${docName} number updated.`);
       onCreated?.(); // refresh the list behind the panel so it shows the new number
     } catch (err) {
@@ -1178,6 +1182,7 @@ const CreateInvoicePanel = ({
         isRoundOff: form.isRoundOff,
         notes: form.notes,
         terms: form.terms,
+        customFields: form.customFields || [],
         bankDetails: form.bankDetails || null,
         qrNote: form.qrNote || "",
         signature: form.signature,
@@ -1392,7 +1397,10 @@ const CreateInvoicePanel = ({
     win.onload = print;
     setTimeout(print, 500);
   };
-  const handleSubmit = () => submitInvoice(form.status || "Draft");
+  // Creating a document files it under Pending; only "Save as draft" makes a Draft.
+  // Editing keeps whatever status the document already has.
+  const handleSubmit = () =>
+    submitInvoice(isEditing ? form.status || "Draft" : form.status && form.status !== "Draft" ? form.status : "Pending");
 
   const dealOptions = deals.map((d) => ({ value: d._id, label: d.title }));
   // Direct-link pickers (deal-less quotation/proforma). Contacts narrow to the
@@ -1688,14 +1696,14 @@ const CreateInvoicePanel = ({
             <div className="min-w-0">
               {isEditing && docNumber ? (
                 <>
-                  {numberDraft === null ? (
+                  {!renamingNumber ? (
                     <div className="flex items-center gap-1.5 min-w-0">
                       <h2 className="text-xl font-bold text-[#1F2937] truncate">
                         {docNumber}
                       </h2>
                       <button
                         type="button"
-                        onClick={() => setNumberDraft(numberSuffix)}
+                        onClick={() => setRenamingNumber(true)}
                         title={`Rename this ${docName.toLowerCase()}`}
                         aria-label={`Rename this ${docName.toLowerCase()}`}
                         className="p-1 rounded-md text-[#99A0AE] hover:text-[#0085FF] hover:bg-[#F0F6FF] transition-colors flex-shrink-0"
@@ -1704,48 +1712,18 @@ const CreateInvoicePanel = ({
                       </button>
                     </div>
                   ) : (
-                    // The prefix sits outside the input so it reads as part of
-                    // the number but can't be edited or deleted.
-                    <div className="flex items-center gap-1 min-w-0">
-                      <div className="flex items-center h-9 pl-2.5 pr-1 border border-[#E1E4EA] rounded-full focus-within:border-[#0085FF] min-w-0">
-                        <span className="text-xl font-bold text-[#99A0AE] flex-shrink-0">
-                          {numberPrefix}
-                        </span>
-                        <input
-                          autoFocus
-                          value={numberDraft}
-                          disabled={savingNumber}
-                          onChange={(e) => setNumberDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") saveDocNumber();
-                            if (e.key === "Escape") setNumberDraft(null);
-                          }}
-                          className="w-28 min-w-0 px-1 text-xl font-bold text-[#1F2937] outline-none bg-transparent"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={saveDocNumber}
-                        disabled={savingNumber}
-                        title={savingNumber ? "Saving..." : "Save"}
-                        className="h-7 w-7 flex items-center justify-center rounded-full bg-[#0085FF] hover:bg-blue-600 text-white transition-colors disabled:opacity-60 flex-shrink-0"
-                      >
-                        {savingNumber ? (
-                          <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                        ) : (
-                          <Check className="w-4 h-4" />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setNumberDraft(null)}
-                        disabled={savingNumber}
-                        title="Cancel"
-                        className="h-7 w-7 flex items-center justify-center rounded-full border border-[#E1E4EA] text-[#525866] hover:bg-gray-50 transition-colors flex-shrink-0"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
+                    <DocumentNumberEditor
+                      docNumber={docNumber}
+                      prefix={form.invoicePrefix}
+                      suffix={form.invoiceSuffix}
+                      settingsKey={SETTINGS_KEY_BY_TYPE[type]}
+                      fallbackPrefixes={prefixOptions}
+                      fallbackSuffixes={suffixOptions}
+                      docName={docName}
+                      saving={savingNumber}
+                      onSave={saveDocNumber}
+                      onCancel={() => setRenamingNumber(false)}
+                    />
                   )}
                 </>
               ) : (
@@ -2388,7 +2366,7 @@ const CreateInvoicePanel = ({
             {/* Empty state / table */}
             {form.items.length === 0 || (form.items.length === 1 && !form.items[0].name && !form.items[0]._id) ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
-                <Inbox className="w-12 h-12 text-[#C1C9D2] mb-4" strokeWidth={1.5} />
+                <img src={emptyBoxImg} alt="" className="w-20 h-auto mb-3 select-none" draggable={false} />
                 <p className="text-[13px] text-[#99A0AE] mb-4">
                   Search for a product above and click "Add to Bill" to get started.
                 </p>
@@ -2565,10 +2543,10 @@ const CreateInvoicePanel = ({
                   onClick={() => setNotesDrawer("notes")}
                 />
               </div>
-              <textarea
+              <NoteField
                 rows={4}
                 value={form.notes}
-                onChange={(e) => setField("notes", e.target.value)}
+                onChange={(v) => setField("notes", v)}
                 placeholder={`A short message to the customer, e.g. "Thank you for the business!"`}
                 className="w-full px-3.5 py-2.5 rounded-2xl border border-[#1F2937]/10 text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-y"
               />
@@ -2584,15 +2562,21 @@ const CreateInvoicePanel = ({
                   onClick={() => setNotesDrawer("terms")}
                 />
               </div>
-              <textarea
+              <NoteField
                 rows={4}
                 value={form.terms}
-                onChange={(e) => setField("terms", e.target.value)}
+                onChange={(v) => setField("terms", v)}
                 placeholder={"1. Goods once sold cannot be taken back or exchanged.\n2. Subject to local jurisdiction."}
                 className="w-full px-3.5 py-2.5 rounded-2xl border border-[#1F2937]/10 text-[13px] text-[#1F2937] placeholder:text-[#1F2937] placeholder:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-y"
               />
             </div>
           </div>
+
+          <DocumentCustomFieldInputs
+            docType={type}
+            value={form.customFields}
+            onChange={(v) => setField("customFields", v)}
+          />
 
           <SectionHeader number={sectionNo.bank} title="Bank Account" />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 w-full">

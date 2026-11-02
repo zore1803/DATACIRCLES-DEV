@@ -32,9 +32,18 @@ export default function BankModal({ isOpen, onClose, onSave, initialData, hasExi
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
   const [ifscLoading, setIfscLoading] = useState(false);
+  // Account-number checks run when the user leaves a field, never while they are
+  // still typing in it. Typing in a field clears its own flag (and, for the account
+  // number, the confirmation's, since that comparison is stale until re-checked).
+  const [accountChecked, setAccountChecked] = useState(false);
+  const [confirmChecked, setConfirmChecked] = useState(false);
+  const [holderChecked, setHolderChecked] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
+    setAccountChecked(false);
+    setConfirmChecked(false);
+    setHolderChecked(false);
 
     if (initialData) {
       setForm({
@@ -206,12 +215,16 @@ export default function BankModal({ isOpen, onClose, onSave, initialData, hasExi
               <input
                 type="text"
                 value={form.accountHolder}
-                onChange={(e) => handleChange("accountHolder", e.target.value)}
+                onChange={(e) => {
+                  handleChange("accountHolder", e.target.value);
+                  setHolderChecked(false);
+                }}
+                onBlur={() => setHolderChecked(true)}
                 placeholder="e.g. John Doe / Company Pvt Ltd"
                 className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
                 required
               />
-              {form.accountHolder.trim() && !/[A-Za-z]/.test(form.accountHolder) && (
+              {holderChecked && form.accountHolder.trim() && !/[A-Za-z]/.test(form.accountHolder) && (
                 <p className="mt-1 ml-3 text-[11px] text-[#FF4935]">
                   Name must contain at least one letter
                 </p>
@@ -226,13 +239,18 @@ export default function BankModal({ isOpen, onClose, onSave, initialData, hasExi
                 type="password"
                 autoComplete="new-password"
                 value={form.accountNumber}
-                onChange={(e) => handleChange("accountNumber", stripNonAlphanumeric(e.target.value))}
+                onChange={(e) => {
+                  handleChange("accountNumber", stripNonAlphanumeric(e.target.value));
+                  setAccountChecked(false);
+                  setConfirmChecked(false);
+                }}
+                onBlur={() => setAccountChecked(true)}
                 placeholder="Enter account number"
                 maxLength={16}
                 className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
                 required
               />
-              {form.accountNumber && !ACCOUNT_NO_REGEX.test(form.accountNumber) && (
+              {accountChecked && form.accountNumber && !ACCOUNT_NO_REGEX.test(form.accountNumber) && (
                 <p className="mt-1 ml-3 text-[11px] text-[#FF4935]">
                   Account number must be 8-16 letters or digits
                 </p>
@@ -246,13 +264,17 @@ export default function BankModal({ isOpen, onClose, onSave, initialData, hasExi
               <input
                 type="text"
                 value={form.confirmAccountNumber}
-                onChange={(e) => handleChange("confirmAccountNumber", stripNonAlphanumeric(e.target.value))}
+                onChange={(e) => {
+                  handleChange("confirmAccountNumber", stripNonAlphanumeric(e.target.value));
+                  setConfirmChecked(false);
+                }}
+                onBlur={() => setConfirmChecked(true)}
                 placeholder="Re-enter account number"
                 maxLength={16}
                 className="w-full border border-[#1F2937]/10 rounded-full px-3 h-[38px] text-[13px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-[#1F2937] placeholder:opacity-50"
                 required
               />
-              {form.confirmAccountNumber &&
+              {confirmChecked && form.confirmAccountNumber &&
                 (form.confirmAccountNumber === form.accountNumber ? (
                   <p className="mt-1 ml-3 text-[11px] text-green-600">Account numbers match</p>
                 ) : (

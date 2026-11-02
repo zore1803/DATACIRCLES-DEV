@@ -7,7 +7,7 @@ import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 import SearchableDropdown from "../contact/SearchableDropdown";
 import BankModal from "../settings/BankModal";
 import { LABEL_CLS, inputCls as fieldInputCls, textareaCls } from "../common/form";
-
+import { maskAccountNumber } from "../../utils/maskAccountNumber";
 const ADD_BANK_VALUE = "__add_bank__";
 
 /*
@@ -68,6 +68,7 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState([]);
   const [banks, setBanks] = useState([]);
+  const [cards, setCards] = useState([]);
   const [showBankModal, setShowBankModal] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
@@ -100,6 +101,7 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
     paymentDate: toDateInput(),
     paymentType: "UPI",
     bankAccount: "",
+    creditCard: "",
     paymentNotes: "",
     vendor: "",
     deal: "",
@@ -131,6 +133,7 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
       paymentDate: toDateInput(record.paymentDate || record.date),
       paymentType: record.paymentType || "UPI",
       bankAccount: record.bankAccount?._id || record.bankAccount || "",
+      creditCard: record.creditCard?._id || record.creditCard || "",
       paymentNotes: record.paymentNotes || "",
       vendor: record.vendor?._id || record.vendor || "",
       deal: record.deal?._id || record.deal || "",
@@ -156,13 +159,15 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
   useEffect(() => {
     (async () => {
       try {
-        const [catRes, bankRes, vendorRes] = await Promise.all([
+        const [catRes, bankRes, vendorRes, cardRes] = await Promise.all([
           API.get("/expenses/categories", { params: { kind } }),
           API.get("/bank-details/all"),
           // Same endpoint the payment drawer uses, so the list is already
           // deduped and carries a subtitle that tells same-named vendors apart.
           API.get("/payments-timeline/parties", { params: { direction: "OUT" } }),
+          API.get("/credit-cards").catch(() => ({ data: [] })),
         ]);
+        setCards(Array.isArray(cardRes.data) ? cardRes.data : []);
         setCategories(catRes.data.categories || []);
         setVendors(vendorRes.data.parties || []);
         setBanks(Array.isArray(bankRes.data) ? bankRes.data : []);
@@ -292,10 +297,15 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
     [categories, categorySearch]
   );
 
+  const cardLabelText = useMemo(() => {
+    const c = cards.find((x) => String(x._id) === String(form.creditCard));
+    return c ? `${c.bank} credit card (•••• ${c.last4})` : "";
+  }, [cards, form.creditCard]);
+
   const bankLabel = useMemo(() => {
     const b = banks.find((x) => String(x._id) === String(form.bankAccount));
     if (!b) return "";
-    return `${b.bank}${b.accountNumber ? ` (${b.accountNumber})` : ""}`;
+    return `${b.bank}${b.accountNumber ? ` (${maskAccountNumber(b.accountNumber)})` : ""}`;
   }, [banks, form.bankAccount]);
 
   const handleFiles = async (fileList) => {
@@ -358,7 +368,8 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
         status: "Paid",
         paymentDate: form.paymentDate,
         paymentType: form.paymentType,
-        bankAccount: form.bankAccount || null,
+        bankAccount: form.creditCard ? null : form.bankAccount || null,
+        creditCard: form.creditCard || null,
         paymentNotes: form.paymentNotes,
         // Cleared when the toggle is off, so turning it off actually detaches
         // a previously-saved vendor instead of silently keeping it.
@@ -810,7 +821,14 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
                         <button
                           key={t}
                           type="button"
-                          onClick={() => set("paymentType", t)}
+                          onClick={() => {
+                            set("paymentType", t);
+                            // Paying by card with nothing chosen yet: start on the default card.
+                            if (t === "Card" && !form.creditCard && !form.bankAccount) {
+                              const d = cards.find((c) => c.isDefault);
+                              if (d) set("creditCard", d._id);
+                            }
+                          }}
                           className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12px] font-medium transition-colors ${
                             form.paymentType === t
                               ? "bg-blue-50 text-[#158FFF] border border-[#158FFF]"
@@ -825,30 +843,49 @@ export default function ExpenseFormPanel({ kind = "expense", record, onClose, on
                   </div>
 
                   <div>
-                    <label className={labelCls}>Select Bank</label>
+                    <label className={labelCls}>Select Bank Account/Credit Card</label>
                     <select
-                      value={form.bankAccount}
+                      value={form.creditCard ? `card:${form.creditCard}` : form.bankAccount ? `bank:${form.bankAccount}` : ""}
                       onChange={(e) => {
-                        if (e.target.value === ADD_BANK_VALUE) setShowBankModal(true);
-                        else set("bankAccount", e.target.value);
+                        const v = e.target.value;
+                        if (v === ADD_BANK_VALUE) return setShowBankModal(true);
+                        // A card and a bank are mutually exclusive: money moves through one.
+                        setForm((f) => ({
+                          ...f,
+                          bankAccount: v.startsWith("bank:") ? v.slice(5) : "",
+                          creditCard: v.startsWith("card:") ? v.slice(5) : "",
+                        }));
                       }}
                       className={`${inputCls} bg-white`}
                     >
                       <option value="">
-                        {banks.length ? "No specific account" : "No bank accounts added yet"}
+                        {banks.length || cards.length ? "No specific account" : "No bank accounts added yet"}
                       </option>
-                      {banks.map((b) => (
-                        <option key={b._id} value={b._id}>
-                          {b.bank}
-                          {b.accountNumber ? ` (${b.accountNumber})` : ""}
-                        </option>
-                      ))}
+                      {banks.length > 0 && (
+                        <optgroup label="Bank Accounts">
+                          {banks.map((b) => (
+                            <option key={b._id} value={`bank:${b._id}`}>
+                              {b.bank}
+                              {b.accountNumber ? ` (${maskAccountNumber(b.accountNumber)})` : ""}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {cards.length > 0 && (
+                        <optgroup label="Credit Cards">
+                          {cards.map((c) => (
+                            <option key={c._id} value={`card:${c._id}`}>
+                              {c.bank} (•••• {c.last4}){c.isDefault ? " - Default" : ""}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                       {/* First-time users have no accounts to pick — offer to create one. */}
-                      {!banks.length && <option value={ADD_BANK_VALUE}>+ Add new bank account</option>}
+                      {!banks.length && !cards.length && <option value={ADD_BANK_VALUE}>+ Add new bank account</option>}
                     </select>
-                    {bankLabel && (
+                    {(bankLabel || cardLabelText) && (
                       <p className="mt-1 text-[11px] text-[#1F2937] opacity-50">
-                        Money moves through {bankLabel}.
+                        Money moves through {cardLabelText || bankLabel}.
                       </p>
                     )}
                   </div>

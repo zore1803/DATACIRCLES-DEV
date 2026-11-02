@@ -1,5 +1,6 @@
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const BankDetails = require("../models/BankDetails");
+const { getLedgerRows, rowBelongsToBank } = require("../utils/expenseLedger");
 const getDefaultBankDetails = require("../utils/getDefaultBankDetails");
 const Payment = require("../models/Payment");
 const Invoice = require("../models/Invoice");
@@ -77,11 +78,12 @@ exports.getAllBankDetails = async (req, res) => {
 
     const banks = await BankDetails.find(query).sort({ isDefault: -1, updatedAt: -1 });
 
-    const [payments, invoices, purchases, subPayments] = await Promise.all([
+    const [payments, invoices, purchases, subPayments, ledgerRows] = await Promise.all([
       Payment.find({ organization: orgId }),
       Invoice.find({ organization: orgId }),
       Purchase.find({ organization: orgId }),
       SubscriptionPayment.find({ organization: orgId }),
+      getLedgerRows(orgId),
     ]);
 
     const formattedPayments = payments.map((p) => ({
@@ -116,18 +118,15 @@ exports.getAllBankDetails = async (req, res) => {
       ...formattedPayments,
       ...formattedInvoices,
       ...formattedPurchases,
-      ...formattedSubs
+      ...formattedSubs,
+      ...ledgerRows
     ];
 
     const banksWithBalances = banks.map((b) => {
       const bankName = b.bank || "Bank Account";
       const opening = Number(b.openingBalance) || 0;
 
-      const bankTx = allTransactions.filter((t) => {
-        if (!t.bank) return false;
-        const bName = t.bank.toLowerCase();
-        return bName.includes(bankName.toLowerCase()) || bName.includes((b.accountNumber || "").toLowerCase());
-      });
+      const bankTx = allTransactions.filter((t) => rowBelongsToBank(t, b));
 
       const inSum = bankTx.filter((t) => t.direction === "IN").reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
       const outSum = bankTx.filter((t) => t.direction === "OUT").reduce((acc, t) => acc + (Number(t.amount) || 0), 0);

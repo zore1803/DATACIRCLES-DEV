@@ -1,3 +1,4 @@
+const { sanitizeCustomFields } = require("../utils/documentCustomFields");
 const { buildFuzzySearchPattern } = require('../utils/searchRegex');
 const Quotation = require("../models/quotation");
 const getDefaultBankDetails = require("../utils/getDefaultBankDetails");
@@ -55,6 +56,7 @@ exports.createQuotation = async (req, res) => {
       items,
       notes,
       terms,
+      customFields,
       transactionType,
       placeOfSupply,
       placeOfSupplyStateCode,
@@ -166,6 +168,7 @@ exports.createQuotation = async (req, res) => {
       items,
       notes: notes || "",
       terms: terms || "",
+      customFields: sanitizeCustomFields(customFields),
       transactionType: transactionType || "intra",
       // Resolved on the form from the shipping address and stored as sent, so the
       // saved document keeps the place of supply it was issued with.
@@ -258,10 +261,11 @@ exports.duplicateQuotation = async (req, res) => {
       reference: source.reference,
       date: new Date(),
       amount: source.amount,
-      status: "Draft",
+      status: "Pending",
       items: source.items,
       notes: source.notes,
       terms: source.terms,
+      customFields: source.customFields,
       isRoundOff: source.isRoundOff,
       placeOfSupply: source.placeOfSupply,
       placeOfSupplyStateCode: source.placeOfSupplyStateCode,
@@ -523,6 +527,7 @@ exports.updateQuotation = async (req, res) => {
       items,
       notes,
       terms,
+      customFields,
       transactionType,
       placeOfSupply,
       placeOfSupplyStateCode,
@@ -608,6 +613,7 @@ exports.updateQuotation = async (req, res) => {
         items,
         notes,
         terms,
+        ...(customFields !== undefined && { customFields: sanitizeCustomFields(customFields) }),
         transactionType,
         ...(placeOfSupply !== undefined && { placeOfSupply }),
         ...(placeOfSupplyStateCode !== undefined && { placeOfSupplyStateCode }),
@@ -772,6 +778,11 @@ exports.updateQuotationNumber = async (req, res) => {
     }
 
     const newNumber = quotationNumber.trim().toUpperCase();
+    // The prefix/suffix the new number was built from, so the document's stored
+    // series fields keep matching its number. Both optional.
+    const seriesFields = {};
+    if (typeof req.body.prefix === "string") seriesFields.quotationPrefix = req.body.prefix.trim();
+    if (typeof req.body.suffix === "string") seriesFields.quotationSuffix = req.body.suffix.trim();
 
     // Prevent duplicates inside same organization
     const existing = await Quotation.findOne({
@@ -790,7 +801,7 @@ exports.updateQuotationNumber = async (req, res) => {
         _id: quotationId,
         organization: req.user.organization,
       },
-      { quotationNumber: newNumber },
+      { quotationNumber: newNumber, ...seriesFields },
       { new: true }
     );
 

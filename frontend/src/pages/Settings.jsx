@@ -587,7 +587,7 @@ const Settings = () => {
           </div>
         </div>
 
-        <div className="pt-[118px] lg:pt-[128px] px-4 sm:px-6 lg:px-8 pb-8">
+        <div className="pt-[88px] lg:pt-[96px] px-4 sm:px-6 lg:px-8 pb-8">
           {activeSection.component}
         </div>
       </div>

@@ -13,7 +13,6 @@ import React, {
   useState,
   useRef,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useCallback,
 } from "react";
@@ -56,7 +55,7 @@ import {
   Link as LinkIcon,
   ArrowUp, ArrowDown } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { PDFDocument } from "pdf-lib";
 import API from "../services/api";
 import SearchIcon from "../components/common/SearchIcon";
@@ -138,6 +137,7 @@ const TABS = [
 
 const statusOptions = [
   "Draft",
+  "Pending",
   "Sent",
   "Partially Paid",
   "Paid",
@@ -264,6 +264,8 @@ const cellText = (colId, doc, tab) => {
 const getStatusBadgeColor = (status) => {
   switch (status?.toLowerCase()) {
     case "draft":
+      return "bg-gray-100 text-gray-700 border-gray-200";
+    case "pending":
       return "bg-yellow-100 text-yellow-800 border-yellow-200";
     case "sent":
       return "bg-blue-100 text-blue-800 border-blue-200";
@@ -364,26 +366,53 @@ const ConvertConfirmModal = ({
 // order the user happened to check the boxes in.
 
 
-const Accounting = () => {
+// Where each document type lives. /accounting?tab=<type> (still used by dashboard
+// shortcuts, search results and deal links) is redirected to the matching page.
+const ROUTE_BY_TAB = {
+  tax: "/invoices",
+  performa: "/proforma-invoices",
+  quotation: "/quotations",
+  deliveryChallan: "/delivery-challans",
+};
+
+const Accounting = ({ fixedTab = null }) => {
   const isSearchOverlayOpen = useSearchOverlayOpen();
-  const [activeTab, setActiveTab] = useState("tax");
-  const tabRefs = useRef({});
-  const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0 });
-
-  useLayoutEffect(() => {
-    const el = tabRefs.current[activeTab];
-    if (el) setTabIndicator({ left: el.offsetLeft, width: el.offsetWidth });
-  }, [activeTab]);
-
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState(fixedTab || "tax");
   // Deep links land on a specific tab, already filtered — e.g. the
   // dashboard's "N invoices awaiting to send" notice sends you to
   // /accounting?tab=tax&status=Draft and you arrive looking at exactly
   // those. Applied once per URL change, then the filter behaves like any
   // other the user set by hand (clearing it doesn't fight the URL).
   const location = useLocation();
+  // Moving to another document page (Invoices -> Quotations ...) must show that page's
+  // list, not keep the previous page's open edit/create panel and carry it over to the
+  // new type. Only runs when the page itself changes. It is declared before the deep-link
+  // effect below so a link that asks for a new document still opens its panel.
+  const prevFixedTabRef = useRef(fixedTab);
+  useEffect(() => {
+    if (prevFixedTabRef.current === fixedTab) return;
+    prevFixedTabRef.current = fixedTab;
+    setShowCreatePanel(false);
+    setEditPanelDoc(null);
+    setConversionData(null);
+    setPreselectInvoiceDealId(null);
+    setShowViewer(false);
+    setViewerId(null);
+    setViewerDoc(null);
+  }, [fixedTab]);
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const tab = params.get("tab");
+    // A dedicated page (/invoices, /quotations, ...) decides the type itself.
+    let tab = fixedTab || params.get("tab");
+    // An old-style /accounting?tab=... link: hop to that type's own page, keeping
+    // every other parameter (status, search, newInvoice, dealId).
+    if (!fixedTab && tab && ROUTE_BY_TAB[tab]) {
+      params.delete("tab");
+      const rest = params.toString();
+      navigate(`${ROUTE_BY_TAB[tab]}${rest ? `?${rest}` : ""}`, { replace: true });
+      return;
+    }
     const status = params.get("status");
     // `?search=` arrives from the global search panel's Invoices row — it
     // hands the query off rather than replicating the table's own filtering.
@@ -409,7 +438,7 @@ const Accounting = () => {
       setIsSearchExpanded(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.search]);
+  }, [location.search, fixedTab]);
 
   const emptyByType = { tax: "", performa: "", quotation: "", deliveryChallan: "" };
   // Tracks whether each tab has completed at least one fetch, so a
@@ -2278,33 +2307,16 @@ const Accounting = () => {
             className={`lg:hidden flex items-center gap-2 overflow-hidden transition-all duration-300 ease-in-out ${isSearchExpanded ? "w-0 opacity-0" : "w-auto opacity-100 flex-shrink-0"}`}
           >
             <h1 className="m-0 text-base font-bold text-[#0E121B] whitespace-nowrap">
-              Accountings
+              {TABS.find((t) => t.key === activeTab)?.label || "Accounting"}
             </h1>
             <VideoIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
           </div>
 
-          {/* Left Side: Tabs Container — same pill selector as the Company tabs.
-              Never skeletoned: the tabs are navigation, not data, so they stay
-              mounted and clickable while the table loads. */}
-          <div className="relative flex-shrink-0 hidden lg:inline-flex items-center gap-1.5 h-10 p-1 bg-[#F1F1F5] rounded-full overflow-x-auto no-scrollbar">
-            <span
-              className="absolute top-1 bottom-1 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
-              style={{ left: tabIndicator.left, width: tabIndicator.width }}
-            />
-            {TABS.map((tab) => (
-              <button
-                key={tab.key}
-                ref={(el) => (tabRefs.current[tab.key] = el)}
-                onClick={() => setActiveTab(tab.key)}
-                className={`relative z-10 flex items-center justify-center h-8 px-4 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${activeTab === tab.key
-                  ? "text-[#0085FF]"
-                  : "text-gray-700 hover:text-gray-900"
-                  }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          {/* Left Side: which document list this is. The type is chosen from
+              Accounting in the sidebar (?tab=...), so there is no tab switcher here. */}
+          <h1 className="m-0 hidden lg:block text-lg font-bold text-[#0E121B] whitespace-nowrap flex-shrink-0">
+            {TABS.find((t) => t.key === activeTab)?.label || "Accounting"}
+          </h1>
 
           {/* Right Side: Search, Filter, More, Add */}
           {showLoadingSkeleton ? (
@@ -2431,26 +2443,6 @@ const Accounting = () => {
                       onExport={handleExportAll}
                       onDone={() => setShowMoreMenu(false)}
                     />
-
-                    {/* Tab switcher — folded in here on mobile since the pill
-                        selector itself is hidden below lg. */}
-                    <div className="lg:hidden flex flex-col gap-0.5 pb-1.5 mb-1.5 border-b border-[#F1F1F5]">
-                      {TABS.map((tab) => (
-                        <button
-                          key={tab.key}
-                          onClick={() => {
-                            setActiveTab(tab.key);
-                            setShowMoreMenu(false);
-                          }}
-                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs whitespace-nowrap ${activeTab === tab.key
-                            ? "text-[#0085FF] font-medium bg-blue-50"
-                            : "text-[#161618] hover:bg-gray-50"
-                            }`}
-                        >
-                          {tab.label}
-                        </button>
-                      ))}
-                    </div>
 
                     {/* Filter by status — folded in here on mobile since the
                         standalone filter button is hidden below lg. */}

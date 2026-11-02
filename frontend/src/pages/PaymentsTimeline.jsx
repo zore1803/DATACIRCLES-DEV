@@ -46,7 +46,7 @@ import StatTile from "../components/common/StatTile";
 import UploadIcon from "../components/common/UploadIcon";
 import EyeIcon from "../components/common/EyeIcon";
 import EditIcon from "../components/common/EditIcon";
-
+import { maskAccountNumber } from "../utils/maskAccountNumber";
 /* ─── Column definitions ───────────────────────────────────────────── */
 const DEFAULT_COL_WIDTHS = {
   selection: 60,
@@ -168,7 +168,9 @@ export default function PaymentsTimeline() {
 
   const walletSummary = useMemo(() => accountsSummary.find(a => a.type === "wallet"), [accountsSummary]);
   const cashSummary   = useMemo(() => accountsSummary.find(a => a.type === "cash"),   [accountsSummary]);
-  const bankSummaries = useMemo(() => accountsSummary.filter(a => a.type === "bank"), [accountsSummary]);
+  const bankSummaries = useMemo(() => accountsSummary.filter(a => a.type === "bank" || a.type === "card"), [accountsSummary]);
+  // Credit-card numbers arrive already masked ("•••• 1234"); bank numbers still need masking.
+  const displayAccountNo = (a) => (a?.type === "card" ? a.accountNumber : maskAccountNumber(a?.accountNumber));
 
   // ----- Funds filter state (which accounts to include in the Total Funds card) -----
   const [filterOpen, setFilterOpen] = useState(false);
@@ -684,11 +686,13 @@ export default function PaymentsTimeline() {
       txs = accountTransactions.filter(doc => doc.type === "Cash" || doc.paymentType === "Cash" || doc.bank?.toLowerCase() === "cash");
     } else if (account.type === "wallet") {
       txs = accountTransactions.filter(doc => doc.type?.toLowerCase() === "wallet" || doc.bank?.toLowerCase() === "wallet");
+    } else if (account.type === "card") {
+      txs = accountTransactions.filter(doc => doc.bank === account.cardLabel);
     } else if (account.type === "bank") {
       const bankName = account.title?.toLowerCase() || "";
       const accNum = account.accountNumber || "";
       txs = accountTransactions.filter(doc => {
-        if (!doc.bank) return false;
+        if (!doc.bank || doc.bank.includes(" Credit Card ••••")) return false;
         const b = doc.bank.toLowerCase();
         return b.includes(bankName) || (accNum && b.includes(accNum.toLowerCase()));
       });
@@ -753,7 +757,7 @@ export default function PaymentsTimeline() {
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.text(`Account Number/Type: ${account.accountNumber || "N/A"}`, 14, 28);
+    doc.text(`Account Number/Type: ${account.accountNumber ? displayAccountNo(account) : "N/A"}`, 14, 28);
     doc.text(`Generated on: ${new Date().toLocaleDateString("en-IN")}`, 14, 34);
 
     const headers = [["Date", "Party / Entity", "Type", "Amount", "Running Balance", "Status"]];
@@ -806,7 +810,7 @@ export default function PaymentsTimeline() {
     if (!selectedAccountDetail) return;
     setEditingPaymentItem({
       direction: "IN",
-      bank: selectedAccountDetail.type === "bank" ? selectedAccountDetail.title : "",
+      bank: selectedAccountDetail.type === "card" ? selectedAccountDetail.cardLabel : selectedAccountDetail.type === "bank" ? selectedAccountDetail.title : "",
       paymentType: selectedAccountDetail.type === "cash" ? "Cash" : "UPI",
     });
     setIsPaymentModalOpen(true);
@@ -816,7 +820,7 @@ export default function PaymentsTimeline() {
     if (!selectedAccountDetail) return;
     setEditingPaymentItem({
       direction: "OUT",
-      bank: selectedAccountDetail.type === "bank" ? selectedAccountDetail.title : "",
+      bank: selectedAccountDetail.type === "card" ? selectedAccountDetail.cardLabel : selectedAccountDetail.type === "bank" ? selectedAccountDetail.title : "",
       paymentType: selectedAccountDetail.type === "cash" ? "Cash" : "UPI",
     });
     setIsPaymentModalOpen(true);
@@ -1249,7 +1253,7 @@ export default function PaymentsTimeline() {
                             <BankLogo bankName={bank.title} size={32} className="flex-shrink-0 rounded-lg overflow-hidden" />
                             <div className="flex flex-col min-w-0">
                               <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{bank.title}</span>
-                              {bank.accountNumber && <span className="text-[11px] text-gray-400">{bank.accountNumber}</span>}
+                              {bank.accountNumber && <span className="text-[11px] text-gray-400">{bank.type === "card" ? `Credit Card ${bank.accountNumber}` : maskAccountNumber(bank.accountNumber)}</span>}
                             </div>
                           </label>
                         ))}
@@ -1397,14 +1401,14 @@ export default function PaymentsTimeline() {
                     key={bank.id}
                     onClick={() => handleCardClick(bank)}
                     className="group relative hidden sm:flex flex-col justify-between w-[220px] h-24 flex-shrink-0 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 hover:border-blue-400 hover:bg-blue-50/10 hover:shadow-sm cursor-pointer transition-all"
-                    title="View Bank Transactions"
+                    title={bank.type === "card" ? "View Credit Card Transactions" : "View Bank Transactions"}
                   >
                     <div className="flex items-center gap-2">
                       <BankLogo bankName={bank.title} size={28} className="flex-shrink-0 rounded-lg overflow-hidden" />
                       <div className="flex flex-col min-w-0">
                         <span className="text-sm font-bold text-gray-900 leading-tight whitespace-nowrap">{bank.title}</span>
                         <span className="text-[11px] text-gray-400 leading-tight">
-                          {bank.accountNumber || "Bank Account"}
+                          {bank.type === "card" ? `Credit Card ${bank.accountNumber}` : bank.accountNumber ? maskAccountNumber(bank.accountNumber) : "Bank Account"}
                         </span>
                       </div>
                     </div>
@@ -2034,7 +2038,7 @@ export default function PaymentsTimeline() {
 
             <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-4 flex-shrink-0">
               <div className="flex items-center gap-3">
-                {selectedAccountDetail.type === "bank" ? (
+                {selectedAccountDetail.type === "bank" || selectedAccountDetail.type === "card" ? (
                   <BankLogo bankName={selectedAccountDetail.title} size={40} className="rounded-lg overflow-hidden flex-shrink-0" />
                 ) : selectedAccountDetail.type === "cash" ? (
                   <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
@@ -2050,7 +2054,7 @@ export default function PaymentsTimeline() {
                     {selectedAccountDetail.title}
                     {selectedAccountDetail.accountNumber && (
                       <span className="text-sm font-normal text-gray-400">
-                        ({selectedAccountDetail.accountNumber})
+                        ({displayAccountNo(selectedAccountDetail)})
                       </span>
                     )}
                   </h3>
@@ -2061,7 +2065,7 @@ export default function PaymentsTimeline() {
                   >
                     {showBalance
                       ? `${selectedAccountDetail.type === "wallet" ? "Balance: " : "Balance: ₹"}${selectedAccountDetail.currentBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${selectedAccountDetail.type === "wallet" ? " credits" : ""}`
-                      : `See current ${selectedAccountDetail.type === "bank" ? "bank" : selectedAccountDetail.type === "cash" ? "cash" : "wallet"} balance`}
+                      : `See current ${selectedAccountDetail.type === "card" ? "credit card" : selectedAccountDetail.type === "bank" ? "bank" : selectedAccountDetail.type === "cash" ? "cash" : "wallet"} balance`}
                   </button>
                 </div>
               </div>

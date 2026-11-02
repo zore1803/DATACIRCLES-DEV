@@ -53,6 +53,15 @@ const aliasMap = {
   punjabsindhbank: "punjabandsindbank",
   // IDBI Bank
   idbibank: "idbi",
+  // Names offered by the bank-name suggestions whose files use short slugs
+  indianoverseasbank: "iob",
+  indusindbank: "indusind",
+  idfcfirstbank: "idfcbank",
+  karurvysyabank: "kvb",
+  jammukashmirbank: "jkbank",
+  dhanlaxmibank: "dhanbank",
+  tamilnadmercantilebank: "tmb",
+  dbsbank: "dbs",
   // Standard Chartered – file is bi_sc.png
   standardchartered: "sc",
   standardcharteredbank: "sc",

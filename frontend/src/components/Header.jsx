@@ -774,6 +774,8 @@ import { useAuth0 } from "@auth0/auth0-react";
 import SearchIcon from "./common/SearchIcon";
 import NotificationBell from "./NotificationBell";
 import { DIM_CHROME_EVENT } from "../hooks/useSearchOverlayOpen";
+import { useSubscription } from "../contexts/SubscriptionContext";
+import toast from "react-hot-toast";
 // Shimmer UI Component for Branding
 const BrandingShimmer = () => {
   return (
@@ -883,12 +885,16 @@ const Header = () => {
   const isSuperAdmin = !!localStorage.getItem("superAdminToken");
   const [isTrialActive, setIsTrialActive] = useState(false);
   const [trialEnd, setTrialEnd] = useState(null);
-  const [trialLeftLabel, setTrialLeftLabel] = useState("");
   const [trialUsed, setTrialUsed] = useState(false);
   const [isPaymentConfirmed, setIsPaymentConfirmed] = useState(false);
   const [appStatus, setAppStatus] = useState(null);
   const [currentPeriodEnd, setCurrentPeriodEnd] = useState(null);
-  const [subscriptionLabel, setSubscriptionLabel] = useState("");
+  // Flips once the first /auth/me answer is in, so a brand-new-user prompt
+  // is never flashed at someone whose subscription simply hasn't loaded yet.
+  const [subscriptionLoaded, setSubscriptionLoaded] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const [startingTrial, setStartingTrial] = useState(false);
+  const { startTrial } = useSubscription();
 
   const isSuperAdminRoute = location.pathname.startsWith("/super-admin");
   const [dynamicCrumbName, setDynamicCrumbName] = useState("");
@@ -950,6 +956,10 @@ const Header = () => {
     "/expenses": "Expenses",
     "/indirect-income": "Indirect Income",
     "/accounting": "Accounting",
+    "/invoices": "Invoices",
+    "/proforma-invoices": "Pro Forma Invoices",
+    "/quotations": "Quotations",
+    "/delivery-challans": "Delivery Challans",
     "/inventory": "Inventory",
     "/profile": "Profile",
     "/wallet": "Wallet",
@@ -1042,6 +1052,7 @@ const Header = () => {
           setIsPaymentConfirmed(authRes.data.isPaymentConfirmed);
           setAppStatus(authRes.data.appStatus);
           setCurrentPeriodEnd(authRes.data.currentPeriodEnd);
+          setSubscriptionLoaded(true);
         } catch (err) {
           console.error("Failed to refresh trial/subscription state:", err);
         }
@@ -1066,6 +1077,7 @@ const Header = () => {
           setIsPaymentConfirmed(authRes.data.isPaymentConfirmed);
           setAppStatus(authRes.data.appStatus);
           setCurrentPeriodEnd(authRes.data.currentPeriodEnd);
+          setSubscriptionLoaded(true);
         } catch (err) {
           console.error("Failed to fetch data:", err);
         } finally {
@@ -1080,66 +1092,77 @@ const Header = () => {
     }
   }, [isSuperAdmin, isSuperAdminRoute, getAccessTokenSilently]);
 
-  useEffect(() => {
-    // Show badge if trial is active OR trial ended without payment
-    const shouldShowTrialBadge =
-      isTrialActive || (trialUsed && !isPaymentConfirmed);
+  // What the header's plan pill should say, if anything:
+  //   - new user (never trialed, never paid): a "Start a Trial" prompt
+  //   - on trial: nothing until the last 3 days (yellow), then the last day (red)
+  //   - paid: nothing until the last 7 days (neutral), 5 (yellow), 2 (red)
+  // `tone` is neutral | warn | danger; `clock` swaps "N Days Left!" for HH:MM:SS.
+  const planBanner = (() => {
+    if (!subscriptionLoaded) return null;
+    const DAY = 1000 * 60 * 60 * 24;
 
-    if (!shouldShowTrialBadge || !trialEnd) {
-      setTrialLeftLabel("");
-      return;
-    }
-
-    const endTime = new Date(trialEnd).getTime();
-
-    function updateLabel() {
-      const now = Date.now();
-      const diff = endTime - now;
-
-      if (diff <= 0) {
-        setTrialLeftLabel("Trial ended");
-        return;
-      }
-
-      const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-      const minutes = Math.floor((diff / (1000 * 60)) % 60);
-      const seconds = Math.floor((diff / 1000) % 60);
-
-      if (days >= 1) {
-        setTrialLeftLabel(`${days} Day${days > 1 ? "s" : ""} Left!`);
-      } else {
-        setTrialLeftLabel(
-          `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
-            2,
-            "0",
-          )}:${String(seconds).padStart(2, "0")} left`,
-        );
-      }
-    }
-
-    updateLabel();
-    let interval = null;
-
-    // Only run interval if trial is still active
     if (isTrialActive && trialEnd) {
-      interval = setInterval(updateLabel, 1000);
+      const diff = new Date(trialEnd).getTime() - now;
+      if (diff <= 0) return { kind: "buy", label: "Trial ended", tone: "danger", button: "Buy a Plan" };
+      const days = Math.ceil(diff / DAY);
+      if (days > 3) return null;
+      return {
+        kind: "buy",
+        diff,
+        clock: days <= 1,
+        label: `${days} Day${days > 1 ? "s" : ""} Left!`,
+        tone: days <= 1 ? "danger" : "warn",
+        button: "Buy a Plan",
+      };
     }
 
-    return () => interval && clearInterval(interval);
-  }, [isTrialActive, trialEnd, trialUsed, isPaymentConfirmed]);
+    if (isPaymentConfirmed && currentPeriodEnd) {
+      const diff = new Date(currentPeriodEnd).getTime() - now;
+      if (diff <= 0) return { kind: "buy", label: "Plan expired", tone: "danger", button: "Buy Next Plan" };
+      const days = Math.ceil(diff / DAY);
+      if (days > 7) return null;
+      return {
+        kind: "buy",
+        diff,
+        clock: false,
+        label: `${days} Day${days > 1 ? "s" : ""} Left!`,
+        tone: days <= 2 ? "danger" : days <= 5 ? "warn" : "neutral",
+        button: "Buy Next Plan",
+      };
+    }
 
+    // Trial over and nothing bought.
+    if (trialUsed && !isPaymentConfirmed) {
+      return { kind: "buy", label: "Trial ended", tone: "danger", button: "Buy a Plan" };
+    }
+
+    // Brand new: no trial, no plan.
+    if (!isTrialActive && !trialUsed && !isPaymentConfirmed) return { kind: "trial" };
+    return null;
+  })();
+
+  // Ticks once a second only while an HH:MM:SS clock is on screen, otherwise a
+  // minute is plenty for a day count.
+  const clockTicking = !!planBanner?.clock;
   useEffect(() => {
-    // Show billing period countdown for active paid subscribers only
-    if (!currentPeriodEnd || isTrialActive || !isPaymentConfirmed) {
-      setSubscriptionLabel("");
-      return;
+    if (!planBanner || planBanner.kind !== "buy") return undefined;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), clockTicking ? 1000 : 60000);
+    return () => clearInterval(id);
+  }, [planBanner?.kind, clockTicking, !!planBanner]);
+
+  const handleStartTrial = async () => {
+    if (startingTrial) return;
+    setStartingTrial(true);
+    try {
+      await startTrial();
+      toast.success("Free trial activated!");
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to start trial");
+    } finally {
+      setStartingTrial(false);
     }
-    const diff = new Date(currentPeriodEnd).getTime() - Date.now();
-    if (diff <= 0) { setSubscriptionLabel(""); return; }
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    setSubscriptionLabel(`${days} Day${days !== 1 ? "s" : ""} Left!`);
-  }, [currentPeriodEnd, isTrialActive, isPaymentConfirmed]);
+  };
 
   useEffect(() => {
     if (!isSuperAdminRoute && !isSuperAdmin) {
@@ -1467,61 +1490,72 @@ const Header = () => {
         <div className="flex items-center gap-2 lg:gap-4 ml-auto">
           {/* Promo Buttons */}
           <div className="hidden md:flex items-center gap-4">
-            {(() => {
-              const label = trialLeftLabel || subscriptionLabel;
-              if (!label) return null;
-              const isEnded = label.includes("ended");
-              const isUrgent = !isEnded && (
-                (/day/i.test(label) && parseInt(label) <= 2) ||
-                (subscriptionLabel && parseInt(subscriptionLabel) <= 3)
-              );
-              // The pill itself is neutral; urgency is carried by the label's
-              // colour so the design stays intact when time is running out.
-              const labelColor = isEnded
-                ? "#ef4444"
-                : isUrgent
-                  ? "#B54708"
-                  : "#525866";
-              // Always "Upgrade Plan" — the subscription screen it opens covers
-              // both upgrading and managing an existing plan.
-              const buttonText = "Upgrade Plan";
+            {planBanner && (() => {
+              const TONES = {
+                neutral: { text: "#525866", bg: "transparent", border: "#E1E4EA" },
+                warn: { text: "#B54708", bg: "#FFFAEB", border: "#FEC84B" },
+                danger: { text: "#D92D20", bg: "#FEF3F2", border: "#FDA29B" },
+              };
+              const tone = TONES[planBanner.tone] || TONES.neutral;
+              let label = planBanner.label;
+              if (planBanner.clock) {
+                const total = Math.max(0, Math.floor(planBanner.diff / 1000));
+                const pad = (n) => String(n).padStart(2, "0");
+                label = `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)} left`;
+              }
+              const primaryStyle = {
+                background:
+                  "linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 100%), var(--btn-primary)",
+                boxShadow: "inset 0px 0px 0px 1.8px rgba(255, 255, 255, 0.25)",
+              };
+              const buttonCls =
+                "box-border flex flex-row items-center justify-center gap-2 h-8 px-3 flex-shrink-0 rounded-full border border-[#0C4FCD] text-white font-inter text-[12px] leading-5 text-center whitespace-nowrap transition-opacity hover:opacity-90 disabled:opacity-60";
               return (
-                // 240px is the design width, but the label is dynamic ("7 Days
-                // Left!" vs "26809 days left in plan"), so it's a minimum the
-                // pill grows past rather than a cap that clips the text.
-                <div className="box-border flex flex-row items-center justify-between gap-4 min-w-[240px] h-[42px] p-[10px] border border-[#E1E4EA] rounded-[96px]">
-                  <div className="flex flex-row items-center gap-1 min-w-0">
-                    <Timer className="w-5 h-5 flex-shrink-0 text-[#525866]" />
-                    <span
-                      className="flex items-center h-5 font-inter text-[14px] font-normal leading-[120%] tracking-[-0.5px] whitespace-nowrap"
-                      style={{ color: labelColor }}
-                    >
-                      {label}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <button
-                      onClick={() => navigate("/settings/subscription")}
-                      className="box-border flex flex-row items-center justify-center gap-2 h-8 px-3 flex-shrink-0 rounded-full border border-[#0C4FCD] text-white font-inter text-[12px] leading-5 text-center whitespace-nowrap transition-opacity hover:opacity-90"
-                      style={{
-                        background:
-                          "linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 100%), var(--btn-primary)",
-                        boxShadow:
-                          "inset 0px 0px 0px 1.8px rgba(255, 255, 255, 0.25)",
-                      }}
-                    >
-                      {buttonText}
-                    </button>
-                    {!isLoadingData && (
-                      <button
-                        className="box-border flex flex-row items-center justify-center gap-2 h-8 px-3 flex-shrink-0 rounded-full border border-[#0C4FCD] text-white font-inter text-[12px] leading-5 text-center whitespace-nowrap transition-opacity hover:opacity-90"
-                        style={{
-                          background:
-                            "linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 100%), var(--btn-primary)",
-                          boxShadow:
-                            "inset 0px 0px 0px 1.8px rgba(255, 255, 255, 0.25)",
-                        }}
+                // The pill's colour carries the urgency (neutral / yellow / red);
+                // the label is dynamic ("7 Days Left!" vs a clock) so the width
+                // is a minimum the pill grows past rather than a cap.
+                <div
+                  className="box-border flex flex-row items-center justify-between gap-4 h-[42px] p-[10px] border rounded-[96px] transition-colors"
+                  style={{
+                    minWidth: planBanner.kind === "buy" ? 240 : undefined,
+                    background: tone.bg,
+                    borderColor: tone.border,
+                  }}
+                >
+                  {planBanner.kind === "buy" && (
+                    <div className="flex flex-row items-center gap-1 min-w-0">
+                      <Timer className="w-5 h-5 flex-shrink-0" style={{ color: tone.text }} />
+                      <span
+                        className="flex items-center h-5 font-inter text-[14px] font-medium leading-[120%] tracking-[-0.5px] whitespace-nowrap"
+                        style={{ color: tone.text }}
                       >
+                        {label}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {planBanner.kind === "trial" ? (
+                      <button
+                        type="button"
+                        onClick={handleStartTrial}
+                        disabled={startingTrial}
+                        className={buttonCls}
+                        style={primaryStyle}
+                      >
+                        {startingTrial ? "Starting..." : "Start a Trial"}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => navigate("/settings/subscription")}
+                        className={buttonCls}
+                        style={primaryStyle}
+                      >
+                        {planBanner.button}
+                      </button>
+                    )}
+                    {!isLoadingData && (
+                      <button className={buttonCls} style={primaryStyle}>
                         Book a Call
                       </button>
                     )}

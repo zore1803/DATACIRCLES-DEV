@@ -171,112 +171,145 @@ const ViewDetails = ({ item, onRequestClose, onEdit, onDelete }) => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 custom-scrollbar space-y-5">
-          {/* Identity */}
-          <div>
-            {item.description ? (
-              <div
-                className="ql-editor !p-0 text-sm text-[#4B5563] font-inter"
-                dangerouslySetInnerHTML={{ __html: item.description }}
-              />
-            ) : (
-              <p className="text-sm text-gray-400">No description provided</p>
-            )}
-          </div>
+        {(() => {
+          const sell = parseFloat(item.sellingPrice) || 0;
+          const buy = parseFloat(item.purchasePrice) || 0;
+          const profit = sell - buy;
+          const margin = sell > 0 ? (profit / sell) * 100 : 0;
+          const variants = item.variants || [];
+          const hasVariants = variants.length > 0;
+          const stock = hasVariants
+            ? variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
+            : Number(item.inventory?.currentStock) || 0;
+          const threshold = Number(item.inventory?.lowStockThreshold) || 0;
+          const stockState = stock <= 0 ? "Out of stock" : stock <= threshold ? "Low stock" : "In stock";
+          const discount = item.discount?.value
+            ? item.discount.type === "amount"
+              ? `₹${formatNumberFixed(item.discount.value)}`
+              : `${item.discount.value}%`
+            : "None";
 
-          {/* Pricing + details, one table */}
-          {(() => {
-            const profit = (parseFloat(item.sellingPrice) || 0) - (parseFloat(item.purchasePrice) || 0);
-            const rows = [
-              ["Purchase Price", formatCurrency(item.purchasePrice)],
-              ["Selling Price", formatCurrency(item.sellingPrice)],
-            ];
-            const details = [
-              ["Category", item.category || "N/A"],
-              ["HSN/SAC", item.hsnSac || "N/A"],
-              ["Tax Inclusive", item.taxInclusive ? "Yes" : "No"],
-            ];
-            const row = ([label, value]) => (
-              <div key={label} className="flex items-center justify-between gap-4 px-4 py-3">
-                <span className="text-[13px] text-[#78788D]">{label}</span>
-                <span className="text-[13px] font-medium text-[#161618] text-right">{value}</span>
-              </div>
-            );
-            return (
-              <div className="rounded-xl border border-[#E5E7EB] divide-y divide-[#E5E7EB] overflow-hidden">
-                {rows.map(row)}
-                <div className={`flex items-center justify-between gap-4 px-4 py-3 ${profit < 0 ? "bg-red-50" : "bg-green-50"}`}>
-                  <span className="text-[13px] font-medium text-[#161618]">Profit per unit</span>
+          // Two columns of label/value pairs keep the whole record on one screen.
+          const facts = [
+            ["Purchase Price", formatCurrency(item.purchasePrice)],
+            ["Selling Price", formatCurrency(item.sellingPrice)],
+            ["Category", item.category || "N/A"],
+            ["HSN/SAC", item.hsnSac || "N/A"],
+            ["GST Rate", item.gstRate || item.gstRate === 0 ? `${item.gstRate}%` : "N/A"],
+            ["Tax Inclusive", item.taxInclusive ? "Yes" : "No"],
+            ["Unit", item.primaryUnit || "N/A"],
+            ["Barcode", item.barcode || "N/A"],
+            ["Discount", discount],
+            ["Max Discount", item.maxDiscountPercent != null ? `${item.maxDiscountPercent}%` : "No limit"],
+            ...(item.type === "product"
+              ? [[hasVariants ? "Total Stock" : "Stock", `${stock} · ${stockState}`]]
+              : []),
+          ];
+          const SHOWN = 4;
+          const shownVariants = variants.slice(0, SHOWN);
+
+          return (
+            <div className="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden px-6 py-4">
+              {item.description ? (
+                <div
+                  className="ql-editor !p-0 max-h-[2.6rem] overflow-hidden text-[13px] leading-[1.3rem] text-[#4B5563] font-inter"
+                  dangerouslySetInnerHTML={{ __html: item.description }}
+                />
+              ) : (
+                <p className="text-[13px] text-gray-400">No description provided</p>
+              )}
+
+              <div className="overflow-hidden rounded-xl border border-[#E5E7EB]">
+                <div className="grid grid-cols-2 divide-x divide-[#E5E7EB]">
+                  {[0, 1].map((col) => (
+                    <div key={col} className="divide-y divide-[#E5E7EB]">
+                      {facts
+                        .filter((_, i) => i % 2 === col)
+                        .map(([label, value]) => (
+                          <div key={label} className="flex items-center justify-between gap-2 px-3 py-2">
+                            <span className="text-[12px] text-[#78788D]">{label}</span>
+                            <span className="min-w-0 truncate text-right text-[12.5px] font-medium text-[#161618]" title={String(value)}>
+                              {value}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  ))}
+                </div>
+                <div className={`flex items-center justify-between gap-4 border-t border-[#E5E7EB] px-3 py-2 ${profit < 0 ? "bg-red-50" : "bg-green-50"}`}>
+                  <span className="text-[12.5px] font-medium text-[#161618]">Profit per unit</span>
                   <span className={`text-[14px] font-semibold ${profit < 0 ? "text-red-600" : "text-green-700"}`}>
                     {profit < 0 ? "-" : ""}₹{formatNumberFixed(Math.abs(profit))}
+                    <span className="ml-1.5 text-[11px] font-medium opacity-80">({margin.toFixed(1)}%)</span>
                   </span>
                 </div>
-                {details.map(row)}
               </div>
-            );
-          })()}
 
-          {/* Variants */}
-          <div>
-            <h4 className="text-[11px] font-medium text-[#78788D] uppercase tracking-wide mb-2">
-              Variants{item.variants?.length ? ` (${item.variants.length})` : ""}
-            </h4>
-            {item.variants && item.variants.length > 0 ? (
-              <div className="space-y-2">
-                {item.variants.map((variant, index) => {
-                  const attrs = Object.entries(variant.attributes || {}).filter(([k]) => k);
-                  return (
-                    <div key={index} className="rounded-xl border border-[#E5E7EB] px-4 py-3">
-                      <div className="flex justify-between items-start gap-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-[#161618] break-words">{variant.name}</p>
-                          <p className="text-xs text-[#78788D] mt-0.5">SKU: {variant.sku || "N/A"}</p>
+              <div>
+                <h4 className="mb-1.5 text-[10.5px] font-medium uppercase tracking-wide text-[#78788D]">
+                  Variants{hasVariants ? ` (${variants.length})` : ""}
+                </h4>
+                {hasVariants ? (
+                  <div className="divide-y divide-[#E5E7EB] overflow-hidden rounded-xl border border-[#E5E7EB]">
+                    {shownVariants.map((variant, i) => {
+                      const attrs = Object.entries(variant.attributes || {}).filter(([k]) => k);
+                      const vStock = Number(variant.stock) || 0;
+                      const vLow = variant.lowStockThreshold ?? threshold;
+                      return (
+                        <div key={i} className="flex items-center justify-between gap-3 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-[12.5px] font-medium text-[#161618]" title={variant.name}>
+                              {variant.name}
+                              {!variant.isActive && (
+                                <span className="ml-2 rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-gray-500">Inactive</span>
+                              )}
+                            </p>
+                            <p className="truncate text-[11px] text-[#78788D]">
+                              SKU: {variant.sku || "N/A"}
+                              {attrs.length > 0 && ` · ${attrs.map(([k, v]) => `${k}: ${v}`).join(", ")}`}
+                            </p>
+                          </div>
+                          <div className="flex-shrink-0 text-right">
+                            <p className="text-[12.5px] font-semibold text-[#161618]">{formatCurrency(variant.sellingPrice)}</p>
+                            <p className={`text-[11px] ${vStock <= 0 ? "text-red-600" : vStock <= vLow ? "text-amber-600" : "text-[#78788D]"}`}>
+                              Stock: {vStock}
+                            </p>
+                          </div>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-sm font-semibold text-[#161618]">{formatCurrency(variant.sellingPrice)}</p>
-                          <p className="text-xs text-[#78788D] mt-0.5">Stock: {variant.stock}</p>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                        {attrs.map(([key, value]) => (
-                          <span key={key} className="px-2 py-0.5 rounded-full bg-gray-100 text-[11px] text-[#4B5563]">
-                            {key}: <span className="font-medium text-[#161618]">{value}</span>
-                          </span>
-                        ))}
-                        <span
-                          className={`ml-auto px-2 py-0.5 rounded-full text-[10px] uppercase font-semibold ${variant.isActive ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-600"}`}
-                        >
-                          {variant.isActive ? "Active" : "Inactive"}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                    {variants.length > SHOWN && (
+                      <p className="px-3 py-1.5 text-center text-[11px] font-medium text-[#78788D]">
+                        + {variants.length - SHOWN} more variant{variants.length - SHOWN > 1 ? "s" : ""} — open Edit to see all
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="rounded-xl border border-dashed border-[#E5E7EB] px-3 py-3 text-center text-[12.5px] text-gray-400">
+                    No variants configured
+                  </p>
+                )}
               </div>
-            ) : (
-              <p className="text-sm text-gray-400 rounded-xl border border-dashed border-[#E5E7EB] px-4 py-4 text-center">
-                No variants configured
-              </p>
-            )}
-          </div>
 
-          {imagePreviews.length > 0 && (
-            <div>
-              <h4 className="text-[11px] font-medium text-[#78788D] uppercase tracking-wide mb-2">Images</h4>
-              <div className="grid grid-cols-3 gap-2">
-                {imagePreviews.map((preview, index) => (
-                  <img
-                    key={index}
-                    src={preview}
-                    alt={`Image ${index + 1}`}
-                    className="w-full h-24 object-cover rounded-xl border border-[#E5E7EB] cursor-pointer"
-                    onClick={() => setSelectedImageIndex(index)}
-                  />
-                ))}
-              </div>
+              {imagePreviews.length > 0 && (
+                <div className="flex items-center gap-2">
+                  {imagePreviews.slice(0, 5).map((preview, index) => (
+                    <img
+                      key={index}
+                      src={preview}
+                      alt={`Image ${index + 1}`}
+                      className="h-12 w-12 cursor-pointer rounded-lg border border-[#E5E7EB] object-cover"
+                      onClick={() => setSelectedImageIndex(index)}
+                    />
+                  ))}
+                  {imagePreviews.length > 5 && (
+                    <span className="text-[11px] font-medium text-[#78788D]">+{imagePreviews.length - 5}</span>
+                  )}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          );
+        })()}
       </div>
 
       {/* Fullscreen Image Preview */}
