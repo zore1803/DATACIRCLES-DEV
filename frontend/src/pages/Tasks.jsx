@@ -3065,7 +3065,7 @@ function Tasks() {
       />
 
       <div
-        className="flex flex-row justify-between items-center px-4 sm:px-6 lg:px-8 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] gap-2 lg:gap-4"
+        className="flex flex-row justify-between items-center px-4 sm:px-6 lg:pl-0 lg:pr-8 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] gap-2 lg:gap-4"
         style={{
           boxSizing: "border-box",
           height: 64,

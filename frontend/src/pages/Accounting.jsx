@@ -2099,6 +2099,18 @@ const Accounting = ({ fixedTab = null }) => {
                       Edit
                     </button>
                   )}
+                  {activeTab === "tax" && doc.salesSubscription && (
+                    <button
+                      onClick={() => {
+                        closeRowMenu();
+                        navigate("/sales-subscription");
+                      }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                    >
+                      <Repeat className="w-3.5 h-3.5 text-orange-600" />
+                      Subscription
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       closeRowMenu();
@@ -2724,7 +2736,7 @@ const Accounting = ({ fixedTab = null }) => {
             that status. */}
         {(
           <div
-            className="fixed right-0 h-14 px-4 sm:px-6 lg:px-8 bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+            className="fixed right-0 h-14 px-4 sm:px-6 lg:pl-0 lg:pr-8 bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
             style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
           >
             {statusTabs && (

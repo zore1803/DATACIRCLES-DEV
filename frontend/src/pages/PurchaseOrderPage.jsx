@@ -1915,7 +1915,7 @@ const PurchaseOrderPage = () => {
 
         {/* Status pills + order-date range, same strip as the Invoices list */}
         <div
-          className="fixed right-0 h-14 px-4 sm:px-6 lg:px-8 bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+          className="fixed right-0 h-14 px-4 sm:px-6 lg:pl-0 lg:pr-8 bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
           style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
         >
           <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
