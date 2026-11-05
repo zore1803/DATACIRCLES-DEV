@@ -760,6 +760,12 @@ import {
   Timer,
   HelpCircle,
   LayoutDashboard,
+  FileText,
+  Receipt,
+  Wallet,
+  ShoppingBag,
+  Package,
+  Undo2,
 } from "lucide-react";
 import SearchResults from "./SearchResults";
 import QuickCompanyForm from "./company/QuickCompanyForm";
@@ -1298,6 +1304,11 @@ const Header = () => {
     setIsAddMenuOpen(false);
     setHoveredMeeting(false);
 
+    if (type.startsWith("nav:")) {
+      navigate(type.slice(4));
+      return;
+    }
+
     // Open the form immediately for a snappy response.
     switch (type) {
       case "vendor":
@@ -1389,6 +1400,20 @@ const Header = () => {
       label: "Vendor",
       icon: VendorAddIcon,
     },
+  ];
+
+  // Accounting documents open their create panel via ?newInvoice=1; the other
+  // modules just navigate to their page.
+  const addSales = [
+    { id: "nav:/invoices?newInvoice=1", label: "Invoice", icon: FileText },
+    { id: "nav:/sales-return", label: "Sales Return", icon: Undo2 },
+    { id: "nav:/payments-timeline", label: "Payment", icon: Wallet },
+  ];
+
+  const addPurchases = [
+    { id: "nav:/purchase", label: "Purchase", icon: ShoppingBag },
+    { id: "nav:/expenses", label: "Expense", icon: Receipt },
+    { id: "nav:/products", label: "Product", icon: Package },
   ];
 
   const addActivities = [
@@ -1700,9 +1725,9 @@ const Header = () => {
                   className="fixed inset-0 z-[9999] cursor-default"
                   onClick={handleAddMenuClose}
                 />
-                <div className="absolute right-0 top-12 w-[160px] bg-white rounded-xl shadow-2xl border border-gray-100 z-[10000] py-2 flex flex-col transition-all duration-300 ease-in-out">
+                <div className="absolute right-0 top-12 w-max min-w-[150px] max-h-[calc(100vh-80px)] overflow-y-auto bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] z-[10000] p-1.5 flex flex-col animate-in fade-in zoom-in duration-150 origin-top-right">
                   {/* Content Area */}
-                  <div className="flex-1 px-2">
+                  <div className="flex-1">
                     {/* Add Records Section */}
                     <div className="mb-1">
                       <div className="space-y-0.5">
@@ -1712,22 +1737,36 @@ const Header = () => {
                             <button
                               key={item.id}
                               onClick={() => handleAddItem(item.id)}
-                              className={`w-full flex items-center p-1 rounded-lg transition-all group ${active
+                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] whitespace-nowrap transition-colors ${active
                                 ? "bg-gradient-to-r from-[#D0E0FF] to-white"
-                                : "hover:bg-[#F2F2F7]"
+                                : "hover:bg-gray-50"
                                 }`}
                             >
-                              <div className="w-5 h-5 flex items-center justify-center mr-2.5 flex-shrink-0">
-                                <item.icon className="w-[18px] h-[18px] text-black" />
-                              </div>
-                              <span className="text-sm font-medium text-gray-900 transition-all">
-                                {item.label}
-                              </span>
+                              <item.icon className="w-3.5 h-3.5 text-[#1C1B1F] flex-shrink-0" />
+                              {item.label}
                             </button>
                           );
                         })}
                       </div>
                     </div>
+
+                    {[addSales, addPurchases].map((group, gi) => (
+                      <div key={gi}>
+                        <div className="border-t border-gray-200 my-1.5" />
+                        <div className="mb-1 space-y-0.5">
+                          {group.map((item) => (
+                            <button
+                              key={item.id}
+                              onClick={() => handleAddItem(item.id)}
+                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] whitespace-nowrap transition-colors hover:bg-gray-50"
+                            >
+                              <item.icon className="w-3.5 h-3.5 text-[#1C1B1F] flex-shrink-0" />
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
 
                     <div className="border-t border-gray-200 my-1.5" />
 
@@ -1740,17 +1779,13 @@ const Header = () => {
                             <button
                               key={item.id}
                               onClick={() => handleAddItem(item.id)}
-                              className={`w-full flex items-center p-1 rounded-lg transition-all group ${active
+                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] whitespace-nowrap transition-colors ${active
                                 ? "bg-gradient-to-r from-[#D0E0FF] to-white"
-                                : "hover:bg-[#F2F2F7]"
+                                : "hover:bg-gray-50"
                                 }`}
                             >
-                              <div className="w-5 h-5 flex items-center justify-center mr-2.5 flex-shrink-0">
-                                <item.icon className="w-[18px] h-[18px] text-black" />
-                              </div>
-                              <span className="text-sm font-medium text-gray-900 transition-all">
-                                {item.label}
-                              </span>
+                              <item.icon className="w-3.5 h-3.5 text-[#1C1B1F] flex-shrink-0" />
+                              {item.label}
                             </button>
                           );
                         })}

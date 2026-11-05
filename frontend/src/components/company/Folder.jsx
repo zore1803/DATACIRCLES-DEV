@@ -42,6 +42,7 @@ import useFillToBottom from "../../hooks/useFillToBottom";
 
 import SearchIcon from "../common/SearchIcon";
 import UploadIcon from "../common/UploadIcon";
+import DocumentUploadIcon from "../common/DocumentUploadIcon";
 import ListIcon from "../common/ListIcon";
 import EditIcon from "../common/EditIcon";
 const FOLDER_ITEM_COUNT_RANGES = [
@@ -379,7 +380,7 @@ const DragDropZone = ({ onFileDrop, isActive, children }) => {
       {isDragOver && (
         <div className="absolute inset-0 bg-gray-50 bg-opacity-95 border-2 border-dashed border-gray-400 rounded-lg flex items-center justify-center z-50">
           <div className="text-center p-6">
-            <UploadIcon className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+            <DocumentUploadIcon className="w-12 h-12 text-gray-600 mx-auto mb-3" />
             <p className="text-gray-900 font-semibold text-sm">Drop files here</p>
             <p className="text-gray-600 text-xs mt-1">Release to upload</p>
           </div>
@@ -489,15 +490,16 @@ const FileCard = ({ file, fileIndex, onView, onDelete, onEditLink, onRenameFile,
         <button
           ref={menuButtonRef}
           onClick={() => (menuOpen ? setMenuOpen(false) : openMenu())}
-          className="hover:opacity-70 transition-opacity"
+          className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+          title="More actions"
         >
-          <MoreIcon className="w-5 h-5" style={{ color: "#525252" }} />
+          <MoreIcon className="w-4 h-4" />
         </button>
         {menuOpen && menuPos && createPortal(
           <>
             <div className="fixed inset-0 z-[9998]" onClick={() => setMenuOpen(false)} />
             <div
-              className="fixed bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-[9999]"
+              className="fixed bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 w-max z-[9999] animate-in fade-in zoom-in duration-150 origin-top-right"
               style={{ minWidth: 150, top: menuPos.top, left: menuPos.left }}
             >
               <button
@@ -505,9 +507,9 @@ const FileCard = ({ file, fileIndex, onView, onDelete, onEditLink, onRenameFile,
                   setMenuOpen(false);
                   onView(file);
                 }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
               >
-                <OpenFileIcon size={19} style={{ color: "#5C5D5C" }} />
+                <OpenFileIcon size={14} style={{ color: "#1C1B1F" }} />
                 Open File
               </button>
               {file.isLink && onEditLink && (
@@ -516,9 +518,9 @@ const FileCard = ({ file, fileIndex, onView, onDelete, onEditLink, onRenameFile,
                     setMenuOpen(false);
                     onEditLink(file, fileIndex);
                   }}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
-                  <EditIcon size={17} style={{ color: "#5C5D5C" }} />
+                  <EditIcon size={14} style={{ color: "#1C1B1F" }} />
                   Edit Link
                 </button>
               )}
@@ -528,9 +530,9 @@ const FileCard = ({ file, fileIndex, onView, onDelete, onEditLink, onRenameFile,
                     setMenuOpen(false);
                     onRenameFile(file, fileIndex);
                   }}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
-                  <EditIcon size={17} style={{ color: "#5C5D5C" }} />
+                  <EditIcon size={14} style={{ color: "#1C1B1F" }} />
                   Rename File
                 </button>
               )}
@@ -539,9 +541,9 @@ const FileCard = ({ file, fileIndex, onView, onDelete, onEditLink, onRenameFile,
                   setMenuOpen(false);
                   onDelete(file);
                 }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-red-600 hover:bg-red-50 whitespace-nowrap"
               >
-                <DeleteFileIcon size={17} style={{ color: "#FB3748" }} />
+                <DeleteFileIcon size={14}style={{ color: "#FB3748" }} />
                 Delete File
               </button>
             </div>
@@ -692,7 +694,7 @@ const FolderCard = ({ folder, expanded, onToggle, onEdit, onDelete, onSelect, on
               boxShadow: "0px 1px 1px rgba(10, 13, 20, 0.03)",
             }}
           >
-            <NoFilesUploadIcon size={17} style={{ color: "#A3A3A3" }} className="mb-2" />
+            <DocumentUploadIcon className="w-5 h-5 mb-2" style={{ color: "#A3A3A3" }} />
             <p style={{ color: "#A3A3A3" }} className="text-sm">Upload Files</p>
           </div>
         )}
@@ -1849,7 +1851,7 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                 }}
                 onClick={() => setSelectedFolderId(openFolder._id)}
               >
-                <NoFilesUploadIcon size={20} style={{ color: "#A3A3A3" }} />
+                <DocumentUploadIcon className="w-5 h-5" style={{ color: "#A3A3A3" }} />
                 <p
                   style={{
                     fontFamily: "Inter Tight",
