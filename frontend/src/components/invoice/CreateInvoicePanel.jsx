@@ -356,12 +356,12 @@ const CreateInvoicePanel = ({
     let n = 1;
     const pad = (v) => String(v).padStart(2, "0");
     const out = { details: pad(n++) };
+    if (hasCustomFields) out.customFields = pad(n++);
     out.address = pad(n++);
     if (supportsGSTIN) out.billing = pad(n++);
     out.items = pad(n++);
     out.notes = pad(n++);
     out.terms = pad(n++);
-    if (hasCustomFields) out.customFields = pad(n++);
     out.bank = pad(n++);
     out.signature = pad(n++);
     out.summary = pad(n++);
@@ -2141,6 +2141,13 @@ const CreateInvoicePanel = ({
             </div>
           </div>
 
+          <DocumentCustomFieldInputs
+            docType={type}
+            header={<SectionHeader number={sectionNo.customFields} title="Custom Fields" />}
+            value={form.customFields}
+            onChange={(v) => setField("customFields", v)}
+          />
+
           <SectionHeader number={sectionNo.address} title="Billing & Shipping Address" />
           <div className="grid grid-cols-1 @md:grid-cols-2 gap-x-6 gap-y-2 w-full">
             <div ref={billingFieldRef} className="contents">
@@ -2573,13 +2580,6 @@ const CreateInvoicePanel = ({
               />
             </div>
           </div>
-
-          <DocumentCustomFieldInputs
-            docType={type}
-            header={<SectionHeader number={sectionNo.customFields} title="Custom Fields" />}
-            value={form.customFields}
-            onChange={(v) => setField("customFields", v)}
-          />
 
           <SectionHeader number={sectionNo.bank} title="Bank Account" />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 w-full">
