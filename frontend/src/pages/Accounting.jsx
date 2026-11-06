@@ -20,6 +20,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
+import { prefetchDocumentCustomFieldDefs } from "../components/common/DocumentCustomFieldInputs";
 import {
   ChevronUp,
   ChevronDown,
@@ -621,6 +622,12 @@ const Accounting = ({ fixedTab = null }) => {
   const [detailDocId, setDetailDocId] = useState(null);
 
   // Which document tabs show the status pill switcher under the header.
+  // Warm the document custom-field definitions so the form's Custom Fields section
+  // is there the moment a document drawer opens.
+  useEffect(() => {
+    prefetchDocumentCustomFieldDefs();
+  }, []);
+
   const statusTabs =
     activeTab === "tax"
       ? INVOICE_STATUS_TABS
@@ -2521,7 +2528,7 @@ const Accounting = ({ fixedTab = null }) => {
         )}
         {/* 2nd Header - Tab Bar & Actions Row */}
         <div
-          className={`fixed right-0 h-16 px-4 sm:px-6 lg:px-8 bg-white flex items-center justify-between gap-3 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]`}
+          className={`fixed right-0 h-16 px-4 sm:px-6 lg:pl-[22px] lg:pr-[22px] bg-white flex items-center justify-between gap-3 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]`}
           style={{ left: "var(--sidebar-width, 0px)", zIndex: 39 }}
         >
           {/* Mobile-only page title — fills the same left slot the tab pill
@@ -2736,7 +2743,7 @@ const Accounting = ({ fixedTab = null }) => {
             that status. */}
         {(
           <div
-            className="fixed right-0 h-14 px-4 sm:px-6 lg:pl-0 lg:pr-8 bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+            className="fixed right-0 h-14 px-4 sm:px-6 lg:pl-[22px] lg:pr-[22px] bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
             style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
           >
             {statusTabs && (

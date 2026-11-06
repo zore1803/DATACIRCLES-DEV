@@ -1158,7 +1158,7 @@ export default function PaymentsTimeline() {
           block stacked (name + video icon, subtitle below) instead of a
           single title+badge line. ──────────────────────────────────────── */}
       <div
-        className="fixed right-0 border-b border-[#E1E4EA] bg-white flex items-center justify-between gap-2 lg:gap-4 px-4 sm:px-6 lg:px-8 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
+        className="fixed right-0 border-b border-[#E1E4EA] bg-white flex items-center justify-between gap-2 lg:gap-4 px-4 sm:px-6 lg:pl-[26px] lg:pr-8 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
         style={{
           left: "var(--sidebar-width, 0px)",
           zIndex: 40,
@@ -1542,7 +1542,7 @@ export default function PaymentsTimeline() {
           when the KPI band is hidden via the three-dot menu. ── */}
       {stripVisible && (
         <div
-          className="fixed right-0 box-border flex items-center bg-white border-b border-[#E1E4EA] px-4 sm:px-6 lg:px-8"
+          className="fixed right-0 box-border flex items-center bg-white border-b border-[#E1E4EA] px-4 sm:px-6 lg:pl-[26px] lg:pr-8"
           style={{
             left: "var(--sidebar-width, 0px)",
             top: TOOLBAR_BOTTOM,
@@ -1577,7 +1577,7 @@ export default function PaymentsTimeline() {
           three-dot menu's Hide/Unhide KPIs item. ─────────────────────── */}
       {showStats && !stripVisible && (
         <div
-          className="fixed right-0 box-border flex flex-col justify-center bg-white border-b border-[#E1E4EA] px-6 py-6"
+          className="fixed right-0 box-border flex flex-col justify-center bg-white border-b border-[#E1E4EA] px-6 lg:pl-[26px] py-6"
           style={{ left: "var(--sidebar-width, 0px)", top: TOOLBAR_BOTTOM, height: KPI_BAND_HEIGHT, zIndex: 38, boxSizing: "border-box" }}
         >
           <div className="grid grid-cols-2 lg:flex lg:flex-row lg:items-stretch gap-3 lg:gap-6">

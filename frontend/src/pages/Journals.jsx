@@ -872,7 +872,7 @@ export default function Journals() {
     >
       {/* ── Fixed header bar (same shape as Inventory.jsx/PaymentsTimeline.jsx) ── */}
       <div
-        className="fixed right-0 h-16 px-4 sm:px-6 lg:px-8 border-b border-[#E1E4EA] bg-white flex items-center justify-between gap-4 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
+        className="fixed right-0 h-16 px-4 sm:px-6 lg:pl-[28px] lg:pr-[28px] border-b border-[#E1E4EA] bg-white flex items-center justify-between gap-4 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
         style={{ left: "var(--sidebar-width, 0px)", zIndex: 40, minHeight: 64, maxHeight: 64, boxSizing: "border-box" }}
       >
         <div className="flex flex-col justify-center gap-1 min-w-0 flex-shrink-0">
@@ -933,7 +933,7 @@ export default function Journals() {
 
       {/* ── Active/Cancelled tabs ─────────────────────────────────────── */}
       <div
-        className="fixed right-0 h-[68px] px-4 sm:px-6 lg:px-8 border-b border-[#E1E4EA] bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+        className="fixed right-0 h-[68px] px-4 sm:px-6 lg:pl-[28px] lg:pr-[28px] border-b border-[#E1E4EA] bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
         style={{ left: "var(--sidebar-width, 0px)", zIndex: 39 }}
       >
         <nav

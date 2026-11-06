@@ -7309,7 +7309,7 @@ const Insights = () => {
           toolbar. Title text lives in the top navbar (Header.jsx) instead;
           this strip is just the spacer bar. */}
       <div
-        className="fixed right-0 h-16 px-4 sm:px-6 lg:px-8 border-b border-[#E1E4EA] bg-white flex items-center justify-between top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
+        className="fixed right-0 h-16 px-4 sm:px-6 lg:pl-[24px] lg:pr-[24px] border-b border-[#E1E4EA] bg-white flex items-center justify-between top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
         style={{
           left: "var(--sidebar-width, 0px)",
           zIndex: 40,

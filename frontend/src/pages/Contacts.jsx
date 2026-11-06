@@ -2137,7 +2137,7 @@ function Contacts() {
 
             <nav
               ref={tabNavRef}
-              className="relative hidden lg:inline-flex items-center gap-1 h-10 p-1 bg-[#F1F1F5] rounded-full overflow-x-auto no-scrollbar flex-shrink-0"
+              className="relative hidden lg:inline-flex lg:ml-[19px] items-center gap-1 h-10 p-1 bg-[#F1F1F5] rounded-full overflow-x-auto no-scrollbar flex-shrink-0"
             >
               <span
                 aria-hidden="true"

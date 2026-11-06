@@ -2296,7 +2296,7 @@ function Deals() {
 
       {/* New Strip */}
       <div
-        className={`fixed right-0 border-b flex items-center justify-between gap-2 lg:gap-4 px-4 sm:px-6 lg:px-8 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E1E4EA]`}
+        className={`fixed right-0 border-b flex items-center justify-between gap-2 lg:gap-4 px-4 sm:px-6 lg:pl-[22px] lg:pr-[22px] top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E1E4EA]`}
         style={{
           left: "var(--sidebar-width, 0px)",
           zIndex: 40,
@@ -2630,7 +2630,7 @@ function Deals() {
 
       {showStats && (
         <div
-          className="fixed right-0 box-border flex flex-col justify-start items-start bg-white border-b border-[#E1E4EA] top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))] h-[156px] lg:h-[104px] px-4 sm:px-6 lg:px-8 py-4 lg:py-6"
+          className="fixed right-0 box-border flex flex-col justify-start items-start bg-white border-b border-[#E1E4EA] top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))] h-[156px] lg:h-[104px] px-4 sm:px-6 lg:pl-[22px] lg:pr-[22px] py-4 lg:py-6"
           style={{
             left: "var(--sidebar-width, 0px)",
             zIndex: 39,

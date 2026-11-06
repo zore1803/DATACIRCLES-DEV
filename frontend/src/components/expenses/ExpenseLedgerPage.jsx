@@ -730,7 +730,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
     // Cancels App.jsx's <main> gutter, same as the other full-bleed pages.
     <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-white -mt-6 -mx-4 sm:-mx-6 lg:-mx-8">
       <div
-        className="fixed right-0 border-b border-[#E1E4EA] bg-white flex items-center justify-between gap-2 lg:gap-4 px-4 sm:px-6 lg:px-8 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
+        className="fixed right-0 border-b border-[#E1E4EA] bg-white flex items-center justify-between gap-2 lg:gap-4 px-4 sm:px-6 lg:pl-[20px] lg:pr-8 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
         style={{
           left: "var(--sidebar-width, 0px)",
           zIndex: 40,
@@ -892,7 +892,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
           the header row. */}
       {!stripVisible && showStats && (
         <div
-          className="hidden lg:flex fixed right-0 items-center gap-4 bg-white border-b border-[#E1E4EA] px-6"
+          className="hidden lg:flex fixed right-0 items-center gap-4 bg-white border-b border-[#E1E4EA] px-6 lg:pl-[20px]"
           style={{
             left: "var(--sidebar-width, 0px)",
             top: "calc(128px + var(--dc-offline-offset,0px))",

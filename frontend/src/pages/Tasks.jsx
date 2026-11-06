@@ -3145,7 +3145,7 @@ function Tasks() {
         <>
         {/* Same pill switcher as the Contacts tabs — grey track, white
             active pill — replacing the underline tabs this page used. */}
-        <nav className="inline-flex items-center gap-1.5 h-10 p-1 bg-[#F1F1F5] rounded-full overflow-x-auto no-scrollbar flex-shrink-0">
+        <nav className="inline-flex ml-[24px] items-center gap-1.5 h-10 p-1 bg-[#F1F1F5] rounded-full overflow-x-auto no-scrollbar flex-shrink-0">
           {[
             { id: "tasks", label: "Tasks" },
             { id: "meetings", label: "Meetings" },

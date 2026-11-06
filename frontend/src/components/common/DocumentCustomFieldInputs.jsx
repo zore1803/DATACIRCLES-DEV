@@ -14,18 +14,36 @@ const inputCls =
 // exist are kept as they are.
 // The fields switched on for `docType`. Forms that number their sections use this to
 // know whether the Custom Fields section exists, so later sections shift up/down.
+// One shared request for every consumer (the panel's section numbering and the inputs
+// themselves), remembered for the session so reopening a form shows the section at once
+// instead of popping in after a fetch. Refreshed in the background each time.
+let cachedDefs = null;
+let inflight = null;
+function loadDefs() {
+  if (!inflight) {
+    inflight = API.get("/document-settings")
+      .then((res) => {
+        cachedDefs = Array.isArray(res.data?.customFields) ? res.data.customFields : [];
+        return cachedDefs;
+      })
+      .catch(() => cachedDefs || [])
+      .finally(() => {
+        inflight = null;
+      });
+  }
+  return inflight;
+}
+// Call early (e.g. when the invoice drawer opens) to warm the cache.
+export const prefetchDocumentCustomFieldDefs = loadDefs;
+
 export function useDocumentCustomFieldDefs(docType) {
-  const [defs, setDefs] = useState([]);
+  const [defs, setDefs] = useState(cachedDefs || []);
 
   useEffect(() => {
     let cancelled = false;
-    API.get("/document-settings")
-      .then((res) => {
-        if (!cancelled) setDefs(Array.isArray(res.data?.customFields) ? res.data.customFields : []);
-      })
-      .catch(() => {
-        if (!cancelled) setDefs([]);
-      });
+    loadDefs().then((d) => {
+      if (!cancelled) setDefs(d);
+    });
     return () => {
       cancelled = true;
     };
