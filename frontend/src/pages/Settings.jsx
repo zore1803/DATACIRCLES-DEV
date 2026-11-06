@@ -584,7 +584,7 @@ const Settings = () => {
                 <div className="h-6 w-px bg-gray-200 flex-shrink-0" />
               </>
             )}
-            <div className="min-w-0">
+            <div id="settings-header-title" className="min-w-0 max-w-[150px] sm:max-w-none">
               <h1 className="m-0 leading-tight font-bold text-base sm:text-lg text-gray-900 truncate">
                 {activeSection.label}
               </h1>
@@ -597,7 +597,7 @@ const Settings = () => {
                 shell is shared by every settings tab, so a child section
                 can't render into it via normal composition. Empty for any
                 tab that doesn't use it. */}
-            <div id="settings-header-actions" className="ml-auto flex-shrink-0 flex items-center gap-3" />
+            <div id="settings-header-actions" className="ml-auto min-w-0 flex-1 sm:flex-none sm:flex-shrink-0 flex items-center justify-end gap-3" />
           </div>
         </div>
 

@@ -126,16 +126,24 @@ const randomMessage =
 // stage) — sized for exactly 3 entries (Open/Won/Lost, this system's only
 // fixed statuses) but degrades to N-1 dividers for any length.
 const DealsFunnelChart = ({ stages }) => {
+  // Phones: the 770x310 drawing is scaled down to ~0.4x with its labels, so stage names and values
+  // came out unreadably tiny. There the labels move out of the drawing into a list underneath.
+  const [phone, setPhone] = React.useState(() => typeof window !== "undefined" && window.innerWidth < 640);
+  React.useEffect(() => {
+    const onResize = () => setPhone(window.innerWidth < 640);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   if (!stages || stages.length === 0) return null;
 
-  const SVG_W = 770;
-  const SVG_H = 310;
+  const SVG_W = phone ? 300 : 770;
+  const SVG_H = phone ? 170 : 310;
   const n = stages.length;
   const midY = SVG_H / 2;
   const nameLabelY = SVG_H - 30;
   const valueLabelY = SVG_H - 12;
   const minH = SVG_H * 0.08;
-  const maxH = SVG_H - 76;
+  const maxH = phone ? SVG_H - 12 : SVG_H - 76;
 
   const values = stages.map((s) => Math.max(0, Number(s.value) || 0));
   const maxVal = Math.max(...values, 1);
@@ -157,8 +165,8 @@ const DealsFunnelChart = ({ stages }) => {
     return 0.9 - t * 0.7;
   };
 
-  return (
-    <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} width="100%" height="100%" style={{ overflow: "visible" }} preserveAspectRatio="none">
+  const svg = (
+    <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} width="100%" height="100%" style={{ overflow: "visible" }} preserveAspectRatio={phone ? "xMidYMid meet" : "none"}>
       {stages.map((stage, i) => {
         const x0 = boundaryX[i];
         const x1 = boundaryX[i + 1];
@@ -197,7 +205,7 @@ const DealsFunnelChart = ({ stages }) => {
       ))}
 
       {/* Stage name with its value stacked directly below it, centered per segment. */}
-      {stages.map((stage, i) => {
+      {!phone && stages.map((stage, i) => {
         const cx = (boundaryX[i] + boundaryX[i + 1]) / 2;
         return (
           <g key={`label-${stage.name}`}>
@@ -216,14 +224,36 @@ const DealsFunnelChart = ({ stages }) => {
         const cx = (boundaryX[i] + boundaryX[i + 1]) / 2;
         return (
           <g key={`badge-${stage.name}`}>
-            <rect x={cx - 26} y={midY - 14} width={52} height={28} rx={14} fill="#0F0E0E" />
-            <text x={cx} y={midY + 5} textAnchor="middle" fontSize={14} fontWeight={600} fill="#FFFFFF">
+            <rect x={cx - (phone ? 26 : 26)} y={midY - (phone ? 13 : 14)} width={phone ? 52 : 52} height={phone ? 26 : 28} rx={phone ? 13 : 14} fill="#0F0E0E" />
+            <text x={cx} y={midY + (phone ? 5 : 5)} textAnchor="middle" fontSize={phone ? 14 : 14} fontWeight={600} fill="#FFFFFF">
               {stage.pct}%
             </text>
           </g>
         );
       })}
     </svg>
+  );
+
+  if (!phone) return svg;
+
+  return (
+    <div className="w-full">
+      <div style={{ height: SVG_H }}>{svg}</div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3 mt-4">
+        {stages.map((stage, i) => (
+          <div key={`legend-${stage.name}`} className="flex items-center gap-2 min-w-0">
+            <span
+              className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+              style={{ background: "#0085FF", opacity: opacityFor(i) }}
+            />
+            <div className="min-w-0">
+              <p className="m-0 text-xs font-semibold text-[#0E121B] truncate">{stage.name}</p>
+              <p className="m-0 text-[11px] text-[#525866]">₹{formatNumberToIndian(Math.round(values[i]))}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 };
 
@@ -246,14 +276,16 @@ const DealsIndustryTreemap = ({ items }) => {
 
   const Cell = ({ item, idx, style }) => (
     <div
-      className="rounded flex flex-col justify-between p-4 min-h-0"
+      className="rounded flex flex-col justify-between p-2 sm:p-4 min-h-0 min-w-0 overflow-hidden"
       style={{ background: colors[idx % colors.length].bg, color: colors[idx % colors.length].text, ...style }}
     >
-      <span className="text-[15px] font-medium truncate">{item.name}</span>
-      <div className="flex items-end justify-between gap-2">
-        <span className="text-2xl font-medium">{item.pct}%</span>
+      <span className="text-xs sm:text-[15px] font-medium truncate">{item.name}</span>
+      {/* Phones: the cells can be under 80px wide, so the amount pill stacks under the percentage
+          instead of sitting beside it (which pushed it out of the cell and over its neighbour). */}
+      <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-end sm:justify-between sm:gap-2 min-w-0">
+        <span className="text-lg sm:text-2xl font-medium leading-none">{item.pct}%</span>
         <span
-          className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-white flex-shrink-0"
+          className="text-[9px] sm:text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-white max-w-full truncate sm:flex-shrink-0"
           style={{ color: "#21201F" }}
         >
           ₹{formatNumberToIndian(Math.round(item.value))}
@@ -283,7 +315,7 @@ const DealsIndustryTreemap = ({ items }) => {
       <div className="flex flex-col gap-0.5" style={{ flex: leftFlex, minWidth: 0 }}>
         <Cell item={i0} idx={0} style={{ flex: i0.pct || 1 }} />
         {(i2 || i3) && (
-          <div className="flex gap-0.5" style={{ flex: (i2?.pct || 0) + (i3?.pct || 0) || 1 }}>
+          <div className="flex gap-0.5 min-w-0" style={{ flex: (i2?.pct || 0) + (i3?.pct || 0) || 1 }}>
             {i2 && <Cell item={i2} idx={2} style={{ flex: i2.pct || 1 }} />}
             {i3 && <Cell item={i3} idx={3} style={{ flex: i3.pct || 1 }} />}
           </div>
@@ -1215,7 +1247,7 @@ const Insights = () => {
     <div className="space-y-6">
       {/* Stats Cards */}
       <div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           <StatCard
             title="Total Contacts"
             value={report?.overviewStats ? report.overviewStats.totalContacts.count : filteredData.filteredContacts.length}
@@ -1961,7 +1993,7 @@ const Insights = () => {
     return (
       <div className="space-y-6">
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
           <StatCard
             title="Total Contacts"
             value={totalContacts}
@@ -3056,7 +3088,7 @@ const Insights = () => {
     const { totalCompanies, companiesThisMonth, topLocations, completenessScore, activeCompanies, avgDealSizeCompanies, avgSalesCycleDays, totalCompaniesChange, activeCompaniesChange, newCompaniesChange, avgDealSizeChange, salesCycleChange, companySourceData, companySourceTotal, velocityPoints, pipelineContributionData, pipelineContributionMax, topRevenueCompaniesAll } = pr ? fromReport : legacy;
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
           <StatCard
             title="Total Companies"
             value={totalCompanies}
@@ -3176,15 +3208,15 @@ const Insights = () => {
             <p className="text-sm text-gray-400 py-10 text-center">No companies yet</p>
           ) : (
             <div className="flex items-center justify-between gap-4 mt-4 flex-wrap">
-              <div className="relative flex-shrink-0" style={{ width: 220, height: 220 }}>
+              <div className="relative flex-shrink-0 w-[170px] h-[170px] sm:w-[220px] sm:h-[220px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
                       data={companySourceData}
                       cx="50%"
                       cy="50%"
-                      innerRadius={68}
-                      outerRadius={108}
+                      innerRadius="62%"
+                      outerRadius="98%"
                       cornerRadius={3}
                       paddingAngle={companySourceData.length > 1 ? 2 : 0}
                       dataKey="value"
@@ -3347,44 +3379,45 @@ const Insights = () => {
                   <p className="text-sm text-gray-400 py-16 text-center">No revenue data yet</p>
                 ) : (
                   <>
+                    {/* Phones: only #, Company (industry beneath) and Revenue - the full desktop grid is
+                        ~810px wide and overlapped itself in a ~320px card. */}
                     <div
-                      className="grid items-center mt-4 pb-2 border-b border-[#E7E7E9] text-[11px] font-medium text-[#525866]"
-                      style={{ gridTemplateColumns: "24px minmax(0,220px) minmax(30px,1fr) 160px 32px 90px 32px 80px 32px 110px" }}
+                      className="grid grid-cols-[20px_minmax(0,1fr)_auto] sm:grid-cols-[24px_minmax(0,220px)_minmax(30px,1fr)_160px_32px_90px_32px_80px_32px_110px] items-center mt-4 pb-2 border-b border-[#E7E7E9] text-[11px] font-medium text-[#525866]"
                     >
                       <span>#</span>
                       <span>Company</span>
-                      <span />
-                      <span>Industry</span>
-                      <span />
-                      <span>Last Active</span>
-                      <span />
-                      <span>Active Deals</span>
-                      <span />
+                      <span className="hidden sm:block" />
+                      <span className="hidden sm:block">Industry</span>
+                      <span className="hidden sm:block" />
+                      <span className="hidden sm:block">Last Active</span>
+                      <span className="hidden sm:block" />
+                      <span className="hidden sm:block">Active Deals</span>
+                      <span className="hidden sm:block" />
                       <span className="text-right">Revenue</span>
                     </div>
                     <div className="flex flex-col flex-1 justify-around">
                       {pageRows.map((c, idx) => (
                         <div
                           key={c.name + idx}
-                          className="grid items-center py-5 border-b border-[#E7E7E9] last:border-b-0"
-                          style={{ gridTemplateColumns: "24px minmax(0,220px) minmax(30px,1fr) 160px 32px 90px 32px 80px 32px 110px" }}
+                          className="grid grid-cols-[20px_minmax(0,1fr)_auto] sm:grid-cols-[24px_minmax(0,220px)_minmax(30px,1fr)_160px_32px_90px_32px_80px_32px_110px] items-center py-4 sm:py-5 border-b border-[#E7E7E9] last:border-b-0"
                         >
                           <span className="text-xs text-[#525866]">{idx + 1}</span>
-                          <span className="flex items-center min-w-0">
+                          <span className="flex flex-col justify-center min-w-0">
                             <span className="text-xs text-[#1F1F21] truncate">{c.name}</span>
+                            <span className="sm:hidden text-[10px] text-[#525866] truncate">{c.industry}</span>
                           </span>
-                          <span />
-                          <span className="text-xs text-[#525866] pr-2">{c.industry}</span>
-                          <span />
-                          <span className="text-xs text-[#525866]">
+                          <span className="hidden sm:block" />
+                          <span className="hidden sm:block text-xs text-[#525866] pr-2">{c.industry}</span>
+                          <span className="hidden sm:block" />
+                          <span className="hidden sm:block text-xs text-[#525866]">
                             {c.lastActive
                               ? c.lastActive.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })
                               : "—"}
                           </span>
-                          <span />
-                          <span className="text-xs text-[#525866]">{c.activeDeals}</span>
-                          <span />
-                          <span className="text-xs font-medium text-[#1F1F21] text-right">
+                          <span className="hidden sm:block" />
+                          <span className="hidden sm:block text-xs text-[#525866]">{c.activeDeals}</span>
+                          <span className="hidden sm:block" />
+                          <span className="text-xs font-medium text-[#1F1F21] text-right pl-2">
                             ₹{formatNumberToIndian(c.revenue)}
                           </span>
                         </div>
@@ -3808,7 +3841,7 @@ const Insights = () => {
       <div className="space-y-6">
         {/* KPI row — same StatCard pattern (icon + label/value + bottom-right
             change badge) used on the Companies tab. */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
           <StatCard
             title="Total Pipeline Value"
             value={`₹${formatNumberToIndian(totalValue)}`}
@@ -3933,7 +3966,7 @@ const Insights = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 items-stretch">
           {/* Deals by Stage — same real stages as the funnel/table above. */}
-          <div className="bg-white p-[18px] rounded-lg border border-[#E1E4EA] min-h-[360px]">
+          <div className="bg-white p-[18px] rounded-lg border border-[#E1E4EA] lg:min-h-[360px]">
             <h3 className="text-sm font-semibold text-[#0E121B]">Deals by Stage</h3>
             <div className="bg-[#F8FAFC] rounded-md p-2 mt-3 overflow-x-auto">
               <table className="w-full text-xs" style={{ minWidth: 640 }}>
@@ -3998,7 +4031,7 @@ const Insights = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-4 items-stretch">
           {/* Deal Status Breakdown */}
-          <div className="bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm min-h-[340px]">
+          <div className="bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm lg:min-h-[340px]">
             <h3 className="text-sm font-semibold text-[#0E121B]">Deal Status Breakdown</h3>
             <p className="text-xs text-[#525866] mt-1">Count and value by status</p>
             {dealStatusChartData.length === 0 ? (
@@ -4446,7 +4479,7 @@ const Insights = () => {
     const { averageBalance, vendorsWithPositiveBalance, vendorsWithNegativeBalance, vendorsWithZeroBalance, vendorsThisMonth, topCompanies, completenessScore, totalVendorSpend, outstandingPayables, totalCredits, activeVendors, avgVendorSpend, vendorSpendChange, activeVendorsChange, totalPurchasesForStatus, paymentDistribution, vendorSpendTrendData, topVendorsBySpend, vendorSpendGoesTotal, recentPayments, totalVendors, vendorTableRows } = pr ? fromReport : legacy;
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
           <StatCard
             title="Total Vendor Spend"
             value={`₹${formatNumberToIndian(Math.round(totalVendorSpend))}`}
@@ -4556,15 +4589,15 @@ const Insights = () => {
               <p className="text-sm text-gray-400 py-10 text-center">No purchase data available</p>
             ) : (
               <div className="flex items-center justify-between gap-4 mt-4 flex-wrap">
-                <div className="relative flex-shrink-0" style={{ width: 220, height: 220 }}>
+                <div className="relative flex-shrink-0 w-[170px] h-[170px] sm:w-[220px] sm:h-[220px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={paymentDistribution}
                         cx="50%"
                         cy="50%"
-                        innerRadius={68}
-                        outerRadius={108}
+                        innerRadius="62%"
+                        outerRadius="98%"
                         cornerRadius={3}
                         paddingAngle={paymentDistribution.length > 1 ? 2 : 0}
                         dataKey="count"
@@ -5163,7 +5196,7 @@ const Insights = () => {
       <div className="space-y-6">
         {/* KPI row — same StatCard pattern (icon + label/value + bottom-right
             change badge) used on the Companies tab. */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
           <StatCard
             title="Total PO Value"
             value={`₹${formatNumberToIndian(Math.round(totalAmount))}`}
@@ -5276,15 +5309,15 @@ const Insights = () => {
               <p className="text-sm text-gray-400 py-10 text-center">No purchase order data available</p>
             ) : (
               <div className="flex items-center justify-between gap-4 mt-4 flex-wrap">
-                <div className="relative flex-shrink-0" style={{ width: 220, height: 220 }}>
+                <div className="relative flex-shrink-0 w-[170px] h-[170px] sm:w-[220px] sm:h-[220px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={poStatusDistribution}
                         cx="50%"
                         cy="50%"
-                        innerRadius={68}
-                        outerRadius={108}
+                        innerRadius="62%"
+                        outerRadius="98%"
                         cornerRadius={3}
                         paddingAngle={poStatusDistribution.length > 1 ? 2 : 0}
                         dataKey="count"
@@ -5932,7 +5965,7 @@ const Insights = () => {
     const { totalPurchases, totalAmount, averagePurchaseAmount, purchasesThisMonthCount, purchasesThisWeek, topVendors, largestPurchases, paidPurchasesAmount, outstandingPurchasesAmount, gstInputTax, activeVendorsCount, totalPurchasesChange, paidPurchasesChange, outstandingPurchasesChange, gstChange, activeVendorsChangePurch, purchaseValueTrendData, purchaseStatusDistribution, receivedRate, purchaseFunnelStages, upcomingPayments, recentPurchaseActivity, purchaseAlerts, recentPurchasesTable } = pr ? fromReport : legacy;
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
           <StatCard
             title="Total Purchases"
             value={`₹${formatNumberToIndian(Math.round(totalAmount))}`}
@@ -6121,21 +6154,21 @@ const Insights = () => {
               </div>
             )}
           </div>
-          <div className="bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm min-h-[360px]">
+          <div className="bg-white p-5 rounded-xl border border-[#E7E4E3] shadow-sm lg:min-h-[360px]">
             <h3 className="text-sm font-semibold text-[#0E121B]">Purchase Status Distribution</h3>
             {purchaseStatusDistribution.length === 0 ? (
               <p className="text-sm text-gray-400 py-10 text-center">No purchase data available</p>
             ) : (
               <div className="flex items-center justify-between gap-4 mt-4 flex-wrap">
-                <div className="relative flex-shrink-0" style={{ width: 220, height: 220 }}>
+                <div className="relative flex-shrink-0 w-[170px] h-[170px] sm:w-[220px] sm:h-[220px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={purchaseStatusDistribution}
                         cx="50%"
                         cy="50%"
-                        innerRadius={68}
-                        outerRadius={108}
+                        innerRadius="62%"
+                        outerRadius="98%"
                         cornerRadius={3}
                         paddingAngle={purchaseStatusDistribution.length > 1 ? 2 : 0}
                         dataKey="count"
@@ -6845,7 +6878,7 @@ const Insights = () => {
     const { totalInvoices, totalAmount, averageInvoiceAmount, paidAmount, pendingAmount, overdueAmount, collectionRate, invoicesThisMonthCount, topDeals, topContactsByBilling, largestInvoices, invoiceStatusChartData, billingTrendData, totalInvoicedChange, collectedChange, outstandingChangeInv, overdueChange, collectionRateChange, upcomingCollections, invoicesByStatus, recentInvoiceActivity } = pr ? fromReport : legacy;
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
           <StatCard
             title="Total Invoiced"
             value={`₹${formatNumberToIndian(Math.round(totalAmount))}`}
@@ -7162,15 +7195,15 @@ const Insights = () => {
               // Same shape as the Payment Distribution card: donut on the left,
               // legend with percentages on the right.
               <div className="flex items-center justify-between gap-4 mt-4 flex-wrap">
-                <div className="relative flex-shrink-0" style={{ width: 220, height: 220 }}>
+                <div className="relative flex-shrink-0 w-[170px] h-[170px] sm:w-[220px] sm:h-[220px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={invoiceStatusChartData}
                         cx="50%"
                         cy="50%"
-                        innerRadius={68}
-                        outerRadius={108}
+                        innerRadius="62%"
+                        outerRadius="98%"
                         cornerRadius={3}
                         paddingAngle={invoiceStatusChartData.length > 1 ? 2 : 0}
                         dataKey="value"
@@ -7375,14 +7408,14 @@ const Insights = () => {
                 className="fixed inset-0 z-40"
                 onClick={() => setShowFiltersPanel(false)}
               />
-              <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[min(90vw,720px)] bg-white p-6 rounded-xl border border-gray-200 shadow-lg">
-        <div className="flex items-center gap-3 mb-4">
+              <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[min(90vw,720px)] bg-white p-4 sm:p-6 rounded-xl border border-gray-200 shadow-lg">
+        <div className="flex items-center gap-3 mb-3 sm:mb-4">
           <FilterIcon size={16} />
           <h3 className="text-base font-bold text-gray-900">Filters</h3>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
               <CalendarIcon className="w-4 h-4 inline mr-1" />
               From Date
             </label>
@@ -7392,11 +7425,11 @@ const Insights = () => {
               onChange={(e) =>
                 setDateRange((prev) => ({ ...prev, startDate: e.target.value }))
               }
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
               <CalendarIcon className="w-4 h-4 inline mr-1" />
               To Date
             </label>
@@ -7406,11 +7439,11 @@ const Insights = () => {
               onChange={(e) =>
                 setDateRange((prev) => ({ ...prev, endDate: e.target.value }))
               }
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
               Contact Status
             </label>
             <select
@@ -7421,7 +7454,7 @@ const Insights = () => {
                   contactStatus: e.target.value,
                 }))
               }
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              className="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
             >
               <option value="all">All Status</option>
               <option value="New">New</option>
@@ -7432,7 +7465,7 @@ const Insights = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
               PO Status
             </label>
             <select
@@ -7440,7 +7473,7 @@ const Insights = () => {
               onChange={(e) =>
                 setFilters((prev) => ({ ...prev, poStatus: e.target.value }))
               }
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              className="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
             >
               <option value="all">All Status</option>
               <option value="Pending">Pending</option>
@@ -7450,7 +7483,7 @@ const Insights = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
               Purchase Status
             </label>
             <select
@@ -7461,7 +7494,7 @@ const Insights = () => {
                   purchaseStatus: e.target.value,
                 }))
               }
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              className="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
             >
               <option value="all">All Status</option>
               <option value="Draft">Draft</option>
@@ -7473,7 +7506,7 @@ const Insights = () => {
           <div className="flex items-end">
             <button
               onClick={clearAllFilters}
-              className="w-full px-4 py-2 flex items-center justify-center gap-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors"
+              className="w-full px-3 sm:px-4 py-1.5 sm:py-2 flex items-center justify-center gap-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 text-xs sm:text-sm font-medium transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
               Clear Filters

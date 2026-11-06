@@ -38,8 +38,11 @@ export default function EmptyState({
     ? filteredDescription
     : description || `Create your first ${noun.toLowerCase()} to see it here.`;
 
+  // The table this sits in is wider than a phone screen (it scrolls sideways) and the cell spans
+  // all of it, so plain centring put the message half off-screen. Phones pin it to the visible
+  // left edge at screen width; from lg up it is the normal full-width centred block.
   return (
-    <div className={`flex flex-col items-center justify-center text-center py-24 px-4 ${className}`}>
+    <div className={`sticky left-0 w-screen max-w-full lg:static lg:w-auto flex flex-col items-center justify-center text-center py-24 px-4 ${className}`}>
       {Icon && <Icon className="h-12 w-12 text-gray-300 mb-4" />}
       <h3 className="text-lg font-semibold text-gray-800">{resolvedTitle}</h3>
       <p className="text-gray-500 mt-1.5 max-w-md text-sm">{resolvedDescription}</p>

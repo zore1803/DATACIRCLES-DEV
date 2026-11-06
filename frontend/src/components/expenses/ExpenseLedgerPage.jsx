@@ -756,7 +756,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
           />
         ) : (
           <>
-        <div className="flex flex-col gap-1 flex-shrink-0 min-w-0">
+        <div className={`flex flex-col gap-1 flex-shrink-0 min-w-0 overflow-hidden transition-opacity duration-300 ease-in-out lg:!w-auto lg:!opacity-100 ${isSearchExpanded ? "w-0 opacity-0" : "w-[150px] opacity-100"}`}>
           <div className="flex items-center gap-2">
             <h2
               className="m-0 font-medium truncate text-sm sm:text-base"
@@ -774,9 +774,10 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
         </div>
 
         {/* Spacer — the totals moved to the KPI band below the strip. */}
-        <div className="flex-1 min-w-0" />
+        <div className="hidden lg:block flex-1 min-w-0" />
 
-        <div className="flex items-center gap-2 lg:gap-4 flex-shrink-0">
+        <div className="flex items-center justify-end gap-2 lg:gap-4 flex-1 min-w-0 lg:flex-none lg:flex-shrink-0">
+          <div className="relative flex-1 min-w-0 flex items-center justify-end lg:flex-none">
           <div
             className={`relative h-10 flex items-center border rounded-full bg-white transition-all duration-300 ease-in-out hover:bg-gray-50 focus-within:border-[#0085FF] focus-within:hover:bg-white ${
               searchTerm ? "border-[#0085FF]" : "border-[#E1E4EA]"
@@ -812,6 +813,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
                 <X className="w-3.5 h-3.5" strokeWidth={2.5} />
               </button>
             )}
+          </div>
           </div>
 
           <button

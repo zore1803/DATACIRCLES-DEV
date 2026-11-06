@@ -605,7 +605,9 @@ const AdminCalendar = () => {
         }}
       >
         <div
-          className="flex flex-col items-start flex-shrink min-w-0"
+          // Phones: the title block steps aside while search is open (as on Companies) so the
+          // field gets the row; desktop keeps it.
+          className={`flex flex-col items-start flex-shrink-0 lg:flex-shrink min-w-0 overflow-hidden transition-opacity duration-300 ease-in-out lg:!w-auto lg:!opacity-100 ${isSearchExpanded ? "w-0 opacity-0" : "w-[130px] opacity-100"}`}
           style={{ gap: 6, height: 39 }}
         >
           <span
@@ -640,59 +642,51 @@ const AdminCalendar = () => {
         </div>
 
         <div
-          className="flex flex-row items-center flex-shrink-0"
+          className="flex flex-row items-center flex-1 min-w-0 justify-end"
           style={{ gap: 12, height: 40 }}
         >
-          <div
-            className="relative box-border flex flex-row items-center flex-shrink transition-all duration-300 ease-in-out hover:bg-gray-50 focus-within:hover:bg-white"
-            style={{
-              // Collapsed, this is a 40px circle holding a 16px icon: 14px of
-              // side padding left only 10px of content box, so the icon
-              // overflowed and sat left of centre. No padding + centring while
-              // collapsed; the input's padding comes back when it expands.
-              padding: isSearchExpanded ? "10px 14px" : 0,
-              justifyContent: isSearchExpanded ? "flex-start" : "center",
-              gap: isSearchExpanded ? 10 : 0,
-              width: isSearchExpanded ? 416 : 40,
-              maxWidth: "40vw",
-              minWidth: isSearchExpanded ? 120 : 40,
-              height: 40,
-              border: `1px solid ${isSearchExpanded ? "#0085FF" : "rgba(31, 41, 55, 0.1)"}`,
-              borderRadius: 95,
-              background: "#fff",
-            }}
-          >
-            <SearchIcon
-              className="flex-shrink-0 cursor-pointer w-4 h-4 text-[#525866]"
-              style={{ color: "#1F2937" }}
-              onClick={() => {
-                setIsSearchExpanded(true);
-                searchInputRef.current?.focus();
-              }}
-            />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onFocus={() => setIsSearchExpanded(true)}
-              onBlur={() => {
-                if (!searchTerm) setIsSearchExpanded(false);
-              }}
-              // Collapsed, the input is taken out of the layout entirely
-              // (w-0 + flex-none), not just faded: as a flex-1 child at
-              // opacity 0 it still claimed the row's width and shoved the
-              // icon out of the 40px circle to its left.
-              className={`bg-transparent focus:outline-none truncate transition-opacity duration-200 cursor-pointer ${isSearchExpanded ? "flex-1 opacity-100 focus:cursor-text" : "w-0 flex-none p-0 opacity-0 pointer-events-none"}`}
-              style={{
-                fontFamily: "Inter",
-                fontWeight: 400,
-                fontSize: 14,
-                lineHeight: "20px",
-                color: "#1F2937",
-              }}
-              placeholder="Search by events by name, task, or meeting..."
-            />
+          {/* Same construction as the Companies search: a 40px circle whose input always fills
+              it (invisible while collapsed), so a tap lands on the real input, opens the
+              keyboard and expands in one go. The old input was 0px wide while collapsed, so
+              on a phone the tap could expand the box without ever focusing the field. */}
+          <div className="relative flex-1 min-w-0 flex items-center justify-end">
+            <div
+              className={`relative h-10 flex items-center border rounded-full bg-white transition-all duration-300 ease-in-out hover:bg-gray-50 focus-within:border-[#0085FF] focus-within:hover:bg-white ${
+                searchTerm || isSearchExpanded ? "border-[#0085FF]" : "border-[#E1E4EA]"
+              } ${isSearchExpanded ? "w-full lg:w-[416px]" : "w-10"} max-w-full`}
+            >
+              <SearchIcon
+                className="absolute left-3 cursor-pointer z-10 flex-shrink-0 top-1/2 -translate-y-1/2 w-4 h-4 text-[#1F2937]"
+                onClick={() => {
+                  setIsSearchExpanded(true);
+                  searchInputRef.current?.focus();
+                }}
+              />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onFocus={() => setIsSearchExpanded(true)}
+                onBlur={() => {
+                  if (!searchTerm) setIsSearchExpanded(false);
+                }}
+                className={`w-full h-full pl-9 pr-9 bg-transparent text-sm focus:outline-none transition-opacity duration-200 font-inter cursor-pointer ${isSearchExpanded ? "opacity-100 focus:cursor-text" : "opacity-0"}`}
+                style={{ fontWeight: 400, lineHeight: "20px", color: "#1F2937" }}
+                placeholder="Search events, tasks or meetings..."
+              />
+              {isSearchExpanded && searchTerm && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setSearchTerm("")}
+                  aria-label="Clear search"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-5 h-5 rounded-full text-gray-900 hover:bg-gray-100 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" strokeWidth={2.5} />
+                </button>
+              )}
+            </div>
           </div>
 
           <div
@@ -704,7 +698,7 @@ const AdminCalendar = () => {
               disabled={loading}
               onClick={() => { setFilterOpen((v) => !v); setMoreOpen(false); setHeaderAddPos(null); }}
               title="Filter"
-              className="box-border relative flex flex-row justify-center items-center flex-shrink-0"
+              className={`box-border relative flex-row justify-center items-center flex-shrink-0 ${isSearchExpanded ? "hidden lg:flex" : "flex"}`}
               style={{
                 padding: 10,
                 gap: 8,
@@ -744,22 +738,24 @@ const AdminCalendar = () => {
             <button
               disabled={loading}
               onClick={() => { setHeaderAddPos((v) => (v ? null : true)); setFilterOpen(false); setMoreOpen(false); }}
-              className="flex flex-row justify-center items-center flex-shrink-0"
+              title="Add Activity"
+              aria-label="Add Activity"
+              className="flex flex-row justify-center items-center flex-shrink-0 w-10 lg:w-[146px]"
               style={{
                 padding: 10,
                 gap: 6,
-                width: 146,
                 height: 40,
                 background: loading ? "#F5F6F6" : "#0085FF",
                 borderRadius: 96,
               }}
             >
               {loading ? (
-                <Skeleton width={90} height={14} />
+                <Skeleton width={90} height={14} className="hidden lg:block" />
               ) : (
                 <>
                   <PlusIcon className="w-4 h-4 text-white" />
                   <span
+                    className="hidden lg:inline"
                     style={{
                       fontFamily: "Inter",
                       fontWeight: 500,
@@ -852,32 +848,24 @@ const AdminCalendar = () => {
       </div>
 
       <div
-        className="box-border flex flex-col items-start flex-shrink-0 self-stretch mx-6 bg-white border border-[#E1E4EA] rounded-lg"
+        className="box-border flex flex-col items-start flex-shrink-0 self-stretch mx-3 lg:mx-6 bg-white border border-[#E1E4EA] rounded-lg"
         style={{ padding: 0, gap: 0, marginTop: 18 + 64 }}
       >
         {/* Filter bar */}
         <div
-          className="relative box-border flex flex-row justify-between items-center flex-shrink-0 self-stretch"
+          className="relative box-border flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3 lg:gap-0 flex-shrink-0 self-stretch py-3 px-3 lg:py-[6px] lg:px-4 lg:h-[60px]"
           style={{
-            padding: "6px 16px",
             width: "100%",
-            height: 60,
             borderBottom: "1px solid #E0E0E1",
           }}
         >
           {/* Legend */}
           <div
-            className="absolute flex flex-row items-center"
-            style={{
-              left: "50%",
-              top: "50%",
-              transform: "translate(-50%, -50%)",
-              gap: 8,
-            }}
+            className="flex flex-row items-center justify-center gap-2 order-3 lg:order-none lg:absolute lg:left-1/2 lg:top-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2"
           >
             <div
               className="flex flex-row justify-center items-center flex-shrink-0"
-              style={{ padding: "8px 24px", gap: 10, height: 30, borderRadius: 96 }}
+              className="px-3 lg:px-6" style={{ gap: 10, height: 30, borderRadius: 96 }}
             >
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#0085FF", flexShrink: 0 }} />
               {loading ? (
@@ -893,7 +881,7 @@ const AdminCalendar = () => {
             </div>
             <div
               className="flex flex-row justify-center items-center flex-shrink-0"
-              style={{ padding: "8px 24px", gap: 10, height: 30, borderRadius: 96 }}
+              className="px-3 lg:px-6" style={{ gap: 10, height: 30, borderRadius: 96 }}
             >
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#00C950", flexShrink: 0 }} />
               {loading ? (
@@ -911,7 +899,7 @@ const AdminCalendar = () => {
 
           {/* Date navigator */}
           <div
-            className="flex flex-row items-center flex-shrink-0"
+            className="flex flex-row items-center flex-shrink-0 w-full lg:w-auto"
             style={{ height: 32 }}
           >
             <button
@@ -933,9 +921,9 @@ const AdminCalendar = () => {
               <ChevronLeft size={20} style={{ color: "#111216" }} />
             </button>
             <div
-              className="box-border flex flex-row justify-center items-center flex-shrink-0"
+              className="box-border flex flex-row justify-center items-center flex-1 lg:flex-none min-w-0"
               style={{
-                padding: "0px 16px",
+                padding: "0px 8px",
                 minWidth: 94,
                 height: 32,
                 borderWidth: "1px 0px",
@@ -1014,11 +1002,10 @@ const AdminCalendar = () => {
 
           {/* View switcher */}
           <div
-            className="box-border flex flex-row justify-center items-center flex-shrink-0"
+            className="box-border flex flex-row justify-center items-center flex-shrink-0 w-full lg:w-[285px]"
             style={{
               padding: 4,
               gap: 6,
-              width: 285,
               height: 40,
               background: "#FFFFFF",
               border: "1px solid #E0E0E1",
@@ -1078,9 +1065,8 @@ const AdminCalendar = () => {
           {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, i) => (
             <div
               key={day}
-              className="box-border flex flex-row justify-center items-center flex-shrink-0"
+              className="box-border flex flex-row justify-center items-center flex-shrink-0 p-0 lg:p-4"
               style={{
-                padding: 16,
                 gap: 10,
                 width: "14.2857%",
                 height: 40,
@@ -1101,6 +1087,7 @@ const AdminCalendar = () => {
                   lineHeight: "17px",
                   color: "#111216",
                 }}
+                className="text-xs lg:text-sm"
               >
                 {day}
               </span>
@@ -1153,7 +1140,6 @@ const AdminCalendar = () => {
               (d) => d.date.toDateString() === currentDate.toDateString(),
             );
             const isOpenWeek = true;
-            const rowHeight = 158;
 
             return (
             <div
@@ -1188,12 +1174,10 @@ const AdminCalendar = () => {
                   <div
                     key={i}
                     onClick={(e) => handleDayClick(e, dayObj.date)}
-                    className="box-border flex flex-col items-start flex-shrink-0 cursor-pointer hover:bg-gray-50 transition-colors"
+                    className="box-border flex flex-col flex-shrink-0 cursor-pointer hover:bg-gray-50 transition-colors p-1 lg:p-4 h-[64px] lg:h-[158px] items-center lg:items-start"
                     style={{
-                      padding: 16,
                       gap: 8,
                       width: "14.2857%",
-                      height: rowHeight,
                       borderWidth: isLastCol
                         ? isLastRow
                           ? "0px"
@@ -1210,7 +1194,7 @@ const AdminCalendar = () => {
                           : "transparent",
                     }}
                   >
-                    <div className="flex flex-row justify-between items-center w-full">
+                    <div className="flex flex-row justify-center lg:justify-between items-center w-full">
                       <span
                         style={{
                           fontFamily: "'SF Pro Display', Inter, sans-serif",
@@ -1224,7 +1208,7 @@ const AdminCalendar = () => {
                       </span>
                       {topPriority && (
                         <div
-                          className="flex flex-row justify-center items-center"
+                          className="hidden lg:flex flex-row justify-center items-center"
                           style={{
                             padding: "2px 8px",
                             gap: 4,
@@ -1248,8 +1232,29 @@ const AdminCalendar = () => {
                       )}
                     </div>
 
+                    {/* Phones: a cell is ~48px wide, too narrow for event chips. Show a dot per
+                        item (blue meeting, green or priority-coloured task) instead. */}
+                    {(dayMeetings.length > 0 || dayTasks.length > 0) && (
+                      <div className="flex lg:hidden flex-row flex-wrap justify-center gap-[3px] mt-1">
+                        {dayMeetings.slice(0, 3).map((m) => (
+                          <span key={m._id} style={{ width: 6, height: 6, borderRadius: "50%", background: "#0085FF" }} />
+                        ))}
+                        {dayTasks.slice(0, 3).map((t) => (
+                          <span
+                            key={t._id}
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: "50%",
+                              background: priorityStyles[t.priority?.toLowerCase()]?.color || "#00C950",
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+
                     {isOpenWeek && (
-                    <div className="flex flex-col items-start w-full" style={{ gap: 4 }}>
+                    <div className="hidden lg:flex flex-col items-start w-full" style={{ gap: 4 }}>
                       {cellMeetings.map((m) => (
                         <div
                           key={m._id}

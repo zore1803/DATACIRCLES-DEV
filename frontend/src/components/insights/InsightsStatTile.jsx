@@ -17,7 +17,35 @@ export default function InsightsStatTile({ tile }) {
   const TrendIcon = tile.trendIcon;
 
   return (
-    <div className="min-h-[56px] w-full flex-1 flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl min-w-0">
+    <>
+    {/* Phone layout: two tiles per row leave ~150px each, too narrow for icon + label + value +
+        trend side by side. Stack them: icon and label on top, value, then the trend. */}
+    <div
+      className="sm:hidden w-full min-w-0 flex flex-col justify-center gap-1 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl"
+      style={{ minHeight: 84 }}
+    >
+      <div className="flex items-center gap-1.5 min-w-0">
+        {Icon && (
+          <span className={`flex flex-shrink-0 ${tile.iconClass || "text-blue-600"}`}>
+            <Icon size={16} strokeWidth={1.5} />
+          </span>
+        )}
+        <p className="m-0 text-[11px] leading-tight text-gray-500 line-clamp-2 break-words">{tile.label}</p>
+      </div>
+      <p className="m-0 text-[15px] leading-tight font-semibold text-gray-900 break-words">{tile.value}</p>
+      {tile.trendValue && (
+        <span
+          className="flex flex-wrap items-center gap-x-1 text-[11px] leading-tight font-semibold"
+          style={tile.trendColor ? { color: tile.trendColor } : undefined}
+        >
+          {TrendIcon && <TrendIcon size={12} className="flex-shrink-0" />}
+          {tile.trendValue}
+          {tile.trendLabel && <span className="font-normal text-gray-500">{tile.trendLabel}</span>}
+        </span>
+      )}
+    </div>
+
+    <div className="hidden sm:flex min-h-[56px] w-full flex-1 items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl min-w-0">
       {Icon && (
         <div className={`flex items-center justify-center flex-shrink-0 ${tile.iconClass || "text-blue-600"}`}>
           <Icon size={20} strokeWidth={1.5} />
@@ -53,5 +81,6 @@ export default function InsightsStatTile({ tile }) {
         )}
       </div>
     </div>
+    </>
   );
 }

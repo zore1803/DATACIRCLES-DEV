@@ -101,8 +101,17 @@ const PRESETS = [
   },
 ];
 
-export default function DateRangeFilterButton({ value, onChange }) {
-  const [open, setOpen] = useState(false);
+// `open` / `onOpenChange` let a parent drive it, and `hideTrigger` drops the pill button so the
+// picker can be opened from elsewhere (the phone layout opens it from a "..." menu entry); the
+// panel then floats centred on screen instead of hanging off a button.
+export default function DateRangeFilterButton({ value, onChange, open: controlledOpen, onOpenChange, hideTrigger = false }) {
+  const [innerOpen, setInnerOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : innerOpen;
+  const setOpen = (next) => {
+    const resolved = typeof next === "function" ? next(open) : next;
+    setInnerOpen(resolved);
+    if (onOpenChange) onOpenChange(resolved);
+  };
   const [view, setView] = useState("months"); // "months" | "years"
   const [year, setYear] = useState(new Date().getFullYear());
   const [yearPageStart, setYearPageStart] = useState(new Date().getFullYear() - 5);
@@ -155,6 +164,7 @@ export default function DateRangeFilterButton({ value, onChange }) {
 
   return (
     <div ref={wrapRef} className="relative flex-shrink-0">
+      {!hideTrigger && (
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -164,9 +174,16 @@ export default function DateRangeFilterButton({ value, onChange }) {
         {value?.label || "All Time"}
         <ChevronDown className="h-4 w-4" />
       </button>
+      )}
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-2 w-[400px] max-w-[94vw] rounded-xl border border-[#E1E4EA] bg-white shadow-xl">
+        <div
+          className={`${
+            hideTrigger
+              ? "fixed left-1/2 top-28 z-[10001] -translate-x-1/2"
+              : "absolute left-0 top-full z-50 mt-2"
+          } w-[400px] max-w-[94vw] rounded-xl border border-[#E1E4EA] bg-white shadow-xl`}
+        >
           <div className="flex">
             {/* Presets: one slim column */}
             <div className="flex w-[118px] flex-shrink-0 flex-col gap-0.5 border-r border-[#F1F1F5] p-2">

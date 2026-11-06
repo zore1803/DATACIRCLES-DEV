@@ -39,14 +39,14 @@ const ProfilePicture = ({
             : `${import.meta.env.VITE_APP_API_URL}${contact.avatar}`
         }
         alt={contact.name}
-        className={`${size} rounded-full object-cover border border-gray-200`}
+        className={`${size} flex-shrink-0 aspect-square rounded-full object-cover border border-gray-200`}
       />
     );
   }
 
   return (
     <div
-      className={`${size} rounded-full flex items-center justify-center text-white font-semibold ${textSize} ${getRandomColor(
+      className={`${size} flex-shrink-0 aspect-square rounded-full flex items-center justify-center text-white font-semibold ${textSize} ${getRandomColor(
         contact?.name
       )}`}
     >

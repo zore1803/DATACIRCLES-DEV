@@ -294,6 +294,17 @@ const FormsList = () => {
   const [search, setSearch] = useState("");
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const searchInputRef = useRef(null);
+
+  // Phones: while the search box is open the Settings header's title block (owned by the shell, so
+  // reached by id) steps aside - the same way Companies' title does - so the box gets the row.
+  useEffect(() => {
+    const el = document.getElementById("settings-header-title");
+    if (!el) return undefined;
+    el.style.display = (isSearchExpanded || search) && window.innerWidth < 640 ? "none" : "";
+    return () => {
+      el.style.display = "";
+    };
+  }, [isSearchExpanded, search]);
   const [moduleFilter] = useState(searchParams.get("module") || "");
   // Module/status are still real query params (module is seeded from ?module= on the URL, both
   // are sent to /forms), but they no longer have their own dropdowns in the strip — the filter
@@ -1116,8 +1127,8 @@ const FormsList = () => {
 
       {/* Normal toolbar — lives in the Settings header strip's actions slot. */}
       <HeaderStripPortal>
-        <div className="flex items-center gap-2 lg:gap-3">
-          <div className="relative flex-1 min-w-0 flex items-center">
+        <div className="flex items-center justify-end gap-2 lg:gap-3 w-full">
+          <div className="relative flex-1 min-w-0 flex items-center justify-end">
             <div
               className={`relative h-10 flex items-center border rounded-full bg-white transition-all duration-300 ease-in-out hover:bg-gray-50 focus-within:border-[#0085FF] ${
                 search ? "border-[#0085FF]" : "border-[#E1E4EA]"
