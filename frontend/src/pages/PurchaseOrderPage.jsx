@@ -10,6 +10,7 @@ import MoreIcon from "../components/common/MoreIcon";
 import DownloadIcon from "../components/common/DownloadIcon";
 import React, {
   useEffect,
+  useLayoutEffect,
   useState,
   useRef,
   useMemo,
@@ -184,6 +185,9 @@ const PurchaseOrderPage = () => {
   // Status pills and the order-date range sit under the header; both are sent
   // to the server together with the Advanced Filter rules.
   const [filterStatus, setFilterStatus] = useState("");
+  const statusTabRefs = useRef({});
+  const statusTabsRef = useRef(null);
+  const [statusTabThumb, setStatusTabThumb] = useState({ left: 0, width: 0, ready: false });
   // The purchase order whose detail card is open (clicked row).
   const [detailPoId, setDetailPoId] = useState(null);
   const [dateRange, setDateRange] = useState(thisMonthRange);
@@ -192,6 +196,26 @@ const PurchaseOrderPage = () => {
   const [filterOptions, setFilterOptions] = useState(null);
   // Record count behind each status pill (from the list response).
   const [statusCounts, setStatusCounts] = useState({});
+  useLayoutEffect(() => {
+    const measure = () => {
+      const nav = statusTabsRef.current;
+      const button = statusTabRefs.current[filterStatus || "all"];
+      if (!nav || !button) return;
+      setStatusTabThumb({
+        left: button.offsetLeft - nav.scrollLeft,
+        width: button.offsetWidth,
+        ready: true,
+      });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const nav = statusTabsRef.current;
+    nav?.addEventListener("scroll", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      nav?.removeEventListener("scroll", measure);
+    };
+  }, [filterStatus, statusCounts]);
   const [selectedPO, setSelectedPO] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -1690,12 +1714,12 @@ const PurchaseOrderPage = () => {
       <div className="bg-white overflow-visible">
         {/* Toolbar (Title + Search + Buttons) */}
         <div
-          className={`fixed right-0 h-16 px-4 sm:px-6 lg:pl-[40px] lg:pr-[40px] flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white`}
+          className={`fixed right-0 h-16 px-4 sm:px-6 lg:pl-0 lg:pr-8 flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white`}
           style={{
             left: "var(--sidebar-width, 0px)",
             zIndex: 40,
-            minHeight: "48px",
-            maxHeight: "48px",
+            minHeight: "64px",
+            maxHeight: "64px",
             boxSizing: "border-box",
           }}
         >
@@ -1756,7 +1780,7 @@ const PurchaseOrderPage = () => {
           ) : (
             <div className="flex items-center gap-2 lg:gap-4 w-full h-full">
               <div
-                className={`flex-shrink-0 flex flex-col justify-center gap-1.5 overflow-hidden transition-opacity duration-300 ease-in-out lg:!w-auto lg:!opacity-100 ${isSearchExpanded ? "w-0 opacity-0" : "w-[190px] opacity-100"}`}
+                className={`flex-shrink-0 flex flex-col justify-center gap-1.5 overflow-hidden transition-opacity duration-300 ease-in-out lg:ml-[36px] ${isSearchExpanded ? "w-0 opacity-0" : "w-[190px] opacity-100"}`}
               >
                 {showLoadingSkeleton ? (
                   <>
@@ -1918,19 +1942,31 @@ const PurchaseOrderPage = () => {
 
         {/* Status pills + order-date range, same strip as the Invoices list */}
         <div
-          className="fixed right-0 h-14 px-4 sm:px-6 lg:pl-[40px] lg:pr-[40px] bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+          className="fixed right-0 h-[52px] px-4 sm:px-6 lg:pl-[var(--content-inset,16px)] lg:pr-8 bg-white flex items-start top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
           style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
         >
-          <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
+          <div ref={statusTabsRef} className="relative flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
+            <span
+              aria-hidden="true"
+              className="absolute top-1 h-9 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
+              style={{
+                left: statusTabThumb.left,
+                width: statusTabThumb.width,
+                opacity: statusTabThumb.ready ? 1 : 0,
+              }}
+            />
             {[{ label: "All", value: "" }, ...statusOptions.map((o) => ({ label: o.label, value: o.value }))].map((tab) => {
               const selected = filterStatus === tab.value;
               return (
                 <button
                   key={tab.label}
+                  ref={(el) => {
+                    statusTabRefs.current[tab.value || "all"] = el;
+                  }}
                   type="button"
                   onClick={() => setFilterStatus(tab.value)}
-                  className={`h-9 flex-shrink-0 whitespace-nowrap rounded-full text-sm font-medium transition-all duration-300 ease-out ${selected
-                    ? "px-6 bg-white text-[#0085FF] shadow-sm"
+                  className={`relative z-[1] h-9 flex-shrink-0 whitespace-nowrap rounded-full text-sm font-medium transition-colors ${selected
+                    ? "px-6 text-[#0085FF]"
                     : "px-3.5 text-[#0E121B] hover:bg-white/60"
                     }`}
                 >
@@ -1956,7 +1992,7 @@ const PurchaseOrderPage = () => {
 
         <div
           ref={tableScrollRef}
-          className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(154px+var(--dc-offline-offset,0px))] lg:top-[calc(164px+var(--dc-offline-offset,0px))]"
+          className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(170px+var(--dc-offline-offset,0px))] lg:top-[calc(180px+var(--dc-offline-offset,0px))]"
           style={{
             position: "fixed",
             left: "var(--sidebar-width, 0px)",
