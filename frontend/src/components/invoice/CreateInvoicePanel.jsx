@@ -3,7 +3,7 @@
 // Shared two-pane create/edit form used by all document types (Invoice,
 // Quotation, Pro Forma Invoice, Delivery Challan) via the `type` prop.
 import DocumentNumberEditor, { joinDocumentNumber } from "../common/DocumentNumberEditor";
-import DocumentCustomFieldInputs from "../common/DocumentCustomFieldInputs";
+import DocumentCustomFieldInputs, { useDocumentCustomFieldDefs } from "../common/DocumentCustomFieldInputs";
 import emptyBoxImg from "../../assets/empty-box.png";
 import NoteField from "../common/NoteField";
 import { resolveDiscount } from "../../utils/variantResolve";
@@ -351,6 +351,7 @@ const CreateInvoicePanel = ({
         };
     return formOverride ? { ...base, ...formOverride } : base;
   });
+  const hasCustomFields = useDocumentCustomFieldDefs(type).length > 0;
   const sectionNo = (() => {
     let n = 1;
     const pad = (v) => String(v).padStart(2, "0");
@@ -360,6 +361,7 @@ const CreateInvoicePanel = ({
     out.items = pad(n++);
     out.notes = pad(n++);
     out.terms = pad(n++);
+    if (hasCustomFields) out.customFields = pad(n++);
     out.bank = pad(n++);
     out.signature = pad(n++);
     out.summary = pad(n++);
@@ -2574,6 +2576,7 @@ const CreateInvoicePanel = ({
 
           <DocumentCustomFieldInputs
             docType={type}
+            header={<SectionHeader number={sectionNo.customFields} title="Custom Fields" />}
             value={form.customFields}
             onChange={(v) => setField("customFields", v)}
           />

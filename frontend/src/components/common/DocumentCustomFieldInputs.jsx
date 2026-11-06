@@ -12,7 +12,9 @@ const inputCls =
 // Each entry carries its label so an issued document keeps reading the same even
 // if the field is renamed or deleted later; values for fields that no longer
 // exist are kept as they are.
-export default function DocumentCustomFieldInputs({ docType, value, onChange }) {
+// The fields switched on for `docType`. Forms that number their sections use this to
+// know whether the Custom Fields section exists, so later sections shift up/down.
+export function useDocumentCustomFieldDefs(docType) {
   const [defs, setDefs] = useState([]);
 
   useEffect(() => {
@@ -29,8 +31,13 @@ export default function DocumentCustomFieldInputs({ docType, value, onChange }) 
     };
   }, []);
 
+  return defs.filter((f) => f.label && (!f.docTypes?.length || f.docTypes.includes(docType)));
+}
+
+// `header` (optional) replaces the plain "Custom Fields" label, e.g. a numbered SectionHeader.
+export default function DocumentCustomFieldInputs({ docType, value, onChange, header }) {
+  const fields = useDocumentCustomFieldDefs(docType);
   const current = Array.isArray(value) ? value : [];
-  const fields = defs.filter((f) => f.label && (!f.docTypes?.length || f.docTypes.includes(docType)));
   if (fields.length === 0) return null;
 
   const valueOf = (def) => current.find((c) => c.id === def.id)?.value ?? "";
@@ -43,7 +50,9 @@ export default function DocumentCustomFieldInputs({ docType, value, onChange }) 
 
   return (
     <div>
-      <p className="mb-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Custom Fields</p>
+      {header || (
+        <p className="mb-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Custom Fields</p>
+      )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {fields.map((def) => (
           <div key={def.id}>
