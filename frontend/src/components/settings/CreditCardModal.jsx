@@ -207,7 +207,11 @@ export default function CreditCardModal({ isOpen, onClose, onSave, initialData, 
                           }}
                           className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-[#1F2937] hover:bg-blue-50"
                         >
-                          <BankLogo bankName={name} size={22} />
+                          <BankLogo
+                            bankName={name}
+                            size={28}
+                            className="shrink-0 overflow-hidden rounded-md border border-[#1F2937]/10 bg-white"
+                          />
                           {name}
                         </button>
                       </li>

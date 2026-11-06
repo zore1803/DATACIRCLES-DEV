@@ -730,7 +730,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
     // Cancels App.jsx's <main> gutter, same as the other full-bleed pages.
     <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-white -mt-6 -mx-4 sm:-mx-6 lg:-mx-8">
       <div
-        className="fixed right-0 border-b border-[#E1E4EA] bg-white flex items-center justify-between gap-2 lg:gap-4 px-4 sm:px-6 lg:px-8 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
+        className="fixed right-0 border-b border-[#E1E4EA] bg-white flex items-center justify-between gap-2 lg:gap-4 px-4 sm:px-6 lg:pl-[20px] lg:pr-8 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
         style={{
           left: "var(--sidebar-width, 0px)",
           zIndex: 40,
@@ -756,7 +756,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
           />
         ) : (
           <>
-        <div className="flex flex-col gap-1 flex-shrink-0 min-w-0">
+        <div className={`flex flex-col gap-1 flex-shrink-0 min-w-0 overflow-hidden transition-opacity duration-300 ease-in-out lg:!w-auto lg:!opacity-100 ${isSearchExpanded ? "w-0 opacity-0" : "w-[150px] opacity-100"}`}>
           <div className="flex items-center gap-2">
             <h2
               className="m-0 font-medium truncate text-sm sm:text-base"
@@ -774,9 +774,10 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
         </div>
 
         {/* Spacer — the totals moved to the KPI band below the strip. */}
-        <div className="flex-1 min-w-0" />
+        <div className="hidden lg:block flex-1 min-w-0" />
 
-        <div className="flex items-center gap-2 lg:gap-4 flex-shrink-0">
+        <div className="flex items-center justify-end gap-2 lg:gap-4 flex-1 min-w-0 lg:flex-none lg:flex-shrink-0">
+          <div className="relative flex-1 min-w-0 flex items-center justify-end lg:flex-none">
           <div
             className={`relative h-10 flex items-center border rounded-full bg-white transition-all duration-300 ease-in-out hover:bg-gray-50 focus-within:border-[#0085FF] focus-within:hover:bg-white ${
               searchTerm ? "border-[#0085FF]" : "border-[#E1E4EA]"
@@ -812,6 +813,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
                 <X className="w-3.5 h-3.5" strokeWidth={2.5} />
               </button>
             )}
+          </div>
           </div>
 
           <button
@@ -892,7 +894,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
           the header row. */}
       {!stripVisible && showStats && (
         <div
-          className="hidden lg:flex fixed right-0 items-center gap-4 bg-white border-b border-[#E1E4EA] px-6"
+          className="hidden lg:flex fixed right-0 items-center gap-4 bg-white border-b border-[#E1E4EA] px-6 lg:pl-[20px]"
           style={{
             left: "var(--sidebar-width, 0px)",
             top: "calc(128px + var(--dc-offline-offset,0px))",
@@ -1047,7 +1049,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
                   numRows={12}
                   columns={orderedColumns.map((c) => colWidths[c.key] ?? c.width)}
                   hasCheckbox
-                  rowHeight={37}
+                  rowHeight={44}
                   checkboxWidth={SELECTION_WIDTH}
                 />
               ) : sortedRows.map((r) => {
@@ -1057,7 +1059,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
                   <tr
                     key={r._id}
                     className={`bg-white hover:bg-blue-50 transition-colors ${selected ? "!bg-blue-50" : ""}`}
-                    style={{ height: 37, maxHeight: 37 }}
+                    style={{ height: 44, maxHeight: 44 }}
                   >
                     <td
                       style={{

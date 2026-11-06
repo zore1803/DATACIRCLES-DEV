@@ -71,16 +71,16 @@ function CustomDomain() {
       <div className="bg-white border-2 border-gray-200 shadow-xl rounded-2xl overflow-hidden">
         
         {/* Header Section */}
-        <div className="p-8 border-b-2 border-gray-100 flex items-start justify-between">
+        <div className="p-4 sm:p-8 border-b-2 border-gray-100 flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="bg-blue-100 p-2.5 rounded-xl">
-              <Globe className="w-6 h-6 text-blue-600" />
+            <div className="bg-blue-100 p-2 sm:p-2.5 rounded-xl flex-shrink-0">
+              <Globe className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-xl font-bold text-gray-900">
                 Custom Domain
               </h2>
-              <p className="text-sm text-gray-600">
+              <p className="text-xs sm:text-sm text-gray-600">
                 Use your own domain for customer-facing document links and public pages.
               </p>
             </div>
@@ -94,7 +94,7 @@ function CustomDomain() {
         </div>
 
         {/* Content Section based on state */}
-        <div className="p-8">
+        <div className="p-4 sm:p-8">
           
           {/* NOT CONNECTED STATE */}
           {uiState === "NOT_CONNECTED" && (

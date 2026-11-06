@@ -3065,7 +3065,7 @@ function Tasks() {
       />
 
       <div
-        className="flex flex-row justify-between items-center px-4 sm:px-6 lg:px-8 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] gap-2 lg:gap-4"
+        className="flex flex-row justify-between items-center px-4 sm:px-6 lg:pl-0 lg:pr-8 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] gap-2 lg:gap-4"
         style={{
           boxSizing: "border-box",
           height: 64,
@@ -3145,7 +3145,13 @@ function Tasks() {
         <>
         {/* Same pill switcher as the Contacts tabs — grey track, white
             active pill — replacing the underline tabs this page used. */}
-        <nav className="inline-flex items-center gap-1.5 h-10 p-1 bg-[#F1F1F5] rounded-full overflow-x-auto no-scrollbar flex-shrink-0">
+        <nav
+          // Phones: while the search box is open the switcher steps aside (like the title block
+          // on Companies) so the field gets the row instead of a ~40px sliver.
+          className={`inline-flex items-center gap-1.5 h-10 bg-[#F1F1F5] rounded-full overflow-x-auto no-scrollbar flex-shrink-0 transition-all duration-300 ease-in-out lg:ml-[24px] lg:p-1 lg:max-w-none lg:opacity-100 ${
+            isSearchExpanded ? "max-w-0 p-0 ml-0 opacity-0 pointer-events-none" : "max-w-[300px] p-1 ml-[7px] opacity-100"
+          }`}
+        >
           {[
             { id: "tasks", label: "Tasks" },
             { id: "meetings", label: "Meetings" },

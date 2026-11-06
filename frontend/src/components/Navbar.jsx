@@ -743,7 +743,7 @@ const getInitials = (name) => {
         style={{
           maxHeight:
             isOpen && (isHovered || isMobileOpen)
-              ? `${children.length * 44}px`
+              ? `${children.length * 40 + 4}px`
               : "0px",
           opacity: isOpen && (isHovered || isMobileOpen) ? 1 : 0,
         }}
@@ -753,11 +753,11 @@ const getInitials = (name) => {
             className="absolute left-[-16px] top-0 pointer-events-none overflow-visible"
             style={{
               width: "20px",
-              height: `${children.length * 44}px`,
+              height: `${children.length * 40}px`,
             }}
           >
             {children.map((child, idx) => {
-              const y = idx * 44 + 16;
+              const y = idx * 40 + 18;
               const isHoveredOrAbove =
                 hoveredIndex !== null && idx <= hoveredIndex;
 
@@ -781,7 +781,7 @@ const getInitials = (name) => {
                   {idx > 0 && (
                     <line
                       x1="4"
-                      y1={(idx - 1) * 44 + 22}
+                      y1={(idx - 1) * 40 + 24}
                       x2="4"
                       y2={y - 6}
                       stroke={

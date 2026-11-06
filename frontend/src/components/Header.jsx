@@ -760,6 +760,12 @@ import {
   Timer,
   HelpCircle,
   LayoutDashboard,
+  FileText,
+  Receipt,
+  Wallet,
+  ShoppingBag,
+  Package,
+  Undo2,
 } from "lucide-react";
 import SearchResults from "./SearchResults";
 import QuickCompanyForm from "./company/QuickCompanyForm";
@@ -881,7 +887,81 @@ const Header = () => {
   const [isLoadingData, setIsLoadingData] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { getAccessTokenSilently, user } = useAuth0();
+  const { getAccessTokenSilently, user, logout: auth0Logout } = useAuth0();
+
+  // Avatar menu (profile picture -> My Profile / Sign out). Password and phone logins have no
+  // Auth0 `user`, so the name falls back to the one the app keeps in localStorage.
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const [profileUrl, setProfileUrl] = useState(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const avatarMenuRef = useRef(null);
+  const storedUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "{}") || {};
+    } catch {
+      return {};
+    }
+  })();
+  const displayName = user?.name || storedUser.name || user?.email || storedUser.email || "";
+  const displayEmail = user?.email || storedUser.email || "";
+
+  useEffect(() => {
+    let cancelled = false;
+    API.get("/auth/profile")
+      .then((res) => {
+        if (!cancelled) {
+          setProfileUrl(typeof res.data === "string" ? res.data : null);
+          setAvatarFailed(false);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!avatarMenuOpen) return undefined;
+    const onDown = (e) => {
+      if (avatarMenuRef.current && !avatarMenuRef.current.contains(e.target)) setAvatarMenuOpen(false);
+    };
+    const onKey = (e) => e.key === "Escape" && setAvatarMenuOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [avatarMenuOpen]);
+
+  const handleAvatarLogout = async () => {
+    setAvatarMenuOpen(false);
+    try {
+      await API.post("/session/logout");
+    } catch (err) {
+      console.error("Failed to revoke DataCircles session:", err);
+    }
+    const savedPins = localStorage.getItem("pinned_companies");
+    const savedReferralCode = localStorage.getItem("referralCode");
+    const isAuth0Session = !localStorage.getItem("token");
+    localStorage.clear();
+    if (savedPins) localStorage.setItem("pinned_companies", savedPins);
+    if (savedReferralCode) localStorage.setItem("referralCode", savedReferralCode);
+    if (isAuth0Session) {
+      auth0Logout({ logoutParams: { returnTo: window.location.origin } });
+    } else {
+      window.location.href = "/login";
+    }
+  };
+
+  const avatarSrc =
+    profileUrl && !avatarFailed
+      ? profileUrl.startsWith("data:") || profileUrl.startsWith("blob:") || profileUrl.startsWith("http")
+        ? profileUrl
+        : `${import.meta.env.VITE_APP_API_URL}${profileUrl}`
+      : null;
   const isSuperAdmin = !!localStorage.getItem("superAdminToken");
   const [isTrialActive, setIsTrialActive] = useState(false);
   const [trialEnd, setTrialEnd] = useState(null);
@@ -1298,6 +1378,11 @@ const Header = () => {
     setIsAddMenuOpen(false);
     setHoveredMeeting(false);
 
+    if (type.startsWith("nav:")) {
+      navigate(type.slice(4));
+      return;
+    }
+
     // Open the form immediately for a snappy response.
     switch (type) {
       case "vendor":
@@ -1389,6 +1474,20 @@ const Header = () => {
       label: "Vendor",
       icon: VendorAddIcon,
     },
+  ];
+
+  // Accounting documents open their create panel via ?newInvoice=1; the other
+  // modules just navigate to their page.
+  const addSales = [
+    { id: "nav:/invoices?newInvoice=1", label: "Invoice", icon: FileText },
+    { id: "nav:/sales-return", label: "Sales Return", icon: Undo2 },
+    { id: "nav:/payments-timeline", label: "Payment", icon: Wallet },
+  ];
+
+  const addPurchases = [
+    { id: "nav:/purchase", label: "Purchase", icon: ShoppingBag },
+    { id: "nav:/expenses", label: "Expense", icon: Receipt },
+    { id: "nav:/products", label: "Product", icon: Package },
   ];
 
   const addActivities = [
@@ -1597,86 +1696,6 @@ const Header = () => {
             )}
           </div>
 
-          {isSearchOpen && searchOrigin && (
-            <>
-              {/* Plain opaque dim — no blur. Sidebar/pagination dim themselves
-                  independently via DIM_CHROME_EVENT; this is just the tint,
-                  and also doubles as the click-outside-to-close target. */}
-              <div
-                className="fixed inset-0 z-[200000] bg-black/40"
-                onClick={handleSearchClose}
-              />
-              {/* Starts pinned exactly over the real search slot (searchOrigin,
-                  captured via getBoundingClientRect) and, once searchCentered
-                  flips a tick later, transitions left/width/top to the centred
-                  target — a real slide from where it was, not a jump-cut.
-                  z-index above the backdrop (200000) — and above every
-                  page-level portaled menu (row-actions/share/convert flyouts
-                  go up to ~100051), the sidebar (9995) and the pagination bar
-                  (9992), any of which could otherwise be left open under the
-                  overlay and show through undimmed. */}
-              <div
-                className="fixed z-[200001] transition-all duration-300 ease-out"
-                style={
-                  searchCentered
-                    ? { top: 10, left: "50%", width: 760, transform: "translateX(-50%)" }
-                    : { top: searchOrigin.top, left: searchOrigin.left, width: searchOrigin.width, transform: "translateX(0)" }
-                }
-              >
-                <div className="relative">
-                  <SearchIcon className="absolute left-4 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866] z-10" />
-                  <input
-                    autoFocus
-                    type="text"
-                    placeholder="Search Companies, Deals, Contacts"
-                    value={searchQuery}
-                    onChange={handleSearchChange}
-                    className="w-full h-[42px] pl-11 pr-11 bg-white border border-gray-200 rounded-full text-sm text-gray-700 placeholder:text-gray-500 outline-none ring-2 ring-blue-500 border-transparent font-sans shadow-lg"
-                  />
-                  {/* Clears the typed text only — the overlay itself stays
-                      open (back to the collapsed "start typing" category
-                      rows), same as backspacing it out by hand. Closing the
-                      whole panel is still backdrop-click / Escape. */}
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery("")}
-                      aria-label="Clear search"
-                      className="absolute right-3.5 -translate-y-1/2 top-1/2 z-10 flex items-center justify-center w-5 h-5 rounded-full text-gray-900 hover:bg-gray-100 transition-colors"
-                    >
-                      <X className="w-4 h-4" strokeWidth={2.5} />
-                    </button>
-                  )}
-                </div>
-
-                {/* Attached results panel, docked directly under the bar. Sized
-                    to its content (up to two-thirds of the viewport) rather
-                    than always claiming a fixed height — a couple of matches
-                    no longer leave a tall mostly-empty box underneath them.
-                    This element does the scrolling itself (overflow-y-auto
-                    with a real maxHeight) — SearchResults' own wrapper used to
-                    be `h-full`, but percentage heights don't resolve against a
-                    maxHeight-only ancestor, so it silently stopped scrolling
-                    and results past the fold were just clipped instead. */}
-                {/* Solid the instant it's mounted — no opacity fade. It used to
-                    fade in with the bar's slide, but that meant it spent its
-                    first ~200ms as a half-transparent grey wash with the page
-                    content showing through, not a crisp white panel. */}
-                <div
-                  className="mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-y-auto"
-                  style={{ maxHeight: "66vh" }}
-                >
-                  <SearchResults
-                    variant="panel"
-                    isOpen={isSearchOpen}
-                    onClose={handleSearchClose}
-                    searchQuery={debouncedQuery}
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
           <NotificationBell variant="desktop" />
 
           {/* New Button (Global Add) */}
@@ -1700,9 +1719,9 @@ const Header = () => {
                   className="fixed inset-0 z-[9999] cursor-default"
                   onClick={handleAddMenuClose}
                 />
-                <div className="absolute right-0 top-12 w-[160px] bg-white rounded-xl shadow-2xl border border-gray-100 z-[10000] py-2 flex flex-col transition-all duration-300 ease-in-out">
+                <div className="absolute right-0 top-12 w-max min-w-[150px] max-h-[calc(100vh-80px)] overflow-y-auto bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] z-[10000] p-1.5 flex flex-col animate-in fade-in zoom-in duration-150 origin-top-right">
                   {/* Content Area */}
-                  <div className="flex-1 px-2">
+                  <div className="flex-1">
                     {/* Add Records Section */}
                     <div className="mb-1">
                       <div className="space-y-0.5">
@@ -1712,22 +1731,36 @@ const Header = () => {
                             <button
                               key={item.id}
                               onClick={() => handleAddItem(item.id)}
-                              className={`w-full flex items-center p-1 rounded-lg transition-all group ${active
+                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] whitespace-nowrap transition-colors ${active
                                 ? "bg-gradient-to-r from-[#D0E0FF] to-white"
-                                : "hover:bg-[#F2F2F7]"
+                                : "hover:bg-gray-50"
                                 }`}
                             >
-                              <div className="w-5 h-5 flex items-center justify-center mr-2.5 flex-shrink-0">
-                                <item.icon className="w-[18px] h-[18px] text-black" />
-                              </div>
-                              <span className="text-sm font-medium text-gray-900 transition-all">
-                                {item.label}
-                              </span>
+                              <item.icon className="w-3.5 h-3.5 text-[#1C1B1F] flex-shrink-0" />
+                              {item.label}
                             </button>
                           );
                         })}
                       </div>
                     </div>
+
+                    {[addSales, addPurchases].map((group, gi) => (
+                      <div key={gi}>
+                        <div className="border-t border-gray-200 my-1.5" />
+                        <div className="mb-1 space-y-0.5">
+                          {group.map((item) => (
+                            <button
+                              key={item.id}
+                              onClick={() => handleAddItem(item.id)}
+                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] whitespace-nowrap transition-colors hover:bg-gray-50"
+                            >
+                              <item.icon className="w-3.5 h-3.5 text-[#1C1B1F] flex-shrink-0" />
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
 
                     <div className="border-t border-gray-200 my-1.5" />
 
@@ -1740,17 +1773,13 @@ const Header = () => {
                             <button
                               key={item.id}
                               onClick={() => handleAddItem(item.id)}
-                              className={`w-full flex items-center p-1 rounded-lg transition-all group ${active
+                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] whitespace-nowrap transition-colors ${active
                                 ? "bg-gradient-to-r from-[#D0E0FF] to-white"
-                                : "hover:bg-[#F2F2F7]"
+                                : "hover:bg-gray-50"
                                 }`}
                             >
-                              <div className="w-5 h-5 flex items-center justify-center mr-2.5 flex-shrink-0">
-                                <item.icon className="w-[18px] h-[18px] text-black" />
-                              </div>
-                              <span className="text-sm font-medium text-gray-900 transition-all">
-                                {item.label}
-                              </span>
+                              <item.icon className="w-3.5 h-3.5 text-[#1C1B1F] flex-shrink-0" />
+                              {item.label}
                             </button>
                           );
                         })}
@@ -1893,18 +1922,149 @@ const Header = () => {
               )}
             </div>
 
-            {/* User Avatar */}
-            <div className="flex items-center justify-center w-10 h-10 p-1 bg-white border border-[#E5E5E5] rounded-full flex-shrink-0">
-              <div
-                className={`flex items-center justify-center w-8 h-8 rounded-full text-white font-medium text-sm ${getRandomColor(user?.name)}`}
-                title={user?.name || ""}
+            {/* User Avatar: profile picture (initials when none) -> My Profile / Sign out */}
+            <div className="relative flex-shrink-0" ref={avatarMenuRef}>
+              <button
+                type="button"
+                onClick={() => setAvatarMenuOpen((o) => !o)}
+                aria-haspopup="menu"
+                aria-expanded={avatarMenuOpen}
+                title={displayName}
+                className="flex items-center justify-center w-10 h-10 p-1 bg-white border border-[#E5E5E5] rounded-full"
               >
-                {getInitials(user?.name)}
-              </div>
+                {avatarSrc ? (
+                  <img
+                    src={avatarSrc}
+                    alt=""
+                    className="w-8 h-8 min-w-[32px] aspect-square rounded-full object-cover"
+                    onError={() => setAvatarFailed(true)}
+                  />
+                ) : (
+                  <div
+                    className={`flex items-center justify-center w-8 h-8 rounded-full text-white font-medium text-sm ${getRandomColor(displayName)}`}
+                  >
+                    {getInitials(displayName)}
+                  </div>
+                )}
+              </button>
+
+              {avatarMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full mt-2 w-56 bg-white border border-[#E1E4EA] rounded-2xl shadow-lg p-2 z-[10000]"
+                >
+                  <div className="px-3 py-2 border-b border-[#E1E4EA] mb-1">
+                    <p className="m-0 text-sm font-semibold text-gray-900 truncate">{displayName || "User"}</p>
+                    {displayEmail && <p className="m-0 text-xs text-gray-500 truncate">{displayEmail}</p>}
+                  </div>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAvatarMenuOpen(false);
+                      navigate("/profile");
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm text-gray-900 rounded-lg hover:bg-gray-100"
+                  >
+                    My Profile
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={handleAvatarLogout}
+                    className="w-full text-left px-3 py-2 text-sm text-red-600 rounded-lg hover:bg-red-50"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </header>
+
+      {/* Search overlay. Lives outside both headers: it used to sit inside the desktop-only
+          (`hidden lg:flex`) header, so on phones tapping the search pill hid the pill
+          (isSearchOpen) while the overlay itself stayed display:none. */}
+          {isSearchOpen && searchOrigin && (
+            <>
+              {/* Plain opaque dim — no blur. Sidebar/pagination dim themselves
+                  independently via DIM_CHROME_EVENT; this is just the tint,
+                  and also doubles as the click-outside-to-close target. */}
+              <div
+                className="fixed inset-0 z-[200000] bg-black/40"
+                onClick={handleSearchClose}
+              />
+              {/* Starts pinned exactly over the real search slot (searchOrigin,
+                  captured via getBoundingClientRect) and, once searchCentered
+                  flips a tick later, transitions left/width/top to the centred
+                  target — a real slide from where it was, not a jump-cut.
+                  z-index above the backdrop (200000) — and above every
+                  page-level portaled menu (row-actions/share/convert flyouts
+                  go up to ~100051), the sidebar (9995) and the pagination bar
+                  (9992), any of which could otherwise be left open under the
+                  overlay and show through undimmed. */}
+              <div
+                className="fixed z-[200001] transition-all duration-300 ease-out"
+                style={
+                  searchCentered
+                    ? { top: 10, left: "50%", width: "min(760px, calc(100vw - 24px))", transform: "translateX(-50%)" }
+                    : { top: searchOrigin.top, left: searchOrigin.left, width: searchOrigin.width, transform: "translateX(0)" }
+                }
+              >
+                <div className="relative">
+                  <SearchIcon className="absolute left-4 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866] z-10" />
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Search Companies, Deals, Contacts"
+                    value={searchQuery}
+                    onChange={handleSearchChange}
+                    className="w-full h-[42px] pl-11 pr-11 bg-white border border-gray-200 rounded-full text-sm text-gray-700 placeholder:text-gray-500 outline-none ring-2 ring-blue-500 border-transparent font-sans shadow-lg"
+                  />
+                  {/* Clears the typed text only — the overlay itself stays
+                      open (back to the collapsed "start typing" category
+                      rows), same as backspacing it out by hand. Closing the
+                      whole panel is still backdrop-click / Escape. */}
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      aria-label="Clear search"
+                      className="absolute right-3.5 -translate-y-1/2 top-1/2 z-10 flex items-center justify-center w-5 h-5 rounded-full text-gray-900 hover:bg-gray-100 transition-colors"
+                    >
+                      <X className="w-4 h-4" strokeWidth={2.5} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Attached results panel, docked directly under the bar. Sized
+                    to its content (up to two-thirds of the viewport) rather
+                    than always claiming a fixed height — a couple of matches
+                    no longer leave a tall mostly-empty box underneath them.
+                    This element does the scrolling itself (overflow-y-auto
+                    with a real maxHeight) — SearchResults' own wrapper used to
+                    be `h-full`, but percentage heights don't resolve against a
+                    maxHeight-only ancestor, so it silently stopped scrolling
+                    and results past the fold were just clipped instead. */}
+                {/* Solid the instant it's mounted — no opacity fade. It used to
+                    fade in with the bar's slide, but that meant it spent its
+                    first ~200ms as a half-transparent grey wash with the page
+                    content showing through, not a crisp white panel. */}
+                <div
+                  className="mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-y-auto"
+                  style={{ maxHeight: "66vh" }}
+                >
+                  <SearchResults
+                    variant="panel"
+                    isOpen={isSearchOpen}
+                    onClose={handleSearchClose}
+                    searchQuery={debouncedQuery}
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
       {!isSuperAdmin && !isSuperAdminRoute && (
         <>

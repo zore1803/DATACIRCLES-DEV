@@ -2318,7 +2318,7 @@ function Companies() {
                             <tr
                               key={row.id}
                               className={`bg-white hover:bg-blue-50 transition-colors ${selectedCompaniesSet.has(row.original._id) ? "!bg-blue-50" : ""}`}
-                              style={{ height: 37, maxHeight: 37 }}
+                              style={{ height: 44, maxHeight: 44 }}
                               onMouseDown={() => handleMouseDown(row.original._id)}
                               onMouseUp={handleMouseUp}
                               onMouseLeave={handleMouseUp}
@@ -2340,8 +2340,8 @@ function Companies() {
                                     key={cell.id}
                                     style={{
                                       width: cell.column.getSize(),
-                                      height: "37px",
-                                      maxHeight: "37px",
+                                      height: "44px",
+                                      maxHeight: "44px",
                                       boxSizing: "border-box",
                                       position: isSticky ? "sticky" : "static",
                                       left: isLeftSticky ? pinnedLeftOffsets[colId] ?? 0 : "auto",

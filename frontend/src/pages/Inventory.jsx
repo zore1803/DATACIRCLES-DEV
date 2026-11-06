@@ -193,6 +193,15 @@ const cellTextFor = (colId, item) => {
 
 /* ─── Component ─────────────────────────────────────────────────────── */
 export default function Inventory() {
+  // Phones: the top bar is 54px (not 64px) and the KPI tiles are stacked, 2 to a row, so the fixed
+  // header / band / table offsets are computed instead of hard-coded for desktop.
+  const [isPhone, setIsPhone] = useState(() => typeof window !== "undefined" && window.innerWidth < 1024);
+  useEffect(() => {
+    const onResize = () => setIsPhone(window.innerWidth < 1024);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const toolbarBottom = isPhone ? 54 + 64 : TOOLBAR_BOTTOM;
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState(null);
   const [pagination, setPagination] = useState({
@@ -968,6 +977,10 @@ export default function Inventory() {
     },
   ];
 
+  // Phone band: 2 stacked tiles per row (~84px, tall enough for a wrapped item-count line).
+  const kpiRows = Math.ceil(kpis.length / 2);
+  const kpiBandHeight = isPhone ? kpiRows * 84 + (kpiRows - 1) * 12 + 24 : KPI_BAND_HEIGHT;
+
   // First-load-only full-page skeleton.
   if (showLoadingSkeleton && items.length === 0 && !hasLoadedOnceRef.current) {
     return <PageSkeleton variant="kanban" boardVariant="table" tableRows={pagination.limit} tableCols={ALL_COLUMNS.length} />;
@@ -979,7 +992,7 @@ export default function Inventory() {
 
       {/* ── Fixed header bar ─────────────────────────────────────────── */}
       <div
-        className="fixed right-0 border-b border-[#E1E4EA] bg-white flex items-center justify-between gap-2 lg:gap-4 px-4 sm:px-6 lg:px-8 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
+        className="fixed right-0 border-b border-[#E1E4EA] bg-white flex items-center justify-between gap-2 lg:gap-4 px-4 sm:px-6 lg:pl-[20px] lg:pr-8 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
         style={{ left: "var(--sidebar-width, 0px)", zIndex: 40, height: 64, minHeight: 64, maxHeight: 64, boxSizing: "border-box" }}
       >
         {showBulkStrip ? (
@@ -996,7 +1009,7 @@ export default function Inventory() {
           />
         ) : (
           <>
-        <div className="flex flex-col gap-1 flex-shrink-0">
+        <div className={`flex flex-col gap-1 flex-shrink-0 overflow-hidden transition-opacity duration-300 ease-in-out lg:!w-auto lg:!opacity-100 ${isSearchExpanded ? "w-0 opacity-0" : "w-[150px] opacity-100"}`}>
           <div className="flex items-center gap-2">
             <h2 className="m-0 font-medium truncate text-sm sm:text-base" style={{ lineHeight: "120%", letterSpacing: "-0.5px", color: "#0E121B" }}>
               Inventory
@@ -1010,9 +1023,10 @@ export default function Inventory() {
           </p>
         </div>
 
-        <div className="flex flex-row items-center gap-2 flex-shrink-0 min-w-0">
+        <div className="flex flex-row items-center justify-end gap-2 flex-1 min-w-0 lg:flex-none lg:flex-shrink-0">
           {/* Search */}
-          <div className={`relative h-10 flex items-center border ${searchQuery ? "border-[#0085FF]" : "border-[#E1E4EA]"} rounded-full bg-white transition-all duration-300 ease-in-out hover:bg-gray-50 focus-within:border-[#0085FF] focus-within:hover:bg-white ${isSearchExpanded ? "w-[220px] sm:w-[300px] lg:w-[380px]" : "w-10"} max-w-full flex-shrink-0`}>
+          <div className="relative flex-1 min-w-0 flex items-center justify-end lg:flex-none">
+          <div className={`relative h-10 flex items-center border ${searchQuery ? "border-[#0085FF]" : "border-[#E1E4EA]"} rounded-full bg-white transition-all duration-300 ease-in-out hover:bg-gray-50 focus-within:border-[#0085FF] focus-within:hover:bg-white ${isSearchExpanded ? "w-full sm:w-[300px] lg:w-[380px]" : "w-10"} max-w-full`}>
             <SearchIcon
               className="absolute left-3 text-[#525866] w-4 h-4 cursor-pointer z-10 flex-shrink-0 top-1/2 -translate-y-1/2"
               onClick={() => { setIsSearchExpanded(true); searchInputRef.current?.focus(); }}
@@ -1038,6 +1052,7 @@ export default function Inventory() {
                 <X className="w-3.5 h-3.5" strokeWidth={2.5} />
               </button>
             )}
+          </div>
           </div>
 
           {/* Advanced filters */}
@@ -1115,8 +1130,8 @@ export default function Inventory() {
       {/* ── KPI band ─────────────────────────────────────────────────── */}
       {showStats && (
         <div
-          className="fixed right-0 box-border flex flex-col justify-center bg-white border-b border-[#E1E4EA] px-6 py-6"
-          style={{ left: "var(--sidebar-width, 0px)", top: TOOLBAR_BOTTOM, height: KPI_BAND_HEIGHT, zIndex: 38, boxSizing: "border-box" }}
+          className="fixed right-0 box-border flex flex-col justify-center bg-white border-b border-[#E1E4EA] px-4 sm:px-6 lg:pl-[20px] py-3 lg:py-6"
+          style={{ left: "var(--sidebar-width, 0px)", top: toolbarBottom, height: kpiBandHeight, zIndex: 38, boxSizing: "border-box" }}
         >
           <div className="grid grid-cols-2 lg:flex lg:flex-row lg:items-stretch gap-3 lg:gap-6">
             {kpis.map((kpi) => (
@@ -1129,7 +1144,7 @@ export default function Inventory() {
       {/* ── Full-bleed table ─────────────────────────────────────────── */}
       <div
         className="fixed right-0 overflow-x-auto overflow-y-auto bg-white"
-        style={{ left: "var(--sidebar-width, 0px)", bottom: 64, top: TOOLBAR_BOTTOM + (showStats ? KPI_BAND_HEIGHT : 0), paddingLeft: "var(--content-inset, 16px)" }}
+        style={{ left: "var(--sidebar-width, 0px)", bottom: 64, top: toolbarBottom + (showStats ? kpiBandHeight : 0), paddingLeft: "var(--content-inset, 16px)" }}
       >
         <table className="min-w-full divide-y divide-gray-200 table-fixed">
           <thead className="bg-[#F5F7FA] sticky top-0 z-20">
@@ -1228,13 +1243,13 @@ export default function Inventory() {
                 <tr
                   key={item._id}
                   className={`bg-white hover:bg-blue-50 transition-colors ${selectedIds.includes(item._id) ? "!bg-blue-50" : ""}`}
-                  style={{ height: 37, maxHeight: 37 }}
+                  style={{ height: 44, maxHeight: 44 }}
                 >
                   <td
                     style={{
                       width: colWidths.selection,
-                      height: "37px",
-                      maxHeight: "37px",
+                      height: "44px",
+                      maxHeight: "44px",
                       boxSizing: "border-box",
                       position: "sticky",
                       left: 0,
@@ -1364,11 +1379,38 @@ export default function Inventory() {
 
       {/* ── Pagination bar ───────────────────────────────────────────── */}
       <div
-        className="fixed bottom-0 right-0 h-16 bg-white border-t border-[#E1E4EA] flex items-center justify-between px-6 z-40"
+        className="fixed bottom-0 right-0 h-16 bg-white border-t border-[#E1E4EA] flex items-center justify-between px-4 sm:px-6 z-40"
         style={{ left: "var(--sidebar-width, 0px)" }}
       >
+        {/* Phones: the same Previous / Next pair every other list page shows. */}
+        <div className="flex-1 flex justify-between sm:hidden">
+          <button
+            onClick={() => handlePageChange(pagination.currentPage - 1)}
+            disabled={!pagination.hasPrevPage}
+            className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => handlePageChange(pagination.currentPage + 1)}
+            disabled={!pagination.hasNextPage}
+            className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
+
+        <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <p className="text-sm text-gray-700">
+          {/* Phones: just "1-20 of 46" - the full sentence wrapped to three lines. */}
+          <p className="sm:hidden text-sm text-gray-700 whitespace-nowrap">
+            <span className="font-semibold">
+              {pagination.totalCount === 0 ? 0 : (pagination.currentPage - 1) * pagination.limit + 1}
+              {"-"}
+              {Math.min(pagination.currentPage * pagination.limit, pagination.totalCount)}
+            </span>{" "}of <span className="font-semibold">{pagination.totalCount}</span>
+          </p>
+          <p className="hidden sm:block text-sm text-gray-700">
             Showing{" "}
             <span className="font-semibold">
               {pagination.totalCount === 0 ? 0 : (pagination.currentPage - 1) * pagination.limit + 1}
@@ -1380,7 +1422,7 @@ export default function Inventory() {
           <select
             value={pagination.limit}
             onChange={(e) => handleLimitChange(parseInt(e.target.value, 10))}
-            className="select-chevron border border-gray-300 rounded-full text-sm py-1 pl-3 pr-7 focus:outline-none focus:border-[#0085FF] focus:ring-1 focus:ring-[#0085FF]"
+            className="hidden sm:block select-chevron border border-gray-300 rounded-full text-sm py-1 pl-3 pr-7 focus:outline-none focus:border-[#0085FF] focus:ring-1 focus:ring-[#0085FF]"
           >
             {[10, 20, 50, 100].map((v) => <option key={v} value={v}>{v} per page</option>)}
           </select>
@@ -1398,7 +1440,7 @@ export default function Inventory() {
           {paginationItems.map((it, idx) => {
             if (it === "left-dots" || it === "right-dots") {
               return (
-                <span key={`${it}-${idx}`} className="flex items-center justify-center w-8 h-8 text-sm font-medium text-gray-400 select-none">
+                <span key={`${it}-${idx}`} className="hidden sm:flex items-center justify-center w-8 h-8 text-sm font-medium text-gray-400 select-none">
                   ....
                 </span>
               );
@@ -1431,7 +1473,7 @@ export default function Inventory() {
                   if (isCurrent) { setEditingPage(true); setPageInput(String(it)); }
                   else handlePageChange(it);
                 }}
-                className={`w-8 h-8 rounded-full text-sm font-medium transition-colors ${isCurrent ? "bg-[#0085FF] text-white" : "text-gray-600 hover:bg-gray-100"}`}
+                className={`w-8 h-8 rounded-full text-sm font-medium transition-colors ${isCurrent ? "bg-[#0085FF] text-white" : "hidden sm:block text-gray-600 hover:bg-gray-100"}`}
               >
                 {it}
               </button>
@@ -1445,6 +1487,7 @@ export default function Inventory() {
           >
             <ChevronRight className="w-4 h-4" />
           </button>
+        </div>
         </div>
       </div>
 

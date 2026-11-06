@@ -3,7 +3,7 @@ import BulkDeleteModal from "../components/common/BulkDeleteModal";
 import Checkbox from "../components/common/Checkbox";
 import MoreIcon from "../components/common/MoreIcon";
 import DownloadIcon from "../components/common/DownloadIcon";
-import { useEffect, useState, useMemo, useRef, Fragment } from "react";
+import { useEffect, useLayoutEffect, useState, useMemo, useRef, Fragment } from "react";
 import { createPortal } from "react-dom";
 import { createColumnHelper } from "@tanstack/react-table";
 import { ResponsiveContainer, ComposedChart, XAxis, YAxis, Area, Line, CartesianGrid, Tooltip } from "recharts";
@@ -145,24 +145,50 @@ const RevenueGeneratedIcon = ({ size = 24, style }) => (
   </svg>
 );
 
-function Dashboard() {
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const activeDashboardTab = searchParams.get("tab") || "Overview";
-  const setActiveDashboardTab = (tab) => {
-    setSearchParams(tab === "Overview" ? {} : { tab });
+const DASHBOARD_TABS = ["Overview", "Invoices"];
+// Remembers where the white pill last was. Overview and Invoices render different page trees, so
+// the switcher is re-mounted on every tab change; starting the pill at its previous position and
+// then moving it is what lets the slide animate across that re-mount.
+let lastDashboardTabIndex = 0;
+
+function DashboardTabSwitcher({ active, onChange }) {
+  const btnRefs = useRef([]);
+  const activeIndex = Math.max(0, DASHBOARD_TABS.indexOf(active));
+  const measure = (i) => {
+    const el = btnRefs.current[i];
+    return el ? { left: el.offsetLeft, width: el.offsetWidth } : null;
   };
-  const DASHBOARD_TABS = ["Overview", "Invoices"];
-  const DashboardTabSwitcher = () => (
-    <div className="inline-flex items-center gap-1 h-10 p-1 bg-[#F1F1F5] rounded-full flex-shrink-0">
-      {DASHBOARD_TABS.map((name) => {
-        const isActive = activeDashboardTab === name;
+  const [thumb, setThumb] = useState(null);
+
+  useLayoutEffect(() => {
+    // Paint once at the previous tab, then move to the current one on the next frame.
+    const from = measure(lastDashboardTabIndex) || measure(activeIndex);
+    setThumb(from);
+    const raf = requestAnimationFrame(() => {
+      setThumb(measure(activeIndex));
+      lastDashboardTabIndex = activeIndex;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [activeIndex]);
+
+  return (
+    <div className="relative inline-flex items-center gap-1 h-10 p-1 bg-[#F1F1F5] rounded-full flex-shrink-0">
+      <span
+        aria-hidden="true"
+        className="absolute top-1 h-8 rounded-full bg-white shadow-sm pointer-events-none transition-all duration-300 ease-out"
+        style={{ left: thumb?.left ?? 0, width: thumb?.width ?? 0, opacity: thumb ? 1 : 0 }}
+      />
+      {DASHBOARD_TABS.map((name, i) => {
+        const isActive = active === name;
         return (
           <button
             key={name}
-            onClick={() => setActiveDashboardTab(name)}
-            className={`flex items-center justify-center h-8 px-4 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-              isActive ? "bg-white shadow-sm" : "text-gray-700 hover:text-gray-900"
+            ref={(el) => {
+              btnRefs.current[i] = el;
+            }}
+            onClick={() => onChange(name)}
+            className={`relative z-[1] flex items-center justify-center h-8 px-4 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+              isActive ? "" : "text-gray-700 hover:text-gray-900"
             }`}
             style={isActive ? { color: "var(--btn-primary, #0085FF)" } : undefined}
           >
@@ -171,6 +197,18 @@ function Dashboard() {
         );
       })}
     </div>
+  );
+}
+
+function Dashboard() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeDashboardTab = searchParams.get("tab") || "Overview";
+  const setActiveDashboardTab = (tab) => {
+    setSearchParams(tab === "Overview" ? {} : { tab });
+  };
+  const dashboardTabSwitcher = (
+    <DashboardTabSwitcher active={activeDashboardTab} onChange={setActiveDashboardTab} />
   );
 
   const [loading, setLoading] = useState(true);
@@ -420,7 +458,8 @@ function Dashboard() {
         })
       : invoices;
 
-    if (!invoiceSortConfig.key) return filtered;
+    // "Top Invoices": largest first unless the user picks a column to sort by.
+    if (!invoiceSortConfig.key) return [...filtered].sort((a, b) => (b.amount || 0) - (a.amount || 0));
     const getVal = (inv) => {
       switch (invoiceSortConfig.key) {
         case "invoiceId": return inv.invoiceNumber || "";
@@ -444,10 +483,8 @@ function Dashboard() {
   }, [invoices, invoiceSortConfig, invoiceSearchTerm]);
 
   const invoiceTotalPages = Math.max(1, Math.ceil(sortedInvoices.length / invoicesPerPage));
-  const paginatedInvoices = useMemo(() => {
-    const start = (invoicePage - 1) * invoicesPerPage;
-    return sortedInvoices.slice(start, start + invoicesPerPage);
-  }, [sortedInvoices, invoicePage, invoicesPerPage]);
+  // The dashboard only ever shows the top 10; the full list lives on the Invoices page.
+  const paginatedInvoices = useMemo(() => sortedInvoices.slice(0, 10), [sortedInvoices]);
 
   useEffect(() => {
     setInvoicePage(1);
@@ -1521,32 +1558,30 @@ function Dashboard() {
   if (activeDashboardTab === "Invoices") {
     return (
       <div style={{ marginTop: -16 }}>
+        {/* Identical bar to the Overview tab's (same offsets, height and spacer) so the
+            switcher doesn't jump or sit off-centre when switching tabs. */}
         <div
-          className="box-border flex flex-row justify-between items-center px-4 sm:px-6 lg:px-8"
+          className="box-border flex flex-row justify-between items-center h-[72px] min-h-[72px] max-h-[72px] px-4 sm:px-6 lg:px-8 py-3 top-[calc(54px+var(--dc-offline-offset,0px))] lg:h-16 lg:min-h-16 lg:max-h-16 lg:py-0 lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
           style={{
             position: "fixed",
-            top: "calc(64px + var(--dc-offline-offset, 0px))",
             left: "var(--sidebar-width, 0px)",
             right: 0,
             zIndex: 40,
             gap: 16,
-            height: 64,
-            minHeight: 64,
-            maxHeight: 64,
             background: "#FFFFFF",
             borderBottom: "1px solid #E1E4EA",
             boxSizing: "border-box",
           }}
         >
-          <DashboardTabSwitcher />
+          {dashboardTabSwitcher}
         </div>
         {/* Spacer to offset the fixed header bar */}
-        <div style={{ height: 64 }} />
+        <div className="h-[72px] lg:h-16" />
 
         {/* KPI Cards */}
         <div
-          className="flex flex-row items-stretch -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8"
-          style={{ gap: 16, marginTop: 24 }}
+          className="grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:items-stretch lg:gap-4 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8"
+          style={{ marginTop: 24 }}
         >
           {[
             { icon: TotalIncomeIcon, label: "Total Invoices Issued", value: `₹${Math.round(invoiceStats.total).toLocaleString("en-IN")}`, trend: `${invoiceKpiTrends.total.pct}% this month`, trendUp: invoiceKpiTrends.total.up, trendNeutral: invoiceKpiTrends.total.pct === 0 },
@@ -1578,7 +1613,7 @@ function Dashboard() {
             user dismisses it. */}
         {draftInvoices.length > 0 && !draftNoticeDismissed && (
         <div
-          className="box-border flex flex-row items-center self-stretch"
+          className="box-border hidden sm:flex flex-row items-center self-stretch"
           style={{ padding: 12, gap: 16, marginTop: 24, background: "rgba(0, 133, 255, 0.1)", border: "1px solid rgba(0, 133, 255, 0.2)", borderRadius: 8 }}
         >
           <div className="flex flex-row justify-end items-center flex-1 self-stretch" style={{ gap: 12 }}>
@@ -1636,17 +1671,15 @@ function Dashboard() {
           style={{ marginTop: 24, borderBottom: "1px solid #E1E4EA" }}
         />
 
-        <div className="flex flex-row" style={{ gap: 16, marginTop: 24, width: "100%" }}>
+        <div className="flex flex-col lg:flex-row" style={{ gap: 16, marginTop: 24, width: "100%" }}>
           <div
-            className="box-border flex flex-col items-start min-w-0"
+            className="box-border flex flex-col items-start min-w-0 w-full h-auto lg:h-[470px] lg:flex-[1_1_917px]"
             style={{
               padding: 18,
               gap: 10,
-              height: 470,
               background: "#FFFFFF",
               border: "1px solid #E1E4EA",
               borderRadius: 12,
-              flex: "1 1 917px",
             }}
           >
             <span
@@ -1658,8 +1691,8 @@ function Dashboard() {
 
             <div className="self-stretch flex-shrink-0" style={{ width: "100%", height: 1, background: "#1F2937", opacity: 0.1 }} />
 
-            <div className="flex flex-col items-start self-stretch flex-shrink-0" style={{ gap: 24, width: "100%", height: 101 }}>
-              <div className="flex flex-row items-start self-stretch flex-shrink-0" style={{ gap: 24, width: "100%", height: 51 }}>
+            <div className="flex flex-col items-start self-stretch flex-shrink-0 h-auto lg:h-[101px]" style={{ gap: 24, width: "100%" }}>
+              <div className="grid grid-cols-2 gap-4 lg:flex lg:flex-row lg:items-start self-stretch flex-shrink-0 lg:gap-6 lg:h-[51px]" style={{ width: "100%" }}>
                 {[
                   {
                     label: "Invoiced Growth",
@@ -1683,7 +1716,7 @@ function Dashboard() {
                         {item.value}
                       </span>
                     </div>
-                    {idx < 3 && <div key={`divider-${idx}`} className="self-stretch flex-shrink-0" style={{ width: 0, borderLeft: "1px solid rgba(31, 41, 55, 0.3)" }} />}
+                    {idx < 3 && <div key={`divider-${idx}`} className="hidden lg:block self-stretch flex-shrink-0" style={{ width: 0, borderLeft: "1px solid rgba(31, 41, 55, 0.3)" }} />}
                   </>
                 ))}
               </div>
@@ -1747,12 +1780,10 @@ function Dashboard() {
           </div>
 
           <div
-            className="box-border flex flex-col items-start flex-shrink-0"
+            className="box-border flex flex-col items-start flex-shrink-0 w-full lg:w-[393px] h-[420px] lg:h-[470px]"
             style={{
               padding: 18,
               gap: 16,
-              width: 393,
-              height: 470,
               background: "#FFFFFF",
               border: "1px solid #E1E4EA",
               borderRadius: 12,
@@ -1916,10 +1947,10 @@ function Dashboard() {
           </div>
         ) : (
         <div
-          className="flex flex-row justify-between items-center"
-          style={{ gap: 16, width: "100%", height: 44, marginTop: 24 }}
+          className="flex flex-col gap-3 lg:flex-row lg:justify-between lg:items-center lg:h-[44px]"
+          style={{ width: "100%", marginTop: 24 }}
         >
-          <div className="flex flex-col items-start flex-shrink-0" style={{ gap: 6, width: 614, height: 19 }}>
+          <div className="flex flex-col items-start flex-shrink-0 lg:w-[614px]" style={{ gap: 6 }}>
             <span
               className="whitespace-nowrap"
               style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 16, lineHeight: "120%", letterSpacing: "-0.5px", color: "#0E121B" }}
@@ -1928,9 +1959,9 @@ function Dashboard() {
             </span>
           </div>
 
-          <div className="flex flex-row items-center flex-shrink-0" style={{ gap: 12, width: 528, height: 44 }}>
+          <div className="flex flex-row items-center lg:flex-shrink-0 w-full lg:w-[528px]" style={{ gap: 12, height: 44 }}>
             <div
-              className="box-border flex flex-row items-center flex-1"
+              className="box-border flex flex-row items-center flex-1 min-w-0"
               style={{ padding: "12px 14px", gap: 10, height: 44, border: "1px solid rgba(31, 41, 55, 0.1)", borderRadius: 95 }}
             >
               <SearchIcon className="w-4 h-4 text-[#525866] flex-shrink-0" />
@@ -1974,7 +2005,7 @@ function Dashboard() {
         >
           <DataTable
             variant="card"
-            maxHeight={440}
+            maxHeight="none"
             data={paginatedInvoices}
             columns={invoiceTableColumns}
             columnSizing={invoiceColumnSizing}
@@ -1987,118 +2018,6 @@ function Dashboard() {
             emptyContent={<p className="font-medium">No invoices found</p>}
           />
 
-          {/* Pagination - Companies-style, contained within the card (not a fixed bottom navbar) */}
-          {sortedInvoices.length > 0 && (
-            <div
-              className="w-full bg-white px-4 py-3 flex items-center justify-between flex-shrink-0"
-              style={{ borderTop: "1px solid #E1E4EA" }}
-            >
-              <div className="flex items-center space-x-2">
-                <p className="text-sm text-gray-700 font-inter">
-                  Showing <span className="font-semibold">{(invoicePage - 1) * invoicesPerPage + 1}</span> to{" "}
-                  <span className="font-semibold">{Math.min(invoicePage * invoicesPerPage, sortedInvoices.length)}</span> of{" "}
-                  <span className="font-semibold">{sortedInvoices.length}</span> results
-                </p>
-                <div className="relative ml-2">
-                  <select
-                    value={invoicesPerPage}
-                    onChange={(e) => setInvoicesPerPage(parseInt(e.target.value))}
-                    className="select-chevron appearance-none border border-gray-300 rounded-full pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
-                  >
-                    <option value={10}>10 per page</option>
-                    <option value={20}>20 per page</option>
-                    <option value={50}>50 per page</option>
-                    <option value={100}>100 per page</option>
-                    <option value={150}>150 per page</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setInvoicePage((p) => Math.max(1, p - 1))}
-                  disabled={invoicePage === 1}
-                  className="flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-
-                {(() => {
-                  const commitPage = () => {
-                    const n = parseInt(invoicePageInput, 10);
-                    if (!Number.isNaN(n)) setInvoicePage(Math.min(Math.max(n, 1), invoiceTotalPages));
-                    setInvoiceEditingPage(false);
-                  };
-                  const items = [1];
-                  if (invoicePage > 2) items.push("left-dots");
-                  if (invoicePage !== 1 && invoicePage !== invoiceTotalPages) items.push(invoicePage);
-                  if (invoicePage < invoiceTotalPages - 1) items.push("right-dots");
-                  if (invoiceTotalPages > 1) items.push(invoiceTotalPages);
-
-                  return items.map((item, index) => {
-                    if (item === "left-dots" || item === "right-dots") {
-                      return (
-                        <span
-                          key={`${item}-${index}`}
-                          className="flex items-center justify-center w-8 h-8 text-sm font-medium text-gray-400 select-none"
-                        >
-                          ....
-                        </span>
-                      );
-                    }
-                    const isCurrent = item === invoicePage;
-                    if (isCurrent && invoiceEditingPage) {
-                      return (
-                        <input
-                          key="page-edit"
-                          autoFocus
-                          type="number"
-                          min={1}
-                          max={invoiceTotalPages}
-                          value={invoicePageInput}
-                          onChange={(e) => setInvoicePageInput(e.target.value)}
-                          onBlur={commitPage}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") commitPage();
-                            if (e.key === "Escape") setInvoiceEditingPage(false);
-                          }}
-                          className="w-10 h-8 rounded-full border border-blue-500 text-center text-sm font-medium text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                        />
-                      );
-                    }
-                    return (
-                      <button
-                        key={`page-${item}`}
-                        onClick={() => setInvoicePage(item)}
-                        onDoubleClick={() => {
-                          if (isCurrent) {
-                            setInvoicePageInput(String(invoicePage));
-                            setInvoiceEditingPage(true);
-                          }
-                        }}
-                        title={isCurrent ? "Double-click to type a page number" : undefined}
-                        className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-colors ${
-                          isCurrent
-                            ? "bg-[#0085FF] text-white"
-                            : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-                        }`}
-                      >
-                        {item}
-                      </button>
-                    );
-                  });
-                })()}
-
-                <button
-                  onClick={() => setInvoicePage((p) => Math.min(invoiceTotalPages, p + 1))}
-                  disabled={invoicePage === invoiceTotalPages}
-                  className="flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         {invoiceQuickView && (
@@ -2216,7 +2135,7 @@ function Dashboard() {
           boxSizing: "border-box",
         }}
       >
-        <DashboardTabSwitcher />
+        {dashboardTabSwitcher}
       </div>
       {/* Spacer to offset the fixed header bar */}
       <div className="h-[72px] lg:h-16" />
@@ -2332,11 +2251,10 @@ function Dashboard() {
             old third card, with the first given a little back so it isn't
             squeezed to a third of the row. */}
         <div
-          className="box-border flex flex-col items-start min-w-0 w-full lg:basis-0"
+          className="box-border flex flex-col items-start min-w-0 w-full lg:basis-0 h-auto sm:h-[320px]"
           style={{
             padding: 18,
             gap: 16,
-            height: 320,
             flexGrow: 2,
             background: "#FFFFFF",
             border: "1px solid #E1E4EA",
@@ -2368,7 +2286,8 @@ function Dashboard() {
             className="flex flex-col sm:flex-row items-center self-stretch min-w-0"
             style={{ gap: 24, flex: 1 }}
           >
-            <div className="flex items-center justify-center min-w-0" style={{ flex: 1, alignSelf: "stretch" }}>
+            {/* Phones: cap the gauge at ~190px so it doesn't fill the whole card width. */}
+            <div className="flex items-center justify-center min-w-0 w-full max-w-[190px] sm:max-w-none" style={{ flex: 1, alignSelf: "stretch" }}>
               <CrmHealthGauge value={crmHealthScore} label={crmHealthLabel} />
             </div>
 
@@ -2377,8 +2296,8 @@ function Dashboard() {
                 is capped so the bars don't stretch into a thin line on a
                 wide screen. */}
             <div
-              className="flex flex-col justify-center min-w-0"
-              style={{ gap: 16, flex: 1, maxWidth: 260 }}
+              className="grid grid-cols-2 gap-x-5 gap-y-3 w-full sm:flex sm:flex-col sm:justify-center sm:gap-4 sm:max-w-[260px] min-w-0"
+              style={{ flex: 1 }}
             >
               {crmHealthMetrics.map((m) => (
                 <div key={m.label} className="flex flex-col items-start self-stretch" style={{ gap: 9 }}>
@@ -2413,11 +2332,10 @@ function Dashboard() {
         </div>
 
         <div
-          className="box-border flex flex-col items-start min-w-0 w-full lg:basis-0"
+          className="box-border flex flex-col items-start min-w-0 w-full lg:basis-0 h-auto sm:h-[320px]"
           style={{
             padding: 18,
             gap: 16,
-            height: 320,
             flexGrow: 3,
             background: "#FFFFFF",
             border: "1px solid #E1E4EA",
@@ -2450,7 +2368,7 @@ function Dashboard() {
           <div className="flex flex-col self-stretch" style={{ gap: 12 }}>
             <div className="self-stretch" style={{ height: 1, background: "#1F2937", opacity: 0.1 }} />
 
-            <div className="flex flex-row items-stretch self-stretch" style={{ gap: 8, height: 40 }}>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:gap-2 sm:flex sm:flex-row sm:items-stretch self-stretch sm:h-[40px]">
               {pipelineSnapshot.map((m, i) => {
                 // "Lost" going up is bad news, so its arrow and colour are
                 // inverted rather than painting any rise green. A flat 0% is
@@ -2462,7 +2380,7 @@ function Dashboard() {
                 return (
                   <Fragment key={m.label}>
                     {i > 0 && (
-                      <div style={{ width: 1, alignSelf: "stretch", background: "rgba(31, 41, 55, 0.3)" }} />
+                      <div className="hidden sm:block" style={{ width: 1, alignSelf: "stretch", background: "rgba(31, 41, 55, 0.3)" }} />
                     )}
                     <div className="flex flex-row justify-between items-end min-w-0" style={{ flex: 1, gap: 4 }}>
                       <div className="flex flex-col items-start min-w-0" style={{ gap: 4 }}>
@@ -2501,7 +2419,7 @@ function Dashboard() {
           </div>
 
           {/* Created vs won value, last 8 months. */}
-          <div className="self-stretch min-w-0" style={{ flex: 1 }}>
+          <div className="self-stretch min-w-0 h-[200px] sm:h-auto" style={{ flex: 1 }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={pipelineTrendData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(31, 41, 55, 0.1)" />

@@ -665,7 +665,14 @@ export default function QuickItemDrawer({ isOpen, onClose, onSaved }) {
                 <div>
                   <label className={lbl}>HSN/SAC</label>
                   <input type="text" value={form.hsnSac} onChange={(e) => handleChange("hsnSac", e.target.value)} placeholder="Enter HSN/SAC Code" className={inp} />
-                  <p className="mt-1 text-[11px] text-blue-600 cursor-pointer hover:underline">Click here to check GST approved HSN/SAC codes.</p>
+                  <a
+                    href="https://services.gst.gov.in/services/searchhsnsac"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-block text-[11px] text-blue-600 cursor-pointer hover:underline"
+                  >
+                    Click here to check GST approved HSN/SAC codes.
+                  </a>
                 </div>
                 <div className="relative">
                   <label className={lbl}>Category</label>

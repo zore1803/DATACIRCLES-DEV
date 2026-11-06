@@ -312,7 +312,7 @@ const NotificationBell = ({ variant = "desktop" }) => {
             aria-label="Notifications"
           >
             {/* Header row: title + All/Unread switcher + close. */}
-            <div className="flex items-center gap-3 px-5 h-16 flex-shrink-0 border-b border-gray-100">
+            <div className="flex items-center flex-wrap sm:flex-nowrap gap-x-3 gap-y-2 px-5 py-3 sm:py-0 min-h-16 sm:h-16 flex-shrink-0 border-b border-gray-100">
               <div className="flex flex-col flex-shrink-0">
                 <span className="text-base font-semibold text-gray-900">
                   Notifications
@@ -330,7 +330,7 @@ const NotificationBell = ({ variant = "desktop" }) => {
 
               {/* Sliding switch: two equal columns, with a white pill that glides
                   between them (its width is one column, so 100% = one step). */}
-              <div className="relative grid grid-cols-2 p-1 bg-gray-100 rounded-full ml-auto">
+              <div className="relative grid grid-cols-2 p-1 bg-gray-100 rounded-full order-last w-full sm:order-none sm:w-auto sm:ml-auto">
                 <span
                   aria-hidden="true"
                   className="absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-full bg-white shadow-sm transition-transform duration-300 ease-out pointer-events-none"
@@ -344,7 +344,7 @@ const NotificationBell = ({ variant = "desktop" }) => {
                     key={tab.key}
                     type="button"
                     onClick={() => setFilter(tab.key)}
-                    className={`relative z-10 px-4 py-1 text-sm font-medium rounded-full whitespace-nowrap transition-colors duration-300 ${
+                    className={`relative z-10 px-4 py-1 text-sm font-medium rounded-full whitespace-nowrap transition-colors duration-300 text-center ${
                       filter === tab.key
                         ? "text-gray-900"
                         : "text-gray-500 hover:text-gray-700"
@@ -359,7 +359,7 @@ const NotificationBell = ({ variant = "desktop" }) => {
                 type="button"
                 onClick={() => setIsOpen(false)}
                 title="Close"
-                className="flex items-center justify-center w-8 h-8 flex-shrink-0 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                className="flex items-center justify-center w-8 h-8 flex-shrink-0 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors ml-auto sm:ml-0"
               >
                 <X className="w-4 h-4" />
               </button>

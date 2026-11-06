@@ -20,6 +20,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
+import { prefetchDocumentCustomFieldDefs } from "../components/common/DocumentCustomFieldInputs";
 import {
   ChevronUp,
   ChevronDown,
@@ -58,7 +59,7 @@ import {
   ListOrdered,
   List as ListIcon,
   Link as LinkIcon,
-  ArrowUp, ArrowDown } from "lucide-react";
+  ArrowUp, ArrowDown, CalendarDays } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { PDFDocument } from "pdf-lib";
@@ -623,6 +624,12 @@ const Accounting = ({ fixedTab = null }) => {
   const [detailDocId, setDetailDocId] = useState(null);
 
   // Which document tabs show the status pill switcher under the header.
+  // Warm the document custom-field definitions so the form's Custom Fields section
+  // is there the moment a document drawer opens.
+  useEffect(() => {
+    prefetchDocumentCustomFieldDefs();
+  }, []);
+
   const statusTabs =
     activeTab === "tax"
       ? INVOICE_STATUS_TABS
@@ -1082,6 +1089,8 @@ const Accounting = ({ fixedTab = null }) => {
   const [openRowMenu, setOpenRowMenu] = useState(null);
   const [rowMenuPos, setRowMenuPos] = useState(null);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  // Phones: the date-range pill is folded into the "..." menu and opens this floating picker.
+  const [showMobileDateRange, setShowMobileDateRange] = useState(false);
   const [showTemplateDrawer, setShowTemplateDrawer] = useState(false);
   const [showBrandingModal, setShowBrandingModal] = useState(false);
   const [pendingInvoiceCreation, setPendingInvoiceCreation] = useState(false);
@@ -2107,6 +2116,18 @@ const Accounting = ({ fixedTab = null }) => {
                       Edit
                     </button>
                   )}
+                  {activeTab === "tax" && doc.salesSubscription && (
+                    <button
+                      onClick={() => {
+                        closeRowMenu();
+                        navigate("/sales-subscription");
+                      }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                    >
+                      <Repeat className="w-3.5 h-3.5 text-orange-600" />
+                      Subscription
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       closeRowMenu();
@@ -2517,7 +2538,7 @@ const Accounting = ({ fixedTab = null }) => {
         )}
         {/* 2nd Header - Tab Bar & Actions Row */}
         <div
-          className={`fixed right-0 h-12 px-4 sm:px-6 lg:px-8 bg-white flex items-center justify-between gap-3 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]`}
+          className={`fixed right-0 h-16 px-4 sm:px-6 lg:pl-[22px] lg:pr-[22px] bg-white flex items-center justify-between gap-3 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]`}
           style={{ left: "var(--sidebar-width, 0px)", zIndex: 39 }}
         >
           {/* Mobile-only page title — fills the same left slot the tab pill
@@ -2656,6 +2677,18 @@ const Accounting = ({ fixedTab = null }) => {
                       onDone={() => setShowMoreMenu(false)}
                     />
 
+                    {/* Date range — folded in here on mobile; the pill beside the status tabs is
+                        hidden below lg. */}
+                    <button
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        setShowMobileDateRange(true);
+                      }}
+                      className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                    >
+                      <CalendarDays className="w-3.5 h-3.5 flex-shrink-0" /> {invoiceDateRange?.label || "All Time"}
+                    </button>
+
                     {/* Filter by status — folded in here on mobile since the
                         standalone filter button is hidden below lg. */}
                     {(
@@ -2740,11 +2773,11 @@ const Accounting = ({ fixedTab = null }) => {
             that status. */}
         {(
           <div
-            className="fixed right-0 h-[52px] px-4 sm:px-6 lg:px-8 bg-white flex items-start top-[calc(102px+var(--dc-offline-offset,0px))] lg:top-[calc(112px+var(--dc-offline-offset,0px))]"
+            className="fixed right-0 h-14 px-4 sm:px-6 lg:pl-[22px] lg:pr-[22px] bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
             style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
           >
             {statusTabs && (
-            <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
+            <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 flex-1 lg:flex-none overflow-x-auto no-scrollbar">
               {statusTabs.map((tab) => {
                 const selected = (filterStatuses[activeTab] || "") === tab.value;
                 const count = statusCountsByType[activeTab]?.[tab.value];
@@ -2755,9 +2788,9 @@ const Accounting = ({ fixedTab = null }) => {
                     onClick={() =>
                       setFilterStatuses((prev) => ({ ...prev, [activeTab]: tab.value }))
                     }
-                    className={`h-9 flex-shrink-0 whitespace-nowrap rounded-full text-sm font-medium transition-all duration-300 ease-out ${selected
-                      ? "px-6 bg-white text-[#0085FF] shadow-sm"
-                      : "px-3.5 text-[#0E121B] hover:bg-white/60"
+                    className={`h-9 flex-1 lg:flex-none flex items-center justify-center whitespace-nowrap rounded-full px-2.5 lg:px-5 text-[13px] lg:text-sm font-medium transition-colors ${selected
+                      ? "bg-white text-[#0085FF] shadow-sm"
+                      : "text-[#0E121B] hover:bg-white/60"
                       }`}
                   >
                     {tab.label}
@@ -2776,7 +2809,22 @@ const Accounting = ({ fixedTab = null }) => {
               })}
             </div>
             )}
-            <div className={statusTabs ? "ml-3" : ""}>
+            <div className="lg:hidden">
+              <DateRangeFilterButton
+                hideTrigger
+                open={showMobileDateRange}
+                onOpenChange={setShowMobileDateRange}
+                value={invoiceDateRange}
+                onChange={(range) => {
+                  setInvoiceDateRange(range);
+                  setPaginations((prev) => ({
+                    ...prev,
+                    [activeTab]: { ...prev[activeTab], currentPage: 1 },
+                  }));
+                }}
+              />
+            </div>
+            <div className={`hidden lg:block flex-shrink-0 [&_button]:whitespace-nowrap ${statusTabs ? "ml-2 lg:ml-3" : ""}`}>
               <DateRangeFilterButton
                 value={invoiceDateRange}
                 onChange={(range) => {
@@ -2932,7 +2980,7 @@ const Accounting = ({ fixedTab = null }) => {
                   }}
                   className={`cursor-pointer bg-white hover:bg-blue-50 transition-colors ${selectedIds.includes(doc._id) ? "!bg-blue-50" : ""
                     }`}
-                  style={{ height: 37, maxHeight: 37 }}
+                  style={{ height: 44, maxHeight: 44 }}
                 >
                   <td
                     style={{

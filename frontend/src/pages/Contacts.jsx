@@ -2046,7 +2046,7 @@ function Contacts() {
 
       {/* Title Strip */}
       <div
-        className={`fixed right-0 h-16 flex items-center gap-2 lg:gap-4 px-4 sm:px-6 lg:px-8 border-b top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E5E5EC]`}
+        className={`fixed right-0 h-16 flex items-center gap-2 lg:gap-4 px-4 sm:px-6 lg:pl-0 lg:pr-8 border-b top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E5E5EC]`}
         style={{ left: "var(--sidebar-width, 0px)", zIndex: 40, minHeight: "64px", maxHeight: "64px", boxSizing: "border-box" }}
       >
         {showBulkStrip ? (
@@ -2137,7 +2137,7 @@ function Contacts() {
 
             <nav
               ref={tabNavRef}
-              className="relative hidden lg:inline-flex items-center gap-1 h-10 p-1 bg-[#F1F1F5] rounded-full overflow-x-auto no-scrollbar flex-shrink-0"
+              className="relative hidden lg:inline-flex lg:ml-[19px] items-center gap-1 h-10 p-1 bg-[#F1F1F5] rounded-full overflow-x-auto no-scrollbar flex-shrink-0"
             >
               <span
                 aria-hidden="true"

@@ -2342,7 +2342,7 @@ const PurchaseReturn = () => {
                               setDetailReturnId(row.original._id);
                             }}
                             className={`cursor-pointer bg-white hover:bg-blue-50 transition-colors ${selectedReturnsSet.has(row.original._id) ? "!bg-blue-50" : ""}`}
-                            style={{ height: 37, maxHeight: 37 }}
+                            style={{ height: 44, maxHeight: 44 }}
                           >
                             {row.getVisibleCells().map((cell) => {
                               const colId = cell.column.id;
@@ -2359,8 +2359,8 @@ const PurchaseReturn = () => {
                                   key={cell.id}
                                   style={{
                                     width: cell.column.getSize(),
-                                    height: "37px",
-                                    maxHeight: "37px",
+                                    height: "44px",
+                                    maxHeight: "44px",
                                     boxSizing: "border-box",
                                     position: isSticky ? "sticky" : "static",
                                     left: isLeftSticky ? pinnedLeftOffsets[colId] ?? 0 : "auto",

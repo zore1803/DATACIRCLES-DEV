@@ -42,6 +42,7 @@ import useFillToBottom from "../../hooks/useFillToBottom";
 
 import SearchIcon from "../common/SearchIcon";
 import UploadIcon from "../common/UploadIcon";
+import DocumentUploadIcon from "../common/DocumentUploadIcon";
 import ListIcon from "../common/ListIcon";
 import EditIcon from "../common/EditIcon";
 const FOLDER_ITEM_COUNT_RANGES = [
@@ -379,7 +380,7 @@ const DragDropZone = ({ onFileDrop, isActive, children }) => {
       {isDragOver && (
         <div className="absolute inset-0 bg-gray-50 bg-opacity-95 border-2 border-dashed border-gray-400 rounded-lg flex items-center justify-center z-50">
           <div className="text-center p-6">
-            <UploadIcon className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+            <DocumentUploadIcon className="w-12 h-12 text-gray-600 mx-auto mb-3" />
             <p className="text-gray-900 font-semibold text-sm">Drop files here</p>
             <p className="text-gray-600 text-xs mt-1">Release to upload</p>
           </div>
@@ -489,15 +490,16 @@ const FileCard = ({ file, fileIndex, onView, onDelete, onEditLink, onRenameFile,
         <button
           ref={menuButtonRef}
           onClick={() => (menuOpen ? setMenuOpen(false) : openMenu())}
-          className="hover:opacity-70 transition-opacity"
+          className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+          title="More actions"
         >
-          <MoreIcon className="w-5 h-5" style={{ color: "#525252" }} />
+          <MoreIcon className="w-4 h-4" />
         </button>
         {menuOpen && menuPos && createPortal(
           <>
             <div className="fixed inset-0 z-[9998]" onClick={() => setMenuOpen(false)} />
             <div
-              className="fixed bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-[9999]"
+              className="fixed bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 w-max z-[9999] animate-in fade-in zoom-in duration-150 origin-top-right"
               style={{ minWidth: 150, top: menuPos.top, left: menuPos.left }}
             >
               <button
@@ -505,9 +507,9 @@ const FileCard = ({ file, fileIndex, onView, onDelete, onEditLink, onRenameFile,
                   setMenuOpen(false);
                   onView(file);
                 }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
               >
-                <OpenFileIcon size={19} style={{ color: "#5C5D5C" }} />
+                <OpenFileIcon size={14} style={{ color: "#1C1B1F" }} />
                 Open File
               </button>
               {file.isLink && onEditLink && (
@@ -516,9 +518,9 @@ const FileCard = ({ file, fileIndex, onView, onDelete, onEditLink, onRenameFile,
                     setMenuOpen(false);
                     onEditLink(file, fileIndex);
                   }}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
-                  <EditIcon size={17} style={{ color: "#5C5D5C" }} />
+                  <EditIcon size={14} style={{ color: "#1C1B1F" }} />
                   Edit Link
                 </button>
               )}
@@ -528,9 +530,9 @@ const FileCard = ({ file, fileIndex, onView, onDelete, onEditLink, onRenameFile,
                     setMenuOpen(false);
                     onRenameFile(file, fileIndex);
                   }}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                 >
-                  <EditIcon size={17} style={{ color: "#5C5D5C" }} />
+                  <EditIcon size={14} style={{ color: "#1C1B1F" }} />
                   Rename File
                 </button>
               )}
@@ -539,9 +541,9 @@ const FileCard = ({ file, fileIndex, onView, onDelete, onEditLink, onRenameFile,
                   setMenuOpen(false);
                   onDelete(file);
                 }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-red-600 hover:bg-red-50 whitespace-nowrap"
               >
-                <DeleteFileIcon size={17} style={{ color: "#FB3748" }} />
+                <DeleteFileIcon size={14}style={{ color: "#FB3748" }} />
                 Delete File
               </button>
             </div>
@@ -692,7 +694,7 @@ const FolderCard = ({ folder, expanded, onToggle, onEdit, onDelete, onSelect, on
               boxShadow: "0px 1px 1px rgba(10, 13, 20, 0.03)",
             }}
           >
-            <NoFilesUploadIcon size={17} style={{ color: "#A3A3A3" }} className="mb-2" />
+            <DocumentUploadIcon className="w-5 h-5 mb-2" style={{ color: "#A3A3A3" }} />
             <p style={{ color: "#A3A3A3" }} className="text-sm">Upload Files</p>
           </div>
         )}
@@ -1145,6 +1147,9 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
   const [refresh, setRefresh] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+  // Phones: both searches are 44px circles that slide open when tapped (same as the other company tabs).
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [fileSearchOpen, setFileSearchOpen] = useState(false);
   const [folderViewMode, setFolderViewMode] = useState("grid");
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [selectedFilters, setSelectedFilters] = useState({});
@@ -1648,8 +1653,8 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
         {openFolderId && openFolder ? (
           <div className="min-h-[400px]">
             {/* Same row as the folder list's search bar: breadcrumb, search, actions. */}
-            <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
-              <div className="flex items-center gap-2.5 flex-shrink-0 min-w-0 max-w-[40%]">
+            <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 lg:gap-4 mb-4" style={{ minHeight: "44px" }}>
+              <div className="flex items-center gap-2.5 flex-shrink-0 min-w-0 max-lg:basis-full lg:max-w-[40%]">
                 <button
                   onClick={() => setOpenFolderId("")}
                   style={{ fontFamily: "Inter", fontWeight: 500, fontSize: 14, letterSpacing: "-0.04em", color: "#000000" }}
@@ -1666,14 +1671,17 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                 </span>
               </div>
 
-              <div className="relative flex-1 min-w-[180px] h-[44px]">
-                <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
+              <div className="relative h-[44px] max-lg:flex-1 max-lg:min-w-0 lg:flex-1 lg:min-w-[180px]">
+                  <div className={`relative h-full transition-all duration-300 ease-in-out max-lg:rounded-full max-lg:border max-lg:bg-white lg:w-full ${fileSearchOpen || fileSearchTerm ? "w-full max-lg:border-[#0085FF]" : "w-11 max-lg:border-[rgba(31,41,55,0.1)]"}`}>
+                <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866] z-10 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Search file by name..."
                   value={fileSearchTerm}
                   onChange={(e) => setFileSearchTerm(e.target.value)}
-                  className="w-full h-full pl-11 pr-10 border border-[rgba(31,41,55,0.1)] rounded-full text-sm focus:outline-none focus:border-[#0085FF]"
+                    onFocus={() => setFileSearchOpen(true)}
+                    onBlur={() => { if (!fileSearchTerm) setFileSearchOpen(false); }}
+                  className={`w-full h-full pl-11 pr-10 lg:border rounded-full text-sm focus:outline-none lg:focus:border-[#0085FF] bg-transparent cursor-pointer lg:cursor-text lg:opacity-100 lg:border-[rgba(31,41,55,0.1)] ${fileSearchOpen || fileSearchTerm ? "opacity-100 cursor-text" : "opacity-0"}`}
                 />
                 {fileSearchTerm && (
                   <button
@@ -1685,8 +1693,9 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                   </button>
                 )}
               </div>
+                  </div>
 
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-2 flex-shrink-0 max-lg:ml-auto">
                 <button
                   onClick={() => deleteFolder(openFolder._id)}
                   className="flex items-center justify-center w-[44px] h-[44px] bg-white border border-[#E1E4EA] rounded-full hover:bg-gray-50 transition-colors"
@@ -1736,13 +1745,12 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
 
             {openFolder.files?.length > 0 ? (
               <div
-                className="overflow-y-auto"
+                className="overflow-y-auto grid-cols-2 sm:grid-cols-[repeat(6,206px)]"
                 style={{
                   boxSizing: "border-box",
                   width: "100%",
                   height: 500,
                   display: "grid",
-                  gridTemplateColumns: "repeat(6, 206px)",
                   gridAutoRows: 156,
                   columnGap: 15,
                   rowGap: 15,
@@ -1754,7 +1762,8 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                     className={`relative flex flex-col items-center justify-center cursor-pointer transition-none ${selectedFileNames.includes(file.fileName) ? "bg-[#CCE8FF]" : "hover:bg-[#E5F3FF] active:bg-[#CCE8FF]"}`}
                     style={{
                       boxSizing: "border-box",
-                      width: 206,
+                      width: "100%",
+                      maxWidth: 206,
                       height: 156,
                       borderRadius: 8,
                       padding: 12,
@@ -1849,7 +1858,7 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                 }}
                 onClick={() => setSelectedFolderId(openFolder._id)}
               >
-                <NoFilesUploadIcon size={20} style={{ color: "#A3A3A3" }} />
+                <DocumentUploadIcon className="w-5 h-5" style={{ color: "#A3A3A3" }} />
                 <p
                   style={{
                     fontFamily: "Inter Tight",
@@ -1875,14 +1884,17 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
               </div>
             ) : (
               <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
-                <div className="relative flex-1 min-w-[180px] h-[44px]">
-                  <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
+                <div className="relative h-[44px] max-lg:flex-1 max-lg:min-w-0 lg:flex-1 lg:min-w-[180px]">
+                  <div className={`relative h-full transition-all duration-300 ease-in-out max-lg:rounded-full max-lg:border max-lg:bg-white lg:w-full ${mobileSearchOpen || searchTerm ? "w-full max-lg:border-[#0085FF]" : "w-11 max-lg:border-[rgba(31,41,55,0.1)]"}`}>
+                  <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866] z-10 pointer-events-none" />
                   <input
                     type="text"
                     placeholder="Search folder by name..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full h-full pl-11 pr-10 border border-[rgba(31,41,55,0.1)] rounded-full text-sm focus:outline-none focus:border-[#0085FF]"
+                    onFocus={() => setMobileSearchOpen(true)}
+                    onBlur={() => { if (!searchTerm) setMobileSearchOpen(false); }}
+                    className={`w-full h-full pl-11 pr-10 lg:border rounded-full text-sm focus:outline-none lg:focus:border-[#0085FF] bg-transparent cursor-pointer lg:cursor-text lg:opacity-100 lg:border-[rgba(31,41,55,0.1)] ${mobileSearchOpen || searchTerm ? "opacity-100 cursor-text" : "opacity-0"}`}
                   />
                   {searchTerm && (
                     <button
@@ -1894,6 +1906,7 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                     </button>
                   )}
                 </div>
+                  </div>
                 <ToolbarFilterGroup
                   isOpen={showFilterPanel}
                   columns={FOLDER_FILTER_COLUMNS}
@@ -1905,7 +1918,7 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                 <button
                   onClick={() => setShowFilterPanel((open) => !open)}
                   aria-expanded={showFilterPanel}
-                  className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+                  className={`relative max-lg:ml-auto flex items-center justify-center gap-2 px-0 w-11 lg:w-auto lg:px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
                     }`}
                   style={{
                     height: "44px",
@@ -1913,7 +1926,7 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
                   }}
                 >
                   <FilterIcon size={16} />
-                  Filter
+                  <span className="hidden lg:inline">Filter</span>
                   {Object.values(selectedFilters).flat().length > 0 && (
                     <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full ring-2 ring-white">
                       {Object.values(selectedFilters).flat().length}
@@ -2000,14 +2013,13 @@ const Folder = ({ companyId: propCompanyId, dealId, onFoldersChange, isLoading =
             ) : folderViewMode === "grid" ? (
               <div
                 ref={fillContainerRef}
-                className="w-full relative"
+                className="w-full relative grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))]"
                 style={{
                   boxSizing: "border-box",
                   width: "100%",
                   borderRadius: 8,
                   padding: 0,
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
                   gap: "16px",
                   alignContent: "flex-start",
                   overflowY: "auto",

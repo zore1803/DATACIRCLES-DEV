@@ -1690,7 +1690,7 @@ const PurchaseOrderPage = () => {
       <div className="bg-white overflow-visible">
         {/* Toolbar (Title + Search + Buttons) */}
         <div
-          className={`fixed right-0 h-12 px-4 sm:px-6 lg:px-8 flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white`}
+          className={`fixed right-0 h-16 px-4 sm:px-6 lg:pl-[40px] lg:pr-[40px] flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white`}
           style={{
             left: "var(--sidebar-width, 0px)",
             zIndex: 40,
@@ -1918,7 +1918,7 @@ const PurchaseOrderPage = () => {
 
         {/* Status pills + order-date range, same strip as the Invoices list */}
         <div
-          className="fixed right-0 h-[52px] px-4 sm:px-6 lg:px-8 bg-white flex items-start top-[calc(102px+var(--dc-offline-offset,0px))] lg:top-[calc(112px+var(--dc-offline-offset,0px))]"
+          className="fixed right-0 h-14 px-4 sm:px-6 lg:pl-[40px] lg:pr-[40px] bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
           style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
         >
           <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
@@ -2098,7 +2098,7 @@ const PurchaseOrderPage = () => {
                               setDetailPoId(row.original._id);
                             }}
                             className={`cursor-pointer bg-white hover:bg-blue-50 transition-colors ${selectedPOSet.has(row.original._id) ? "!bg-blue-50" : ""}`}
-                            style={{ height: 37, maxHeight: 37 }}
+                            style={{ height: 44, maxHeight: 44 }}
                           >
                             {row.getVisibleCells().map((cell) => {
                               const colId = cell.column.id;
@@ -2115,8 +2115,8 @@ const PurchaseOrderPage = () => {
                                   key={cell.id}
                                   style={{
                                     width: cell.column.getSize(),
-                                    height: "37px",
-                                    maxHeight: "37px",
+                                    height: "44px",
+                                    maxHeight: "44px",
                                     boxSizing: "border-box",
                                     position: isSticky ? "sticky" : "static",
                                     left: isLeftSticky ? pinnedLeftOffsets[colId] ?? 0 : "auto",

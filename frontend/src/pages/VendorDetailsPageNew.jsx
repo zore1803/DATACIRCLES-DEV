@@ -84,7 +84,7 @@ export const TabTableSkeleton = () => (
     {/* Every tab (Payments/Notes/Tasks/Meetings) shows its own 4-tile KPI
         row above the toolbar once loaded — without this, that row popped
         in as a layout shift right as the table skeleton resolved. */}
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
       {Array.from({ length: 4 }).map((_, i) => <StatTileSkeleton key={i} />)}
     </div>
     <div className="bg-white border border-[#E1E4EA] rounded-lg overflow-hidden">

@@ -1,6 +1,6 @@
 
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
 import API from "../services/api";
 import OrganizationPicker from "../components/common/OrganizationPicker";
@@ -37,7 +37,18 @@ export default function Login() {
   // AUTH0
   // ==================================================
 
-  const { loginWithRedirect, error: auth0Error } = useAuth0();
+  const {
+    loginWithRedirect,
+    error: auth0Error,
+    isAuthenticated: isAuth0Authenticated,
+    user: auth0User,
+    logout: auth0Logout,
+  } = useAuth0();
+  const location = useLocation();
+  const [setupMode, setSetupMode] = useState("create");
+  const [setupValue, setSetupValue] = useState("");
+  const [setupError, setSetupError] = useState("");
+  const [setupBusy, setSetupBusy] = useState(false);
 
   const AUTH0_GOOGLE_CONNECTION =
     import.meta.env.VITE_AUTH0_GOOGLE_CONNECTION || "google-oauth2";
@@ -118,6 +129,76 @@ export default function Login() {
       console.error("Login error:", error);
     }
   };
+
+  // A Google account with no DataCircles user yet: PrivateRoute sends it here
+  // with requiresSetup (backend answered 428). Finish sign-up by creating an
+  // organization or joining one with a company code.
+  const needsSetup = !!location.state?.requiresSetup && isAuth0Authenticated;
+
+  const handleCompleteSetup = async () => {
+    setSetupError("");
+    const body = setupMode === "join" ? { code: setupValue.trim() } : { orgName: setupValue.trim() };
+    if (!setupValue.trim()) {
+      setSetupError(setupMode === "join" ? "Enter a company code." : "Enter your organization name.");
+      return;
+    }
+    try {
+      setSetupBusy(true);
+      await API.post("/auth/complete-registration", body);
+      window.location.replace("/");
+    } catch (error) {
+      setSetupError(error.response?.data?.message || "Could not finish setup. Please try again.");
+      setSetupBusy(false);
+    }
+  };
+
+  if (needsSetup) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-[#EAEAEA] font-inter">
+        <div className="w-full max-w-[449px] rounded-[24px] bg-white p-8 shadow-sm">
+          <h1 className="text-[24px] font-semibold text-[#0F172A]">Finish setting up</h1>
+          <p className="mt-2 text-[14px] text-[#475569]">
+            {auth0User?.email ? `${auth0User.email} doesn't have a DataCircles account yet.` : "No DataCircles account exists for this Google account yet."}{" "}
+            Create your organization or join one to continue.
+          </p>
+          <div className="mt-5 flex gap-2">
+            {[["create", "Create organization"], ["join", "Join with code"]].map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => { setSetupMode(mode); setSetupValue(""); setSetupError(""); }}
+                className={`h-[40px] flex-1 rounded-full text-[13px] font-medium ${setupMode === mode ? "bg-[#0085FF] text-white" : "bg-[#F1F5F9] text-[#475569]"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <input
+            value={setupValue}
+            onChange={(e) => setSetupValue(e.target.value)}
+            placeholder={setupMode === "join" ? "Company code" : "Organization name"}
+            className="mt-4 h-[48px] w-full rounded-full border border-[#E2E8F0] px-5 text-[14px] outline-none focus:border-[#0085FF]"
+          />
+          {setupError && <p className="mt-2 text-[13px] text-red-600">{setupError}</p>}
+          <button
+            type="button"
+            onClick={handleCompleteSetup}
+            disabled={setupBusy}
+            className="mt-4 h-[48px] w-full rounded-full bg-[#0085FF] text-[14px] font-medium text-white disabled:opacity-60"
+          >
+            {setupBusy ? "Setting up..." : "Continue"}
+          </button>
+          <button
+            type="button"
+            onClick={() => auth0Logout({ logoutParams: { returnTo: window.location.origin + "/login" } })}
+            className="mt-3 w-full text-[13px] font-semibold text-[#64748B] hover:underline"
+          >
+            Use a different account
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-full bg-[#EAEAEA] p-0 font-inter overflow-hidden flex items-center justify-center">

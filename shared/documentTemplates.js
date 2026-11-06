@@ -722,18 +722,44 @@ export function buildDocumentHtml(doc, options = {}) {
   const customFieldItems = (Array.isArray(doc.customFields) ? doc.customFields : []).filter(
     (f) => f && f.label && String(f.value ?? "").trim() && f.showOnDocument !== false
   );
-  const customFieldsBlock = customFieldItems.length
-    ? `<div class="dc-customfields" style="margin-top:10px;padding-top:8px;border-top:1px solid #D9D9D9;font-size:11px;line-height:1.5;display:flex;flex-wrap:wrap;gap:3px 28px;">${customFieldItems
+  let tplHtml = tpl.html(ctx);
+  let customFieldsBlock = "";
+  if (customFieldItems.length) {
+    // Preferred: list each custom field as a row of the template's own
+    // Invoice No. / Date / Due Date / Place of Supply card, by cloning that
+    // card's "Place of Supply" row (every template writes it as one line).
+    const posRe = /Place\s*(?:of|\/)\s*Supply/i;
+    const posVal = esc(doc.placeOfSupply || "—");
+    const lines = tplHtml.split("\n");
+    const idx = lines.findIndex(
+      (l) => posRe.test(l) && l.includes(posVal) && !/Due|Invoice|Customer/i.test(l.replace(posRe, ""))
+    );
+    if (idx !== -1) {
+      const src = lines[idx];
+      const clones = customFieldItems.map((f) => {
+        const labelHtml = `${esc(f.label)}`;
+        const at = src.lastIndexOf(posVal);
+        const withVal = src.slice(0, at) + esc(f.value) + src.slice(at + posVal.length);
+        // Keep the template's own label punctuation (":" or none).
+        const colon = /Supply\s*:/i.test(src) ? ":" : "";
+        return withVal.replace(posRe, labelHtml + colon).replace(/(\w):\s*:/, "$1:");
+      });
+      lines.splice(idx + 1, 0, ...clones);
+      tplHtml = lines.join("\n");
+    } else {
+      // Templates with no such row: compact label/value strip under the content.
+      customFieldsBlock = `<div class="dc-customfields" style="margin-top:10px;padding-top:8px;border-top:1px solid #D9D9D9;font-size:11px;line-height:1.5;display:flex;flex-wrap:wrap;gap:3px 28px;">${customFieldItems
         .map((f) => `<span><b>${esc(f.label)}:</b> ${esc(f.value)}</span>`)
-        .join("")}</div>`
-    : "";
+        .join("")}</div>`;
+    }
+  }
 
   const css = BASE_CSS + (tpl.css || "");
 
   return `<style>${css}</style>
 <div class="dcsheet t-${tplName}">
   <div class="dcsheet-body" style="flex:1;">
-    ${tpl.html(ctx)}
+    ${tplHtml}
     ${customFieldsBlock}
   </div>
   <div class="dc-page-footer">Page 1 / 1&nbsp;&nbsp;This is a digitally signed document.</div>

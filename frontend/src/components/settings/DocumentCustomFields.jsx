@@ -49,13 +49,13 @@ export default function DocumentCustomFields({ value = [], onChange }) {
   };
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
+    <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2">
-          <ListPlus className="mt-0.5 h-4 w-4 text-sky-600" />
+          <ListPlus className="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" />
           <div>
             <h3 className="text-sm font-semibold text-gray-800">Custom Fields</h3>
-            <p className="text-xs text-gray-500">
+            <p className="hidden sm:block text-xs text-gray-500">
               Add your own fields, such as PO Number or Vehicle No. They appear while creating the
               documents you choose, and print on them.
             </p>
@@ -79,18 +79,18 @@ export default function DocumentCustomFields({ value = [], onChange }) {
         <div className="space-y-3">
           {fields.map((field) => (
             <div key={field.id} className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_150px_auto]">
+              <div className="grid grid-cols-[1fr_auto] items-center gap-3 sm:grid-cols-[1fr_150px_auto]">
                 <input
                   value={field.label}
                   onChange={(e) => update(field.id, { label: e.target.value })}
                   placeholder="Field name, e.g. PO Number"
                   maxLength={60}
-                  className={inputCls}
+                  className={`${inputCls} order-1 sm:order-none`}
                 />
                 <select
                   value={field.type}
                   onChange={(e) => update(field.id, { type: e.target.value })}
-                  className={inputCls}
+                  className={`${inputCls} order-3 col-span-2 sm:order-none sm:col-span-1`}
                 >
                   {FIELD_TYPES.map((t) => (
                     <option key={t.key} value={t.key}>
@@ -102,7 +102,7 @@ export default function DocumentCustomFields({ value = [], onChange }) {
                   type="button"
                   onClick={() => remove(field.id)}
                   title="Delete field"
-                  className="inline-flex h-[38px] w-[38px] items-center justify-center rounded-lg text-rose-600 hover:bg-rose-50"
+                  className="order-2 sm:order-none inline-flex h-[38px] w-[38px] items-center justify-center rounded-lg text-rose-600 hover:bg-rose-50"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -117,8 +117,8 @@ export default function DocumentCustomFields({ value = [], onChange }) {
                 />
               )}
 
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <span className="text-xs font-medium text-gray-500">Use on:</span>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:flex sm:flex-wrap sm:items-center sm:gap-x-4">
+                <span className="col-span-2 sm:col-auto text-xs font-medium text-gray-500">Use on:</span>
                 {CUSTOM_FIELD_DOC_TYPES.map((d) => (
                   <label key={d.key} className="inline-flex items-center gap-1.5 text-[13px] text-gray-700">
                     <input
@@ -130,7 +130,7 @@ export default function DocumentCustomFields({ value = [], onChange }) {
                     {d.label}
                   </label>
                 ))}
-                <label className="ml-auto inline-flex items-center gap-1.5 text-[13px] text-gray-700">
+                <label className="col-span-2 sm:col-auto sm:ml-auto mt-1 pt-2 border-t border-gray-200 sm:mt-0 sm:pt-0 sm:border-0 inline-flex items-center gap-1.5 text-[13px] text-gray-700">
                   <input
                     type="checkbox"
                     checked={field.showOnDocument !== false}

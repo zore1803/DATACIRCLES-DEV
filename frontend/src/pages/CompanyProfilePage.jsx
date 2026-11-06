@@ -843,9 +843,9 @@ const CompanyProfilePage = () => {
             Detail pages start at y=80 (<main> carries lg:pt-20), so they need
             48px here, unlike the list pages whose band is `fixed top-16 h-16`
             and therefore 64px. */}
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between gap-2 mb-2">
           {/* LEFT: Logo + Name + Address */}
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {/* Prev/next through whatever company list (search/filter results)
                 the user arrived from — absent on a direct link, so nothing
                 renders and there's no "browse everything" fallback. */}

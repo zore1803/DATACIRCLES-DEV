@@ -779,15 +779,15 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
       <AppToaster />
 
       {/* Header */}
-      <div className="relative flex items-center gap-1.5 lg:gap-3 mb-4">
-        <div className="flex items-center gap-1 lg:gap-2 flex-shrink-0">
+      <div className="relative flex flex-wrap items-center gap-2 lg:gap-3 mb-4">
+        <div className="flex items-center justify-between gap-1 lg:gap-2 order-1 flex-1 lg:flex-none lg:order-none min-w-0">
           <button
             onClick={() => goToPeriod(-1)}
             className="p-1 lg:p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <ChevronLeft className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-gray-600" />
           </button>
-          <span className="text-xs lg:text-sm font-semibold text-gray-900 max-w-[76px] lg:max-w-none lg:min-w-[90px] text-center truncate lg:whitespace-nowrap">
+          <span className="text-sm font-semibold text-gray-900 flex-1 lg:flex-none lg:min-w-[90px] text-center truncate lg:whitespace-nowrap">
             {periodLabel}
           </span>
           <button
@@ -798,7 +798,7 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
           </button>
         </div>
 
-        <div className="relative flex items-center bg-[#F1F1F5] gap-1.5 rounded-full p-1 flex-shrink-0 overflow-hidden">
+        <div className="relative flex items-center bg-[#F1F1F5] gap-1.5 rounded-full p-1 flex-shrink-0 overflow-hidden order-3 w-full lg:w-auto lg:order-none">
           <span
             className="absolute top-0.5 lg:top-1 bottom-0.5 lg:bottom-1 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
             style={{ left: viewIndicator.left, width: viewIndicator.width }}
@@ -808,7 +808,7 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
               key={mode}
               ref={(el) => (viewRefs.current[mode] = el)}
               onClick={() => setViewMode(mode)}
-              className={`relative z-10 px-2 lg:px-3 py-1 lg:py-1.5 rounded-full text-[11px] lg:text-sm font-medium capitalize transition-colors ${viewMode === mode
+              className={`relative z-10 flex-1 lg:flex-none px-2 lg:px-3 py-1.5 rounded-full text-xs lg:text-sm font-medium capitalize transition-colors ${viewMode === mode
                 ? "text-blue-600"
                 : "text-gray-500 hover:text-gray-700"
                 }`}
@@ -820,7 +820,7 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
 
         <button
           onClick={() => setCurrentDate(new Date())}
-          className={`px-2.5 lg:px-3 py-1 lg:py-1.5 border rounded-full text-[11px] lg:text-sm font-medium transition-colors flex-shrink-0 ${
+          className={`order-2 lg:order-none px-3 py-1.5 border rounded-full text-xs lg:text-sm font-medium transition-colors flex-shrink-0 ${
             isViewingToday
               ? "border-[#0085FF] bg-blue-50 text-[#0085FF]"
               : "border-gray-200 text-gray-600 hover:bg-gray-50"
@@ -829,7 +829,7 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
           Today
         </button>
 
-        <div className="relative flex items-center flex-1 min-w-0 rounded-full bg-white">
+        <div className="relative flex items-center flex-1 min-w-0 rounded-full bg-white order-4 lg:order-none">
           <SearchIcon className="absolute left-2.5 lg:left-3 -translate-y-1/2 lg: top-1/2 w-4 h-4 text-[#525866]" />
           <input
             ref={searchInputRef}
@@ -852,7 +852,7 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
 
         <button
           onClick={() => handleDayClick(today)}
-          className="w-8 h-8 lg:w-9 lg:h-9 flex items-center justify-center rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50 flex-shrink-0"
+          className="order-5 lg:order-none w-8 h-8 lg:w-9 lg:h-9 flex items-center justify-center rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50 flex-shrink-0"
           title="Add Event"
         >
           <CalendarAddIcon className="w-4 h-4" />
@@ -909,7 +909,7 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
               <div
                 key={key + idx}
                 className={`
-                  min-h-[148px] p-1 border-b border-r border-gray-200 last:border-r-0 relative transition-all
+                  min-h-[64px] lg:min-h-[148px] p-1 border-b border-r border-gray-200 last:border-r-0 relative transition-all
                   ${!isCurrentMonth
                     ? "bg-gray-50 text-gray-400"
                     : "bg-white text-gray-900"
@@ -920,11 +920,16 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
                   }
                   ${isToday ? "bg-gray-100 border-gray-300" : ""}
                 `}
-                onClick={() =>
-                  isCurrentMonth && isFuture && handleDayClick(date)
-                }
+                onClick={() => {
+                  // Phones: cells only show dots, so a tap opens that day's list (events + add buttons).
+                  if (typeof window !== "undefined" && window.innerWidth < 1024) {
+                    setActivityPopup({ isOpen: true, date, meetings: filteredMeetings, tasks: filteredTasks });
+                    return;
+                  }
+                  if (isCurrentMonth && isFuture) handleDayClick(date);
+                }}
               >
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-center lg:justify-between mb-1">
                   <span
                     className={`
                       text-xs
@@ -939,13 +944,26 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
                     {date.getDate()}
                   </span>
                   {hasHighPriority && (
-                    <span className="text-[9px] font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full">
+                    <span className="hidden lg:inline text-[9px] font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full">
                       High
                     </span>
                   )}
                 </div>
 
-                <div className="space-y-0.5">
+                {/* Phones: cells are ~48px wide, too narrow for event chips - one dot per item instead
+                    (blue meeting, green task), like the main Calendar page. */}
+                {totalItems > 0 && (
+                  <div className="flex lg:hidden flex-row flex-wrap justify-center gap-[3px]">
+                    {allDayItems.slice(0, 6).map(({ item, type }) => (
+                      <span
+                        key={item._id}
+                        style={{ width: 6, height: 6, borderRadius: "50%", background: type === "meeting" ? "#0085FF" : "#00C950" }}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                <div className="hidden lg:block space-y-0.5">
                   {visibleItems.map(({ item, type }) => (
                     <CompactEventCard
                       key={item._id}

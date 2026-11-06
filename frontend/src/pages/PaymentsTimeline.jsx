@@ -66,6 +66,10 @@ const KPI_BAND_HEIGHT = 104;
 // so they sit flush; hardcoding it left a 2px overlap and a 4px gap.
 const HEADER_HEIGHT = 144;
 const TOOLBAR_BOTTOM = 64 + HEADER_HEIGHT;
+// Phones: the account cards are hidden below sm, so the 144px header was mostly empty, and the
+// top bar is 54px tall rather than 64px. Everything below hangs off these instead.
+const PHONE_HEADER_HEIGHT = 64;
+const PHONE_TOP_BAR = 54;
 // The bulk-action strip gets its own band so it doesn't hide the account
 // cards — those balances are context you want while acting on rows.
 const BULK_STRIP_HEIGHT = 64;
@@ -108,6 +112,14 @@ const cellTextFor = (colId, doc) => {
 
 /* ─── Component ─────────────────────────────────────────────────────── */
 export default function PaymentsTimeline() {
+  const [isPhone, setIsPhone] = useState(() => typeof window !== "undefined" && window.innerWidth < 1024);
+  useEffect(() => {
+    const onResize = () => setIsPhone(window.innerWidth < 1024);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const headerHeight = isPhone ? PHONE_HEADER_HEIGHT : HEADER_HEIGHT;
+  const toolbarBottom = (isPhone ? PHONE_TOP_BAR : 64) + headerHeight;
   const [documents, setDocuments] = useState([]);
   const [accountsSummary, setAccountsSummary] = useState([]);
   // Unapplied credit — money received (or advanced) that hasn't been settled
@@ -578,6 +590,12 @@ export default function PaymentsTimeline() {
       isFiltered: false,
     };
   }, [filteredDocs, selectedIds, serverSummary, allSelectableDocs]);
+
+  // Phones: the KPI tiles are a 2-wide grid of stacked tiles (~62px each), so the fixed band is
+  // as tall as its rows need - 4 tiles = 2 rows, 5 (with Self Transfers) = 3.
+  const kpiTileCount = 4 + (Number(paymentStats.totalTransferred) > 0 ? 1 : 0);
+  const kpiRows = Math.ceil(kpiTileCount / 2);
+  const kpiBandHeight = isPhone ? kpiRows * 62 + (kpiRows - 1) * 12 + 28 : KPI_BAND_HEIGHT;
 
   const handleSelectAll = e =>
     setSelectedIds(e.target.checked ? filteredDocs.map(d => d._id) : []);
@@ -1158,17 +1176,17 @@ export default function PaymentsTimeline() {
           block stacked (name + video icon, subtitle below) instead of a
           single title+badge line. ──────────────────────────────────────── */}
       <div
-        className="fixed right-0 border-b border-[#E1E4EA] bg-white flex items-center justify-between gap-2 lg:gap-4 px-4 sm:px-6 lg:px-8 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
+        className="fixed right-0 border-b border-[#E1E4EA] bg-white flex items-center justify-between gap-2 lg:gap-4 px-4 sm:px-6 lg:pl-[26px] lg:pr-8 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
         style={{
           left: "var(--sidebar-width, 0px)",
           zIndex: 40,
-          height: `${HEADER_HEIGHT}px`,
-          minHeight: `${HEADER_HEIGHT}px`,
-          maxHeight: `${HEADER_HEIGHT}px`,
+          height: `${headerHeight}px`,
+          minHeight: `${headerHeight}px`,
+          maxHeight: `${headerHeight}px`,
           boxSizing: "border-box",
         }}
       >
-        <div className="flex flex-1 items-center gap-4 min-w-0 pr-4">
+        <div className={`flex items-center gap-4 min-w-0 overflow-hidden transition-opacity duration-300 ease-in-out flex-shrink-0 sm:flex-shrink sm:flex-1 sm:w-auto sm:opacity-100 sm:pr-4 sm:overflow-visible ${isSearchExpanded ? "w-0 opacity-0" : "w-[110px] opacity-100"}`}>
           {/* Scrollable Container for all Individual Cards — Total Funds + Wallet/Cash/Bank,
               ported from the signatures branch (cards now open the Account Detail ledger
               instead of navigating to Settings). */}
@@ -1176,6 +1194,7 @@ export default function PaymentsTimeline() {
             ref={cardsScrollRef}
             className="hover-scrollbar flex-1 flex items-center gap-4 overflow-x-auto h-full pt-[10px] pb-1 min-w-0"
           >
+            <h1 className="m-0 sm:hidden text-base font-bold text-gray-900 truncate">Payments</h1>
             {/* ── CARD: Total Available Funds ──────────────────────────────── */}
             {(() => {
               const isNegative = filteredTotal < 0;
@@ -1426,10 +1445,11 @@ export default function PaymentsTimeline() {
           </div>
         </div>
 
-        <div className="flex flex-row items-center gap-2 flex-shrink-0 min-w-0">
+        <div className="flex flex-row items-center justify-end gap-2 min-w-0 flex-1 sm:flex-none sm:flex-shrink-0">
           {/* Search — expands in place from the icon */}
+          <div className="relative flex-1 min-w-0 flex items-center justify-end sm:flex-none">
           <div
-            className={`relative h-10 flex items-center border ${searchQuery ? "border-[#0085FF]" : "border-[#E1E4EA]"} rounded-full bg-white transition-all duration-300 ease-in-out hover:bg-gray-50 focus-within:border-[#0085FF] focus-within:hover:bg-white ${isSearchExpanded ? "w-[220px] sm:w-[300px] lg:w-[380px]" : "w-10"} max-w-full flex-shrink-0`}
+            className={`relative h-10 flex items-center border ${searchQuery ? "border-[#0085FF]" : "border-[#E1E4EA]"} rounded-full bg-white transition-all duration-300 ease-in-out hover:bg-gray-50 focus-within:border-[#0085FF] focus-within:hover:bg-white ${isSearchExpanded ? "w-full sm:w-[300px] lg:w-[380px]" : "w-10"} max-w-full`}
           >
             <SearchIcon
               className="absolute left-3 text-[#525866] w-4 h-4 cursor-pointer z-10 flex-shrink-0 top-1/2 -translate-y-1/2"
@@ -1456,6 +1476,7 @@ export default function PaymentsTimeline() {
                 <X className="w-3.5 h-3.5" strokeWidth={2.5} />
               </button>
             )}
+          </div>
           </div>
 
           {/* Filter Button */}
@@ -1527,10 +1548,12 @@ export default function PaymentsTimeline() {
               setEditingPaymentItem(null);
               setIsPaymentModalOpen(true);
             }}
-            className="inline-flex items-center justify-center gap-2 h-10 px-4 bg-[#0085FF] text-white text-sm font-medium rounded-full hover:bg-blue-600 transition-colors flex-shrink-0 ml-1 cursor-pointer"
+            title="Add Payment"
+            aria-label="Add Payment"
+            className="inline-flex items-center justify-center gap-2 h-10 w-10 lg:w-auto px-0 lg:px-4 bg-[#0085FF] text-white text-sm font-medium rounded-full hover:bg-blue-600 transition-colors flex-shrink-0 ml-1 cursor-pointer"
           >
             <PlusIcon className="w-4 h-4 flex-shrink-0 text-white" />
-            <span className="whitespace-nowrap">Add Payment</span>
+            <span className="hidden lg:inline whitespace-nowrap">Add Payment</span>
           </button>
         </div>
       </div>
@@ -1542,11 +1565,11 @@ export default function PaymentsTimeline() {
           when the KPI band is hidden via the three-dot menu. ── */}
       {stripVisible && (
         <div
-          className="fixed right-0 box-border flex items-center bg-white border-b border-[#E1E4EA] px-4 sm:px-6 lg:px-8"
+          className="fixed right-0 box-border flex items-center bg-white border-b border-[#E1E4EA] px-4 sm:px-6 lg:pl-[26px] lg:pr-8"
           style={{
             left: "var(--sidebar-width, 0px)",
-            top: TOOLBAR_BOTTOM,
-            height: showStats ? KPI_BAND_HEIGHT : BULK_STRIP_HEIGHT,
+            top: toolbarBottom,
+            height: showStats ? kpiBandHeight : BULK_STRIP_HEIGHT,
             zIndex: 39,
             boxSizing: "border-box",
           }}
@@ -1577,10 +1600,10 @@ export default function PaymentsTimeline() {
           three-dot menu's Hide/Unhide KPIs item. ─────────────────────── */}
       {showStats && !stripVisible && (
         <div
-          className="fixed right-0 box-border flex flex-col justify-center bg-white border-b border-[#E1E4EA] px-6 py-6"
-          style={{ left: "var(--sidebar-width, 0px)", top: TOOLBAR_BOTTOM, height: KPI_BAND_HEIGHT, zIndex: 38, boxSizing: "border-box" }}
+          className="fixed right-0 box-border flex flex-col justify-center bg-white border-b border-[#E1E4EA] px-4 sm:px-6 lg:pl-[26px] py-3 lg:py-6"
+          style={{ left: "var(--sidebar-width, 0px)", top: toolbarBottom, height: kpiBandHeight, zIndex: 38, boxSizing: "border-box" }}
         >
-          <div className="grid grid-cols-2 lg:flex lg:flex-row lg:items-stretch gap-3 lg:gap-6">
+          <div className="grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:items-stretch lg:gap-6">
             {[
               { label: "Total Credit", value: `₹${paymentStats.totalCredit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, icon: TrendingUp, iconClass: "text-green-600" },
               { label: "Total Debit", value: `₹${paymentStats.totalDebit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, icon: TrendingDown, iconClass: "text-red-600" },
@@ -1597,13 +1620,14 @@ export default function PaymentsTimeline() {
                   }]
                 : []),
             ].map((kpi) => (
-              <StatTile
-                key={kpi.label}
-                tile={{
-                  ...kpi,
-                  label: `${kpi.label}${paymentStats.isFiltered ? " (selected)" : ""}`,
-                }}
-              />
+              <div key={kpi.label} className="min-w-0 lg:flex lg:flex-1">
+                <StatTile
+                  tile={{
+                    ...kpi,
+                    label: `${kpi.label}${paymentStats.isFiltered ? " (selected)" : ""}`,
+                  }}
+                />
+              </div>
             ))}
           </div>
         </div>
@@ -1619,9 +1643,9 @@ export default function PaymentsTimeline() {
           // other, never both), so this adds a single band's height —
           // whichever is currently showing — instead of summing them.
           top:
-            TOOLBAR_BOTTOM +
+            toolbarBottom +
             (showStats
-              ? KPI_BAND_HEIGHT
+              ? kpiBandHeight
               : stripVisible
                 ? BULK_STRIP_HEIGHT
                 : 0),
@@ -1731,7 +1755,7 @@ export default function PaymentsTimeline() {
                 <tr
                   key={doc._id}
                   className={`bg-white hover:bg-blue-50 transition-colors ${selectedIds.includes(doc._id) ? "!bg-blue-50" : ""}`}
-                  style={{ height: 37, maxHeight: 37 }}
+                  style={{ height: 44, maxHeight: 44 }}
                 >
                   {/* Selection cell */}
                   <td

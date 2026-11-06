@@ -95,7 +95,7 @@ const DocTypeCard = ({ def, rows, onOpen }) => {
       type="button"
       onClick={() => !empty && onOpen(def)}
       disabled={empty}
-      className={`group flex flex-col text-left bg-white border border-gray-200 rounded-xl p-4 min-h-[140px] h-full transition-all ${
+      className={`group flex flex-col text-left bg-white border border-gray-200 rounded-xl p-3 sm:p-4 min-h-[120px] sm:min-h-[140px] h-full transition-all min-w-0 ${
         empty ? "cursor-default" : "hover:shadow-md hover:border-[#0085FF] cursor-pointer"
       }`}
     >
@@ -156,7 +156,7 @@ const CategorySection = ({ title, subtitle, defs, docsByType, loading, onOpen, g
     </div>
     {subtitle && <p className="text-xs text-gray-400 mb-3">{subtitle}</p>}
     <div className="h-px bg-[#E5E7EB] mb-4" />
-    <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${gridClass} gap-3 auto-rows-fr`}>
+    <div className={`grid grid-cols-2 md:grid-cols-3 ${gridClass} gap-2 sm:gap-3 auto-rows-fr`}>
       {loading
         ? defs.map((d) => <DocTypeCardSkeleton key={d.key} />)
         : defs.map((def) => (

@@ -1744,7 +1744,7 @@ function ProductsServices() {
       <div className="bg-white overflow-visible">
         {/* Toolbar (Title + Search + Buttons) */}
         <div
-          className={`fixed right-0 h-16 px-4 sm:px-6 lg:px-8 border-b flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E1E4EA]`}
+          className={`fixed right-0 h-16 px-4 sm:px-6 lg:pl-[22px] lg:pr-[22px] border-b flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E1E4EA]`}
           style={{
             left: "var(--sidebar-width, 0px)",
             zIndex: 40,
@@ -2115,7 +2115,7 @@ function ProductsServices() {
                               setShowDetails(true);
                             }}
                             className={`bg-white hover:bg-blue-50 transition-colors cursor-pointer ${selectedItemsSet.has(row.original._id) ? "!bg-blue-50" : ""}`}
-                            style={{ height: 37, maxHeight: 37 }}
+                            style={{ height: 44, maxHeight: 44 }}
                           >
                             {row.getVisibleCells().map((cell) => {
                               const colId = cell.column.id;
@@ -2132,8 +2132,8 @@ function ProductsServices() {
                                   key={cell.id}
                                   style={{
                                     width: cell.column.getSize(),
-                                    height: "37px",
-                                    maxHeight: "37px",
+                                    height: "44px",
+                                    maxHeight: "44px",
                                     boxSizing: "border-box",
                                     position: isSticky ? "sticky" : "static",
                                     left: isLeftSticky ? pinnedLeftOffsets[colId] ?? 0 : "auto",

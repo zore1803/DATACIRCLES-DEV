@@ -42,7 +42,7 @@ export default function SlidingTabs({
           onClick={() => onChange(tab.key)}
           style={fill ? undefined : { width: itemWidth }}
           className={`relative z-10 py-2 text-sm font-semibold rounded-full whitespace-nowrap transition-colors ${
-            fill ? "flex-1 min-w-0 px-1 text-[13px]" : "flex-shrink-0"
+            fill ? "flex-1 min-w-0 px-1 text-[13px] truncate" : "flex-shrink-0"
           } ${value === tab.key ? "text-[#0085FF]" : "text-gray-500 hover:text-gray-700"}`}
         >
           {tab.label}

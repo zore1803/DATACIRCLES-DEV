@@ -12,25 +12,50 @@ const inputCls =
 // Each entry carries its label so an issued document keeps reading the same even
 // if the field is renamed or deleted later; values for fields that no longer
 // exist are kept as they are.
-export default function DocumentCustomFieldInputs({ docType, value, onChange }) {
-  const [defs, setDefs] = useState([]);
+// The fields switched on for `docType`. Forms that number their sections use this to
+// know whether the Custom Fields section exists, so later sections shift up/down.
+// One shared request for every consumer (the panel's section numbering and the inputs
+// themselves), remembered for the session so reopening a form shows the section at once
+// instead of popping in after a fetch. Refreshed in the background each time.
+let cachedDefs = null;
+let inflight = null;
+function loadDefs() {
+  if (!inflight) {
+    inflight = API.get("/document-settings")
+      .then((res) => {
+        cachedDefs = Array.isArray(res.data?.customFields) ? res.data.customFields : [];
+        return cachedDefs;
+      })
+      .catch(() => cachedDefs || [])
+      .finally(() => {
+        inflight = null;
+      });
+  }
+  return inflight;
+}
+// Call early (e.g. when the invoice drawer opens) to warm the cache.
+export const prefetchDocumentCustomFieldDefs = loadDefs;
+
+export function useDocumentCustomFieldDefs(docType) {
+  const [defs, setDefs] = useState(cachedDefs || []);
 
   useEffect(() => {
     let cancelled = false;
-    API.get("/document-settings")
-      .then((res) => {
-        if (!cancelled) setDefs(Array.isArray(res.data?.customFields) ? res.data.customFields : []);
-      })
-      .catch(() => {
-        if (!cancelled) setDefs([]);
-      });
+    loadDefs().then((d) => {
+      if (!cancelled) setDefs(d);
+    });
     return () => {
       cancelled = true;
     };
   }, []);
 
+  return defs.filter((f) => f.label && (!f.docTypes?.length || f.docTypes.includes(docType)));
+}
+
+// `header` (optional) replaces the plain "Custom Fields" label, e.g. a numbered SectionHeader.
+export default function DocumentCustomFieldInputs({ docType, value, onChange, header }) {
+  const fields = useDocumentCustomFieldDefs(docType);
   const current = Array.isArray(value) ? value : [];
-  const fields = defs.filter((f) => f.label && (!f.docTypes?.length || f.docTypes.includes(docType)));
   if (fields.length === 0) return null;
 
   const valueOf = (def) => current.find((c) => c.id === def.id)?.value ?? "";
@@ -43,7 +68,9 @@ export default function DocumentCustomFieldInputs({ docType, value, onChange }) 
 
   return (
     <div>
-      <p className="mb-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Custom Fields</p>
+      {header || (
+        <p className="mb-2 text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Custom Fields</p>
+      )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {fields.map((def) => (
           <div key={def.id}>
