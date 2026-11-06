@@ -319,17 +319,17 @@ export default function DocumentDetailModal({
           </div>
 
           {/* Tabs */}
-          <div className="mb-2 inline-flex rounded-full bg-[#ECEEF3] p-0.5">
+          <div className="mb-2 flex w-full sm:inline-flex sm:w-auto rounded-full bg-[#ECEEF3] p-0.5">
             {tabs.map((t) => (
               <button
                 key={t.id}
                 type="button"
                 onClick={() => setTab(t.id)}
-                className={`flex h-8 items-center gap-1.5 rounded-full px-4 text-xs font-medium transition-colors ${
+                className={`flex h-8 flex-1 sm:flex-none items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2 sm:px-4 text-xs font-medium transition-colors ${
                   tab === t.id ? "bg-white text-[#2B5BFF] shadow-sm" : "text-[#0E121B] hover:bg-white/60"
                 }`}
               >
-                <t.icon className="h-3.5 w-3.5" />
+                <t.icon className="hidden sm:block h-3.5 w-3.5" />
                 {t.label}
               </button>
             ))}

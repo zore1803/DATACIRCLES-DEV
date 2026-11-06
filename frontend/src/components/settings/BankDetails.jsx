@@ -230,10 +230,12 @@ const BankDetails = () => {
             <button
               type="button"
               onClick={handleOpenAdd}
-              className="inline-flex items-center gap-2 h-[38px] rounded-full bg-[#0085FF] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 sm:gap-2 h-[38px] rounded-full bg-[#0085FF] px-3 sm:px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 whitespace-nowrap flex-shrink-0"
             >
               <PlusIcon className="w-4 h-4" />
-              Add Bank Details
+              {/* Phones: short labels so both buttons fit the header strip. */}
+              <span className="hidden sm:inline">Add Bank Details</span>
+              <span className="sm:hidden">Bank</span>
             </button>
             <button
               type="button"
@@ -241,10 +243,11 @@ const BankDetails = () => {
                 setEditingCard(null);
                 setIsCardModalOpen(true);
               }}
-              className="inline-flex items-center gap-2 h-[38px] rounded-full bg-[#0085FF] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 sm:gap-2 h-[38px] rounded-full bg-[#0085FF] px-3 sm:px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 whitespace-nowrap flex-shrink-0"
             >
               <PlusIcon className="w-4 h-4" />
-              Add Credit Card
+              <span className="hidden sm:inline">Add Credit Card</span>
+              <span className="sm:hidden">Card</span>
             </button>
           </>,
           document.getElementById('settings-header-actions')

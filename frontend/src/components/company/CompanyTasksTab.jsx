@@ -147,6 +147,8 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
   } = useFillToBottom();
 
   const [searchTerm, setSearchTerm] = useState("");
+  // Phones: the search is a 44px circle that slides open when tapped (same as the Deals tab).
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
@@ -830,7 +832,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
       {/* KPI Tiles */}
       {showStats && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
             {isLoading ? (
               Array.from({ length: 4 }).map((_, i) => <StatTileSkeleton key={i} />)
             ) : (
@@ -864,15 +866,18 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
           onCancel={clearSelection}
         />
       ) : (
-        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
-          <div className="relative flex-1 min-w-[180px] h-[44px]">
-            <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 lg:gap-4 mb-4" style={{ minHeight: "44px" }}>
+          <div className="relative h-[44px] max-lg:flex-1 max-lg:min-w-0 lg:flex-1 lg:min-w-[180px]">
+          <div className={`relative h-full transition-all duration-300 ease-in-out max-lg:rounded-full max-lg:border max-lg:bg-white lg:w-full ${mobileSearchOpen || searchTerm ? "w-full max-lg:border-[#0085FF]" : "w-11 max-lg:border-[rgba(31,41,55,0.1)]"}`}>
+            <SearchIcon className="absolute left-3.5 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866] z-10 pointer-events-none" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              onFocus={() => setMobileSearchOpen(true)}
+              onBlur={() => { if (!searchTerm) setMobileSearchOpen(false); }}
               placeholder="Search by tasks..."
-              className="w-full h-full pl-11 pr-3.5 border border-[rgba(31,41,55,0.1)] rounded-full text-sm focus:outline-none focus:border-[#0085FF]"
+              className={`w-full h-full pl-11 pr-3.5 lg:border rounded-full text-sm focus:outline-none lg:focus:border-[#0085FF] bg-transparent cursor-pointer lg:cursor-text lg:opacity-100 lg:border-[rgba(31,41,55,0.1)] ${mobileSearchOpen || searchTerm ? "opacity-100 cursor-text" : "opacity-0"}`}
             />
             {searchTerm && (
               <button
@@ -883,6 +888,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
                 <X size={16} />
               </button>
             )}
+          </div>
           </div>
           <ToolbarFilterGroup
             isOpen={showFilterPanel}
@@ -912,7 +918,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
           <button
             onClick={() => setShowFilterPanel((open) => !open)}
             aria-expanded={showFilterPanel}
-            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+            className={`relative max-lg:ml-auto flex items-center justify-center gap-2 px-0 w-11 lg:w-auto lg:px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
               }`}
             style={{
               height: "44px",
@@ -920,7 +926,7 @@ export default function CompanyTasksTab({ companyId, contactId, dealId, tasks = 
             }}
           >
             <FilterIcon size={16} />
-            Filter
+            <span className="hidden lg:inline">Filter</span>
             {Object.values(selectedFilters).flat().length + dueDateFilterCount > 0 && (
               <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full ring-2 ring-white">
                 {Object.values(selectedFilters).flat().length + dueDateFilterCount}

@@ -715,13 +715,13 @@ const EmailNotifications = () => {
 
       {/* Notification Settings */}
       <div className="bg-white rounded-2xl border-2 border-gray-200 shadow-lg">
-        <div className="p-6 border-b-2 border-gray-100">
-          <div className="flex items-center gap-3 mb-2">
-            <h2 className="text-xl font-bold text-gray-900">
+        <div className="p-4 sm:p-6 border-b-2 border-gray-100">
+          <div className="flex items-center gap-3 mb-1 sm:mb-2">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900">
               Notification Preferences
             </h2>
           </div>
-          <p className="text-sm text-gray-600 leading-relaxed">
+          <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
             Choose which activities should trigger automatic email notifications
             to your team
           </p>
@@ -729,11 +729,11 @@ const EmailNotifications = () => {
 
         <div className="divide-y divide-gray-200">
           {notificationTypes.map((type) => (
-            <div key={type.id} className="p-6 hover:bg-gray-50 transition-colors">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-start gap-4 flex-1">
+            <div key={type.id} className="p-4 sm:p-6 hover:bg-gray-50 transition-colors">
+              <div className="flex flex-row items-start md:items-center justify-between gap-3 md:gap-4">
+                <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
                   <div
-                    className={`p-3 rounded-xl ${type.bgColor} border-2 ${type.borderColor} shadow-sm`}
+                    className={`p-2 sm:p-3 flex-shrink-0 rounded-xl ${type.bgColor} border-2 ${type.borderColor} shadow-sm`}
                   >
                     <div className={type.color}>{type.icon}</div>
                   </div>
@@ -749,7 +749,7 @@ const EmailNotifications = () => {
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-600 leading-relaxed">
+                    <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
                       {type.description}
                     </p>
                   </div>
@@ -774,7 +774,7 @@ const EmailNotifications = () => {
               </div>
 
               {emailSettings[type.id] && (
-                <div className="mt-4 ml-16 p-4 bg-green-50 border-2 border-green-200 rounded-xl">
+                <div className="mt-3 sm:mt-4 ml-0 sm:ml-16 p-3 sm:p-4 bg-green-50 border-2 border-green-200 rounded-xl">
                   <div className="flex items-start gap-3">
                     <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                     <div>
@@ -794,10 +794,10 @@ const EmailNotifications = () => {
           ))}
 
           {/* Deals Section */}
-          <div className="p-6 hover:bg-gray-50 transition-colors">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-              <div className="flex items-start gap-4 flex-1">
-                <div className="p-3 rounded-xl bg-purple-50 border-2 border-purple-200 shadow-sm">
+          <div className="p-4 sm:p-6 hover:bg-gray-50 transition-colors">
+            <div className="flex flex-row items-start md:items-center justify-between gap-3 md:gap-4 mb-4">
+              <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+                <div className="p-2 sm:p-3 flex-shrink-0 rounded-xl bg-purple-50 border-2 border-purple-200 shadow-sm">
                   <Briefcase className="w-5 h-5 text-purple-600" />
                 </div>
                 <div className="flex-1">
@@ -812,7 +812,7 @@ const EmailNotifications = () => {
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-gray-600 leading-relaxed">
+                  <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
                     Get notified when deals move between pipeline stages
                   </p>
                 </div>
@@ -835,7 +835,7 @@ const EmailNotifications = () => {
             </div>
 
             {emailSettings.deals && (
-              <div className="mt-4 ml-16">
+              <div className="mt-4 ml-0 sm:ml-16">
                 <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-5">
                   <div className="flex items-center gap-2 mb-4">
                     <ArrowRight className="w-5 h-5 text-purple-600" />

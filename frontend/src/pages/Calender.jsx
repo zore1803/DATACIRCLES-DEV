@@ -483,6 +483,17 @@ const AdminCalendar = () => {
   }, [filterOpen, moreOpen, headerAddPos]);
 
   const handleDayClick = (e, date) => {
+    // Phones: a tap opens that day's list (the cells only show dots there, so this is the only way
+    // to reach the meetings and tasks on a day).
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      const key = date.toDateString();
+      setDayDetail({
+        date,
+        meetings: visibleMeetings[key] || [],
+        tasks: visibleTasks[key] || [],
+      });
+      return;
+    }
     // Open quick add menu at click position
     if (!quickAddPos) {
       const rect = e.currentTarget.getBoundingClientRect();
@@ -1419,12 +1430,14 @@ const AdminCalendar = () => {
                         setDayDetail(null);
                         handleEventClick(m, "meeting");
                       }}
-                      className="flex items-center gap-2 p-2 bg-gray-50 hover:bg-gray-100 rounded-md cursor-pointer text-sm mb-1"
+                      className="flex items-center gap-2 p-2 hover:brightness-95 rounded-md cursor-pointer text-sm mb-1"
+                      // Same blue as the meeting dot on the calendar cell.
+                      style={{ background: "#E7EFFF", color: "#0952E7" }}
                     >
-                      <TeamIcon className="w-3 h-3 text-gray-600 flex-shrink-0" />
+                      <TeamIcon className="w-3 h-3 flex-shrink-0" style={{ color: "#0085FF" }} />
                       <span className="truncate flex-1">{m.title}</span>
                       {m.scheduledAt && (
-                        <span className="text-[11px] text-gray-500 flex-shrink-0">
+                        <span className="text-[11px] flex-shrink-0" style={{ color: "#0952E7" }}>
                           {new Date(m.scheduledAt).toLocaleTimeString(undefined, {
                             hour: "2-digit",
                             minute: "2-digit",
@@ -1442,19 +1455,24 @@ const AdminCalendar = () => {
               {dayDetail.tasks.length === 0 ? (
                 <p className="text-xs text-gray-500">No tasks scheduled.</p>
               ) : (
-                dayDetail.tasks.map((t) => (
-                  <div
-                    key={t._id}
-                    onClick={() => {
-                      setDayDetail(null);
-                      handleEventClick(t, "task");
-                    }}
-                    className="flex items-center gap-2 p-2 bg-gray-50 hover:bg-gray-100 rounded-md cursor-pointer text-sm mb-1"
-                  >
-                    <CheckCircle2 className="w-3 h-3 text-gray-600 flex-shrink-0" />
-                    <span className="truncate flex-1">{t.title}</span>
-                  </div>
-                ))
+                dayDetail.tasks.map((t) => {
+                  // Same colour as this task's dot on the calendar cell: its priority colour, else green.
+                  const dot = { high: "#CD3636", medium: "#B77B00", low: "#2E9E4F" }[t.priority?.toLowerCase()] || "#00C950";
+                  return (
+                    <div
+                      key={t._id}
+                      onClick={() => {
+                        setDayDetail(null);
+                        handleEventClick(t, "task");
+                      }}
+                      className="flex items-center gap-2 p-2 hover:brightness-95 rounded-md cursor-pointer text-sm mb-1"
+                      style={{ background: `${dot}1A`, color: dot }}
+                    >
+                      <CheckCircle2 className="w-3 h-3 flex-shrink-0" style={{ color: dot }} />
+                      <span className="truncate flex-1">{t.title}</span>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>

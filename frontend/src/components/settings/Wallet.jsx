@@ -6,6 +6,7 @@ import PlusIcon from "../common/PlusIcon";
 // here reads or changes plan state. Pricing (credit value, GST) always comes
 // from the backend; this component never computes what will be charged.
 import React, { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowUpRight,
   ArrowDownRight,
@@ -280,12 +281,12 @@ const Wallet = () => {
   return (
     <div className="space-y-5">
       {/* Balance + what credits are for */}
-      <div className="grid gap-5 lg:grid-cols-4">
+      <div className="grid gap-5 grid-cols-[minmax(0,1fr)] lg:grid-cols-4">
         {/* Top-up */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 lg:col-span-3">
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-6 lg:col-span-3 min-w-0">
+        <div className="grid gap-5 grid-cols-[minmax(0,1fr)] lg:grid-cols-2">
           {/* Left column — pick an amount, then confirm the purchase */}
-          <div className="flex h-full flex-col">
+          <div className="flex h-full flex-col min-w-0">
             <p className="text-sm font-semibold text-gray-900">Add credits</p>
             <p className="mt-0.5 text-xs text-gray-500">
               Choose a quick amount or enter your own.
@@ -336,7 +337,7 @@ const Wallet = () => {
                 </label>
               </div>
               <div
-                className={`flex items-center gap-2 transition-opacity ${
+                className={`grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap transition-opacity ${
                   applyConvertedAmount ? "" : "pointer-events-none opacity-40"
                 }`}
               >
@@ -346,14 +347,14 @@ const Wallet = () => {
                   disabled={!applyConvertedAmount}
                   value={convertAmount}
                   onChange={(e) => setConvertAmount(e.target.value)}
-                  className="w-20 h-[34px] rounded-full border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  className="order-1 sm:order-none w-full sm:w-20 min-w-0 h-[34px] rounded-full border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                 />
                 <CustomDropdown
                   options={CONVERTER_CURRENCIES}
                   value={convertFrom}
                   onChange={setConvertFrom}
                   searchable
-                  className="w-24"
+                  className="order-2 sm:order-none w-full sm:w-24"
                   buttonClassName="w-full h-[34px] rounded-full border border-gray-300 bg-white px-3 text-sm text-gray-700 flex items-center justify-between outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                 />
                 <button
@@ -364,7 +365,7 @@ const Wallet = () => {
                     setConvertFrom(convertTo);
                     setConvertTo(convertFrom);
                   }}
-                  className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-500 hover:bg-gray-50"
+                  className="order-3 sm:order-none col-span-2 justify-self-center sm:justify-self-auto flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-500 hover:bg-gray-50"
                 >
                   <ArrowLeftRight className="h-3.5 w-3.5" />
                 </button>
@@ -373,11 +374,11 @@ const Wallet = () => {
                   value={convertTo}
                   onChange={setConvertTo}
                   searchable
-                  className="w-24"
+                  className="order-5 sm:order-none w-full sm:w-24"
                   buttonClassName="w-full h-[34px] rounded-full border border-gray-300 bg-white px-3 text-sm text-gray-700 flex items-center justify-between outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                 />
-                <span className="text-sm font-semibold text-gray-900">
-                  ={" "}
+                <span className="order-4 sm:order-none flex h-[34px] min-w-0 items-center rounded-full border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-900 sm:h-auto sm:border-0 sm:bg-transparent sm:px-0">
+                  <span className="hidden sm:inline">={" "}</span>
                   {convertLoading
                     ? "…"
                     : convertedAmount !== null
@@ -425,9 +426,9 @@ const Wallet = () => {
 
           {/* Right column — balance on top, payment summary below, stacked
               flush with no gap between them. */}
-          <div className="flex flex-col items-end gap-5">
+          <div className="flex flex-col items-stretch lg:items-end gap-5 min-w-0">
             <div
-              className="relative w-[85%] overflow-hidden rounded-2xl p-5 text-white shadow-sm"
+              className="relative w-full lg:w-[85%] overflow-hidden rounded-2xl p-5 text-white shadow-sm"
               style={{ background: "linear-gradient(to bottom right, #0085FF, #0066CC)" }}
             >
               <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-white/10" />
@@ -447,7 +448,7 @@ const Wallet = () => {
               </div>
             </div>
 
-            <div className="w-[85%] rounded-xl border border-gray-100 bg-gray-50/60 p-4">
+            <div className="w-full lg:w-[85%] rounded-xl border border-gray-100 bg-gray-50/60 p-4">
               <p className="mb-3 text-xs font-medium text-gray-600">Payment summary</p>
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between">
@@ -475,7 +476,7 @@ const Wallet = () => {
         </div>
         </div>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 lg:col-span-1">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-6 lg:col-span-1 min-w-0">
           <div className="mb-1 flex items-center justify-between">
             <p className="text-sm font-semibold text-gray-900">Where credits apply</p>
             <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
@@ -529,8 +530,8 @@ const Wallet = () => {
         </div>
       </div>
 
-      {reminderOpen && (
-        <div
+      {reminderOpen &&
+        createPortal(        <div
           className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/20 backdrop-blur-sm p-4"
           onClick={() => !savingReminder && setReminderOpen(false)}
         >
@@ -599,8 +600,9 @@ const Wallet = () => {
               </div>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body,
+        )}
 
       {/* Ledger */}
       <div className="rounded-2xl border border-gray-200 bg-white">

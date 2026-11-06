@@ -2958,7 +2958,7 @@ const Accounting = ({ fixedTab = null }) => {
                   }}
                   className={`cursor-pointer bg-white hover:bg-blue-50 transition-colors ${selectedIds.includes(doc._id) ? "!bg-blue-50" : ""
                     }`}
-                  style={{ height: 37, maxHeight: 37 }}
+                  style={{ height: 44, maxHeight: 44 }}
                 >
                   <td
                     style={{

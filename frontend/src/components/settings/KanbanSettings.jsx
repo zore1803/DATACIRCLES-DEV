@@ -320,7 +320,7 @@ export default function KanbanSettings({ embedded = false }) {
   }
 
   return (
-    <div className={embedded ? "space-y-4" : "space-y-6 -mt-8"}>
+    <div className={embedded ? "space-y-4" : "space-y-6 -mt-1 lg:-mt-8"}>
       <AppToaster />
 
       <div className={embedded ? "" : "bg-white rounded-2xl border border-gray-200 shadow-sm p-6"}>

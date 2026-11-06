@@ -1688,7 +1688,7 @@ function Vendors() {
                     className={`bg-white hover:bg-blue-50 transition-colors ${
                       selectedVendors.includes(vendor._id) ? "!bg-blue-50" : ""
                     }`}
-                    style={{ height: 37, maxHeight: 37 }}
+                    style={{ height: 44, maxHeight: 44 }}
                   >
                     <td
                       style={{

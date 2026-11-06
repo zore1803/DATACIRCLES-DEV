@@ -341,7 +341,7 @@ function DealDetail() {
 
       <div className="mx-auto">
         {/* Header Section — same 48px band as the company/contact pages. */}
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between gap-2 mb-2">
           {/* LEFT: Avatar + Title + Company */}
           <div className="flex items-center gap-3 min-w-0">
             {dealIds && (
@@ -358,8 +358,10 @@ function DealDetail() {
             )}
 
             <div className="min-w-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <h1 className="text-base font-semibold text-gray-900 truncate">
+              {/* Phones: the deal name gets its own line, with the status and company chips wrapping
+                  underneath it, so the chips can't squeeze the name out of view. */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+                <h1 className="max-lg:basis-full max-w-full text-base font-semibold text-gray-900 truncate">
                   {deal.title}
                 </h1>
                 <StatusBadge status={deal.status} />

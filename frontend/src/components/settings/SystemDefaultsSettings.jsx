@@ -208,7 +208,7 @@ function SystemDefaultsSettings() {
   }
 
   return (
-    <div className="space-y-6 -mt-8">
+    <div className="space-y-6 -mt-1 lg:-mt-8">
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
         <div className="relative inline-flex items-center bg-gray-100 rounded-full p-1 mb-5">
           <span

@@ -112,7 +112,7 @@ const DealsTable = ({ deals = [], contact, company, onDealCreated, title = "Asso
         <div className="border border-[#E1E4EA] rounded-lg overflow-hidden">
           <div className="overflow-x-auto overflow-y-auto max-h-[248px]">
             <table className="w-full min-w-full text-sm text-left border-separate border-spacing-0">
-              <thead className="sticky top-0 z-20">
+              <thead className={`sticky top-0 z-20 ${(deals?.length || 0) === 0 ? "max-lg:hidden" : ""}`}>
                 <tr>
                   {["Deal Name", "Stage", "Amount", "Last Updated", "Company"].map((label, i, arr) => (
                     <th
@@ -177,6 +177,7 @@ const DealsTable = ({ deals = [], contact, company, onDealCreated, title = "Asso
                         icon={Handshake}
                         noun="Deal"
                         onCreate={() => setShowQuickDealForm(true)}
+                        hideCreateOnMobile
                         className="!py-8"
                       />
                     </td>

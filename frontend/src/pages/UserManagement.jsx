@@ -567,7 +567,7 @@ function UserManagement() {
   };
 
   return (
-    <div className="space-y-6 -mt-10 lg:-mt-12">
+    <div className="space-y-6 -mt-3 lg:-mt-12">
       <AppToaster />
       <div className="flex flex-col gap-6">
         {/* TOP ROW: Organization Code / Seat Usage / Pending Invitations */}
@@ -675,13 +675,13 @@ function UserManagement() {
 
       {/* Header */}
       <div className="flex flex-row justify-between items-center gap-4 shrink-0">
-        <p className="text-sm font-semibold text-neutral-700">
+        <p className="text-xs sm:text-sm font-semibold text-neutral-700 min-w-0">
           Add your staff. Assign Roles. Multiply your business.
         </p>
         <button
           onClick={() => setFormVisible(!formVisible)}
           disabled={paymentProcessing}
-          className={`flex items-center gap-1.5 text-sm font-semibold px-3.5 py-1.5 rounded-lg cursor-pointer transition-all ${
+          className={`flex items-center gap-1.5 text-sm font-semibold px-3.5 py-1.5 rounded-lg cursor-pointer transition-all whitespace-nowrap flex-shrink-0 ${
             formVisible
               ? "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
               : "bg-[#0085FF] hover:bg-[#0072db] text-white"

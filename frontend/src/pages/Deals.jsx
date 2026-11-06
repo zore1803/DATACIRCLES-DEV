@@ -2630,7 +2630,7 @@ function Deals() {
 
       {showStats && (
         <div
-          className="fixed right-0 box-border flex flex-col justify-start items-start bg-white border-b border-[#E1E4EA] top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))] h-[156px] lg:h-[104px] px-4 sm:px-6 lg:pl-[22px] lg:pr-[22px] py-4 lg:py-6"
+          className="fixed right-0 box-border flex flex-col justify-start items-start bg-white border-b border-[#E1E4EA] top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))] h-[196px] lg:h-[104px] px-4 sm:px-6 lg:pl-[22px] lg:pr-[22px] py-3 lg:py-6"
           style={{
             left: "var(--sidebar-width, 0px)",
             zIndex: 39,
@@ -2668,7 +2668,7 @@ function Deals() {
           table 32px further below the KPI strip. */}
       <div
         className={`-mx-4 sm:-mx-6 lg:-mx-8 px-6 pb-6 ${showStats
-            ? showKanban ? "mt-[286px] lg:mt-[168px]" : "mt-[270px] lg:mt-[152px]"
+            ? showKanban ? "mt-[326px] lg:mt-[168px]" : "mt-[310px] lg:mt-[152px]"
             : showKanban ? "mt-16" : "mt-12"
           }`}
       >
@@ -2831,7 +2831,7 @@ function Deals() {
 
             <div
               ref={tableScrollRef}
-              className="overflow-x-auto overflow-y-auto top-[calc(118px+156px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+104px+var(--dc-offline-offset,0px))]"
+              className="overflow-x-auto overflow-y-auto top-[calc(118px+196px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+104px+var(--dc-offline-offset,0px))]"
               style={{
                 // Edge-to-edge fixed pane bounded between the KPI strip
                 // (118/156 mobile, 128/104 desktop — its own top+height, so

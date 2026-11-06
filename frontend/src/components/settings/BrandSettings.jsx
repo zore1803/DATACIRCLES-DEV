@@ -388,7 +388,9 @@ function BrandSettings() {
 
       {/* Fields sit directly on the page — no card wrapper — matching
           Profile.jsx's layout. */}
-      <form onSubmit={handleSubmit}>
+      {/* Phones: the fields sit inside a bordered card with its own padding, so they read as
+          contained instead of running edge to edge. md and up keeps the original open layout. */}
+      <form onSubmit={handleSubmit} className="p-4 border border-gray-200 rounded-2xl bg-white md:p-0 md:border-0 md:rounded-none md:bg-transparent">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {/* Company Name */}
           <div ref={companyNameRef}>
@@ -603,11 +605,11 @@ function BrandSettings() {
               {savedAddresses.map((a) => (
                 <div
                   key={a._id}
-                  className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 flex items-center justify-between gap-3"
+                  className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 flex items-start sm:items-center justify-between gap-3"
                 >
-                  <div className="min-w-0">
-                    {a.title && <span className="font-semibold text-gray-900 mr-2">{a.title}</span>}
-                    <span className="truncate">{summarizeAddress(a)}</span>
+                  <div className="min-w-0 flex-1">
+                    {a.title && <span className="block sm:inline font-semibold text-gray-900 sm:mr-2">{a.title}</span>}
+                    <span className="break-words">{summarizeAddress(a)}</span>
                   </div>
                   {a.isDefault && (
                     <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#E3F1FF] text-[#0085FF] flex-shrink-0">

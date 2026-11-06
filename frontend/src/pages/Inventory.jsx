@@ -1243,13 +1243,13 @@ export default function Inventory() {
                 <tr
                   key={item._id}
                   className={`bg-white hover:bg-blue-50 transition-colors ${selectedIds.includes(item._id) ? "!bg-blue-50" : ""}`}
-                  style={{ height: 37, maxHeight: 37 }}
+                  style={{ height: 44, maxHeight: 44 }}
                 >
                   <td
                     style={{
                       width: colWidths.selection,
-                      height: "37px",
-                      maxHeight: "37px",
+                      height: "44px",
+                      maxHeight: "44px",
                       boxSizing: "border-box",
                       position: "sticky",
                       left: 0,

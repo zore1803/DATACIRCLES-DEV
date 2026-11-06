@@ -13,9 +13,10 @@ function UsageBar({ label, used, limit, unit = "", unlimited = false }) {
   const isOverLimit = !unlimited && pct >= 100;
 
   return (
-    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium text-gray-700">{label}</span>
+    <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 sm:p-4 min-w-0">
+      {/* Phones are 2 tiles per row, so the label sits above the figure instead of beside it. */}
+      <div className="flex flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:justify-between sm:gap-0 mb-2">
+        <span className="text-xs sm:text-sm font-medium text-gray-700">{label}</span>
         <span
           className={`text-xs font-semibold ${
             isOverLimit ? "text-red-600" : isNearLimit ? "text-amber-600" : "text-gray-900"
@@ -67,14 +68,14 @@ function DataAdministration() {
   return (
     <div className="space-y-6">
       <div className="bg-white border-2 border-gray-200 shadow-xl rounded-2xl overflow-hidden">
-        <div className="p-8 border-b-2 border-gray-100 flex items-start justify-between gap-4 flex-wrap">
+        <div className="p-4 sm:p-8 border-b-2 border-gray-100 flex items-start justify-between gap-3 sm:gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="bg-blue-50 p-2.5 rounded-xl">
-              <Database className="w-6 h-6 text-blue-600" />
+            <div className="bg-blue-50 p-2 sm:p-2.5 rounded-xl flex-shrink-0">
+              <Database className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Data Administration</h2>
-              <p className="text-sm text-gray-600">
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-xl font-bold text-gray-900">Data Administration</h2>
+              <p className="text-xs sm:text-sm text-gray-600">
                 {overview ? `You're on the ${overview.planName} plan. ` : ""}
                 See what your plan includes and how much of it you've used.
               </p>
@@ -85,24 +86,24 @@ function DataAdministration() {
               (gradient, icon badge, decorative circles), just shorter, so
               buying an add-on's cost is visible against what's actually
               available to spend without leaving this page. */}
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 px-5 py-3.5 text-white shadow-sm flex-shrink-0 w-full sm:w-auto">
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 px-3 sm:px-5 py-2 sm:py-3.5 text-white shadow-sm flex-shrink-0 w-full sm:w-auto">
             <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-white/10" />
             <div className="pointer-events-none absolute -bottom-8 -left-4 h-16 w-16 rounded-full bg-white/5" />
-            <div className="relative flex items-center gap-4">
+            <div className="relative flex items-center justify-between sm:justify-start gap-3 sm:gap-4">
               <div className="flex items-center gap-2.5">
                 <div className="rounded-lg bg-white/20 p-1.5 backdrop-blur-sm">
                   <WalletIcon className="h-4 w-4" />
                 </div>
                 <div>
                   <p className="text-xs font-medium text-emerald-50 leading-tight">Wallet Balance</p>
-                  <p className="text-2xl font-bold leading-tight tracking-tight">
+                  <p className="text-lg sm:text-2xl font-bold leading-tight tracking-tight">
                     {walletLoading ? "…" : wallet ? wallet.balance.toFixed(2) : "—"}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => navigate("/settings/wallet")}
-                className="flex items-center gap-1 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors flex-shrink-0"
+                className="flex items-center gap-1 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white text-[11px] sm:text-xs font-semibold px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-colors flex-shrink-0"
               >
                 <PlusIcon className="w-4 h-4" />
                 Add Money
@@ -111,7 +112,7 @@ function DataAdministration() {
           </div>
         </div>
 
-        <div className="p-8">
+        <div className="p-4 sm:p-8">
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
@@ -122,7 +123,7 @@ function DataAdministration() {
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 <UsageBar
                   label={overview.adminSeats.label}
                   used={overview.adminSeats.used}

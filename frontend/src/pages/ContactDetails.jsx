@@ -401,9 +401,9 @@ const ContactDetailsPage = () => {
         {/* Header Section — 48px total (40px content + mb-2) so the strip's
             bottom edge lands on the same line as the sidebar switcher's
             bottom border, matching the company page. */}
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between gap-2 mb-2">
           {/* LEFT: Avatar + Name + Company/Address */}
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {/* Prev/next through whatever contact list (search/filter results)
                 the user arrived from — absent on a direct link. */}
             {currentContactIds.length > 0 && (
@@ -426,8 +426,9 @@ const ContactDetailsPage = () => {
             />
 
             <div className="min-w-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <h1 className="text-base font-semibold text-gray-900 truncate">
+              {/* Phones: the company chip drops under the name so the name isn't squeezed to one letter. */}
+              <div className="flex flex-col items-start gap-0.5 lg:flex-row lg:items-center lg:gap-2 min-w-0">
+                <h1 className="max-w-full text-base font-semibold text-gray-900 truncate">
                   {contact.name}
                 </h1>
                 {company && (

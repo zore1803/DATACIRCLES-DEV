@@ -343,11 +343,12 @@ export default function AccountingFieldSettings() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="mb-1 flex items-center gap-2">
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-6 shadow-sm">
+        {/* Phones: heading and intro hidden - the Settings header strip already shows the title. */}
+        <div className="mb-1 hidden sm:flex items-center gap-2">
           <h2 className="text-lg font-bold text-gray-900">Accounting Fields</h2>
         </div>
-        <p className="mb-5 text-sm text-gray-500">
+        <p className="mb-5 hidden sm:block text-sm text-gray-500">
           Add your own fields to invoices, pro forma invoices, quotations and delivery challans. A new field
           appears straight away as a column in that list and as an input on the document form.
         </p>

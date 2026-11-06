@@ -551,11 +551,12 @@ const Settings = () => {
     // outer gutters, title strip aligned with the sidebar switcher.
     return (
       <div
-        className="min-h-screen bg-white"
+        // Negative margins mirror the page container's own padding (px-4 / sm:px-6 / lg:px-8). They
+        // used to be a fixed -32px, which on a phone (16px padding) pulled the content 16px past
+        // the screen edge and left no side padding at all.
+        className="min-h-screen bg-white -mx-4 sm:-mx-6 lg:-mx-8"
         style={{
           marginTop: -24,
-          marginLeft: -32,
-          marginRight: -32,
           boxSizing: "border-box",
         }}
       >
@@ -584,7 +585,7 @@ const Settings = () => {
                 <div className="h-6 w-px bg-gray-200 flex-shrink-0" />
               </>
             )}
-            <div id="settings-header-title" className="min-w-0 max-w-[150px] sm:max-w-none">
+            <div id="settings-header-title" className={`min-w-0 ${activeSection.id === "forms" ? "max-w-[150px] sm:max-w-none" : ""}`}>
               <h1 className="m-0 leading-tight font-bold text-base sm:text-lg text-gray-900 truncate">
                 {activeSection.label}
               </h1>
@@ -597,7 +598,7 @@ const Settings = () => {
                 shell is shared by every settings tab, so a child section
                 can't render into it via normal composition. Empty for any
                 tab that doesn't use it. */}
-            <div id="settings-header-actions" className="ml-auto min-w-0 flex-1 sm:flex-none sm:flex-shrink-0 flex items-center justify-end gap-3" />
+            <div id="settings-header-actions" className={`ml-auto min-w-0 flex items-center justify-end gap-3 ${activeSection.id === "forms" ? "flex-1 sm:flex-none sm:flex-shrink-0" : "flex-shrink-0"}`} />
           </div>
         </div>
 

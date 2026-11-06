@@ -169,13 +169,24 @@ const ProfileSkeleton = () => (
 // viewport. Deeper report tables further down aren't mocked; the page's own
 // tab content already replaces this skeleton by the time they'd matter.
 const InsightsStatCard = () => (
-  <div className="relative min-h-[72px] flex items-center gap-3 px-4 py-2.5 bg-white border border-gray-200 rounded-xl min-w-0">
-    <Skeleton shape="rect" width={40} height={40} className="rounded-lg flex-shrink-0" />
-    <div className="min-w-0 flex-1 space-y-1.5">
-      <Skeleton width="60%" height={10} />
-      <Skeleton width="40%" height={16} />
+  <>
+    {/* Phones: same stacked tile the real page shows (icon + label, value, trend), 2 per row. */}
+    <div className="sm:hidden flex flex-col justify-center gap-1.5 px-3 py-2.5 bg-white border border-gray-200 rounded-xl min-w-0" style={{ minHeight: 84 }}>
+      <div className="flex items-center gap-1.5">
+        <Skeleton shape="circle" width={16} height={16} className="flex-shrink-0" />
+        <Skeleton width="55%" height={10} />
+      </div>
+      <Skeleton width="65%" height={15} />
+      <Skeleton width="45%" height={10} />
     </div>
-  </div>
+    <div className="hidden sm:flex relative min-h-[72px] items-center gap-3 px-4 py-2.5 bg-white border border-gray-200 rounded-xl min-w-0">
+      <Skeleton shape="rect" width={40} height={40} className="rounded-lg flex-shrink-0" />
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <Skeleton width="60%" height={10} />
+        <Skeleton width="40%" height={16} />
+      </div>
+    </div>
+  </>
 );
 
 const InsightsSkeleton = () => (
@@ -198,7 +209,7 @@ const InsightsSkeleton = () => (
 
     <div className="pt-[80px] lg:pt-[90px] space-y-6">
       {/* 8 KPI cards, same 1/2/4-col grid as the real StatCard grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {Array.from({ length: 8 }).map((_, i) => (
           <InsightsStatCard key={i} />
         ))}
@@ -206,16 +217,18 @@ const InsightsSkeleton = () => (
 
       {/* Chart row: big trend chart (3/4) + activity feed (1/4) */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className="lg:col-span-3 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+        <div className="lg:col-span-3 bg-white p-4 sm:p-6 rounded-xl border border-gray-200 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <Skeleton width={200} height={18} />
-            <div className="flex items-center gap-4">
+            <div className="hidden sm:flex items-center gap-4">
               {Array.from({ length: 3 }).map((_, i) => (
                 <Skeleton key={i} width={70} height={10} />
               ))}
             </div>
           </div>
-          <Skeleton width="100%" height={380} shape="rect" className="rounded-lg" />
+          <div className="h-[220px] sm:h-[380px]">
+            <Skeleton width="100%" height="100%" shape="rect" className="rounded-lg" />
+          </div>
         </div>
         <div className="lg:col-span-1 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
           <Skeleton width="55%" height={16} className="mb-4" />

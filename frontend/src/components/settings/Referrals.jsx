@@ -243,7 +243,7 @@ const Referrals = () => {
       {/* Stats — same StatTile the Dashboard KPI row uses, so this reads as
           one consistent stat style across the app instead of its own
           bespoke card. */}
-      <div className="flex flex-col sm:flex-row items-stretch gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-row items-stretch sm:gap-4">
         <StatTile
           tile={{
             icon: SendIcon,

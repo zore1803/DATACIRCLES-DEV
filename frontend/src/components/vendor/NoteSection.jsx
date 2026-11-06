@@ -1010,7 +1010,7 @@ const NoteSection = ({ initialVendor = null, showKPIs = true, autoOpenCreate = f
           strip toggle (VendorDetailsPageNew.jsx's ⋮ menu), same as PaymentsTable. */}
       {showKPIs && (
       <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         {initialLoading && !notes.length
           ? Array.from({ length: 4 }).map((_, i) => <StatTileSkeleton key={i} />)
           : noteKpiTiles.map((tile) => (

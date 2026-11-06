@@ -574,7 +574,7 @@ const VendorTasksTable = ({ vendorId, initialVendorName = "", showKPIs = true, a
           strip toggle (VendorDetailsPageNew.jsx's ⋮ menu), same as PaymentsTable. */}
       {showKPIs && (
       <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         {loading && !tasks.length
           ? Array.from({ length: 4 }).map((_, i) => <StatTileSkeleton key={i} />)
           : taskKpiTiles.map((tile) => (

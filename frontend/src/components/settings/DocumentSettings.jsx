@@ -511,16 +511,17 @@ function DocumentSettings() {
   const sigList = Array.isArray(signatures) ? signatures : [];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {/* SECTION 1: Document Numbering Settings */}
-      <div className="p-6 bg-white rounded-2xl border border-gray-200 shadow-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-3 rounded-xl bg-sky-50 text-sky-600">
+      <div className="p-3 sm:p-6 bg-white rounded-2xl border border-gray-200 shadow-sm">
+        {/* Phones: hidden - the Settings header strip above already shows this title and subtitle. */}
+        <div className="hidden sm:flex items-center gap-3 mb-6">
+          <div className="p-2 sm:p-3 rounded-xl bg-sky-50 text-sky-600 flex-shrink-0">
             <PdfIcon className="w-4 h-4" />
           </div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Document Settings</h3>
-            <p className="text-sm text-gray-500">Manage saved prefixes and suffixes for invoices, quotes, proforma invoices, delivery challans, purchases, purchase orders, and purchase returns.</p>
+          <div className="min-w-0">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Document Settings</h3>
+            <p className="text-xs sm:text-sm text-gray-500">Manage saved prefixes and suffixes for invoices, quotes, proforma invoices, delivery challans, purchases, purchase orders, and purchase returns.</p>
           </div>
         </div>
 
@@ -541,9 +542,10 @@ function DocumentSettings() {
               value={activeDocumentType}
               onChange={setActiveDocumentType}
               fill
+              minItemWidth={132}
             />
 
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 sm:p-4">
               {(() => {
                 const options = activeTab === "prefix" ? currentSection.prefixes || [] : currentSection.suffixes || [];
                 const placeholder = activeTab === "prefix"
@@ -641,13 +643,13 @@ function DocumentSettings() {
                 }));
 
               return (
-                <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
+                <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-5 space-y-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-2">
-                      <FileText className="mt-0.5 h-4 w-4 text-sky-600" />
+                      <FileText className="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" />
                       <div>
                         <h3 className="text-sm font-semibold text-gray-800">Notes &amp; Terms</h3>
-                        <p className="text-xs text-gray-500">
+                        <p className="hidden sm:block text-xs text-gray-500">
                           Saved per document type, then inserted with one click while creating a {activeLabel.toLowerCase()}.
                         </p>
                       </div>
@@ -666,7 +668,7 @@ function DocumentSettings() {
                     value={footerDocType}
                     onChange={setFooterDocType}
                     fill
-                    minItemWidth={110}
+                    minItemWidth={132}
                   />
 
                   <label className="flex flex-col gap-2 text-sm">
@@ -704,12 +706,15 @@ function DocumentSettings() {
                     currentTerms={termsValue}
                   />
                   <label className="flex flex-col gap-1.5">
-                    <span className="flex items-center justify-between font-medium text-gray-700">
-                      Terms and Conditions
+                    <span className="flex items-center justify-between gap-2 font-medium text-gray-700">
+                      <span className="whitespace-nowrap">
+                        <span className="sm:hidden">Terms &amp; Conditions</span>
+                        <span className="hidden sm:inline">Terms and Conditions</span>
+                      </span>
                       <button
                         type="button"
                         onClick={() => setFooterDrawer("terms")}
-                        className="text-[12px] font-semibold text-[#0085FF] hover:underline"
+                        className="text-[12px] font-semibold text-[#0085FF] hover:underline whitespace-nowrap"
                       >
                         + Add / choose saved terms
                       </button>

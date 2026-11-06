@@ -656,6 +656,8 @@ export default function CompanyDealsKanban({
   };
   const [statuses, setStatuses] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+  // Phones: the search is a 44px circle that opens to a full row when tapped (same as the list pages).
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [selectedFilters, setSelectedFilters] = useState({});
   // Stable across renders so the filter bar's option lists (memoized on `columns`) aren't
@@ -1540,20 +1542,28 @@ export default function CompanyDealsKanban({
         />
       ) : (
         // Wraps below lg so the filter group can drop onto its own line; one line on desktop.
-        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 mb-4" style={{ minHeight: "44px" }}>
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 lg:gap-4 mb-4" style={{ minHeight: "44px" }}>
           {/* Search just fills the space left over: only the filter group animates its width, so
               the search shrinks by exactly as much as the group grows and the Filter / view / +
               buttons on the right stay perfectly still. */}
-          <div className="relative flex-1 min-w-[180px] h-[44px]">
+          <div className="relative h-[44px] max-lg:flex-1 max-lg:min-w-0 lg:flex-1 lg:min-w-[180px]">
+          {/* Same construction as the Companies search: this slot keeps its size, and only the box
+              inside animates between a 44px circle and the full slot, so the Filter / view / +
+              buttons beside it never move. */}
+          <div className={`relative h-full transition-all duration-300 ease-in-out max-lg:rounded-full max-lg:border max-lg:bg-white lg:w-full ${mobileSearchOpen || searchTerm ? "w-full max-lg:border-[#0085FF]" : "w-11 max-lg:border-[rgba(31,41,55,0.1)]"}`}>
             <SearchIcon
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#525866]"
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#525866] z-10 pointer-events-none"
             />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              onFocus={() => setMobileSearchOpen(true)}
+              onBlur={() => { if (!searchTerm) setMobileSearchOpen(false); }}
               placeholder="Search deals by name, contact, or status..."
-              className="w-full h-full pl-10 pr-10 border border-[rgba(31,41,55,0.1)] rounded-full text-sm focus:outline-none focus:border-[#0085FF]"
+              className={`w-full h-full pl-10 pr-10 lg:border rounded-full text-sm focus:outline-none lg:focus:border-[#0085FF] bg-transparent cursor-pointer lg:cursor-text lg:opacity-100 lg:border-[rgba(31,41,55,0.1)] ${
+                mobileSearchOpen || searchTerm ? "opacity-100 cursor-text" : "opacity-0"
+              }`}
             />
             {searchTerm && (
               <button
@@ -1565,6 +1575,7 @@ export default function CompanyDealsKanban({
               </button>
             )}
           </div>
+          </div>
           <ToolbarFilterGroup
             isOpen={showFilterPanel}
             columns={dealFilterColumns}
@@ -1574,9 +1585,11 @@ export default function CompanyDealsKanban({
             onApply={setSelectedFilters}
           />
           <button
+            title="Filter"
+            aria-label="Filter"
             onClick={() => setShowFilterPanel((open) => !open)}
             aria-expanded={showFilterPanel}
-            className={`relative flex items-center justify-center gap-2 px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
+            className={`relative max-lg:ml-auto flex items-center justify-center gap-2 px-0 w-11 lg:w-auto lg:px-3 text-sm font-medium bg-white border rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors ${showFilterPanel ? "text-[#0085FF]" : "text-gray-800"
               }`}
             style={{
               height: "44px",
@@ -1584,7 +1597,7 @@ export default function CompanyDealsKanban({
             }}
           >
             <FilterIcon size={16} />
-            Filter
+            <span className="hidden lg:inline">Filter</span>
             {Object.values(selectedFilters).flat().length > 0 && (
               <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full ring-2 ring-white">
                 {Object.values(selectedFilters).flat().length}

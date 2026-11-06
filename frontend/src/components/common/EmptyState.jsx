@@ -30,6 +30,8 @@ export default function EmptyState({
   onCreate,
   buttonLabel,
   className = "",
+  // Phones: hide the create button when the page already has its own add button nearby.
+  hideCreateOnMobile = false,
 }) {
   const resolvedTitle = isFiltered
     ? filteredTitle || `No matching ${noun.toLowerCase()}s`
@@ -42,7 +44,7 @@ export default function EmptyState({
   // all of it, so plain centring put the message half off-screen. Phones pin it to the visible
   // left edge at screen width; from lg up it is the normal full-width centred block.
   return (
-    <div className={`sticky left-0 w-screen max-w-full lg:static lg:w-auto flex flex-col items-center justify-center text-center py-24 px-4 ${className}`}>
+    <div className={`sticky left-0 w-[min(100%,100vw)] lg:static lg:w-auto flex flex-col items-center justify-center text-center py-24 px-4 ${className}`}>
       {Icon && <Icon className="h-12 w-12 text-gray-300 mb-4" />}
       <h3 className="text-lg font-semibold text-gray-800">{resolvedTitle}</h3>
       <p className="text-gray-500 mt-1.5 max-w-md text-sm">{resolvedDescription}</p>
@@ -50,7 +52,7 @@ export default function EmptyState({
         <button
           type="button"
           onClick={onCreate}
-          className="mt-5 inline-flex items-center gap-2 h-10 px-5 bg-[#0085FF] text-white text-sm font-medium rounded-full hover:bg-blue-600 transition-colors"
+          className={`mt-5 ${hideCreateOnMobile ? "hidden lg:inline-flex" : "inline-flex"} items-center gap-2 h-10 px-5 bg-[#0085FF] text-white text-sm font-medium rounded-full hover:bg-blue-600 transition-colors`}
         >
           <PlusIcon className="w-4 h-4" />
           {buttonLabel || `New ${noun}`}

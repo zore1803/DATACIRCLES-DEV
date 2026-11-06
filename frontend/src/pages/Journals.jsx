@@ -1274,7 +1274,7 @@ export default function Journals() {
               </tr>
             ) : (
               paginatedJournals.map((j) => (
-                <tr key={j._id} className="bg-white hover:bg-blue-50 transition-colors" style={{ height: 37, maxHeight: 37 }}>
+                <tr key={j._id} className="bg-white hover:bg-blue-50 transition-colors" style={{ height: 44, maxHeight: 44 }}>
                   <td
                     style={{
                       width: colWidths.selection,

@@ -1049,7 +1049,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
                   numRows={12}
                   columns={orderedColumns.map((c) => colWidths[c.key] ?? c.width)}
                   hasCheckbox
-                  rowHeight={37}
+                  rowHeight={44}
                   checkboxWidth={SELECTION_WIDTH}
                 />
               ) : sortedRows.map((r) => {
@@ -1059,7 +1059,7 @@ export default function ExpenseLedgerPage({ kind = "expense", icon: Icon, title,
                   <tr
                     key={r._id}
                     className={`bg-white hover:bg-blue-50 transition-colors ${selected ? "!bg-blue-50" : ""}`}
-                    style={{ height: 37, maxHeight: 37 }}
+                    style={{ height: 44, maxHeight: 44 }}
                   >
                     <td
                       style={{
