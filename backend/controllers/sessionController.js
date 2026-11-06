@@ -13,6 +13,23 @@ const { setSessionCookie, clearSessionCookie, COOKIE_NAME } = require("../utils/
 // from the Auth0/phone credential.
 exports.establish = async (req, res) => {
   try {
+    // Same browser (its dc_session cookie still maps to a live session of this
+    // user): keep that session instead of replacing it. Only a login from a
+    // different browser/profile/incognito (no such cookie) replaces the old one.
+    const existing = await sessionService.findActiveSession(req.cookies && req.cookies[COOKIE_NAME]);
+    if (existing && String(existing.userId) === String(req.user._id)) {
+      return res.json({
+        success: true,
+        csrfToken: sessionService.deriveCsrfToken(existing.csrfSecret, existing.sessionId),
+        session: {
+          id: existing._id,
+          createdAt: existing.createdAt,
+          expiresAt: existing.expiresAt,
+          deviceLabel: existing.deviceLabel,
+        },
+      });
+    }
+
     const { session, csrfToken } = await sessionService.establishSession({
       userId: req.user._id,
       organization: req.user.organization,

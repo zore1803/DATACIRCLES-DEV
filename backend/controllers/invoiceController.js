@@ -773,6 +773,18 @@ const getAllInvoicesPaginated = async (req, res) => {
     sortObj[sortBy] = sortOrder === "desc" ? -1 : 1;
 
     // Execute queries in parallel for better performance
+    // Per-status record counts for the pill switcher: the same filters as the list
+    // (search, date range, advanced rules) but with the status filter lifted, so
+    // every pill shows how many records it would list.
+    const statusCountQuery = { ...query };
+    delete statusCountQuery.status;
+    if (status === "Overdue") delete statusCountQuery.dueDate;
+    const statusCountKeys = ["Draft", "Paid", "Pending", "Cancelled"];
+    const statusCountValues = await Promise.all(
+      statusCountKeys.map((s) => Invoice.countDocuments({ ...statusCountQuery, status: s })),
+    );
+    const statusCounts = Object.fromEntries(statusCountKeys.map((s, i) => [s, statusCountValues[i]]));
+
     const [invoices, totalCount] = await Promise.all([
       Invoice.find(query)
         .populate({ path: "deal", populate: [{ path: "company", select: "name email" }, { path: "contact", select: "name email" }] })
@@ -791,6 +803,7 @@ const getAllInvoicesPaginated = async (req, res) => {
 
     res.json({
       invoices,
+      statusCounts,
       pagination: {
         currentPage: page,
         totalPages,

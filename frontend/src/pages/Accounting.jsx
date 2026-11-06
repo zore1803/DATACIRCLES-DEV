@@ -604,6 +604,8 @@ const Accounting = ({ fixedTab = null }) => {
   const [searchTerms, setSearchTerms] = useState(emptyByType);
   const [debouncedSearchTerms, setDebouncedSearchTerms] = useState(emptyByType);
   const [filterStatuses, setFilterStatuses] = useState(emptyByType);
+  // Record count behind each status pill, per document type (from the list response).
+  const [statusCountsByType, setStatusCountsByType] = useState({});
   // Issue-date range for the Invoices list; defaults to the current month.
   const [dateRangeByType, setDateRangeByType] = useState(() => ({
     tax: thisMonthRange(),
@@ -1344,6 +1346,12 @@ const Accounting = ({ fixedTab = null }) => {
         ...prev,
         [type]: res.data[dataKeyFor(type)] || [],
       }));
+      if (res.data.statusCounts) {
+        setStatusCountsByType((prev) => ({
+          ...prev,
+          [type]: { ...res.data.statusCounts, "": serverPagination.totalCount },
+        }));
+      }
       setPaginations((prev) => ({
         ...prev,
         [type]: {
@@ -2384,7 +2392,7 @@ const Accounting = ({ fixedTab = null }) => {
             mirroring the Companies page layout and slide animation. */}
         {showBulkStrip && (
           <div
-            className="fixed right-0 h-16 px-4 sm:px-6 lg:px-8 border-b border-[#E1E4EA] bg-white flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
+            className="fixed right-0 h-12 px-4 sm:px-6 lg:px-8 border-b border-[#E1E4EA] bg-white flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]"
             style={{ left: "var(--sidebar-width, 0px)", zIndex: 41 }}
           >
             <div
@@ -2509,7 +2517,7 @@ const Accounting = ({ fixedTab = null }) => {
         )}
         {/* 2nd Header - Tab Bar & Actions Row */}
         <div
-          className={`fixed right-0 h-16 px-4 sm:px-6 lg:px-8 bg-white flex items-center justify-between gap-3 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]`}
+          className={`fixed right-0 h-12 px-4 sm:px-6 lg:px-8 bg-white flex items-center justify-between gap-3 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]`}
           style={{ left: "var(--sidebar-width, 0px)", zIndex: 39 }}
         >
           {/* Mobile-only page title — fills the same left slot the tab pill
@@ -2530,9 +2538,17 @@ const Accounting = ({ fixedTab = null }) => {
 
           {/* Left Side: which document list this is. The type is chosen from
               Accounting in the sidebar (?tab=...), so there is no tab switcher here. */}
-          <h1 className="m-0 hidden lg:block text-lg font-bold text-[#0E121B] whitespace-nowrap flex-shrink-0">
-            {TABS.find((t) => t.key === activeTab)?.label || "Accounting"}
-          </h1>
+          <div className="hidden lg:flex flex-col justify-center gap-1 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <h1 className="m-0 leading-tight text-lg font-bold text-[#0E121B] whitespace-nowrap">
+                {TABS.find((t) => t.key === activeTab)?.label || "Accounting"}
+              </h1>
+              <VideoIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            </div>
+            <p className="m-0 leading-tight text-xs text-gray-500 font-inter whitespace-nowrap">
+              {`Manage your ${(TABS.find((t) => t.key === activeTab)?.label || "documents").toLowerCase()} and their status`}
+            </p>
+          </div>
 
           {/* Right Side: Search, Filter, More, Add */}
           {showLoadingSkeleton ? (
@@ -2724,13 +2740,14 @@ const Accounting = ({ fixedTab = null }) => {
             that status. */}
         {(
           <div
-            className="fixed right-0 h-14 px-4 sm:px-6 lg:px-8 bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+            className="fixed right-0 h-[52px] px-4 sm:px-6 lg:px-8 bg-white flex items-start top-[calc(102px+var(--dc-offline-offset,0px))] lg:top-[calc(112px+var(--dc-offline-offset,0px))]"
             style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
           >
             {statusTabs && (
             <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
               {statusTabs.map((tab) => {
                 const selected = (filterStatuses[activeTab] || "") === tab.value;
+                const count = statusCountsByType[activeTab]?.[tab.value];
                 return (
                   <button
                     key={tab.label}
@@ -2738,15 +2755,20 @@ const Accounting = ({ fixedTab = null }) => {
                     onClick={() =>
                       setFilterStatuses((prev) => ({ ...prev, [activeTab]: tab.value }))
                     }
-                    className={`h-9 flex-shrink-0 whitespace-nowrap rounded-full px-5 text-sm font-medium transition-colors ${selected
-                      ? "bg-white text-[#0085FF] shadow-sm"
-                      : "text-[#0E121B] hover:bg-white/60"
+                    className={`h-9 flex-shrink-0 whitespace-nowrap rounded-full text-sm font-medium transition-all duration-300 ease-out ${selected
+                      ? "px-6 bg-white text-[#0085FF] shadow-sm"
+                      : "px-3.5 text-[#0E121B] hover:bg-white/60"
                       }`}
                   >
                     {tab.label}
-                    {tab.value === "" && selected && (
-                      <span className="ml-2 rounded-md bg-[#F1F1F5] px-1.5 py-0.5 text-xs font-medium text-[#525866]">
-                        {paginations[activeTab]?.totalCount ?? 0}
+                    {count != null && (
+                      <span
+                        className={`ml-2 inline-block rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors duration-300 ${selected
+                          ? "bg-[#E8F2FF] text-[#0085FF]"
+                          : "bg-white/70 text-[#525866]"
+                          }`}
+                      >
+                        {count}
                       </span>
                     )}
                   </button>
@@ -2792,7 +2814,7 @@ const Accounting = ({ fixedTab = null }) => {
             region Companies.jsx uses: edge to edge under the tab bar, stopping
             above the pagination bar. */}
         <div
-          className={`fixed right-0 overflow-x-auto overflow-y-auto bg-white top-[calc(174px+var(--dc-offline-offset,0px))] lg:top-[calc(184px+var(--dc-offline-offset,0px))]`}
+          className={`fixed right-0 overflow-x-auto overflow-y-auto bg-white border-t border-[#E1E4EA] top-[calc(154px+var(--dc-offline-offset,0px))] lg:top-[calc(164px+var(--dc-offline-offset,0px))]`}
           style={{ left: "var(--sidebar-width, 0px)", bottom: 64, paddingLeft: "var(--content-inset, 16px)" }}
         >
           <table

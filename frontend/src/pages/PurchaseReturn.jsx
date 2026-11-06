@@ -70,6 +70,9 @@ import AdvancedFilterPanel from "../components/common/AdvancedFilterPanel";
 import UploadIcon from "../components/common/UploadIcon";
 import EyeIcon from "../components/common/EyeIcon";
 import EditIcon from "../components/common/EditIcon";
+import DocumentDetailModal from "../components/common/DocumentDetailModal";
+import DateRangeFilterButton,{ thisMonthRange } from "../components/common/DateRangeFilterButton";
+import { toServerDueDateFilter } from "../utils/dueDateFilter";
 
 /*
  * Purchase Return list — edge-to-edge header/table/pin/reorder/columns/
@@ -123,6 +126,18 @@ const PurchaseReturn = () => {
   const moreMenuRef = useRef(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState([]);
+  const activeFiltersKey = JSON.stringify(activeFilters);
+  // Status pills and the return-date range sit under the header; both are sent
+  // to the server together with the Advanced Filter rules.
+  const [filterStatus, setFilterStatus] = useState("");
+  const [dateRange, setDateRange] = useState(thisMonthRange);
+  const dateFromMs = dateRange.from ? dateRange.from.getTime() : 0;
+  const dateToMs = dateRange.to ? dateRange.to.getTime() : 0;
+  const [filterOptions, setFilterOptions] = useState(null);
+  // Record count behind each status pill (from the list response).
+  const [statusCounts, setStatusCounts] = useState({});
+  // The return whose read-only detail card is open (clicked row).
+  const [detailReturnId, setDetailReturnId] = useState(null);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const tableScrollRef = useRef(null);
@@ -254,7 +269,10 @@ const PurchaseReturn = () => {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
 
   // Full set for filtering/badges — a return can sit at any of these.
-  const statusOptions = ["Draft", "Pending", "Confirmed", "Partial", "Paid", "Cancelled"];
+  // Confirmed and Partial are folded into Pending in the UI (pills, badges, filters);
+  // the server keeps the finer states because stock and refunds depend on them.
+  const statusOptions = ["Draft", "Pending", "Paid", "Cancelled"];
+  const getStatusLabel = (status) => (status === "Confirmed" || status === "Partial" ? "Pending" : status);
   // What a user may set BY HAND. Partial/Paid are refund-driven (§11): they're
   // reached only by recording a refund against the return, never chosen from a
   // dropdown — the backend rejects a manual Partial/Paid, so they're left out
@@ -271,15 +289,61 @@ const PurchaseReturn = () => {
     return manualStatusOptions;
   };
 
-  const returnFilterColumns = [
-    { key: "returnNumber", label: "Return Number" },
-    { key: "vendor", label: "Vendor" },
-    { key: "status", label: "Status", options: statusOptions },
-    { key: "grandTotal", label: "Grand Total" },
-    { key: "mode", label: "Mode", options: ["Cash", "UPI", "Bank Transfer", "Cheque", "Card", "Other"] },
-    { key: "reason", label: "Reason" },
-    { key: "notes", label: "Notes" },
-  ];
+  useEffect(() => {
+    API.get("/purchase-returns/filter-options")
+      .then((res) => setFilterOptions(res.data))
+      .catch((err) => console.error("Failed to load purchase return filter options", err));
+  }, []);
+
+  const returnFilterColumns = useMemo(() => {
+    const o = filterOptions || {};
+    return [
+      {
+        key: "returnNumber",
+        label: "Return Number",
+        type: "text",
+        combo: true,
+        operators: ["contains", "starts_with", "ends_with", "is", "is_not", "in", "not_in"],
+        options: o.numbers || [],
+        suggestionsByOperator: { starts_with: o.prefixes || [], ends_with: o.suffixes || [] },
+      },
+      {
+        key: "vendor",
+        label: "Vendor",
+        type: "text",
+        combo: true,
+        operators: ["contains", "is", "is_not"],
+        options: o.deals || [],
+      },
+      { key: "date", label: "Return Date", type: "dateRange" },
+      {
+        key: "amount",
+        label: "Grand Total",
+        type: "range",
+        min: o.amountMin ?? 0,
+        max: o.amountMax ?? 0,
+        step: Math.max(Math.round(((o.amountMax ?? 0) - (o.amountMin ?? 0)) / 200), 1),
+      },
+      { key: "status", label: "Status", type: "select", operators: ["is", "is_not"], options: statusOptions },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterOptions]);
+
+  // Everything the list request needs besides paging and sorting: status pill,
+  // date range and the drawer's rules.
+  const appendFilterParams = (params) => {
+    if (filterStatus) params.append("status", filterStatus);
+    if (dateRange.from) params.append("dateFrom", dateRange.from.toISOString());
+    if (dateRange.to) params.append("dateTo", dateRange.to.toISOString());
+    const rules = activeFilters
+      .map((f) =>
+        f.column === "date"
+          ? { ...toServerDueDateFilter(f.value), column: "date" }
+          : { column: f.column, operator: f.operator, value: f.value },
+      )
+      .filter((f) => f && (f.column !== "date" || f.from || f.to));
+    if (rules.length > 0) params.append("advancedFilters", JSON.stringify(rules));
+  };
 
   const handleSelectReturn = (id) => {
     setSelectedReturns((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -303,6 +367,7 @@ const PurchaseReturn = () => {
     try {
       const params = new URLSearchParams({ allIds: "true" });
       if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
+      appendFilterParams(params);
       const res = await API.get(`/purchase-returns/pagination?${params.toString()}`);
       setSelectedReturns(res.data.ids || []);
     } catch (err) {
@@ -327,12 +392,13 @@ const PurchaseReturn = () => {
     }
     exitSelectionMode();
     setPagination((prev) => ({ ...prev, currentPage: 1 }));
-  }, [debouncedSearchTerm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearchTerm, filterStatus, dateFromMs, dateToMs, activeFiltersKey]);
 
   useEffect(() => {
     fetchReturns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.currentPage, pagination.limit, sortConfig, debouncedSearchTerm]);
+  }, [pagination.currentPage, pagination.limit, sortConfig, debouncedSearchTerm, filterStatus, dateFromMs, dateToMs, activeFiltersKey]);
 
   useEffect(() => {
   }, []);
@@ -358,10 +424,12 @@ const PurchaseReturn = () => {
         params.append("sortOrder", "desc");
       }
       if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
+      appendFilterParams(params);
 
       const res = await API.get(`/purchase-returns/pagination?${params.toString()}`);
       if (requestId !== fetchRequestIdRef.current) return;
       setPurchaseReturns(res.data.purchaseReturns || []);
+      if (res.data.statusCounts) setStatusCounts({ ...res.data.statusCounts, "": res.data.pagination.totalCount });
       setPagination((prev) => ({ ...prev, ...res.data.pagination }));
       hasLoadedOnceRef.current = true;
     } catch (err) {
@@ -473,7 +541,8 @@ const PurchaseReturn = () => {
       params.append("sortOrder", "desc");
     }
     if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
-    return applyActiveFilters(await fetchAllPages("/purchase-returns/pagination", params, "purchaseReturns"));
+    appendFilterParams(params);
+    return await fetchAllPages("/purchase-returns/pagination", params, "purchaseReturns");
   };
 
   const loadExportRows = async () => {
@@ -1096,8 +1165,8 @@ const PurchaseReturn = () => {
             } else if (vc.key === "status") {
               baseContent = (
                 <div className="flex items-center justify-start">
-                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusBadgeColor(p.status)}`}>
-                    {p.status}
+                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusBadgeColor(getStatusLabel(p.status))}`}>
+                    {getStatusLabel(p.status)}
                   </span>
                 </div>
               );
@@ -1151,33 +1220,8 @@ const PurchaseReturn = () => {
     searchTerm,
   ]);
 
-  const applyActiveFilters = (list) => {
-    if (!activeFilters || activeFilters.length === 0) return list;
-    return list.filter((row) =>
-      activeFilters.every((f) => {
-        let rawVal;
-        if (f.column === "vendor") {
-          rawVal = typeof row.vendor === "object" ? (row.vendor?.name || "") : (row.vendor || "");
-        } else {
-          rawVal = row[f.column];
-        }
-        const val = String(rawVal ?? "").toLowerCase().trim();
-        const filterVal = String(f.value ?? "").toLowerCase().trim();
-        switch (f.operator) {
-          case "contains": return val.includes(filterVal);
-          case "not_contains": return !val.includes(filterVal);
-          case "is": return val === filterVal;
-          case "is_not": return val !== filterVal;
-          case "in": return filterVal.split(",").map((s) => s.trim()).some((s) => val === s);
-          case "not_in": return !filterVal.split(",").map((s) => s.trim()).some((s) => val === s);
-          case "is_empty": return val === "" || rawVal == null;
-          case "is_not_empty": return val !== "" && rawVal != null;
-          default: return true;
-        }
-      })
-    );
-  };
-  const filteredReturns = useMemo(() => applyActiveFilters(purchaseReturns), [purchaseReturns, activeFilters]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Filtering (pills, dates, drawer rules) is done by the server.
+  const filteredReturns = purchaseReturns;
 
   const table = useReactTable({
     data: filteredReturns,
@@ -1353,6 +1397,62 @@ const PurchaseReturn = () => {
         selectedIds={selectedReturns}
         fileName="Exported_PurchaseReturns.csv"
       />
+
+      {(() => {
+        const detailIndex = filteredReturns.findIndex((p) => p._id === detailReturnId);
+        if (detailIndex < 0) return null;
+        const pr = filteredReturns[detailIndex];
+        // The shared detail card speaks in invoice terms, so map the return onto it.
+        const stripHtml = (h) =>
+          String(h || "")
+            .replace(/<br\s*\/?>/gi, "\n")
+            .replace(/<\/p>/gi, "\n")
+            .replace(/<[^>]+>/g, "")
+            .replace(/&nbsp;/g, " ")
+            .trim();
+        const detailDoc = {
+          _id: pr._id,
+          returnNumber: pr.returnNumber,
+          date: pr.returnDate || pr.createdAt,
+          dueDate: null,
+          amount: pr.grandTotal,
+          status: getStatusLabel(pr.status),
+          deal: { title: pr.vendor?.name || "—" },
+          items: (pr.items || []).map((i) => ({
+            _id: i._id,
+            name: i.name,
+            description: [i.sku ? `SKU ${i.sku}` : "", i.reason ? `Reason: ${i.reason}` : ""].filter(Boolean).join(" · "),
+            rate: i.unitPrice,
+            quantity: i.quantity,
+            gstRate: i.gstRate,
+            discount: 0,
+          })),
+          payments: pr.payments || [],
+          notes: stripHtml(pr.notes),
+        };
+        return (
+          <DocumentDetailModal
+            doc={detailDoc}
+            type="purchaseReturn"
+            docLabel="Purchase Return"
+            numberKey="returnNumber"
+            steps={["Draft", "Pending", "Paid"]}
+            paymentTerms={pr.purchase?.purchaseNumber ? `Purchase ${pr.purchase.purchaseNumber}` : ""}
+            termsLabel="Against bill"
+            showPayments
+            dateLabel="Return date"
+            hideAddresses
+            position={{ index: detailIndex, total: filteredReturns.length }}
+            onClose={() => setDetailReturnId(null)}
+            onPrev={detailIndex > 0 ? () => setDetailReturnId(filteredReturns[detailIndex - 1]._id) : null}
+            onNext={
+              detailIndex < filteredReturns.length - 1
+                ? () => setDetailReturnId(filteredReturns[detailIndex + 1]._id)
+                : null
+            }
+          />
+        );
+      })()}
 
       <AdvancedFilterPanel
         isOpen={showAdvancedFilters}
@@ -1888,8 +1988,8 @@ const PurchaseReturn = () => {
 
       <div className="bg-white overflow-visible">
         <div
-          className={`fixed right-0 h-16 px-4 sm:px-6 lg:px-8 border-b flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E1E4EA]`}
-          style={{ left: "var(--sidebar-width, 0px)", zIndex: 40, minHeight: "64px", maxHeight: "64px", boxSizing: "border-box" }}
+          className={`fixed right-0 h-12 px-4 sm:px-6 lg:px-8 flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white`}
+          style={{ left: "var(--sidebar-width, 0px)", zIndex: 40, minHeight: "48px", maxHeight: "48px", boxSizing: "border-box" }}
         >
           {showBulkStrip ? (
             <div className={`${bulkStripClosing ? "animate-slideOutRight" : "animate-slideInLeft"} flex flex-nowrap items-center justify-between gap-4 w-full h-full overflow-x-auto`}>
@@ -2084,9 +2184,47 @@ const PurchaseReturn = () => {
           )}
         </div>
 
+        {/* Status pills + return-date range, same strip as the Invoices list */}
+        <div
+          className="fixed right-0 h-[52px] px-4 sm:px-6 lg:px-8 bg-white flex items-start top-[calc(102px+var(--dc-offline-offset,0px))] lg:top-[calc(112px+var(--dc-offline-offset,0px))]"
+          style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
+        >
+          <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
+            {[{ label: "All", value: "" }, ...statusOptions.map((o) => ({ label: o, value: o }))].map((tab) => {
+              const selected = filterStatus === tab.value;
+              return (
+                <button
+                  key={tab.label}
+                  type="button"
+                  onClick={() => setFilterStatus(tab.value)}
+                  className={`h-9 flex-shrink-0 whitespace-nowrap rounded-full text-sm font-medium transition-all duration-300 ease-out ${selected
+                    ? "px-6 bg-white text-[#0085FF] shadow-sm"
+                    : "px-3.5 text-[#0E121B] hover:bg-white/60"
+                    }`}
+                >
+                  {tab.label}
+                  {statusCounts[tab.value] != null && (
+                    <span
+                      className={`ml-2 inline-block rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors duration-300 ${selected
+                        ? "bg-[#E8F2FF] text-[#0085FF]"
+                        : "bg-white/70 text-[#525866]"
+                        }`}
+                    >
+                      {statusCounts[tab.value]}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="ml-3">
+            <DateRangeFilterButton value={dateRange} onChange={setDateRange} />
+          </div>
+        </div>
+
         <div
           ref={tableScrollRef}
-          className="overflow-x-auto overflow-y-auto top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+          className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(154px+var(--dc-offline-offset,0px))] lg:top-[calc(164px+var(--dc-offline-offset,0px))]"
           style={{ position: "fixed", left: "var(--sidebar-width, 0px)", paddingLeft: "var(--content-inset, 16px)", right: 0, bottom: !showLoadingSkeleton ? 64 : 0 }}
         >
           <div className={`relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || purchaseReturns.length > 0 ? "border-b" : ""}`}>
@@ -2187,7 +2325,7 @@ const PurchaseReturn = () => {
                             <EmptyState
                               icon={RotateCcw}
                               noun="Return"
-                              isFiltered={!!(debouncedSearchTerm || activeFilters?.length)}
+                              isFiltered={!!(debouncedSearchTerm || activeFilters?.length || filterStatus)}
                               onCreate={() => { setEditingReturn(null); setShowForm(true); }}
                             />
                           </td>
@@ -2196,7 +2334,14 @@ const PurchaseReturn = () => {
                         table.getRowModel().rows.map((row) => (
                           <tr
                             key={row.id}
-                            className={`bg-white hover:bg-blue-50 transition-colors ${selectedReturnsSet.has(row.original._id) ? "!bg-blue-50" : ""}`}
+                            onClick={(e) => {
+                              // A click on the row itself (not a control inside it, and
+                              // not the checkbox column) opens the detail card.
+                              if (e.target.closest("button, a, input, label, [data-no-row-click]")) return;
+                              if (e.target.closest("td")?.cellIndex === 0) return;
+                              setDetailReturnId(row.original._id);
+                            }}
+                            className={`cursor-pointer bg-white hover:bg-blue-50 transition-colors ${selectedReturnsSet.has(row.original._id) ? "!bg-blue-50" : ""}`}
                             style={{ height: 37, maxHeight: 37 }}
                           >
                             {row.getVisibleCells().map((cell) => {

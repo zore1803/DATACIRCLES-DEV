@@ -429,6 +429,18 @@ exports.getAllQuotationsPaginated = async (req, res) => {
 
     const sortObj = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
 
+    // Per-status record counts for the pill switcher: the same filters as the list
+    // (search, date range, advanced rules) but with the status filter lifted, so
+    // every pill shows how many records it would list.
+    const statusCountQuery = { ...query };
+    delete statusCountQuery.status;
+    if (status === "Overdue") delete statusCountQuery.dueDate;
+    const statusCountKeys = ["Draft", "Pending", "Accepted", "Rejected"];
+    const statusCountValues = await Promise.all(
+      statusCountKeys.map((s) => Quotation.countDocuments({ ...statusCountQuery, status: s })),
+    );
+    const statusCounts = Object.fromEntries(statusCountKeys.map((s, i) => [s, statusCountValues[i]]));
+
     const [quotations, totalCount] = await Promise.all([
       Quotation.find(query)
         .populate("deal")
@@ -448,6 +460,7 @@ exports.getAllQuotationsPaginated = async (req, res) => {
 
     res.json({
       quotations,
+      statusCounts,
       pagination: {
         currentPage: page,
         totalPages,

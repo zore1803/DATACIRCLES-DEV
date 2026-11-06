@@ -112,6 +112,9 @@ export default function DocumentDetailModal({
   steps: stepsProp,
   paymentTerms,
   hideAddresses = false,
+  showPayments: showPaymentsProp = false,
+  dateLabel,
+  termsLabel,
 }) {
   const [tab, setTab] = useState("items");
   useBodyScrollLock(true);
@@ -173,7 +176,7 @@ export default function DocumentDetailModal({
   const effective = status === "Partially Paid" ? "Pending" : status;
   const stepIndex = steps.indexOf(effective);
   const ended = BAD_END.includes(status);
-  const showPayments = type === "tax";
+  const showPayments = type === "tax" || showPaymentsProp;
   const hint = dueHint(doc.dueDate, status);
   const paidPct = money.total > 0 ? Math.min((money.paid / money.total) * 100, 100) : 0;
 
@@ -302,9 +305,9 @@ export default function DocumentDetailModal({
 
           {/* Key facts */}
           <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Fact icon={CalendarDays} label={isPurchase ? "Order date" : "Issue date"}>{fmtDate(doc.date)}</Fact>
+            <Fact icon={CalendarDays} label={dateLabel || (isPurchase ? "Order date" : "Issue date")}>{fmtDate(doc.date)}</Fact>
             {isPurchase ? (
-              <Fact icon={Clock} label="Payment terms">{paymentTerms || "—"}</Fact>
+              <Fact icon={Clock} label={termsLabel || "Payment terms"}>{paymentTerms || "—"}</Fact>
             ) : (
               <Fact icon={Clock} label={type === "quotation" ? "Valid until" : "Due date"} hint={hint}>
                 {fmtDate(doc.dueDate)}
@@ -491,7 +494,7 @@ export default function DocumentDetailModal({
             >
               <ChevronRight className="h-4 w-4" />
             </button>
-            <span className="ml-2 hidden sm:inline">← → to browse · E to edit · Esc to close</span>
+            <span className="ml-2 hidden sm:inline">← → to browse{onEdit ? " · E to edit" : ""} · Esc to close</span>
           </div>
           {onEdit && (
             <button

@@ -7,6 +7,17 @@ const purchaseDocumentPdf = require("../utils/purchaseDocumentPdf");
 const { syncDocumentStock } = require("../utils/inventorySync");
 const allocationService = require("../services/paymentAllocationService");
 const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
+const { parseAdvancedFiltersParam } = require("../utils/dateRangeFilter");
+const { buildDocumentAdvancedConditions, createFilterOptionsHandler, parseIssueDateRange, PURCHASE_RETURN_OPTS } = require("../utils/documentAdvancedFilters");
+
+// GET /api/purchase-returns/filter-options — suggestions + amount bounds for Advanced Filters
+exports.getPurchaseReturnFilterOptions = createFilterOptionsHandler({
+  Model: PurchaseReturn,
+  numberField: "returnNumber",
+  settingsKey: "purchaseReturn",
+  purchase: true,
+  amountField: "grandTotal",
+});
 
 // Tax helpers. Per-line math mirrors purchaseDocumentPdf.js exactly so saved
 // numbers always match the PDF: taxable = taxInclusive ? gross/(1+rate) : gross,
@@ -431,7 +442,26 @@ exports.getAllPurchaseReturnsWithPagination = async (req, res) => {
         { "items.name": { $regex: buildFuzzySearchPattern(search), $options: "i" } },
       ];
     }
-    if (status) query.status = status;
+    if (status) {
+      // "Pending" on the list also covers Confirmed and Partial.
+      query.status = status === "Pending" ? { $in: ["Pending", "Confirmed", "Partial"] } : status;
+    }
+
+    // Return-date range from the list's date button (from inclusive, to exclusive).
+    const returnDateRange = parseIssueDateRange(req.query);
+    if (returnDateRange) query.returnDate = returnDateRange;
+
+    // Advanced Filter panel rules, ANDed with everything else.
+    const advancedRules = parseAdvancedFiltersParam(req.query.advancedFilters);
+    if (advancedRules === null) {
+      return res.status(400).json({ error: "Invalid advancedFilters" });
+    }
+    if (advancedRules.length > 0) {
+      const advancedConditions = await buildDocumentAdvancedConditions(advancedRules, req.user.organization, "returnNumber", PURCHASE_RETURN_OPTS);
+      if (advancedConditions.length > 0) {
+        query.$and = query.$and ? [...query.$and, ...advancedConditions] : advancedConditions;
+      }
+    }
 
     const sortObj = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
 
@@ -439,6 +469,19 @@ exports.getAllPurchaseReturnsWithPagination = async (req, res) => {
       const all = await PurchaseReturn.find(query).select("_id").lean();
       return res.json({ ids: all.map((p) => p._id) });
     }
+
+    // Per-status record counts for the pill switcher: the same filters as the list
+    // but with the status filter lifted, so each pill shows how many records it lists.
+    const statusCountQuery = { ...query };
+    delete statusCountQuery.status;
+    const statusCountEntries = Object.entries({
+      "Draft": PurchaseReturn.countDocuments({ ...statusCountQuery, status: "Draft" }),
+      "Pending": PurchaseReturn.countDocuments({ ...statusCountQuery, status: { $in: ["Pending", "Confirmed", "Partial"] } }),
+      "Paid": PurchaseReturn.countDocuments({ ...statusCountQuery, status: "Paid" }),
+      "Cancelled": PurchaseReturn.countDocuments({ ...statusCountQuery, status: "Cancelled" }),
+    });
+    const statusCountValues = await Promise.all(statusCountEntries.map(([, q]) => q));
+    const statusCounts = Object.fromEntries(statusCountEntries.map(([k], i) => [k, statusCountValues[i]]));
 
     const [purchaseReturns, totalCount] = await Promise.all([
       PurchaseReturn.find(query)
@@ -455,6 +498,7 @@ exports.getAllPurchaseReturnsWithPagination = async (req, res) => {
 
     res.json({
       purchaseReturns,
+      statusCounts,
       pagination: {
         currentPage: page,
         totalPages,

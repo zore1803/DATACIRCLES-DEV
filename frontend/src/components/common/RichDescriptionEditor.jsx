@@ -20,11 +20,22 @@ const MODULES = {
   ],
 };
 const FORMATS = ["bold", "italic", "underline", "strike", "list"];
+// Longer free-text fields (notes, terms) also get headings and links.
+const EXTENDED_MODULES = {
+  toolbar: [
+    [{ header: [1, 2, 3, false] }],
+    ["bold", "italic", "underline", "strike"],
+    [{ list: "ordered" }, { list: "bullet" }],
+    ["link"],
+    ["clean"],
+  ],
+};
+const EXTENDED_FORMATS = ["header", "bold", "italic", "underline", "strike", "list", "link"];
 
 const escapeHtml = (s) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-const looksLikeHtml = (s) => /<\/?(p|strong|em|b|i|u|s|ol|ul|li|br)(\s|\/?>)/i.test(s);
+const looksLikeHtml = (s) => /<\/?(p|strong|em|b|i|u|s|ol|ul|li|br|h[1-3]|a)(\s|\/?>)/i.test(s);
 
 // Plain text -> one <p> per line; HTML passes through untouched.
 const toHtml = (value) => {
@@ -47,6 +58,7 @@ const RichDescriptionEditor = ({
   minHeight = 48,
   maxHeight = 140,
   className = "",
+  extended = false,
 }) => {
   const html = useMemo(() => toHtml(value), [value]);
   return (
@@ -58,8 +70,8 @@ const RichDescriptionEditor = ({
         theme="snow"
         value={html}
         onChange={(next) => onChange(isEmptyHtml(next) ? "" : next)}
-        modules={MODULES}
-        formats={FORMATS}
+        modules={extended ? EXTENDED_MODULES : MODULES}
+        formats={extended ? EXTENDED_FORMATS : FORMATS}
         placeholder={placeholder}
       />
     </div>

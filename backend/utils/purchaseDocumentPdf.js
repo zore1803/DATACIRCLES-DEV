@@ -33,6 +33,30 @@ async function getBrowser() {
   return sharedBrowserPromise;
 }
 
+// Notes are saved as rich text (HTML from the editor) or, for older records, plain
+// text. Output is rebuilt from a small whitelist of tags with no attributes
+// (links keep a plain http(s) href), so formatting prints as formatting and
+// nothing else — no stray tags, no script.
+const ALLOWED_RICH_TAGS = new Set(["p", "br", "strong", "b", "em", "i", "u", "s", "ol", "ul", "li", "h1", "h2", "h3", "a"]);
+const richTextToSafeHtml = (value) => {
+  const src = String(value ?? "");
+  if (!src.trim()) return "";
+  if (!/<\/?[a-z][^>]*>/i.test(src)) return escapeHtml(src).replace(/\r?\n/g, "<br>");
+  return src
+    .replace(/<\s*(script|style)[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
+    .replace(/<\s*(\/?)\s*([a-z0-9]+)([^>]*)>/gi, (m, slash, tag, attrs) => {
+      const t = tag.toLowerCase();
+      if (!ALLOWED_RICH_TAGS.has(t)) return "";
+      if (slash) return `</${t}>`;
+      if (t === "a") {
+        const href = /href\s*=\s*"(https?:\/\/[^"]*)"/i.exec(attrs);
+        return href ? `<a href="${href[1].replace(/"/g, "&quot;")}">` : "<a>";
+      }
+      return `<${t}>`;
+    })
+    .replace(/&nbsp;/g, " ");
+};
+
 const escapeHtml = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;",
@@ -193,6 +217,11 @@ function buildHtml(doc, orgDetails, vendor, type) {
   .words { margin-top: 10px; font-size: 10px; font-style: italic; color: #4B5563; }
   .terms { font-size: 10px; color: #4B5563; }
   .terms li { margin-bottom: 4px; }
+  .terms.rich p { margin: 0 0 4px; }
+  .terms.rich h1, .terms.rich h2, .terms.rich h3 { margin: 6px 0 3px; color: #111827; }
+  .terms.rich h1 { font-size: 14px; } .terms.rich h2 { font-size: 12px; } .terms.rich h3 { font-size: 11px; }
+  .terms.rich ul, .terms.rich ol { margin: 0 0 4px 16px; padding: 0; }
+  .terms.rich a { color: #0A66C2; }
   .footer { margin-top: 32px; display: flex; justify-content: space-between; align-items: flex-end; }
   .sig-img { max-height: 48px; }
 </style>
@@ -272,12 +301,13 @@ function buildHtml(doc, orgDetails, vendor, type) {
           isPO
             ? `<div class="terms">${escapeHtml(doc.paymentTerms || "Payment is due within the specified due date")}</div>`
             : isReturn
-            ? `<div class="terms">${escapeHtml(doc.notes || "Goods returned as listed above.")}</div>`
+            ? `<div class="terms">${richTextToSafeHtml(doc.notes) || "Goods returned as listed above."}</div>`
             : `<ul class="terms">
                 <li>Payment is due within the specified due date</li>
                 <li>Please make checks payable to ${escapeHtml(orgDetails?.companyName || "Company Name")}</li>
                 <li>Late payments may incur additional charges</li>
-              </ul>`
+              </ul>
+              ${richTextToSafeHtml(doc.notes) ? `<div class="label" style="margin-top:10px">Notes</div><div class="terms rich">${richTextToSafeHtml(doc.notes)}</div>` : ""}`
         }
       </div>
       <div class="totals">

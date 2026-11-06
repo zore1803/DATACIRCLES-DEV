@@ -44,6 +44,8 @@ import FilterIcon from "../components/common/FilterIcon";
 import SearchIcon from "../components/common/SearchIcon";
 import SettingsIcon from "../components/common/SettingsIcon";
 import AdvancedFilterPanel from "../components/common/AdvancedFilterPanel";
+import DateRangeFilterButton, { thisMonthRange } from "../components/common/DateRangeFilterButton";
+import { toServerDueDateFilter } from "../utils/dueDateFilter";
 import ColumnSettingsPanel from "../components/ColumnSettingsPanel";
 import { useColumnSettings } from "../hooks/useColumnSettings";
 import { exportClientSide, formatINR, confirmExport, formatExportDate } from "../utils/clientExport";
@@ -126,6 +128,18 @@ export default function EInvoicing() {
 
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState([]);
+  const activeFiltersKey = JSON.stringify(activeFilters);
+  // Status pills and the invoice-date range sit under the header; both are sent
+  // to the server together with the Advanced Filter rules.
+  const [filterStatus, setFilterStatus] = useState("");
+  const [dateRange, setDateRange] = useState(thisMonthRange);
+  const dateFromMs = dateRange.from ? dateRange.from.getTime() : 0;
+  const dateToMs = dateRange.to ? dateRange.to.getTime() : 0;
+  const [filterOptions, setFilterOptions] = useState(null);
+  // Record count behind each status pill (from the list response).
+  const [statusCounts, setStatusCounts] = useState({});
+  // The e-invoice whose read-only detail card is open (clicked row).
+  const [detailId, setDetailId] = useState(null);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const moreMenuRef = useRef(null);
@@ -209,6 +223,23 @@ export default function EInvoicing() {
   // applied if no newer fetch has started since. Without it an older, slower response (a
   // previous keystroke's search, or the page-2 request fired just before a search reset the
   // list to page 1) could land last and overwrite the newer results.
+  // Everything the list request needs besides paging and sorting: status pill,
+  // date range and the drawer's rules. Date rules are resolved to concrete
+  // instants here, in the user's own timezone.
+  const appendFilterParams = (params) => {
+    if (filterStatus) params.append("status", filterStatus);
+    if (dateRange.from) params.append("dateFrom", dateRange.from.toISOString());
+    if (dateRange.to) params.append("dateTo", dateRange.to.toISOString());
+    const rules = activeFilters
+      .map((f) =>
+        f.column === "date"
+          ? { ...toServerDueDateFilter(f.value), column: "date" }
+          : { column: f.column, operator: f.operator, value: f.value },
+      )
+      .filter((f) => f && (f.column !== "date" || f.from || f.to));
+    if (rules.length > 0) params.append("advancedFilters", JSON.stringify(rules));
+  };
+
   const fetchRequestIdRef = useRef(0);
   const fetchRows = async () => {
     const requestId = ++fetchRequestIdRef.current;
@@ -223,9 +254,11 @@ export default function EInvoicing() {
         params.append("sortOrder", sortConfig.direction || "asc");
       }
       if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
+      appendFilterParams(params);
       const res = await API.get(`/e-invoices/pagination?${params.toString()}`);
       if (requestId !== fetchRequestIdRef.current) return;
       setEInvoices(res.data.eInvoices || EMPTY_LIST);
+      if (res.data.statusCounts) setStatusCounts({ ...res.data.statusCounts, "": res.data.pagination.totalCount });
       setPagination((prev) => ({ ...prev, ...res.data.pagination }));
     } catch (err) {
       if (requestId !== fetchRequestIdRef.current) return;
@@ -243,7 +276,7 @@ export default function EInvoicing() {
   useEffect(() => {
     fetchRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.currentPage, pagination.limit, sortConfig, debouncedSearchTerm]);
+  }, [pagination.currentPage, pagination.limit, sortConfig, debouncedSearchTerm, filterStatus, dateFromMs, dateToMs, activeFiltersKey]);
 
   // Reset to page 1 whenever the search term actually changes the result set
   // (not on the initial mount, which already fetches page 1 above).
@@ -255,7 +288,7 @@ export default function EInvoicing() {
     }
     setPagination((prev) => ({ ...prev, currentPage: 1 }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearchTerm]);
+  }, [debouncedSearchTerm, filterStatus, dateFromMs, dateToMs, activeFiltersKey]);
 
   // Click-outside
   useEffect(() => {
@@ -324,20 +357,8 @@ export default function EInvoicing() {
   // a very restrictive filter can show fewer than `limit` rows on a page
   // without the pagination count knowing — acceptable since it's a rare,
   // power-user path, not the default view.
-  const sortedEInvoices = useMemo(() => {
-    if (activeFilters.length === 0) return eInvoices;
-    return eInvoices.filter((r) =>
-      activeFilters.every((f) => {
-        const val = (r[f.field] ?? "").toString().toLowerCase();
-        const target = (f.value ?? "").toString().toLowerCase();
-        if (f.operator === "equals") return val === target;
-        if (f.operator === "not_equals") return val !== target;
-        if (f.operator === "contains") return val.includes(target);
-        if (f.operator === "not_contains") return !val.includes(target);
-        return true;
-      })
-    );
-  }, [eInvoices, activeFilters]);
+  // Filtering (pills, dates, drawer rules) is done by the server.
+  const sortedEInvoices = eInvoices;
 
   // Helper to get field value from a row
   const getFieldValue = (row, key) => {
@@ -710,6 +731,7 @@ export default function EInvoicing() {
     try {
       const params = new URLSearchParams();
       if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
+      appendFilterParams(params);
       params.append("allIds", "true");
       const res = await API.get(`/e-invoices/pagination?${params.toString()}`);
       setSelectedIds(res.data.ids || []);
@@ -922,13 +944,53 @@ export default function EInvoicing() {
     setIsMoreMenuOpen(false);
   };
 
-  const filterColumns = [
-    { key: "invoiceNumber", label: "Invoice Number", type: "text" },
-    { key: "status", label: "Status", type: "select", options: STATUS_TABS.filter((t) => t.key !== "all").map((t) => t.key) },
-    { key: "customer", label: "Customer", type: "text" },
-    { key: "irn", label: "IRN", type: "text" },
-    { key: "ackNo", label: "Ack No.", type: "text" },
-  ];
+  useEffect(() => {
+    API.get("/e-invoices/filter-options")
+      .then((res) => setFilterOptions(res.data))
+      .catch((err) => console.error("Failed to load e-invoice filter options", err));
+  }, []);
+
+  const filterColumns = useMemo(() => {
+    const o = filterOptions || {};
+    return [
+      {
+        key: "invoiceNumber",
+        label: "Invoice Number",
+        type: "text",
+        combo: true,
+        operators: ["contains", "starts_with", "ends_with", "is", "is_not", "in", "not_in"],
+        options: o.numbers || [],
+        suggestionsByOperator: { starts_with: o.prefixes || [], ends_with: o.suffixes || [] },
+      },
+      {
+        key: "customer",
+        label: "Customer",
+        type: "text",
+        combo: true,
+        operators: ["contains", "is", "is_not"],
+        options: o.deals || [],
+      },
+      { key: "date", label: "Invoice Date", type: "dateRange" },
+      {
+        key: "amount",
+        label: "Amount",
+        type: "range",
+        min: o.amountMin ?? 0,
+        max: o.amountMax ?? 0,
+        step: Math.max(Math.round(((o.amountMax ?? 0) - (o.amountMin ?? 0)) / 200), 1),
+      },
+      {
+        key: "status",
+        label: "Status",
+        type: "select",
+        operators: ["is", "is_not"],
+        options: STATUS_TABS.filter((t) => t.key !== "all").map((t) => t.label),
+      },
+      { key: "irn", label: "IRN", type: "text", operators: ["contains", "is", "is_not"] },
+      { key: "ackNo", label: "Ack No.", type: "text", operators: ["contains", "is", "is_not"] },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterOptions]);
 
   const handlePageChange = (page) => {
     if (page >= 1 && page <= pagination.totalPages && page !== pagination.currentPage) {
@@ -1058,8 +1120,8 @@ export default function EInvoicing() {
 
       {/* ── Fixed header toolbar — edge-to-edge, matches PurchasePage ──*/}
       <div
-        className={`fixed right-0 h-16 px-4 sm:px-6 lg:px-8 border-b flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E1E4EA]`}
-        style={{ left: "var(--sidebar-width, 0px)", zIndex: 40, minHeight: "64px", maxHeight: "64px", boxSizing: "border-box" }}
+        className={`fixed right-0 h-12 px-4 sm:px-6 lg:px-8 flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white`}
+        style={{ left: "var(--sidebar-width, 0px)", zIndex: 40, minHeight: "48px", maxHeight: "48px", boxSizing: "border-box" }}
       >
         {showBulkStrip ? (
           <div className={`${bulkStripClosing ? "animate-slideOutRight" : "animate-slideInLeft"} flex flex-nowrap items-center justify-between gap-4 w-full h-full overflow-x-auto`}>
@@ -1300,10 +1362,49 @@ export default function EInvoicing() {
         )}
       </div>
 
+      {/* Status pills + invoice-date range, same strip as the Invoices list */}
+      <div
+        className="fixed right-0 h-[52px] px-4 sm:px-6 lg:px-8 bg-white flex items-start top-[calc(102px+var(--dc-offline-offset,0px))] lg:top-[calc(112px+var(--dc-offline-offset,0px))]"
+        style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
+      >
+        <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
+          {STATUS_TABS.map((tab) => {
+            const value = tab.key === "all" ? "" : tab.label;
+            const selected = filterStatus === value;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setFilterStatus(value)}
+                className={`h-9 flex-shrink-0 whitespace-nowrap rounded-full text-sm font-medium transition-all duration-300 ease-out ${selected
+                    ? "px-6 bg-white text-[#0085FF] shadow-sm"
+                    : "px-3.5 text-[#0E121B] hover:bg-white/60"
+                    }`}
+              >
+                {tab.label}
+                {statusCounts[value] != null && (
+                    <span
+                      className={`ml-2 inline-block rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors duration-300 ${selected
+                        ? "bg-[#E8F2FF] text-[#0085FF]"
+                        : "bg-white/70 text-[#525866]"
+                        }`}
+                    >
+                      {statusCounts[value]}
+                    </span>
+                  )}
+              </button>
+            );
+          })}
+        </div>
+        <div className="ml-3">
+          <DateRangeFilterButton value={dateRange} onChange={setDateRange} />
+        </div>
+      </div>
+
       {/* ── Edge-to-edge scrollable table area ─────────────────────── */}
       <div
         ref={tableScrollRef}
-        className="overflow-x-auto overflow-y-auto top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+        className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(154px+var(--dc-offline-offset,0px))] lg:top-[calc(164px+var(--dc-offline-offset,0px))]"
         style={{
           position: "fixed",
           left: "var(--sidebar-width, 0px)",
@@ -1401,8 +1502,8 @@ export default function EInvoicing() {
                       <tr>
                         <td colSpan={table.getAllColumns().length} className="px-6 py-12 text-center text-gray-500 font-inter">
                           <EmptyState
-                            hasSearch={!!debouncedSearchTerm || activeFilters.length > 0}
-                            onClear={() => { setSearchTerm(""); setActiveFilters([]); }}
+                            hasSearch={!!debouncedSearchTerm || activeFilters.length > 0 || !!filterStatus}
+                            onClear={() => { setSearchTerm(""); setActiveFilters([]); setFilterStatus(""); }}
                             onConnect={handleConnectPortal}
                             portalConnected={portalConnected}
                           />
@@ -1412,7 +1513,14 @@ export default function EInvoicing() {
                       table.getRowModel().rows.map((row) => (
                         <tr
                           key={row.id}
-                          className="bg-white hover:bg-blue-50 transition-colors"
+                          onClick={(e) => {
+                            // A click on the row itself (not a control inside it, and
+                            // not the checkbox column) opens the detail card.
+                            if (e.target.closest("button, a, input, label, [data-no-row-click]")) return;
+                            if (e.target.closest("td")?.cellIndex === 0) return;
+                            setDetailId(row.original._id);
+                          }}
+                          className="cursor-pointer bg-white hover:bg-blue-50 transition-colors"
                           style={{ height: 44, maxHeight: 44 }}
                         >
                           {row.getVisibleCells().map((cell) => {
@@ -1556,6 +1664,105 @@ export default function EInvoicing() {
       )}
 
       {/* ── Slide-in panels ────────────────────────────────────────── */}
+      {(() => {
+        const idx = sortedEInvoices.findIndex((r) => r._id === detailId);
+        if (idx < 0) return null;
+        const r = sortedEInvoices[idx];
+        const inr = (n) => `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const fmt = (d) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—");
+        const fmtTime = (d) => (d ? new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
+        const t = r.totalsSnapshot || {};
+        const Row = ({ label, children }) => (
+          <div className="rounded-xl border border-[#E8EAF0] bg-white px-3 py-2.5 min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-[#78788D]">{label}</p>
+            <div className="mt-0.5 text-sm font-semibold text-[#0E121B] break-all">{children || "—"}</div>
+          </div>
+        );
+        return createPortal(
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true">
+            <div className="absolute inset-0 bg-[#0E121B]/40 backdrop-blur-sm" onClick={() => setDetailId(null)} />
+            <div className="relative flex max-h-[96vh] w-full max-w-[760px] flex-col overflow-hidden rounded-[22px] bg-[#F7F8FA] shadow-2xl">
+              <div className="flex items-start justify-between gap-4 bg-white px-6 py-5">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-md bg-[#EEF2FF] px-2 py-0.5 text-[11px] font-semibold uppercase text-[#2B5BFF]">E-Invoice</span>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusBadge(r.status)}`}>{r.status || "—"}</span>
+                  </div>
+                  <h2 className="mt-1.5 text-2xl font-bold text-[#0E121B] truncate">#{r.invoiceNumber}</h2>
+                  <p className="text-sm text-[#525866] truncate">{r.customer?.name || "—"}</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="text-right">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-[#78788D]">Total</p>
+                    <p className="text-2xl font-bold text-[#0E121B]">{inr(r.amount)}</p>
+                  </div>
+                  <button type="button" onClick={() => setDetailId(null)} className="p-1.5 rounded-full text-[#525866] hover:bg-gray-100" aria-label="Close">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <Row label="Invoice date">{fmt(r.date)}</Row>
+                  <Row label="Customer GSTIN">{r.customer?.gstin}</Row>
+                  <Row label="Ack date">{fmtTime(r.ackDate)}</Row>
+                  <Row label="Ack no.">{r.ackNo}</Row>
+                  <Row label="Provider">{[r.provider, r.environment].filter(Boolean).join(" · ")}</Row>
+                  <Row label="Attempt">{r.attemptNumber ? `#${r.attemptNumber}` : ""}</Row>
+                </div>
+                <Row label="IRN">{r.irn}</Row>
+
+                {(t.grandTotal > 0 || t.totalTax > 0) && (
+                  <div className="rounded-xl border border-[#E8EAF0] bg-white p-4 text-sm">
+                    <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[#78788D]">Submitted totals</p>
+                    {[["Taxable value", t.taxableValue], ["CGST", t.cgst], ["SGST", t.sgst], ["IGST", t.igst], ["Total tax", t.totalTax]]
+                      .filter(([, v]) => Number(v) > 0)
+                      .map(([k, v]) => (
+                        <div key={k} className="flex justify-between py-0.5 text-[#525866]"><span>{k}</span><span>{inr(v)}</span></div>
+                      ))}
+                    <div className="mt-1 flex justify-between border-t border-[#E8EAF0] pt-1.5 font-bold text-[#0E121B]">
+                      <span>Grand total</span><span>{inr(t.grandTotal)}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Row label="Generated at">{fmtTime(r.generatedAt)}</Row>
+                  <Row label="Cancelled at">{r.cancelledAt ? fmtTime(r.cancelledAt) : ""}</Row>
+                </div>
+
+                {(r.failureReason || r.failureCode) && (
+                  <div className="rounded-xl border border-[#F7C9C9] bg-[#FCEAEA] p-4 text-sm text-[#B42318]">
+                    <p className="mb-1 text-[11px] font-medium uppercase tracking-wide">Failure</p>
+                    {r.failureCode && <p className="font-semibold">{r.failureCode}</p>}
+                    <p>{r.failureReason}</p>
+                  </div>
+                )}
+                {(r.cancellationReason || r.cancellationRemarks) && (
+                  <div className="rounded-xl border border-[#E8EAF0] bg-white p-4 text-sm text-[#525866]">
+                    <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-[#78788D]">Cancellation</p>
+                    {r.cancellationReason && <p className="font-semibold text-[#0E121B]">{r.cancellationReason}</p>}
+                    <p>{r.cancellationRemarks}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 border-t border-[#E8EAF0] bg-white px-6 py-3">
+                <button type="button" disabled={idx === 0} onClick={() => setDetailId(sortedEInvoices[idx - 1]._id)} className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E1E4EA] disabled:opacity-40">
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-xs text-[#525866]">{idx + 1} of {sortedEInvoices.length}</span>
+                <button type="button" disabled={idx >= sortedEInvoices.length - 1} onClick={() => setDetailId(sortedEInvoices[idx + 1]._id)} className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E1E4EA] disabled:opacity-40">
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        );
+      })()}
+
       <AdvancedFilterPanel
         isOpen={showAdvancedFilters}
         onClose={() => setShowAdvancedFilters(false)}

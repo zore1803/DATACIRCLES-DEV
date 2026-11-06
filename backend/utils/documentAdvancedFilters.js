@@ -44,9 +44,32 @@ const PURCHASE_ORDER_OPTS = {
   amountField: "totalAmount",
 };
 
+const PURCHASE_OPTS = {
+  ...PURCHASE_ORDER_OPTS,
+  dateFields: { date: "purchaseDate" },
+  amountField: "grandTotal",
+  // The Purchases list shows Confirmed and Partial as Pending.
+  statusGroups: { Pending: ["Pending", "Confirmed", "Partial"] },
+};
+
+const PURCHASE_RETURN_OPTS = {
+  ...PURCHASE_OPTS,
+  dateFields: { date: "returnDate" },
+};
+
+// E-invoices keep the customer name and the IRP fields on the document itself,
+// so the party and a few text columns are matched by regex instead of by id.
+const E_INVOICE_OPTS = {
+  partyColumn: "customer",
+  partyRegexField: "customer.name",
+  textFields: { irn: "irn", ackNo: "ackNo" },
+  dateFields: { date: "date" },
+  amountField: "amount",
+};
+
 // Turns Advanced Filter rules into Mongo conditions (ANDed together).
 const buildDocumentAdvancedConditions = async (rules, organization, numberField, opts = SALES_OPTS) => {
-  const { partyColumn, partyPath, findPartyIds, dateFields, amountField } = { ...SALES_OPTS, ...opts };
+  const { partyColumn, partyPath, findPartyIds, dateFields, amountField, statusGroups, partyRegexField, textFields = {} } = { ...SALES_OPTS, ...opts };
   const conditions = [];
   for (const rule of rules) {
     if (!rule || !rule.column) continue;
@@ -69,6 +92,14 @@ const buildDocumentAdvancedConditions = async (rules, organization, numberField,
         case "not_in": if (list.length) conditions.push({ [numberField]: { $nin: list.map((x) => re(`^${escapeRegex(x)}$`)) } }); break;
         default: break;
       }
+    } else if (Object.prototype.hasOwnProperty.call(textFields, column) || (column === partyColumn && partyRegexField)) {
+      const field = column === partyColumn ? partyRegexField : textFields[column];
+      const v = String(Array.isArray(value) ? "" : value ?? "").trim();
+      if (!v) continue;
+      const exact = new RegExp(`^${escapeRegex(v)}$`, "i");
+      if (operator === "contains") conditions.push({ [field]: new RegExp(escapeRegex(v), "i") });
+      else if (operator === "is") conditions.push({ [field]: exact });
+      else if (operator === "is_not") conditions.push({ [field]: { $not: exact } });
     } else if (column === partyColumn) {
       const v = String(Array.isArray(value) ? "" : value ?? "").trim();
       if (!v) continue;
@@ -93,10 +124,11 @@ const buildDocumentAdvancedConditions = async (rules, organization, numberField,
       if (Number.isFinite(max)) range.$lte = max;
       if (Object.keys(range).length) conditions.push({ [amountField]: range });
     } else if (column === "status") {
-      if (operator === "is" && value) conditions.push({ status: value });
-      else if (operator === "is_not" && value) conditions.push({ status: { $ne: value } });
-      else if (operator === "in" && list.length) conditions.push({ status: { $in: list } });
-      else if (operator === "not_in" && list.length) conditions.push({ status: { $nin: list } });
+      const expand = (vals) => vals.flatMap((v) => (statusGroups && statusGroups[v]) || [v]);
+      if (operator === "is" && value) conditions.push({ status: { $in: expand([value]) } });
+      else if (operator === "is_not" && value) conditions.push({ status: { $nin: expand([value]) } });
+      else if (operator === "in" && list.length) conditions.push({ status: { $in: expand(list) } });
+      else if (operator === "not_in" && list.length) conditions.push({ status: { $nin: expand(list) } });
     }
   }
   return conditions;
@@ -106,10 +138,10 @@ const buildDocumentAdvancedConditions = async (rules, organization, numberField,
 // numbers/prefixes/suffixes/deals the panel suggests, plus amount bounds.
 // `settingsKey` is the document's key in Document Settings (invoice, quote,
 // proformaInvoice, deliveryChallan) so configured prefixes/suffixes show up too.
-const createFilterOptionsHandler = ({ Model, numberField, settingsKey, purchase = false }) => async (req, res) => {
+const createFilterOptionsHandler = ({ Model, numberField, settingsKey, purchase = false, amountField: amountFieldOverride }) => async (req, res) => {
   try {
     const partyPath = purchase ? "vendor" : "deal";
-    const amountField = purchase ? "totalAmount" : "amount";
+    const amountField = amountFieldOverride || (purchase ? "totalAmount" : "amount");
     const match = { organization: req.user.organization };
     if (req.ownOnly) {
       if (purchase) {
@@ -181,4 +213,7 @@ module.exports = {
   createFilterOptionsHandler,
   parseIssueDateRange,
   PURCHASE_ORDER_OPTS,
+  PURCHASE_OPTS,
+  PURCHASE_RETURN_OPTS,
+  E_INVOICE_OPTS,
 };

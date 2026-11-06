@@ -24,6 +24,7 @@ router.get("/history/:invoiceId", requireAuth, subscriptionGate, c.history);
 // Unchanged — the dashboard reads the mirrored legacy `status` field.
 router.post("/", requireAuth, subscriptionGate, c.createEInvoice);
 router.get("/", requireAuth, subscriptionGate, c.getAllEInvoices);
+router.get("/filter-options", requireAuth, subscriptionGate, c.getEInvoiceFilterOptions);
 router.get("/pagination", requireAuth, subscriptionGate, c.getAllEInvoicesWithPagination);
 router.get("/:id", requireAuth, subscriptionGate, c.getEInvoiceById);
 router.put("/:id/status", requireAuth, subscriptionGate, c.updateEInvoiceStatus);

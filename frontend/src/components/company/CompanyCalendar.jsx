@@ -14,6 +14,7 @@ import {
   CheckSquare,
   X,
   Loader2,
+  StickyNote,
 } from "lucide-react";
 import AppToaster from "../AppToaster";
 
@@ -21,24 +22,26 @@ import SearchIcon from "../common/SearchIcon";
 import HighlightText from "../common/HighlightText";
 import TeamIcon from "../common/TeamIcon";
 const CompactEventCard = ({ item, type, onClick, searchTerm }) => {
-  const time = item.scheduledAt || item.dueDate;
+  const time = type === "note" ? null : item.scheduledAt || item.dueDate;
   return (
     <div
       className={`
         flex items-center justify-between gap-1 text-[10px] px-1.5 py-0.5 rounded cursor-pointer mb-0.5 transition-all
         ${type === "meeting"
-          ? "bg-blue-50 text-blue-700 hover:bg-blue-100"
-          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+          ? "bg-blue-50 text-blue-700 hover:bg-blue-100 border-l-2 border-blue-500"
+          : type === "note"
+            ? "bg-yellow-50 text-yellow-800 hover:bg-yellow-100 border-l-2 border-yellow-500"
+            : "bg-green-50 text-green-700 hover:bg-green-100 border-l-2 border-green-500"
         }
       `}
       onClick={(e) => {
         e.stopPropagation();
         onClick(item);
       }}
-      title={`${type}: ${item.title}`}
+      title={`${type}: ${item.title || "Note"}`}
     >
       <span className="truncate">
-        <HighlightText text={item.title} query={searchTerm} />
+        <HighlightText text={item.title || "Note"} query={searchTerm} />
       </span>
       {time && (
         <span className="flex-shrink-0 opacity-70">
@@ -52,16 +55,79 @@ const CompactEventCard = ({ item, type, onClick, searchTerm }) => {
   );
 };
 
-const QuickAddModal = ({ isOpen, onClose, onAddMeeting, onAddTask, date }) => {
+const QuickAddModal = ({ isOpen, onClose, onAddMeeting, onAddTask, onSaveNote, date }) => {
+  const [noteMode, setNoteMode] = useState(false);
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteText, setNoteText] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setNoteMode(false);
+      setNoteTitle("");
+      setNoteText("");
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   // Parse the string date for display
   const displayDate = date ? new Date(date + "T00:00:00") : null;
 
+  const options = [
+    {
+      key: "meeting",
+      label: "Meeting",
+      hint: "Schedule with contacts",
+      Icon: TeamIcon,
+      onClick: onAddMeeting,
+      card: "bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-300",
+      iconWrap: "bg-blue-500 text-white",
+      text: "text-blue-800",
+    },
+    {
+      key: "task",
+      label: "Task",
+      hint: "Create action item",
+      Icon: CheckSquare,
+      onClick: onAddTask,
+      card: "bg-green-50 border-green-200 hover:bg-green-100 hover:border-green-300",
+      iconWrap: "bg-green-500 text-white",
+      text: "text-green-800",
+    },
+    ...(onSaveNote
+      ? [
+          {
+            key: "note",
+            label: "Note",
+            hint: "Jot something down",
+            Icon: StickyNote,
+            onClick: () => setNoteMode(true),
+            card: "bg-yellow-50 border-yellow-200 hover:bg-yellow-100 hover:border-yellow-300",
+            iconWrap: "bg-yellow-400 text-white",
+            text: "text-yellow-800",
+          },
+        ]
+      : []),
+  ];
+
+  const handleSaveNote = async () => {
+    if (!noteText.trim()) {
+      toast.error("Please write something in the note.");
+      return;
+    }
+    setSavingNote(true);
+    try {
+      await onSaveNote({ title: noteTitle.trim(), note: noteText.trim() });
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-[10000] p-4">
-      <div className="bg-white rounded-lg shadow-xl p-4 w-full max-w-xs border border-gray-200">
-        <div className="flex items-center justify-between mb-3">
+      <div className="bg-white rounded-xl shadow-xl p-4 w-full max-w-md border border-gray-200">
+        <div className="flex items-center justify-between mb-1">
           <h3 className="text-xl font-semibold text-gray-900">Quick Add</h3>
           <button
             onClick={onClose}
@@ -79,30 +145,60 @@ const QuickAddModal = ({ isOpen, onClose, onAddMeeting, onAddTask, date }) => {
             })
             : ""}
         </p>
-        <div className="space-y-2">
-          <button
-            onClick={onAddMeeting}
-            className="w-full flex items-center gap-2 p-2 text-left hover:bg-gray-50 rounded-lg transition-colors border border-gray-200"
-          >
-            <TeamIcon className="w-4 h-4 text-gray-600" />
-            <div>
-              <div className="text-sm font-medium text-gray-900">Meeting</div>
-              <div className="text-xs text-gray-600">
-                Schedule with contacts
-              </div>
+        {noteMode ? (
+          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-yellow-800">
+              <StickyNote className="w-4 h-4" />
+              New note
             </div>
-          </button>
-          <button
-            onClick={onAddTask}
-            className="w-full flex items-center gap-2 p-2 text-left hover:bg-gray-50 rounded-lg transition-colors border border-gray-200"
-          >
-            <CheckSquare className="w-4 h-4 text-gray-600" />
-            <div>
-              <div className="text-sm font-medium text-gray-900">Task</div>
-              <div className="text-xs text-gray-600">Create action item</div>
+            <input
+              type="text"
+              value={noteTitle}
+              onChange={(e) => setNoteTitle(e.target.value)}
+              placeholder="Title (optional)"
+              className="w-full h-9 px-3 rounded-lg border border-yellow-200 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400"
+            />
+            <textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder="Write your note..."
+              rows={4}
+              autoFocus
+              className="w-full px-3 py-2 rounded-lg border border-yellow-200 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400 resize-none"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setNoteMode(false)}
+                className="h-8 px-3 rounded-full text-sm text-gray-600 hover:bg-yellow-100"
+              >
+                Back
+              </button>
+              <button
+                onClick={handleSaveNote}
+                disabled={savingNote}
+                className="h-8 px-4 rounded-full text-sm font-medium bg-yellow-400 text-white hover:bg-yellow-500 disabled:opacity-60"
+              >
+                {savingNote ? "Saving..." : "Save note"}
+              </button>
             </div>
-          </button>
-        </div>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            {options.map(({ key, label, hint, Icon, onClick, card, iconWrap, text }) => (
+              <button
+                key={key}
+                onClick={onClick}
+                className={`flex-1 min-w-0 flex flex-col items-center gap-1.5 px-2 py-3 text-center rounded-xl border transition-colors ${card}`}
+              >
+                <span className={`flex items-center justify-center w-8 h-8 rounded-full ${iconWrap}`}>
+                  <Icon className="w-4 h-4" />
+                </span>
+                <span className={`text-sm font-semibold ${text}`}>{label}</span>
+                <span className="text-[10px] leading-tight text-gray-600">{hint}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -113,6 +209,7 @@ const ActivityListPopup = ({
   date,
   meetings,
   tasks,
+  notes = [],
   onMeetingClick,
   onTaskClick,
   onAddMeeting,
@@ -143,7 +240,7 @@ const ActivityListPopup = ({
         <div className="max-h-[60vh] overflow-y-auto space-y-2">
           <div className="mb-3">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-medium text-gray-700">Meetings</h4>
+              <h4 className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">Meetings</h4>
               <button
                 onClick={() => onAddMeeting(date)}
                 className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"
@@ -158,10 +255,10 @@ const ActivityListPopup = ({
               meetings.map((meeting) => (
                 <div
                   key={meeting._id}
-                  className="flex items-center gap-2 p-2 bg-gray-50 hover:bg-gray-100 rounded-md cursor-pointer text-sm mb-1"
+                  className="flex items-center gap-2 p-2 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-md cursor-pointer text-sm mb-1"
                   onClick={() => onMeetingClick(meeting)}
                 >
-                  <TeamIcon className="w-3 h-3 text-gray-600 flex-shrink-0" />
+                  <TeamIcon className="w-3 h-3 text-blue-600 flex-shrink-0" />
                   <span className="truncate">
                     <HighlightText text={meeting.title} query={searchTerm} />
                   </span>
@@ -171,10 +268,10 @@ const ActivityListPopup = ({
           </div>
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-medium text-gray-700">Tasks</h4>
+              <h4 className="text-xs font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full">Tasks</h4>
               <button
                 onClick={() => onAddTask(date)}
-                className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"
+                className="flex items-center gap-1 text-xs font-medium text-green-600 hover:text-green-700"
               >
                 <PlusIcon className="w-4 h-4" />
                 Add
@@ -186,10 +283,10 @@ const ActivityListPopup = ({
               tasks.map((task) => (
                 <div
                   key={task._id}
-                  className="flex items-center gap-2 p-2 bg-gray-50 hover:bg-gray-100 rounded-md cursor-pointer text-sm mb-1"
+                  className="flex items-center gap-2 p-2 bg-green-50 hover:bg-green-100 text-green-800 rounded-md cursor-pointer text-sm mb-1"
                   onClick={() => onTaskClick(task)}
                 >
-                  <CheckSquare className="w-3 h-3 text-gray-600 flex-shrink-0" />
+                  <CheckSquare className="w-3 h-3 text-green-600 flex-shrink-0" />
                   <span className="truncate">
                     <HighlightText text={task.title} query={searchTerm} />
                   </span>
@@ -197,6 +294,29 @@ const ActivityListPopup = ({
               ))
             )}
           </div>
+          {notes.length > 0 && (
+            <div className="mt-3">
+              <h4 className="mb-2 inline-block text-xs font-semibold text-yellow-800 bg-yellow-50 px-2 py-0.5 rounded-full">
+                Notes
+              </h4>
+              {notes.map((n) => (
+                <div
+                  key={n._id}
+                  className="p-2 bg-yellow-50 text-yellow-900 rounded-md text-sm mb-1 border-l-2 border-yellow-400"
+                >
+                  {n.title && <div className="font-medium truncate">{n.title}</div>}
+                  <div className="text-xs text-yellow-800 whitespace-pre-wrap break-words line-clamp-4">
+                    {String(n.note || "")
+                      .replace(/<br\s*\/?>/gi, "\n")
+                      .replace(/<\/(p|li|h[1-6])>/gi, "\n")
+                      .replace(/<[^>]+>/g, "")
+                      .replace(/&nbsp;/g, " ")
+                      .trim()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -218,6 +338,8 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
   }, [viewMode]);
   const [meetings, setMeetings] = useState({});
   const [tasks, setTasks] = useState({});
+  // Notes are dated by when they were written; only company and deal calendars show them.
+  const [notes, setNotes] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("create");
@@ -238,6 +360,7 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
     date: null,
     meetings: [],
     tasks: [],
+    notes: [],
   });
 
   const months = [
@@ -310,6 +433,22 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
         }
       });
       setTasks(tasksByDate);
+
+      if (!contactId && (dealId || companyId)) {
+        try {
+          const notesRes = await API.get(dealId ? `/notes/deal/${dealId}` : `/notes/company/${companyId}`);
+          const notesByDate = {};
+          (notesRes.data || []).forEach((n) => {
+            if (!n.createdAt) return;
+            const key = new Date(n.createdAt).toDateString();
+            if (!notesByDate[key]) notesByDate[key] = [];
+            notesByDate[key].push(n);
+          });
+          setNotes(notesByDate);
+        } catch {
+          setNotes({});
+        }
+      }
     } catch (error) {
       toast.error(error.response?.data?.error || "Failed to fetch calendar data");
     } finally {
@@ -462,6 +601,24 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
     setSelectedMeeting(null);
     setModalOpen(true);
     setQuickAddOpen(false);
+  };
+
+  const handleQuickAddNote = async ({ title, note }) => {
+    try {
+      await API.post("/notes", {
+        title,
+        note,
+        company: companyId,
+        ...(dealId ? { deal: dealId } : {}),
+        // Dated to the clicked day (noon, so timezones can't push it onto another date).
+        createdAt: new Date(`${quickAddDate}T12:00:00`).toISOString(),
+      });
+      toast.success("Note added");
+      setQuickAddOpen(false);
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to add note");
+    }
   };
 
   const handleQuickAddTask = () => {
@@ -734,9 +891,11 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
             // however many chips actually fit inside the cell's fixed
             // height, rather than the old hardcoded 1 — the rest collapse
             // into a "+N" chip instead of overflowing the box.
+            const dayNotes = notes[key] || [];
             const allDayItems = [
               ...filteredMeetings.map((m) => ({ item: m, type: "meeting" })),
               ...filteredTasks.map((t) => ({ item: t, type: "task" })),
+              ...dayNotes.map((n) => ({ item: n, type: "note" })),
             ];
             const totalItems = allDayItems.length;
             const maxDisplay = 4;
@@ -792,7 +951,20 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
                       key={item._id}
                       item={item}
                       type={type}
-                      onClick={type === "meeting" ? handleMeetingClick : handleTaskClick}
+                      onClick={
+                        type === "meeting"
+                          ? handleMeetingClick
+                          : type === "note"
+                            ? () =>
+                                setActivityPopup({
+                                  isOpen: true,
+                                  date,
+                                  meetings: filteredMeetings,
+                                  tasks: filteredTasks,
+                                  notes: dayNotes,
+                                })
+                            : handleTaskClick
+                      }
                       searchTerm={searchTerm}
                     />
                   ))}
@@ -806,6 +978,7 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
                           date,
                           meetings: filteredMeetings,
                           tasks: filteredTasks,
+                          notes: dayNotes,
                         });
                       }}
                     >
@@ -875,6 +1048,23 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
                       searchTerm={searchTerm}
                     />
                   ))}
+                  {(notes[key] || []).map((n) => (
+                    <CompactEventCard
+                      key={n._id}
+                      item={n}
+                      type="note"
+                      onClick={() =>
+                        setActivityPopup({
+                          isOpen: true,
+                          date,
+                          meetings: filteredMeetings,
+                          tasks: filteredTasks,
+                          notes: notes[key] || [],
+                        })
+                      }
+                      searchTerm={searchTerm}
+                    />
+                  ))}
                 </div>
               );
             })}
@@ -890,7 +1080,8 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
         const dayTasks = tasks[key] || [];
         const { meetings: filteredMeetings, tasks: filteredTasks } =
           filteredEvents(dayMeetings, dayTasks);
-        const hasEvents = filteredMeetings.length > 0 || filteredTasks.length > 0;
+        const dayNotesList = notes[key] || [];
+        const hasEvents = filteredMeetings.length > 0 || filteredTasks.length > 0 || dayNotesList.length > 0;
 
         return (
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden min-h-[740px] p-4">
@@ -913,7 +1104,7 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
                   <div
                     key={meeting._id}
                     onClick={() => handleMeetingClick(meeting)}
-                    className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 cursor-pointer transition-colors"
+                    className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border-l-2 border-blue-500 cursor-pointer transition-colors"
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <TeamIcon className="w-4 h-4 flex-shrink-0" />
@@ -935,7 +1126,7 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
                   <div
                     key={task._id}
                     onClick={() => handleTaskClick(task)}
-                    className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 cursor-pointer transition-colors"
+                    className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border-l-2 border-green-500 cursor-pointer transition-colors"
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <CheckSquare className="w-4 h-4 flex-shrink-0" />
@@ -953,6 +1144,25 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
                     )}
                   </div>
                 ))}
+                {dayNotesList.map((n) => (
+                  <div
+                    key={n._id}
+                    className="px-3 py-2.5 rounded-lg bg-yellow-50 text-yellow-800 border-l-2 border-yellow-500"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <StickyNote className="w-4 h-4 flex-shrink-0" />
+                      <span className="text-sm font-medium truncate">{n.title || "Note"}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-yellow-800/80 line-clamp-3 whitespace-pre-wrap break-words">
+                      {String(n.note || "")
+                        .replace(/<br\s*\/?>/gi, "\n")
+                        .replace(/<\/(p|li|h[1-6])>/gi, "\n")
+                        .replace(/<[^>]+>/g, "")
+                        .replace(/&nbsp;/g, " ")
+                        .trim()}
+                    </p>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -964,6 +1174,7 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
         onClose={() => setQuickAddOpen(false)}
         onAddMeeting={handleQuickAddMeeting}
         onAddTask={handleQuickAddTask}
+        onSaveNote={!contactId && companyId ? handleQuickAddNote : undefined}
         date={quickAddDate}
       />
 
@@ -972,6 +1183,7 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
         date={activityPopup.date}
         meetings={activityPopup.meetings}
         tasks={activityPopup.tasks}
+        notes={activityPopup.notes}
         onMeetingClick={handleMeetingClick}
         onTaskClick={handleTaskClick}
         onAddMeeting={handleAddMeetingForDate}
@@ -982,6 +1194,7 @@ const CompanyCalendar = ({ companyId, contactId, dealId }) => {
             date: null,
             meetings: [],
             tasks: [],
+            notes: [],
           })
         }
       />

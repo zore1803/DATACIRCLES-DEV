@@ -69,6 +69,9 @@ import AdvancedFilterPanel from "../components/common/AdvancedFilterPanel";
 import UploadIcon from "../components/common/UploadIcon";
 import EyeIcon from "../components/common/EyeIcon";
 import EditIcon from "../components/common/EditIcon";
+import DateRangeFilterButton, { thisMonthRange } from "../components/common/DateRangeFilterButton";
+import DocumentDetailModal from "../components/common/DocumentDetailModal";
+import { toServerDueDateFilter } from "../utils/dueDateFilter";
 
 // The app is rendered inside #root which carries a CSS `zoom` (0.75 on desktop).
 // getBoundingClientRect() returns UNSCALED layout coordinates, while portal overlays
@@ -128,6 +131,18 @@ const PurchasePage = () => {
   const moreMenuRef = useRef(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState([]);
+  const activeFiltersKey = JSON.stringify(activeFilters);
+  // Status pills and the purchase-date range sit under the header; both are sent
+  // to the server together with the Advanced Filter rules.
+  const [filterStatus, setFilterStatus] = useState("");
+  const [dateRange, setDateRange] = useState(thisMonthRange);
+  const dateFromMs = dateRange.from ? dateRange.from.getTime() : 0;
+  const dateToMs = dateRange.to ? dateRange.to.getTime() : 0;
+  const [filterOptions, setFilterOptions] = useState(null);
+  // Record count behind each status pill (from the list response).
+  const [statusCounts, setStatusCounts] = useState({});
+  // The purchase whose read-only detail card is open (clicked row).
+  const [detailPurchaseId, setDetailPurchaseId] = useState(null);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const tableScrollRef = useRef(null);
@@ -288,7 +303,10 @@ const PurchasePage = () => {
     direction: null,
   });
 
-  const statusOptions = ["Draft", "Pending", "Confirmed", "Partial", "Paid", "Cancelled"];
+  // Confirmed and Partial are folded into Pending in the UI (pills, badges, filters);
+  // the server keeps the finer states because stock-in and payments depend on them.
+  const statusOptions = ["Draft", "Pending", "Paid", "Cancelled"];
+  const allStatuses = ["Draft", "Pending", "Confirmed", "Partial", "Paid", "Cancelled"];
 
   // Statuses a user may set by hand. "Partial" and "Paid" are deliberately
   // absent: both are payment-derived, set by the server from how much of
@@ -304,7 +322,7 @@ const PurchasePage = () => {
   // They remain in `statusOptions` above, which drives filtering and the field
   // config, so partially-paid and paid purchases are still filterable.
   const PAYMENT_DERIVED_STATUSES = ["Partial", "Paid"];
-  const manualStatusOptions = statusOptions.filter(
+  const manualStatusOptions = allStatuses.filter(
     (s) => !PAYMENT_DERIVED_STATUSES.includes(s),
   );
 
@@ -322,13 +340,62 @@ const PurchasePage = () => {
   };
 
   // Columns available in the rule-builder filter panel (mirrors Companies.jsx pattern).
-  const purchaseFilterColumns = [
-    { key: "purchaseNumber", label: "Purchase Number" },
-    { key: "vendor", label: "Vendor" },
-    { key: "status", label: "Status", options: statusOptions },
-    { key: "grandTotal", label: "Grand Total" },
-    { key: "notes", label: "Notes" },
-  ];
+  useEffect(() => {
+    API.get("/purchases/filter-options")
+      .then((res) => setFilterOptions(res.data))
+      .catch((err) => console.error("Failed to load purchase filter options", err));
+  }, []);
+
+  const purchaseFilterColumns = useMemo(() => {
+    const o = filterOptions || {};
+    return [
+      {
+        key: "purchaseNumber",
+        label: "Purchase Number",
+        type: "text",
+        combo: true,
+        operators: ["contains", "starts_with", "ends_with", "is", "is_not", "in", "not_in"],
+        options: o.numbers || [],
+        suggestionsByOperator: { starts_with: o.prefixes || [], ends_with: o.suffixes || [] },
+      },
+      {
+        key: "vendor",
+        label: "Vendor",
+        type: "text",
+        combo: true,
+        operators: ["contains", "is", "is_not"],
+        options: o.deals || [],
+      },
+      { key: "date", label: "Purchase Date", type: "dateRange" },
+      {
+        key: "amount",
+        label: "Grand Total",
+        type: "range",
+        min: o.amountMin ?? 0,
+        max: o.amountMax ?? 0,
+        step: Math.max(Math.round(((o.amountMax ?? 0) - (o.amountMin ?? 0)) / 200), 1),
+      },
+      { key: "status", label: "Status", type: "select", operators: ["is", "is_not"], options: statusOptions },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterOptions]);
+
+  // Everything the list request needs besides paging and sorting: status pill,
+  // date range and the drawer's rules. Date rules are resolved to concrete
+  // instants here, in the user's own timezone.
+  const appendFilterParams = (params) => {
+    if (filterStatus) params.append("status", filterStatus);
+    if (dateRange.from) params.append("dateFrom", dateRange.from.toISOString());
+    if (dateRange.to) params.append("dateTo", dateRange.to.toISOString());
+    const rules = activeFilters
+      .map((f) =>
+        f.column === "date"
+          ? { ...toServerDueDateFilter(f.value), column: "date" }
+          : { column: f.column, operator: f.operator, value: f.value },
+      )
+      .filter((f) => f && (f.column !== "date" || f.from || f.to));
+    if (rules.length > 0) params.append("advancedFilters", JSON.stringify(rules));
+  };
 
   // Column list handed to the shared ExportModal — same shape Vendors/Companies use.
   const exportColumns = [
@@ -374,6 +441,7 @@ const PurchasePage = () => {
     try {
       const params = new URLSearchParams({ allIds: "true" });
       if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
+      appendFilterParams(params);
       const res = await API.get(`/purchases/pagination?${params.toString()}`);
       setSelectedPurchases(res.data.ids || []);
     } catch (err) {
@@ -400,7 +468,8 @@ const PurchasePage = () => {
     }
     exitSelectionMode();
     setPagination((prev) => ({ ...prev, currentPage: 1 }));
-  }, [debouncedSearchTerm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearchTerm, filterStatus, dateFromMs, dateToMs, activeFiltersKey]);
 
   // Fetch purchases
   useEffect(() => {
@@ -411,6 +480,10 @@ const PurchasePage = () => {
     pagination.limit,
     sortConfig,
     debouncedSearchTerm,
+    filterStatus,
+    dateFromMs,
+    dateToMs,
+    activeFiltersKey,
   ]);
 
   useEffect(() => {
@@ -468,10 +541,12 @@ const PurchasePage = () => {
         params.append("sortOrder", "desc");
       }
       if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
+      appendFilterParams(params);
 
       const res = await API.get(`/purchases/pagination?${params.toString()}`);
       if (requestId !== fetchRequestIdRef.current) return;
       setPurchases(res.data.purchases || []);
+      if (res.data.statusCounts) setStatusCounts({ ...res.data.statusCounts, "": res.data.pagination.totalCount });
       setPagination((prev) => ({
         ...prev,
         ...res.data.pagination,
@@ -581,7 +656,8 @@ const PurchasePage = () => {
         params.append("sortOrder", "desc");
       }
       if (debouncedSearchTerm) params.append("search", debouncedSearchTerm);
-      const rows = applyActiveFilters(await fetchAllPages("/purchases/pagination", params, "purchases"));
+      appendFilterParams(params);
+      const rows = await fetchAllPages("/purchases/pagination", params, "purchases");
       toast.dismiss(loadingToast);
       await exportClientSide(format, {
         rows,
@@ -694,7 +770,7 @@ const PurchasePage = () => {
   };
 
   // "Partial" is stored compactly but reads clearer as "Partially Paid" in the UI.
-  const getStatusLabel = (status) => (status === "Partial" ? "Partially Paid" : status);
+  const getStatusLabel = (status) => (status === "Confirmed" || status === "Partial" ? "Pending" : status);
 
   // Amount still owed on a purchase (grandTotal minus everything recorded).
   const amountDueOf = (p) => {
@@ -1265,7 +1341,7 @@ const PurchasePage = () => {
               );
             } else if (vc.key === "grandTotal") {
               const due = amountDueOf(p);
-              const showDue = p.status === "Partial" && due > 0.01;
+              const showDue = ["Pending", "Confirmed", "Partial"].includes(p.status) && due > 0.01;
               baseContent = (
                 <div>
                   <span className="text-sm font-semibold text-gray-900">
@@ -1289,7 +1365,7 @@ const PurchasePage = () => {
               baseContent = (
                 <div className="flex items-center justify-start">
                   <span
-                    className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusBadgeColor(p.status)}`}
+                    className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusBadgeColor(getStatusLabel(p.status))}`}
                   >
                     {getStatusLabel(p.status)}
                   </span>
@@ -1347,37 +1423,8 @@ const PurchasePage = () => {
     searchTerm,
   ]);
 
-  // Client-side advanced filter — applied on top of the server-fetched page so
-  // no backend changes are needed; large datasets are still paginated server-side.
-  const applyActiveFilters = (list) => {
-    if (!activeFilters || activeFilters.length === 0) return list;
-    return list.filter((row) =>
-      activeFilters.every((f) => {
-        let rawVal;
-        if (f.column === "vendor") {
-          rawVal = typeof row.vendor === "object"
-            ? (row.vendor?.name || "")
-            : (row.vendor || "");
-        } else {
-          rawVal = row[f.column];
-        }
-        const val = String(rawVal ?? "").toLowerCase().trim();
-        const filterVal = String(f.value ?? "").toLowerCase().trim();
-        switch (f.operator) {
-          case "contains": return val.includes(filterVal);
-          case "not_contains": return !val.includes(filterVal);
-          case "is": return val === filterVal;
-          case "is_not": return val !== filterVal;
-          case "in": return filterVal.split(",").map((s) => s.trim()).some((s) => val === s);
-          case "not_in": return !filterVal.split(",").map((s) => s.trim()).some((s) => val === s);
-          case "is_empty": return val === "" || rawVal == null;
-          case "is_not_empty": return val !== "" && rawVal != null;
-          default: return true;
-        }
-      }),
-    );
-  };
-  const filteredPurchases = useMemo(() => applyActiveFilters(purchases), [purchases, activeFilters]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Filtering (pills, dates, drawer rules) is done by the server.
+  const filteredPurchases = purchases;
 
   const table = useReactTable({
     data: filteredPurchases,
@@ -1649,12 +1696,12 @@ const PurchasePage = () => {
       <div className="bg-white overflow-visible">
         {/* Toolbar (Title + Search + Buttons) */}
         <div
-          className={`fixed right-0 h-16 px-4 sm:px-6 lg:px-8 border-b flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E1E4EA]`}
+          className={`fixed right-0 h-12 px-4 sm:px-6 lg:px-8 flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white`}
           style={{
             left: "var(--sidebar-width, 0px)",
             zIndex: 40,
-            minHeight: "64px",
-            maxHeight: "64px",
+            minHeight: "48px",
+            maxHeight: "48px",
             boxSizing: "border-box",
           }}
         >
@@ -1873,9 +1920,47 @@ const PurchasePage = () => {
           )}
         </div>
 
+        {/* Status pills + purchase-date range, same strip as the Invoices list */}
+        <div
+          className="fixed right-0 h-[52px] px-4 sm:px-6 lg:px-8 bg-white flex items-start top-[calc(102px+var(--dc-offline-offset,0px))] lg:top-[calc(112px+var(--dc-offline-offset,0px))]"
+          style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
+        >
+          <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
+            {[{ label: "All", value: "" }, ...statusOptions.map((o) => ({ label: getStatusLabel(o), value: o }))].map((tab) => {
+              const selected = filterStatus === tab.value;
+              return (
+                <button
+                  key={tab.label}
+                  type="button"
+                  onClick={() => setFilterStatus(tab.value)}
+                  className={`h-9 flex-shrink-0 whitespace-nowrap rounded-full text-sm font-medium transition-all duration-300 ease-out ${selected
+                    ? "px-6 bg-white text-[#0085FF] shadow-sm"
+                    : "px-3.5 text-[#0E121B] hover:bg-white/60"
+                    }`}
+                >
+                  {tab.label}
+                  {statusCounts[tab.value] != null && (
+                    <span
+                      className={`ml-2 inline-block rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors duration-300 ${selected
+                        ? "bg-[#E8F2FF] text-[#0085FF]"
+                        : "bg-white/70 text-[#525866]"
+                        }`}
+                    >
+                      {statusCounts[tab.value]}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="ml-3">
+            <DateRangeFilterButton value={dateRange} onChange={setDateRange} />
+          </div>
+        </div>
+
         <div
           ref={tableScrollRef}
-          className="overflow-x-auto overflow-y-auto top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+          className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(154px+var(--dc-offline-offset,0px))] lg:top-[calc(164px+var(--dc-offline-offset,0px))]"
           style={{
             position: "fixed",
             left: "var(--sidebar-width, 0px)",
@@ -1997,7 +2082,7 @@ const PurchasePage = () => {
                             <EmptyState
                               icon={ShoppingCart}
                               noun="Purchase"
-                              isFiltered={!!(debouncedSearchTerm || activeFilters?.length)}
+                              isFiltered={!!(debouncedSearchTerm || activeFilters?.length || filterStatus)}
                               onCreate={() => {
                                 setEditingPurchase(null);
                                 setShowForm(true);
@@ -2009,7 +2094,14 @@ const PurchasePage = () => {
                         table.getRowModel().rows.map((row) => (
                           <tr
                             key={row.id}
-                            className={`bg-white hover:bg-blue-50 transition-colors ${selectedPurchasesSet.has(row.original._id) ? "!bg-blue-50" : ""}`}
+                            onClick={(e) => {
+                              // A click on the row itself (not a control inside it, and
+                              // not the checkbox column) opens the detail card.
+                              if (e.target.closest("button, a, input, label, [data-no-row-click]")) return;
+                              if (e.target.closest("td")?.cellIndex === 0) return;
+                              setDetailPurchaseId(row.original._id);
+                            }}
+                            className={`cursor-pointer bg-white hover:bg-blue-50 transition-colors ${selectedPurchasesSet.has(row.original._id) ? "!bg-blue-50" : ""}`}
                             style={{ height: 37, maxHeight: 37 }}
                           >
                             {row.getVisibleCells().map((cell) => {
@@ -2135,6 +2227,63 @@ const PurchasePage = () => {
         exportUrl="/purchases/export-selected"
         fileName="Exported_Purchases.csv"
       />
+
+      {(() => {
+        const detailIndex = filteredPurchases.findIndex((p) => p._id === detailPurchaseId);
+        if (detailIndex < 0) return null;
+        const pu = filteredPurchases[detailIndex];
+        // The shared detail card speaks in invoice terms, so map the purchase onto it.
+        const stripHtml = (h) =>
+          String(h || "")
+            .replace(/<li[^>]*>/gi, "• ")
+            .replace(/<br\s*\/?>/gi, "\n")
+            .replace(/<\/(p|li|h[1-3])>/gi, "\n")
+            .replace(/<[^>]+>/g, "")
+            .replace(/&nbsp;/g, " ")
+            .trim();
+        const detailDoc = {
+          _id: pu._id,
+          purchaseNumber: pu.purchaseNumber,
+          date: pu.purchaseDate || pu.createdAt,
+          dueDate: null,
+          amount: pu.grandTotal,
+          status: getStatusLabel(pu.status),
+          deal: { title: pu.vendor?.name || "—" },
+          items: (pu.items || []).map((i) => ({
+            _id: i._id,
+            name: i.name,
+            description: i.sku ? `SKU ${i.sku}` : "",
+            rate: i.unitPrice,
+            quantity: i.quantity,
+            gstRate: i.gstRate,
+            discount: 0,
+          })),
+          payments: pu.payments || [],
+          notes: stripHtml(pu.notes),
+        };
+        return (
+          <DocumentDetailModal
+            doc={detailDoc}
+            type="purchase"
+            docLabel="Purchase"
+            numberKey="purchaseNumber"
+            steps={["Draft", "Pending", "Paid"]}
+            paymentTerms={pu.purchaseOrder?.poNumber ? `PO ${pu.purchaseOrder.poNumber}` : ""}
+            showPayments
+            dateLabel="Purchase date"
+            termsLabel="Linked PO"
+            hideAddresses
+            position={{ index: detailIndex, total: filteredPurchases.length }}
+            onClose={() => setDetailPurchaseId(null)}
+            onPrev={detailIndex > 0 ? () => setDetailPurchaseId(filteredPurchases[detailIndex - 1]._id) : null}
+            onNext={
+              detailIndex < filteredPurchases.length - 1
+                ? () => setDetailPurchaseId(filteredPurchases[detailIndex + 1]._id)
+                : null
+            }
+          />
+        );
+      })()}
 
       <AdvancedFilterPanel
         isOpen={showAdvancedFilters}

@@ -15,6 +15,7 @@ const subscriptionGate = require("../middlewares/subscriptionGate");
 // validity are enforced for now.
 router.post("/", requireAuth, subscriptionGate, purchaseReturnController.createPurchaseReturn);
 router.get("/", requireAuth, subscriptionGate, purchaseReturnController.getAllPurchaseReturns);
+router.get("/filter-options", requireAuth, subscriptionGate, purchaseReturnController.getPurchaseReturnFilterOptions);
 router.get("/pagination", requireAuth, subscriptionGate, purchaseReturnController.getAllPurchaseReturnsWithPagination);
 router.get("/download/:id", requireAuth, subscriptionGate, purchaseReturnController.downloadPurchaseReturn);
 router.post("/bulk-import", requireAuth, subscriptionGate, purchaseReturnController.bulkImportPurchaseReturns);

@@ -9,6 +9,8 @@ const purchaseDocumentPdf = require("../utils/purchaseDocumentPdf");
 const { syncDocumentStock } = require("../utils/inventorySync");
 const allocationService = require("../services/paymentAllocationService");
 const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
+const { parseAdvancedFiltersParam } = require("../utils/dateRangeFilter");
+const { buildDocumentAdvancedConditions, createFilterOptionsHandler, parseIssueDateRange, PURCHASE_OPTS } = require("../utils/documentAdvancedFilters");
 
 // A purchase's per-item Purchase Price / GST% (PurchaseForm.jsx's editable Amount/GST%
 // fields) are an explicit "this is what it actually cost" entry — sync them back onto the
@@ -388,6 +390,15 @@ exports.getAllPurchases = async (req, res) => {
   }
 };
 
+// GET /api/purchases/filter-options — suggestions + amount bounds for Advanced Filters
+exports.getPurchaseFilterOptions = createFilterOptionsHandler({
+  Model: Purchase,
+  numberField: "purchaseNumber",
+  settingsKey: "purchase",
+  purchase: true,
+  amountField: "grandTotal",
+});
+
 // Get All Purchases with Pagination
 exports.getAllPurchasesWithPagination = async (req, res) => {
   try {
@@ -418,7 +429,24 @@ exports.getAllPurchasesWithPagination = async (req, res) => {
 
     // Status filter
     if (status) {
-      query.status = status;
+      // "Pending" on the list also covers Confirmed and Partial.
+      query.status = status === "Pending" ? { $in: ["Pending", "Confirmed", "Partial"] } : status;
+    }
+
+    // Purchase-date range from the list's date button (from inclusive, to exclusive).
+    const purchaseDateRange = parseIssueDateRange(req.query);
+    if (purchaseDateRange) query.purchaseDate = purchaseDateRange;
+
+    // Advanced Filter panel rules, ANDed with everything else.
+    const advancedRules = parseAdvancedFiltersParam(req.query.advancedFilters);
+    if (advancedRules === null) {
+      return res.status(400).json({ error: "Invalid advancedFilters" });
+    }
+    if (advancedRules.length > 0) {
+      const advancedConditions = await buildDocumentAdvancedConditions(advancedRules, req.user.organization, "purchaseNumber", PURCHASE_OPTS);
+      if (advancedConditions.length > 0) {
+        query.$and = query.$and ? [...query.$and, ...advancedConditions] : advancedConditions;
+      }
     }
 
     // Build sort object
@@ -434,6 +462,19 @@ exports.getAllPurchasesWithPagination = async (req, res) => {
     }
 
     // Execute queries in parallel for better performance
+    // Per-status record counts for the pill switcher: the same filters as the list
+    // but with the status filter lifted, so each pill shows how many records it lists.
+    const statusCountQuery = { ...query };
+    delete statusCountQuery.status;
+    const statusCountEntries = Object.entries({
+      "Draft": Purchase.countDocuments({ ...statusCountQuery, status: "Draft" }),
+      "Pending": Purchase.countDocuments({ ...statusCountQuery, status: { $in: ["Pending", "Confirmed", "Partial"] } }),
+      "Paid": Purchase.countDocuments({ ...statusCountQuery, status: "Paid" }),
+      "Cancelled": Purchase.countDocuments({ ...statusCountQuery, status: "Cancelled" }),
+    });
+    const statusCountValues = await Promise.all(statusCountEntries.map(([, q]) => q));
+    const statusCounts = Object.fromEntries(statusCountEntries.map(([k], i) => [k, statusCountValues[i]]));
+
     const [purchases, totalCount] = await Promise.all([
       Purchase.find(query)
         .populate("vendor", "name email phone")
@@ -454,6 +495,7 @@ exports.getAllPurchasesWithPagination = async (req, res) => {
 
     res.json({
       purchases,
+      statusCounts,
       pagination: {
         currentPage: page,
         totalPages,

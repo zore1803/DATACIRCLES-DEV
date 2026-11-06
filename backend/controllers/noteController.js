@@ -6,7 +6,10 @@ const Deal = require("../models/Deal");
 exports.createNote = async (req, res) => {
   try {
     const { title, note, company, deal, taggedContacts = [], taggedDeals = [], taggedInvoices = [], noteType, visibility } = req.body;
+    // Optional date for the note (the calendar's Quick Add dates it to the clicked day).
+    const requestedDate = req.body.createdAt ? new Date(req.body.createdAt) : null;
     const newNote = await Note.create({
+      ...(requestedDate && !Number.isNaN(requestedDate.getTime()) ? { createdAt: requestedDate } : {}),
       title,
       note,
       company,

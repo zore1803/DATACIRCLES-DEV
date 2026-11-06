@@ -153,9 +153,23 @@ const SearchableDropdown = ({
         className={`w-full border transition-all font-inter flex items-center justify-between ${compact ? "rounded-full px-3 h-[38px]" : "rounded-[25px] px-4 h-12"} ${getBorderColor()} ${disabled ? "bg-gray-50 cursor-not-allowed opacity-70" : "bg-white cursor-pointer"}`}
         onClick={() => !disabled && setIsOpen(!isOpen)}
       >
-        <span className={`truncate ${compact ? "text-[13px]" : "text-[14px]"} ${selectedOption ? (compact ? "text-[#1F2937]" : "text-gray-900 font-medium") : (compact ? "text-[#1F2937] opacity-50" : "text-[#A0A0A0]")}`}>
-          {selectedOption ? selectedOption[displayKey] : placeholder}
-        </span>
+        {/* One search bar: when open, the field itself becomes the search input
+            (all options are listed until you type, then they narrow down). */}
+        {isOpen ? (
+          <input
+            type="text"
+            autoFocus
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            placeholder={selectedOption ? selectedOption[displayKey] : placeholder}
+            className={`flex-1 min-w-0 bg-transparent outline-none font-inter ${compact ? "text-[13px]" : "text-[14px]"} text-[#1F2937] placeholder:text-[#A0A0A0]`}
+          />
+        ) : (
+          <span className={`truncate ${compact ? "text-[13px]" : "text-[14px]"} ${selectedOption ? (compact ? "text-[#1F2937]" : "text-gray-900 font-medium") : (compact ? "text-[#1F2937] opacity-50" : "text-[#A0A0A0]")}`}>
+            {selectedOption ? selectedOption[displayKey] : placeholder}
+          </span>
+        )}
         <div className="flex items-center gap-2">
           {selectedOption && !disabled && (
             <button
@@ -196,21 +210,11 @@ const SearchableDropdown = ({
 
       {isOpen && (
         <div className="absolute z-[10010] w-full mt-2 bg-white border border-[#E0E0E1] rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
-          <div className="p-2 border-b border-[#F2F2F7]">
-            <input
-              type="text"
-              placeholder={`Search ${placeholder.toLowerCase()}...`}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full h-8 px-3 text-[13px] border border-[#E0E0E1] rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 font-inter placeholder:text-[#A0A0A0]"
-              autoFocus
-            />
-          </div>
-          <div className="max-h-52 overflow-y-auto py-1">
+          <div className="max-h-52 overflow-y-auto py-0.5">
             {filteredOptions.length > 0 ? (
               <>
                 <div
-                  className="px-3 py-1.5 text-[13px] text-gray-400 hover:bg-[#F2F2F7] cursor-pointer transition-colors italic border-b border-[#F2F2F7]"
+                  className="px-3 py-1 text-[13px] leading-5 text-gray-400 hover:bg-[#F2F2F7] cursor-pointer transition-colors italic border-b border-[#F2F2F7]"
                   onClick={handleClear}
                 >
                   Clear selection
@@ -218,7 +222,7 @@ const SearchableDropdown = ({
                 {filteredOptions.map((option) => (
                   <div
                     key={option[valueKey]}
-                    className={`px-3 py-1.5 text-[13px] cursor-pointer hover:bg-[#F2F2F7] transition-all font-inter ${option[valueKey] === value
+                    className={`px-3 py-1 text-[13px] leading-5 min-h-[28px] cursor-pointer hover:bg-[#F2F2F7] transition-all font-inter ${option[valueKey] === value
                         ? "bg-[#F2F2F7] text-blue-600 font-bold"
                         : "text-gray-700"
                       }`}

@@ -2124,13 +2124,13 @@ function Contacts() {
         ) : (
           <>
             <div
-              className={`lg:hidden flex flex-col justify-center gap-1.5 overflow-hidden flex-shrink-0 transition-all duration-300 ease-in-out ${isSearchExpanded ? "w-0 opacity-0" : "w-[160px] opacity-100"}`}
+              className={`lg:!w-auto lg:!opacity-100 flex flex-col justify-center gap-1.5 overflow-hidden flex-shrink-0 transition-all duration-300 ease-in-out ${isSearchExpanded ? "w-0 opacity-0" : "w-[160px] opacity-100"}`}
             >
               <div className="flex items-center gap-2">
-                <h1 className="m-0 leading-tight font-bold text-base text-gray-900 truncate">Contacts</h1>
+                <h1 className="m-0 leading-tight font-bold text-base sm:text-lg text-gray-900 truncate">Contacts</h1>
                 <VideoIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
               </div>
-              <p className="m-0 leading-tight text-[10px] text-gray-500 font-inter truncate">
+              <p className="m-0 leading-tight text-[10px] sm:text-xs text-gray-500 font-inter truncate">
                 Manage your contacts and leads
               </p>
             </div>

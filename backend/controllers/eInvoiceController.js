@@ -2,6 +2,40 @@ const EInvoice = require("../models/EInvoice");
 const { buildFuzzySearchPattern } = require("../utils/searchRegex");
 const eInvoiceService = require("../services/eInvoiceService");
 const irisProvider = require("../providers/iris/irisProvider");
+const { parseAdvancedFiltersParam } = require("../utils/dateRangeFilter");
+const { buildDocumentAdvancedConditions, parseIssueDateRange, E_INVOICE_OPTS } = require("../utils/documentAdvancedFilters");
+
+// GET /api/e-invoices/filter-options — suggestions + amount bounds for Advanced Filters
+exports.getEInvoiceFilterOptions = async (req, res) => {
+  try {
+    const match = { organization: req.user.organization };
+    const [numbers, customers, bounds] = await Promise.all([
+      EInvoice.find(match).sort({ createdAt: -1 }).limit(1000).distinct("invoiceNumber"),
+      EInvoice.find(match).distinct("customer.name"),
+      EInvoice.aggregate([
+        { $match: match },
+        { $group: { _id: null, min: { $min: "$amount" }, max: { $max: "$amount" } } },
+      ]),
+    ]);
+    const prefixes = new Set();
+    const suffixes = new Set();
+    numbers.forEach((n) => {
+      const m = /^(\D*)(.*?)(\D*)$/.exec(String(n || ""));
+      if (m && m[1]) prefixes.add(m[1]);
+      if (m && m[3]) suffixes.add(m[3]);
+    });
+    res.json({
+      numbers: numbers.sort(),
+      prefixes: [...prefixes].sort(),
+      suffixes: [...suffixes].sort(),
+      deals: customers.filter(Boolean).sort((a, b) => a.localeCompare(b)).map((t) => ({ value: t, label: t })),
+      amountMin: Math.floor(bounds[0]?.min ?? 0),
+      amountMax: Math.ceil(bounds[0]?.max ?? 0),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
 
 const POPULATE = [
   { path: "invoice", select: "invoiceNumber amount date" },
@@ -68,6 +102,20 @@ exports.getAllEInvoicesWithPagination = async (req, res) => {
       query.$or = [{ invoiceNumber: re }, { "customer.name": re }, { irn: re }, { ackNo: re }];
     }
 
+    // Invoice-date range from the list's date button (from inclusive, to exclusive).
+    const dateRange = parseIssueDateRange(req.query);
+    if (dateRange) query.date = dateRange;
+
+    // Advanced Filter panel rules, ANDed with everything else.
+    const advancedRules = parseAdvancedFiltersParam(req.query.advancedFilters);
+    if (advancedRules === null) {
+      return res.status(400).json({ message: "Invalid advancedFilters" });
+    }
+    if (advancedRules.length > 0) {
+      const conditions = await buildDocumentAdvancedConditions(advancedRules, req.user.organization, "invoiceNumber", E_INVOICE_OPTS);
+      if (conditions.length > 0) query.$and = query.$and ? [...query.$and, ...conditions] : conditions;
+    }
+
     // Mirrors salesReturnController's allIds shortcut — lets the frontend's
     // "Select All" bulk-strip button select every row matching the current
     // search/status filters, not just the ids on the currently-loaded page.
@@ -82,6 +130,19 @@ exports.getAllEInvoicesWithPagination = async (req, res) => {
     const sortFieldMap = { customer: "customer.name" };
     const sortField = sortFieldMap[sortBy] || sortBy;
 
+    // Per-status record counts for the pill switcher: the same filters as the list
+    // but with the status filter lifted, so each pill shows how many records it lists.
+    const statusCountQuery = { ...query };
+    delete statusCountQuery.status;
+    const statusCountEntries = Object.entries({
+      "Success": EInvoice.countDocuments({ ...statusCountQuery, status: "Success" }),
+      "Pending": EInvoice.countDocuments({ ...statusCountQuery, status: "Pending" }),
+      "Failed": EInvoice.countDocuments({ ...statusCountQuery, status: "Failed" }),
+      "Cancelled": EInvoice.countDocuments({ ...statusCountQuery, status: "Cancelled" }),
+    });
+    const statusCountValues = await Promise.all(statusCountEntries.map(([, q]) => q));
+    const statusCounts = Object.fromEntries(statusCountEntries.map(([k], i) => [k, statusCountValues[i]]));
+
     const [eInvoices, totalCount] = await Promise.all([
       EInvoice.find(query)
         .populate(POPULATE)
@@ -94,6 +155,7 @@ exports.getAllEInvoicesWithPagination = async (req, res) => {
     const totalPages = Math.ceil(totalCount / limit);
     res.json({
       eInvoices,
+      statusCounts,
       pagination: {
         currentPage: page,
         totalPages,

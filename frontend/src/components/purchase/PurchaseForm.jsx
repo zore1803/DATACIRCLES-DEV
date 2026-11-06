@@ -18,7 +18,7 @@ import useBodyScrollLock from "../../hooks/useBodyScrollLock";
 import { resolveTransactionType } from "../../utils/placeOfSupply";
 
 import SearchIcon from "../common/SearchIcon";
-import FilterIcon from "../common/FilterIcon";
+import RichDescriptionEditor from "../common/RichDescriptionEditor";
 import { FormLabel, STATIC_FIELD_CLS, inputCls, textareaCls } from "../common/form";
 const API_BASE = `${import.meta.env.VITE_APP_API_URL}/api`;
 // Same fixed slab set as ItemForm.jsx/QuickItemDrawer.jsx, so a purchase's
@@ -732,7 +732,7 @@ const PurchaseForm = ({
                     setVendorId(id);
                     setSelectedVendor(option || null);
                   }}
-                  remote={{ endpoint: "/vendors", onSelectedLoaded: setSelectedVendor }}
+                  remote={{ endpoint: "/vendors", params: { picker: "true" }, onSelectedLoaded: setSelectedVendor }}
                   placeholder="Select Vendor"
                   displayKey="name"
                   valueKey="_id"
@@ -773,27 +773,24 @@ const PurchaseForm = ({
                   </button>
                 </div>
               ) : (
-                <div className="relative">
-                  <select
-                    value={selectedPO}
-                    onChange={handlePOChange}
-                    className={`${inputCls()} appearance-none bg-white cursor-pointer`}
-                  >
-                    <option value="">Select Purchase Order</option>
-                    {/* Only the selected vendor's POs are linkable — showing
-                        every vendor's POs here let the user link a PO that
-                        belongs to a different vendor. With no vendor picked yet,
-                        fall back to showing all. */}
-                    {vendorPOs.map((po) => (
-                      <option key={po._id} value={po._id}>
-                        {po.poNumber} - {po.vendor?.name}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
-                    <ChevronDown className="w-4 h-4" />
-                  </div>
-                </div>
+                <>
+                {/* Only the selected vendor's POs are linkable — showing every
+                    vendor's POs here let the user link a PO that belongs to a
+                    different vendor. With no vendor picked yet, fall back to
+                    showing all. */}
+                <SearchableDropdown
+                  options={vendorPOs.map((po) => ({
+                    _id: po._id,
+                    label: `${po.poNumber}${po.vendor?.name ? ` - ${po.vendor.name}` : ""}`,
+                  }))}
+                  value={selectedPO}
+                  onChange={(id) => handlePOChange({ target: { value: id } })}
+                  placeholder="Select Purchase Order"
+                  displayKey="label"
+                  valueKey="_id"
+                  className="w-full"
+                />
+                </>
               )}
             </div>
           </div>
@@ -801,12 +798,12 @@ const PurchaseForm = ({
           {/* Items Section */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-900">Items</h3>
+              <h3 className="text-[13px] font-medium text-[#161618] tracking-[-0.05em]">Items</h3>
               <div className="relative flex-shrink-0" ref={addMenuRef}>
                 <button
                   type="button"
                   onClick={() => setShowAddMenu((v) => !v)}
-                  className="flex items-center gap-1 flex-shrink-0 whitespace-nowrap text-blue-600 hover:text-blue-700 font-medium text-xs transition-colors"
+                  className="flex items-center gap-1 flex-shrink-0 whitespace-nowrap text-blue-600 hover:text-blue-700 font-medium text-[13px] transition-colors"
                 >
                   <PlusIcon className="w-4 h-4 flex-shrink-0" />
                   Add Item
@@ -861,7 +858,7 @@ const PurchaseForm = ({
                       just types a name. Never both at once. */}
                   {item.mode === "manual" ? (
                     <div>
-                      <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
+                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                         Item Name <span className="text-red-500">*</span>
                       </label>
                       <input
@@ -874,7 +871,7 @@ const PurchaseForm = ({
                     </div>
                   ) : (
                     <div>
-                      <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
+                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                         Item <span className="text-red-500">*</span>
                       </label>
                       {item.name ? (
@@ -906,27 +903,46 @@ const PurchaseForm = ({
                   <div className="grid grid-cols-3 gap-3">
                     {/* Quantity */}
                     <div>
-                      <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
+                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                         Quantity
                       </label>
                       <div className="relative">
                         <input
                           type="number"
+                          min="0"
+                          step="any"
                           value={item.quantity}
                           onChange={(e) =>
                             updateItem(index, "quantity", e.target.value)
                           }
-                          className="w-full px-3 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                          className="w-full px-9 h-8 bg-white border border-[#1F2937]/10 rounded-full text-[12px] text-[#1F2937] text-center focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                           placeholder="01"
                         />
-                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-                          <FilterIcon size={16} />
-                        </div>
+                        <button
+                          type="button"
+                          aria-label="Decrease quantity"
+                          onClick={() =>
+                            updateItem(index, "quantity", String(Math.max(0, (parseFloat(item.quantity) || 0) - 1)))
+                          }
+                          className="absolute left-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-gray-500 hover:bg-gray-100 flex items-center justify-center text-base leading-none"
+                        >
+                          −
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Increase quantity"
+                          onClick={() =>
+                            updateItem(index, "quantity", String((parseFloat(item.quantity) || 0) + 1))
+                          }
+                          className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-gray-500 hover:bg-gray-100 flex items-center justify-center text-base leading-none"
+                        >
+                          +
+                        </button>
                       </div>
                     </div>
                     {/* Unit Price */}
                     <div>
-                      <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
+                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                         Unit Price <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
@@ -946,7 +962,7 @@ const PurchaseForm = ({
                     </div>
                     {/* GST % */}
                     <div>
-                      <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
+                      <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                         GST %
                       </label>
                       <div className="relative">
@@ -977,7 +993,7 @@ const PurchaseForm = ({
                   {/* Amount — read-only. Always quantity × unitPrice; edit Unit Price to
                       change it. */}
                   <div>
-                    <label className="block text-[11px] font-medium text-[#161618] tracking-[-0.05em] mb-1.5">
+                    <label className="block text-[13px] font-medium text-[#161618] tracking-[-0.05em] mb-2">
                       Amount
                     </label>
                     <div className="w-full px-3 h-8 flex items-center bg-gray-100 border border-[#1F2937]/10 rounded-full text-[12px] font-semibold text-gray-800">
@@ -995,11 +1011,13 @@ const PurchaseForm = ({
           {/* Notes */}
           <div>
             <FormLabel>Additional Notes</FormLabel>
-            <textarea
+            <RichDescriptionEditor
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={setNotes}
               placeholder="Add Additional Notes"
-              className={`${textareaCls()} min-h-[90px]`}
+              minHeight={90}
+              maxHeight={220}
+              extended
             />
           </div>
 

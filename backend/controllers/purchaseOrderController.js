@@ -317,6 +317,19 @@ exports.getAllPurchaseOrdersWithPagination = async (req, res) => {
     }
 
     // Execute queries in parallel for better performance
+    // Per-status record counts for the pill switcher: the same filters as the list
+    // but with the status filter lifted, so each pill shows how many records it lists.
+    const statusCountQuery = { ...query };
+    delete statusCountQuery.status;
+    const statusCountEntries = Object.entries({
+      "Pending": PurchaseOrder.countDocuments({ ...statusCountQuery, status: "Pending" }),
+      "Approved": PurchaseOrder.countDocuments({ ...statusCountQuery, status: "Approved" }),
+      "Rejected": PurchaseOrder.countDocuments({ ...statusCountQuery, status: "Rejected" }),
+      "Delivered": PurchaseOrder.countDocuments({ ...statusCountQuery, status: "Delivered" }),
+    });
+    const statusCountValues = await Promise.all(statusCountEntries.map(([, q]) => q));
+    const statusCounts = Object.fromEntries(statusCountEntries.map(([k], i) => [k, statusCountValues[i]]));
+
     const [purchaseOrders, totalCount] = await Promise.all([
       PurchaseOrder.find(query)
         .populate("vendor")
@@ -336,6 +349,7 @@ exports.getAllPurchaseOrdersWithPagination = async (req, res) => {
     
     res.json({
       purchaseOrders,
+      statusCounts,
       pagination: {
         currentPage: page,
         totalPages,

@@ -190,6 +190,8 @@ const PurchaseOrderPage = () => {
   const dateFromMs = dateRange.from ? dateRange.from.getTime() : 0;
   const dateToMs = dateRange.to ? dateRange.to.getTime() : 0;
   const [filterOptions, setFilterOptions] = useState(null);
+  // Record count behind each status pill (from the list response).
+  const [statusCounts, setStatusCounts] = useState({});
   const [selectedPO, setSelectedPO] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -568,6 +570,7 @@ const PurchaseOrderPage = () => {
       );
       if (requestId !== fetchRequestIdRef.current) return;
       setPurchaseOrders(res.data.purchaseOrders || []);
+      if (res.data.statusCounts) setStatusCounts({ ...res.data.statusCounts, "": res.data.pagination.totalCount });
       setPagination((prev) => ({
         ...prev,
         ...res.data.pagination,
@@ -1687,12 +1690,12 @@ const PurchaseOrderPage = () => {
       <div className="bg-white overflow-visible">
         {/* Toolbar (Title + Search + Buttons) */}
         <div
-          className={`fixed right-0 h-16 px-4 sm:px-6 lg:px-8 flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white`}
+          className={`fixed right-0 h-12 px-4 sm:px-6 lg:px-8 flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white`}
           style={{
             left: "var(--sidebar-width, 0px)",
             zIndex: 40,
-            minHeight: "64px",
-            maxHeight: "64px",
+            minHeight: "48px",
+            maxHeight: "48px",
             boxSizing: "border-box",
           }}
         >
@@ -1915,7 +1918,7 @@ const PurchaseOrderPage = () => {
 
         {/* Status pills + order-date range, same strip as the Invoices list */}
         <div
-          className="fixed right-0 h-14 px-4 sm:px-6 lg:px-8 bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+          className="fixed right-0 h-[52px] px-4 sm:px-6 lg:px-8 bg-white flex items-start top-[calc(102px+var(--dc-offline-offset,0px))] lg:top-[calc(112px+var(--dc-offline-offset,0px))]"
           style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
         >
           <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
@@ -1926,15 +1929,20 @@ const PurchaseOrderPage = () => {
                   key={tab.label}
                   type="button"
                   onClick={() => setFilterStatus(tab.value)}
-                  className={`h-9 flex-shrink-0 whitespace-nowrap rounded-full px-5 text-sm font-medium transition-colors ${selected
-                    ? "bg-white text-[#0085FF] shadow-sm"
-                    : "text-[#0E121B] hover:bg-white/60"
+                  className={`h-9 flex-shrink-0 whitespace-nowrap rounded-full text-sm font-medium transition-all duration-300 ease-out ${selected
+                    ? "px-6 bg-white text-[#0085FF] shadow-sm"
+                    : "px-3.5 text-[#0E121B] hover:bg-white/60"
                     }`}
                 >
                   {tab.label}
-                  {tab.value === "" && selected && (
-                    <span className="ml-2 rounded-md bg-[#F1F1F5] px-1.5 py-0.5 text-xs font-medium text-[#525866]">
-                      {pagination.totalCount ?? 0}
+                  {statusCounts[tab.value] != null && (
+                    <span
+                      className={`ml-2 inline-block rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors duration-300 ${selected
+                        ? "bg-[#E8F2FF] text-[#0085FF]"
+                        : "bg-white/70 text-[#525866]"
+                        }`}
+                    >
+                      {statusCounts[tab.value]}
                     </span>
                   )}
                 </button>
@@ -1948,7 +1956,7 @@ const PurchaseOrderPage = () => {
 
         <div
           ref={tableScrollRef}
-          className="overflow-x-auto overflow-y-auto top-[calc(174px+var(--dc-offline-offset,0px))] lg:top-[calc(184px+var(--dc-offline-offset,0px))]"
+          className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(154px+var(--dc-offline-offset,0px))] lg:top-[calc(164px+var(--dc-offline-offset,0px))]"
           style={{
             position: "fixed",
             left: "var(--sidebar-width, 0px)",
@@ -2264,10 +2272,6 @@ const PurchaseOrderPage = () => {
                 ? () => setDetailPoId(filteredPurchaseOrders[detailIndex + 1]._id)
                 : null
             }
-            onEdit={() => {
-              setDetailPoId(null);
-              handleEdit(po);
-            }}
           />
         );
       })()}

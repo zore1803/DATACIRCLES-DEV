@@ -212,6 +212,8 @@ const ItemSearchSelect = ({ value, onSelect, onAddNew, error = null }) => {
   );
 };
 
+const PAYMENT_TERM_PRESETS = ["Net 7", "Net 30", "Net 45", "Net 60", "Net 90"];
+
 const PurchaseOrderForm = ({
   editingPO,
   onRequestClose,
@@ -275,6 +277,8 @@ const PurchaseOrderForm = ({
     },
   ]);
   const [paymentTerms, setPaymentTerms] = useState("Net 30");
+  // "Custom" lets the user type their own terms instead of picking a preset.
+  const [customTerms, setCustomTerms] = useState(false);
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState("Approved");
   // Auto-derived from vendor state vs. the org's own state (see the effect
@@ -308,6 +312,7 @@ const PurchaseOrderForm = ({
         })) || [],
       );
       setPaymentTerms(editingPO.paymentTerms || "Net 30");
+      setCustomTerms(!!editingPO.paymentTerms && !PAYMENT_TERM_PRESETS.includes(editingPO.paymentTerms));
       setNotes(editingPO.notes || "");
       setStatus(editingPO.status || "Pending");
       // Was never restored on edit — every existing PO reopened for editing
@@ -399,6 +404,11 @@ const PurchaseOrderForm = ({
     e.preventDefault();
     if (!vendorId) {
       toast.error("Please select a vendor");
+      return;
+    }
+
+    if (!paymentTerms.trim()) {
+      toast.error("Please enter the payment terms");
       return;
     }
 
@@ -757,12 +767,34 @@ const PurchaseOrderForm = ({
           <div className="space-y-6">
             <div>
               <FormLabel required>Payment Terms</FormLabel>
-              <input
-                type="text"
-                value={paymentTerms}
-                onChange={(e) => setPaymentTerms(e.target.value)}
-                className={inputCls()}
+              <SearchableDropdown
+                options={[...PAYMENT_TERM_PRESETS, "Custom"].map((t) => ({ _id: t, label: t }))}
+                value={customTerms ? "Custom" : paymentTerms}
+                onChange={(id) => {
+                  if (!id) return;
+                  if (id === "Custom") {
+                    setCustomTerms(true);
+                    setPaymentTerms("");
+                  } else {
+                    setCustomTerms(false);
+                    setPaymentTerms(id);
+                  }
+                }}
+                placeholder="Select payment terms"
+                displayKey="label"
+                valueKey="_id"
+                className="w-full"
               />
+              {customTerms && (
+                <input
+                  type="text"
+                  value={paymentTerms}
+                  onChange={(e) => setPaymentTerms(e.target.value)}
+                  placeholder="e.g. 50% advance, balance on delivery"
+                  className={`${inputCls()} mt-2`}
+                  autoFocus
+                />
+              )}
             </div>
 
             <div>

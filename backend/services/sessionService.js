@@ -20,10 +20,10 @@ const Session = require("../models/Session");
 const User = require("../models/User");
 
 const SESSION_TTL_DAYS = Number(process.env.SESSION_TTL_DAYS) || 30;
-// How many browsers/devices one user may be logged in on at once. Defaults to
-// 1: a new login replaces the previous one (see establishSession). Capped at 2
+// How many browsers/devices one user may be logged in on at once. Logging in on
+// another device or browser does not replace an existing session. Capped at 2
 // because the Session model only has slots 0 and 1.
-const MAX_SESSIONS_PER_USER = Math.min(Math.max(Number(process.env.MAX_SESSIONS_PER_USER) || 1, 1), 2);
+const MAX_SESSIONS_PER_USER = Math.min(Math.max(Number(process.env.MAX_SESSIONS_PER_USER) || 2, 1), 2);
 const SLOTS = Array.from({ length: MAX_SESSIONS_PER_USER }, (_, i) => i);
 const DUPLICATE_KEY_ERROR = 11000;
 
@@ -87,14 +87,14 @@ async function clearStaleSlot(userId, slot, now, session) {
  * Atomically reserve one of a user's two session slots. Throws
  * SessionLimitError if both slots are currently held by a live session.
  */
-async function reserveSlot({ userId, organization, ip, userAgent }) {
+async function reserveSlot({ userId, organization, ip, userAgent, slots = SLOTS }) {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
   const sessionId = newSessionId();
   const csrfSecret = newCsrfSecret();
   const deviceLabel = deviceLabelFromUserAgent(userAgent);
 
-  for (const slot of SLOTS) {
+  for (const slot of slots) {
     const dbSession = await mongoose.startSession();
     try {
       let created = null;
@@ -142,17 +142,8 @@ async function reserveSlot({ userId, organization, ip, userAgent }) {
  * time this is called). Returns { session, csrfToken }.
  */
 async function establishSession({ userId, organization, ip, userAgent }) {
-  // Newest login wins. With a single allowed session, sign every older one
-  // out first (their next request gets SESSION_REVOKED from sessionGuard).
-  // With 2 allowed, only evict when both slots are taken (oldest first).
-  if (MAX_SESSIONS_PER_USER === 1) {
-    await Session.updateMany({ userId, revokedAt: null }, { $set: { revokedAt: new Date() } });
-  } else {
-    const live = await Session.find({ userId, revokedAt: null, expiresAt: { $gt: new Date() } }).sort({ lastActiveAt: 1 });
-    if (live.length >= MAX_SESSIONS_PER_USER) {
-      await Session.updateOne({ _id: live[0]._id }, { $set: { revokedAt: new Date() } });
-    }
-  }
+  // A new login never signs an existing one out. Each user has two slots; when
+  // both are held by live sessions, reserveSlot throws SessionLimitError.
   const session = await reserveSlot({ userId, organization, ip, userAgent });
   const csrfToken = deriveCsrfToken(session.csrfSecret, session.sessionId);
   return { session, csrfToken };
