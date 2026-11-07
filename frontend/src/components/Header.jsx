@@ -1816,7 +1816,7 @@ const Header = () => {
             {/* Search pill */}
             <div
               ref={mobileSearchSlotRef}
-              className={`flex items-center gap-2 px-2.5 h-8 border border-[#E1E4EA] rounded-full flex-1 min-w-0 max-w-[172px] transition-opacity duration-150 ${isSearchOpen ? "opacity-0 pointer-events-none" : "opacity-100"}`}
+              className={`flex items-center gap-2 px-2.5 h-8 border border-[#E1E4EA] bg-white rounded-full flex-1 min-w-0 max-w-[172px] transition-opacity duration-150 ${isSearchOpen ? "opacity-0 pointer-events-none" : "opacity-100"}`}
             >
               <SearchIcon className="text-[#525866] flex-shrink-0 w-4 h-4" />
               <input
