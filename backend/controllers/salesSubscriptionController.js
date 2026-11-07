@@ -9,6 +9,16 @@ const Contact = require("../models/Contact");
 const Company = require("../models/Company");
 const { getDocumentSettingsForOrganization, resolveDocumentNumber } = require("../utils/documentNumbering");
 const { syncDocumentStock } = require("../utils/inventorySync");
+const { parseAdvancedFiltersParam } = require("../utils/dateRangeFilter");
+const { buildDocumentAdvancedConditions, createFilterOptionsHandler, parseIssueDateRange, SALES_SUBSCRIPTION_OPTS } = require("../utils/documentAdvancedFilters");
+
+// GET /api/sales-subscriptions/filter-options — suggestions + amount bounds for Advanced Filters
+exports.getSalesSubscriptionFilterOptions = createFilterOptionsHandler({
+  Model: SalesSubscription,
+  numberField: "subscriptionNumber",
+  settingsKey: "salesSubscription",
+  amountField: "amount",
+});
 
 // GST is decided PER LINE ITEM, never by one flat rate over the whole
 // document — a subscription billing both an 18%-GST product and a 5%-GST
@@ -233,6 +243,22 @@ exports.getAllSalesSubscriptionsWithPagination = async (req, res) => {
     }
     if (status) query.status = status;
 
+    // Start-date range (from inclusive, to exclusive), when a client sends one.
+    const startDateRange = parseIssueDateRange(req.query);
+    if (startDateRange) query.startDate = startDateRange;
+
+    // Advanced Filter panel rules, ANDed with everything else.
+    const advancedRules = parseAdvancedFiltersParam(req.query.advancedFilters);
+    if (advancedRules === null) {
+      return res.status(400).json({ error: "Invalid advancedFilters" });
+    }
+    if (advancedRules.length > 0) {
+      const advancedConditions = await buildDocumentAdvancedConditions(advancedRules, req.user.organization, "subscriptionNumber", SALES_SUBSCRIPTION_OPTS);
+      if (advancedConditions.length > 0) {
+        query.$and = query.$and ? [...query.$and, ...advancedConditions] : advancedConditions;
+      }
+    }
+
     if (req.query.allIds === "true") {
       const all = await SalesSubscription.find(query).select("_id").lean();
       return res.json({ ids: all.map((x) => x._id) });
@@ -346,9 +372,20 @@ exports.getAllSalesSubscriptionsWithPagination = async (req, res) => {
       ]);
     }
 
+    // Per-status record counts for the pill switcher: the same filters as the
+    // list with the status filter lifted, so each pill shows how many it lists.
+    const statusCountQuery = { ...query };
+    delete statusCountQuery.status;
+    const COUNT_STATUSES = ["Draft", "Active", "Expired", "Error", "Cancelled"];
+    const countValues = await Promise.all(
+      COUNT_STATUSES.map((st) => SalesSubscription.countDocuments({ ...statusCountQuery, status: st }))
+    );
+    const statusCounts = Object.fromEntries(COUNT_STATUSES.map((st, i) => [st, countValues[i]]));
+
     const totalPages = Math.ceil(totalCount / limit);
     res.json({
       subscriptions,
+      statusCounts,
       pagination: {
         currentPage: page,
         totalPages,

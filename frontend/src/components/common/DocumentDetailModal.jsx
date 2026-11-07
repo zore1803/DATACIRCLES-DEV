@@ -99,6 +99,53 @@ const Fact = ({ icon: Icon, label, children, hint }) => (
    Purchase orders reuse the same card by passing `docLabel`, `numberKey`,
    `steps` and `paymentTerms` (which swaps the due-date facts for the vendor's
    terms) and `hideAddresses`. */
+// Notes / terms come from the rich-text editor as an HTML string
+// ("<p>hi</p><ol><li data-list=\"bullet\">…"). Show them as readable text
+// instead of raw tags; older plain-text values pass through untouched.
+// DOMParser is inert (no scripts run, no images load), so this is safe.
+function richToPlainText(value) {
+  const raw = typeof value === "string" ? value : "";
+  if (!/^\s*<[a-z][\s\S]*>/i.test(raw)) return raw;
+  const doc = new DOMParser().parseFromString(raw, "text/html");
+  const lines = [];
+  const walk = (node, ctx) => {
+    node.childNodes.forEach((n) => {
+      if (n.nodeType === 3) {
+        ctx.buf += n.textContent;
+      } else if (n.nodeType === 1) {
+        const tag = n.tagName.toLowerCase();
+        if (tag === "br") {
+          lines.push(ctx.buf);
+          ctx.buf = "";
+        } else if (tag === "li") {
+          const bullet = n.getAttribute("data-list") === "ordered" ? `${++ctx.n}. ` : "• ";
+          if (ctx.buf) lines.push(ctx.buf);
+          ctx.buf = bullet;
+          walk(n, ctx);
+          lines.push(ctx.buf);
+          ctx.buf = "";
+        } else {
+          const block = /^(p|div|h[1-6]|ul|ol)$/.test(tag);
+          if (block && ctx.buf) {
+            lines.push(ctx.buf);
+            ctx.buf = "";
+          }
+          if (tag === "ol" || tag === "ul") ctx.n = 0;
+          walk(n, ctx);
+          if (block && ctx.buf) {
+            lines.push(ctx.buf);
+            ctx.buf = "";
+          }
+        }
+      }
+    });
+  };
+  const ctx = { buf: "", n: 0 };
+  walk(doc.body, ctx);
+  if (ctx.buf) lines.push(ctx.buf);
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 export default function DocumentDetailModal({
   doc,
   type,
@@ -456,8 +503,8 @@ export default function DocumentDetailModal({
               {[
                 { title: "Reference", text: doc.reference },
                 { title: "GSTIN", text: doc.receiverGSTIN },
-                { title: "Notes", text: doc.notes },
-                { title: "Terms & conditions", text: doc.terms },
+                { title: "Notes", text: richToPlainText(doc.notes) },
+                { title: "Terms & conditions", text: richToPlainText(doc.terms) },
               ]
                 .filter((b) => !isPurchase || b.title === "Notes")
                 .map((b) => (

@@ -10,7 +10,7 @@ import Checkbox from "../components/common/Checkbox";
 import PlusIcon from "../components/common/PlusIcon";
 import MoreIcon from "../components/common/MoreIcon";
 import DownloadIcon from "../components/common/DownloadIcon";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import API from "../services/api";
 import toast from "react-hot-toast";
@@ -50,6 +50,9 @@ import SearchIcon from "../components/common/SearchIcon";
 import SettingsIcon from "../components/common/SettingsIcon";
 import FilterIcon from "../components/common/FilterIcon";
 import AdvancedFilterPanel from "../components/common/AdvancedFilterPanel";
+import DateRangeFilterButton, { thisMonthRange } from "../components/common/DateRangeFilterButton";
+import CalendarIcon from "../components/common/CalendarIcon";
+import { toServerDueDateFilter } from "../utils/dueDateFilter";
 import ColumnSettingsPanel from "../components/ColumnSettingsPanel";
 import { useColumnSettings } from "../hooks/useColumnSettings";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
@@ -159,7 +162,47 @@ const SalesReturn = () => {
 
   const [statusFilter, setStatusFilter] = useState("");
   const [activeFilters, setActiveFilters] = useState([]);
+  const activeFiltersKey = JSON.stringify(activeFilters);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  // Status pills + return-date range under the header; both go to the server
+  // together with the Advanced Filter rules.
+  const statusTabRefs = useRef({});
+  const statusTabsRef = useRef(null);
+  const [statusTabThumb, setStatusTabThumb] = useState({ left: 0, width: 0, ready: false });
+  const [dateRange, setDateRange] = useState(thisMonthRange);
+  const dateFromMs = dateRange.from ? dateRange.from.getTime() : 0;
+  const dateToMs = dateRange.to ? dateRange.to.getTime() : 0;
+  const [showMobileDateRange, setShowMobileDateRange] = useState(false);
+  const [filterOptions, setFilterOptions] = useState(null);
+  // Record count behind each status pill (from the list response).
+  const [statusCounts, setStatusCounts] = useState({});
+  useLayoutEffect(() => {
+    const measure = () => {
+      const nav = statusTabsRef.current;
+      const button = statusTabRefs.current[statusFilter || "all"];
+      if (!nav || !button) return;
+      setStatusTabThumb({
+        left: button.offsetLeft - nav.scrollLeft,
+        width: button.offsetWidth,
+        ready: true,
+      });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const nav = statusTabsRef.current;
+    nav?.addEventListener("scroll", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      nav?.removeEventListener("scroll", measure);
+    };
+  }, [statusFilter, statusCounts]);
+  // Phones: keep the selected pill in view when the row scrolls sideways.
+  useEffect(() => {
+    const nav = statusTabsRef.current;
+    const button = statusTabRefs.current[statusFilter || "all"];
+    if (!nav || !button || nav.scrollWidth <= nav.clientWidth) return;
+    nav.scrollTo({ left: button.offsetLeft - (nav.clientWidth - button.offsetWidth) / 2, behavior: "smooth" });
+  }, [statusFilter]);
 
   const [showForm, setShowForm] = useState(false);
   const [editingReturn, setEditingReturn] = useState(null);
@@ -292,7 +335,29 @@ const SalesReturn = () => {
     exitSelectionMode();
     setPagination((prev) => ({ ...prev, currentPage: 1 }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, statusFilter]);
+  }, [debouncedSearch, statusFilter, dateFromMs, dateToMs, activeFiltersKey]);
+
+  // Everything the list request needs besides paging and sorting: status pill,
+  // return-date range and the drawer's rules.
+  const appendFilterParams = (params) => {
+    if (statusFilter) params.append("status", statusFilter);
+    if (dateRange.from) params.append("dateFrom", dateRange.from.toISOString());
+    if (dateRange.to) params.append("dateTo", dateRange.to.toISOString());
+    const rules = activeFilters
+      .map((f) =>
+        f.column === "date"
+          ? { ...toServerDueDateFilter(f.value), column: "date" }
+          : { column: f.column, operator: f.operator, value: f.value },
+      )
+      .filter((f) => f && (f.column !== "date" || f.from || f.to));
+    if (rules.length > 0) params.append("advancedFilters", JSON.stringify(rules));
+  };
+
+  useEffect(() => {
+    API.get("/sales-returns/filter-options")
+      .then((res) => setFilterOptions(res.data))
+      .catch((err) => console.error("Failed to load sales return filter options", err));
+  }, []);
 
   // Latest-request guard: a response is only applied if no newer fetch has
   // started, so a slow earlier request can't overwrite fresher results.
@@ -313,10 +378,11 @@ const SalesReturn = () => {
         params.append("sortOrder", "desc");
       }
       if (debouncedSearch) params.append("search", debouncedSearch);
-      if (statusFilter) params.append("status", statusFilter);
+      appendFilterParams(params);
       const res = await API.get(`/sales-returns/pagination?${params.toString()}`);
       if (requestId !== fetchRequestIdRef.current) return;
       setRows(res.data.salesReturns || []);
+      if (res.data.statusCounts) setStatusCounts({ ...res.data.statusCounts, "": res.data.pagination.totalCount });
       setPagination((prev) => ({ ...prev, ...res.data.pagination }));
       hasLoadedOnceRef.current = true;
     } catch (err) {
@@ -333,7 +399,7 @@ const SalesReturn = () => {
   useEffect(() => {
     fetchRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.currentPage, pagination.limit, sortConfig, debouncedSearch, statusFilter]);
+  }, [pagination.currentPage, pagination.limit, sortConfig, debouncedSearch, statusFilter, dateFromMs, dateToMs, activeFiltersKey]);
 
   useEffect(() => {
     const onClick = (event) => {
@@ -481,7 +547,7 @@ const SalesReturn = () => {
     try {
       const params = new URLSearchParams({ allIds: "true" });
       if (debouncedSearch) params.append("search", debouncedSearch);
-      if (statusFilter) params.append("status", statusFilter);
+      appendFilterParams(params);
       const res = await API.get(`/sales-returns/pagination?${params.toString()}`);
       setSelected(res.data.ids || []);
     } catch (err) {
@@ -602,7 +668,7 @@ const SalesReturn = () => {
       params.append("sortOrder", "desc");
     }
     if (debouncedSearch) params.append("search", debouncedSearch);
-    if (statusFilter) params.append("status", statusFilter);
+    appendFilterParams(params);
     return await fetchAllPages("/sales-returns/pagination", params, "salesReturns");
   };
 
@@ -629,13 +695,43 @@ const SalesReturn = () => {
     }
   };
 
-  const srFilterColumns = [
-    { key: "returnNumber", label: "SR Number" },
-    { key: "status", label: "Status", options: ALL_STATUSES },
-    { key: "grandTotal", label: "Amount" },
-    { key: "reason", label: "Reason" },
-    { key: "notes", label: "Notes" },
-  ];
+  // Advanced Filter drawer fields — the sales return's own columns. Number /
+  // deal suggestions and the amount bounds come from /sales-returns/filter-options.
+  const srFilterColumns = useMemo(() => {
+    const o = filterOptions || {};
+    return [
+      {
+        key: "returnNumber",
+        label: "SR Number",
+        type: "text",
+        combo: true,
+        operators: ["contains", "starts_with", "ends_with", "is", "is_not", "in", "not_in"],
+        options: o.numbers || [],
+        suggestionsByOperator: { starts_with: o.prefixes || [], ends_with: o.suffixes || [] },
+      },
+      {
+        key: "deal",
+        label: "Deal",
+        type: "text",
+        combo: true,
+        operators: ["contains", "is", "is_not"],
+        options: o.deals || [],
+      },
+      { key: "date", label: "Return Date", type: "dateRange" },
+      {
+        key: "amount",
+        label: "Amount",
+        type: "range",
+        min: o.amountMin ?? 0,
+        max: o.amountMax ?? 0,
+        step: Math.max(Math.round(((o.amountMax ?? 0) - (o.amountMin ?? 0)) / 200), 1),
+      },
+      { key: "status", label: "Status", type: "select", operators: ["is", "is_not"], options: ALL_STATUSES },
+      { key: "reason", label: "Reason", type: "text", operators: ["contains", "is", "is_not"] },
+      { key: "notes", label: "Notes", type: "text", operators: ["contains", "is", "is_not"] },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterOptions]);
 
   const handlePageChange = (page) => {
     if (page >= 1 && page <= pagination.totalPages && page !== pagination.currentPage) {
@@ -1177,7 +1273,7 @@ const SalesReturn = () => {
         setFilters={setActiveFilters}
         onApply={(nf) => setActiveFilters(nf)}
         title="Filter Sales Returns"
-        subtitle="Narrow down by number, status, amount or reason"
+        subtitle="Narrow down by number, deal, date, amount, status or reason"
         emptyStateText="Add a rule to filter the list."
       />
 
@@ -1717,7 +1813,7 @@ const SalesReturn = () => {
       {/* Fixed edge-to-edge toolbar */}
       <div className="bg-white overflow-visible">
         <div
-          className={`fixed right-0 h-16 px-4 sm:px-6 lg:pl-[28px] lg:pr-[28px] border-b flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E1E4EA]`}
+          className={`fixed right-0 h-16 px-4 sm:px-6 lg:pl-[28px] lg:pr-[28px] flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E1E4EA]`}
           style={{
             left: "var(--sidebar-width, 0px)",
             zIndex: 40,
@@ -1916,10 +2012,79 @@ const SalesReturn = () => {
           )}
         </div>
 
+        {/* Status pills + return-date range, same strip as the Purchase Returns list */}
+        <div
+          className="fixed right-0 h-14 px-4 sm:px-6 lg:pl-[28px] lg:pr-[28px] bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+          style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
+        >
+          <div ref={statusTabsRef} className="relative flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto no-scrollbar">
+            <span
+              aria-hidden="true"
+              className="absolute top-1 h-9 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
+              style={{
+                left: statusTabThumb.left,
+                width: statusTabThumb.width,
+                opacity: statusTabThumb.ready ? 1 : 0,
+              }}
+            />
+            {[{ label: "All", value: "" }, ...ALL_STATUSES.map((o) => ({ label: o, value: o }))].map((tab) => {
+              const selected = statusFilter === tab.value;
+              return (
+                <button
+                  key={tab.label}
+                  ref={(el) => {
+                    statusTabRefs.current[tab.value || "all"] = el;
+                  }}
+                  type="button"
+                  onClick={() => setStatusFilter(tab.value)}
+                  className={`relative z-[1] h-9 flex-shrink-0 whitespace-nowrap rounded-full text-[13px] lg:text-sm font-medium transition-colors ${selected
+                    ? "px-4 lg:px-6 text-[#0085FF]"
+                    : "px-2.5 lg:px-3.5 text-[#0E121B] hover:bg-white/60"
+                    }`}
+                >
+                  {tab.label}
+                  {statusCounts[tab.value] != null && (
+                    <span
+                      className={`ml-1.5 lg:ml-2 ${selected ? "inline-block" : "hidden lg:inline-block"} rounded-full px-1.5 lg:px-2 py-0.5 text-[10px] lg:text-xs font-medium transition-colors duration-300 ${selected
+                        ? "bg-[#E8F2FF] text-[#0085FF]"
+                        : "bg-white/70 text-[#525866]"
+                        }`}
+                    >
+                      {statusCounts[tab.value]}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="ml-3 hidden lg:block">
+            <DateRangeFilterButton value={dateRange} onChange={setDateRange} />
+          </div>
+          {/* Phones: calendar icon opens the same picker as a centred sheet. */}
+          <button
+            type="button"
+            onClick={() => setShowMobileDateRange(true)}
+            title={dateRange?.label || "All Time"}
+            aria-label={`Return date: ${dateRange?.label || "All Time"}`}
+            className="lg:hidden flex-shrink-0 ml-2 w-11 h-11 flex items-center justify-center rounded-full bg-[#F1F1F5] text-[#0E121B]"
+          >
+            <CalendarIcon className="w-4 h-4" />
+          </button>
+          <div className="lg:hidden">
+            <DateRangeFilterButton
+              hideTrigger
+              open={showMobileDateRange}
+              onOpenChange={setShowMobileDateRange}
+              value={dateRange}
+              onChange={setDateRange}
+            />
+          </div>
+        </div>
+
         {/* Fixed edge-to-edge table area */}
         <div
           ref={tableScrollRef}
-          className="overflow-x-auto overflow-y-auto top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+          className="overflow-x-auto overflow-y-auto top-[calc(174px+var(--dc-offline-offset,0px))] lg:top-[calc(184px+var(--dc-offline-offset,0px))]"
           style={{
             position: "fixed",
             left: "var(--sidebar-width, 0px)",
@@ -2014,7 +2179,7 @@ const SalesReturn = () => {
                             <EmptyState
                               icon={ClipboardList}
                               noun="Return"
-                              isFiltered={!!(debouncedSearch || activeFilters?.length)}
+                              isFiltered={!!(debouncedSearch || activeFilters?.length || statusFilter)}
                               onCreate={openCreate}
                               buttonLabel="Create your first return"
                             />

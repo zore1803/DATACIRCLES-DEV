@@ -4,6 +4,19 @@ import API from "../../services/api";
 
 const APP_ID = import.meta.env.VITE_INTERCOM_APP_ID;
 
+// Desktop: unchanged (90 / 24). Below lg (1024px) the header's round "+" button
+// floats bottom-right (80px up, 56px tall, 16px from the edge), so the launcher
+// is stacked just above it, centred on the same vertical line.
+const isMobileViewport = () =>
+  typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches;
+// The 48px button sits 20px up, or 76px when a list page's bottom pagination
+// bar is showing (see .dc-fab in index.css); the launcher goes 12px above it.
+const hasBottomBar = () => !!document.querySelector("div.fixed.bottom-0.right-0.border-t");
+const launcherPadding = () =>
+  isMobileViewport()
+    ? { vertical_padding: hasBottomBar() ? 144 : 88, horizontal_padding: 16 }
+    : { vertical_padding: 90, horizontal_padding: 24 };
+
 function loadIntercomScript(appId) {
   if (window.Intercom) return;
 
@@ -81,8 +94,7 @@ export default function Intercom({ isAuthenticated, isSetupComplete }) {
           // Default launcher sits flush in the bottom-right corner, right on
           // top of the fixed pagination bar every list page has there —
           // nudged up so it always clears it, app-wide (not per-page).
-          vertical_padding: 90,
-          horizontal_padding: 24,
+          ...launcherPadding(),
         };
 
         window.Intercom?.("boot", window.intercomSettings);
@@ -99,6 +111,38 @@ export default function Intercom({ isAuthenticated, isSetupComplete }) {
       cancelled = true;
     };
   }, [isAuthenticated, isSetupComplete]);
+
+  // Re-position the launcher when crossing the mobile/desktop breakpoint
+  // (rotation, window resize).
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)");
+    let last = "";
+    const onChange = () => {
+      if (!bootedRef.current || !window.Intercom) return;
+      const p = launcherPadding();
+      const key = `${p.vertical_padding}/${p.horizontal_padding}`;
+      if (key === last) return;
+      last = key;
+      window.Intercom("update", p);
+    };
+    mq.addEventListener("change", onChange);
+    // The pagination bar mounts/unmounts as lists load and routes change, so
+    // watch the DOM (throttled to one check per frame).
+    let raf = 0;
+    const mo = new MutationObserver(() => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        onChange();
+      });
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      mq.removeEventListener("change", onChange);
+      mo.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
 
   // Let the Messenger re-check unread counts / launcher position on route change.
   useEffect(() => {

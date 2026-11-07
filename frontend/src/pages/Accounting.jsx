@@ -141,6 +141,11 @@ const TABS = [
   { label: "Delivery Challans", key: "deliveryChallan" },
 ];
 
+/* Phones, every Accounting document tab (invoices, pro forma, quotations, challans…): title band, then row 1 = search bar + filter + three-dot menu,
+   row 2 = status pills + calendar filter. Set to false to restore the previous
+   mobile header (title + icon-only search + Add button). Desktop never changes. */
+const INVOICES_MOBILE_ROWS = true;
+
 /* Status tabs shown under the header on the Invoices list. "Overdue" is not a
    stored status: the server treats it as unpaid invoices past their due date. */
 /* Pro forma invoices: only the four statuses the app really sets. */
@@ -440,6 +445,7 @@ const Accounting = ({ fixedTab = null }) => {
   const isSearchOverlayOpen = useSearchOverlayOpen();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(fixedTab || "tax");
+  const mobileInvoiceRows = INVOICES_MOBILE_ROWS; // every Accounting document tab
   // Deep links land on a specific tab, already filtered — e.g. the
   // dashboard's "N invoices awaiting to send" notice sends you to
   // /accounting?tab=tax&status=Draft and you arrive looking at exactly
@@ -1091,6 +1097,39 @@ const Accounting = ({ fixedTab = null }) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   // Phones: the date-range pill is folded into the "..." menu and opens this floating picker.
   const [showMobileDateRange, setShowMobileDateRange] = useState(false);
+
+  // Phones: the status pill row can be wider than the screen. Track whether
+  // tabs are hidden past either edge (drives the fades/arrows) and keep the
+  // selected status in view.
+  const statusTabTrackRef = useRef(null);
+  const [statusTabOverflow, setStatusTabOverflow] = useState({ left: false, right: false });
+  useEffect(() => {
+    const track = statusTabTrackRef.current;
+    if (!track) return undefined;
+    const update = () =>
+      setStatusTabOverflow((prev) => {
+        const next = {
+          left: track.scrollLeft > 4,
+          right: track.scrollLeft + track.clientWidth < track.scrollWidth - 4,
+        };
+        return prev.left === next.left && prev.right === next.right ? prev : next;
+      });
+    update();
+    const sel = track.querySelector('[data-selected="true"]');
+    if (sel && track.scrollWidth > track.clientWidth) {
+      track.scrollTo({
+        left: sel.offsetLeft - (track.clientWidth - sel.offsetWidth) / 2,
+        behavior: "smooth",
+      });
+    }
+    track.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(track);
+    return () => {
+      track.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [activeTab, filterStatuses, statusTabs]);
   const [showTemplateDrawer, setShowTemplateDrawer] = useState(false);
   const [showBrandingModal, setShowBrandingModal] = useState(false);
   const [pendingInvoiceCreation, setPendingInvoiceCreation] = useState(false);
@@ -2536,9 +2575,36 @@ const Accounting = ({ fixedTab = null }) => {
             </div>
           </div>
         )}
+        {/* Phones, Invoices only (INVOICES_MOBILE_ROWS): the page title band —
+            title + subtitle on the left, Add on the right — above the search row. */}
+        {mobileInvoiceRows && (
+          <div
+            className="lg:hidden fixed right-0 h-12 px-4 sm:px-6 bg-white flex items-center justify-between gap-3 top-[calc(54px+var(--dc-offline-offset,0px))]"
+            style={{ left: "var(--sidebar-width, 0px)", zIndex: 39 }}
+          >
+            <div className="flex flex-col justify-center gap-0.5 min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="m-0 text-base font-bold leading-tight text-[#0E121B] whitespace-nowrap">
+                  {TABS.find((t) => t.key === activeTab)?.label || "Accounting"}
+                </h1>
+                <VideoIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              </div>
+              <p className="m-0 truncate leading-tight text-[10px] text-gray-500 font-inter">
+                {`Manage your ${(TABS.find((t) => t.key === activeTab)?.label || "documents").toLowerCase()} and their status`}
+              </p>
+            </div>
+            <button
+              onClick={handleAddDocument}
+              aria-label={`Add ${docNameFor(activeTab)}`}
+              className="flex items-center justify-center w-9 h-9 rounded-full bg-[#0085FF] hover:bg-blue-600 transition-colors flex-shrink-0"
+            >
+              <PlusIcon className="w-4 h-4 text-white" />
+            </button>
+          </div>
+        )}
         {/* 2nd Header - Tab Bar & Actions Row */}
         <div
-          className={`fixed right-0 h-16 px-4 sm:px-6 lg:pl-[22px] lg:pr-[22px] bg-white flex items-center justify-between gap-3 top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))]`}
+          className={`fixed right-0 h-16 px-4 sm:px-6 lg:pl-[22px] lg:pr-[22px] bg-white flex items-center justify-between gap-3 ${mobileInvoiceRows ? "top-[calc(102px+var(--dc-offline-offset,0px))]" : "top-[calc(54px+var(--dc-offline-offset,0px))]"} lg:top-[calc(64px+var(--dc-offline-offset,0px))]`}
           style={{ left: "var(--sidebar-width, 0px)", zIndex: 39 }}
         >
           {/* Mobile-only page title — fills the same left slot the tab pill
@@ -2549,12 +2615,17 @@ const Accounting = ({ fixedTab = null }) => {
               Companies.jsx's title, so the search field gets the freed
               width instead of staying pinned to a small fixed size. */}
           <div
-            className={`lg:hidden flex items-center gap-2 overflow-hidden transition-all duration-300 ease-in-out ${isSearchExpanded ? "w-0 opacity-0" : "w-auto opacity-100 flex-shrink-0"}`}
+            className={`${mobileInvoiceRows ? "hidden" : "lg:hidden flex"} flex-col justify-center gap-0.5 overflow-hidden transition-all duration-300 ease-in-out ${isSearchExpanded ? "w-0 opacity-0" : "w-auto opacity-100 flex-shrink min-w-0"}`}
           >
-            <h1 className="m-0 text-base font-bold text-[#0E121B] whitespace-nowrap">
-              {TABS.find((t) => t.key === activeTab)?.label || "Accounting"}
-            </h1>
-            <VideoIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            <div className="flex items-center gap-2">
+              <h1 className="m-0 text-base font-bold leading-tight text-[#0E121B] whitespace-nowrap">
+                {TABS.find((t) => t.key === activeTab)?.label || "Accounting"}
+              </h1>
+              <VideoIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            </div>
+            <p className="m-0 max-w-[44vw] truncate leading-tight text-[10px] text-gray-500 font-inter">
+              {`Manage your ${(TABS.find((t) => t.key === activeTab)?.label || "documents").toLowerCase()} and their status`}
+            </p>
           </div>
 
           {/* Left Side: which document list this is. The type is chosen from
@@ -2587,7 +2658,7 @@ const Accounting = ({ fixedTab = null }) => {
                   flex-1 above); on desktop it's the same fixed 380px as
                   before. */}
               <div
-                className={`relative h-10 flex items-center border ${searchTerms[activeTab] ? "border-[#0085FF]" : "border-[#E1E4EA]"} rounded-full bg-white transition-all duration-300 ease-in-out hover:bg-gray-50 focus-within:border-[#0085FF] focus-within:hover:bg-white min-w-0 max-w-full ${isSearchExpanded ? "flex-1 lg:flex-initial lg:w-[380px]" : "w-10 flex-shrink-0"}`}
+                className={`relative h-10 flex items-center border ${searchTerms[activeTab] ? "border-[#0085FF]" : "border-[#E1E4EA]"} rounded-full bg-white transition-all duration-300 ease-in-out hover:bg-gray-50 focus-within:border-[#0085FF] focus-within:hover:bg-white min-w-0 max-w-full ${isSearchExpanded ? "flex-1 lg:flex-initial lg:w-[380px]" : mobileInvoiceRows ? "flex-1 lg:flex-none lg:w-10 lg:flex-shrink-0" : "w-10 flex-shrink-0"}`}
               >
                 <SearchIcon
                   className="absolute left-3 cursor-pointer z-10 flex-shrink-0 top-1/2 -translate-y-1/2 w-4 h-4 text-[#525866]"
@@ -2612,7 +2683,7 @@ const Accounting = ({ fixedTab = null }) => {
                   }}
                   placeholder={`Search by ${activeTab === "tax" ? "invoice" : "document"
                     } ID, deal, or date...`}
-                  className={`w-full h-full bg-transparent rounded-full pl-11 pr-9 text-[14px] leading-[20px] text-[#1F2937] placeholder:text-[#99A0AE] focus:outline-none transition-opacity duration-200 cursor-pointer ${isSearchExpanded ? "opacity-100 focus:cursor-text" : "opacity-0"}`}
+                  className={`w-full h-full bg-transparent rounded-full pl-11 pr-9 text-[14px] leading-[20px] text-[#1F2937] placeholder:text-[#99A0AE] focus:outline-none transition-opacity duration-200 cursor-pointer ${isSearchExpanded ? "opacity-100 focus:cursor-text" : mobileInvoiceRows ? "opacity-100 lg:opacity-0" : "opacity-0"}`}
                 />
                 {/* Clears the typed text only — mousedown+preventDefault stops
                     the input's onBlur from firing before the click lands. */}
@@ -2633,7 +2704,7 @@ const Accounting = ({ fixedTab = null }) => {
 
               {/* Filter Button — status filter. Hidden on mobile; folded into
                   the More menu below instead. */}
-              <div className="relative flex-shrink-0 hidden lg:block">
+              <div className={`relative flex-shrink-0 ${mobileInvoiceRows ? "block" : "hidden lg:block"}`}>
                 <button
                   title="Filter by status"
                   onClick={(e) => {
@@ -2697,7 +2768,7 @@ const Accounting = ({ fixedTab = null }) => {
                           setShowMoreMenu(false);
                           setShowAdvancedFilters(true);
                         }}
-                        className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                        className={`${mobileInvoiceRows ? "hidden" : "lg:hidden flex"} w-full items-center gap-2 px-2 py-1.5 rounded-md text-xs text-[#161618] hover:bg-gray-50 whitespace-nowrap`}
                       >
                         <FilterIcon size={14} /> Filters{advancedFilters.length > 0 ? ` (${advancedFilters.length})` : ""}
                       </button>
@@ -2755,7 +2826,7 @@ const Accounting = ({ fixedTab = null }) => {
                   background: "#0085FF",
                   borderRadius: 96,
                 }}
-                className="flex flex-row justify-center items-center hover:bg-blue-600 transition-colors flex-shrink-0 ml-1 lg:!w-auto"
+                className={`${mobileInvoiceRows ? "hidden lg:flex" : "flex"} flex-row justify-center items-center hover:bg-blue-600 transition-colors flex-shrink-0 ml-1 lg:!w-auto`}
               >
                 <PlusIcon className="w-4 h-4 text-white flex-shrink-0" />
                 <span
@@ -2773,11 +2844,33 @@ const Accounting = ({ fixedTab = null }) => {
             that status. */}
         {(
           <div
-            className="fixed right-0 h-14 px-4 sm:px-6 lg:pl-[22px] lg:pr-[22px] bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+            className={`fixed right-0 h-14 px-4 sm:px-6 lg:pl-[22px] lg:pr-[22px] bg-white flex items-center ${mobileInvoiceRows ? "top-[calc(166px+var(--dc-offline-offset,0px))]" : "top-[calc(118px+var(--dc-offline-offset,0px))]"} lg:top-[calc(128px+var(--dc-offline-offset,0px))]`}
             style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
           >
             {statusTabs && (
-            <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 flex-1 lg:flex-none overflow-x-auto no-scrollbar">
+            <div className="relative min-w-0 flex-1 lg:flex-none">
+            {/* Phones only: edge fade + arrow flag status tabs hidden past either edge. */}
+            {statusTabOverflow.left && (
+              <button
+                type="button"
+                aria-label="Scroll statuses left"
+                onClick={() => statusTabTrackRef.current?.scrollBy({ left: -120, behavior: "smooth" })}
+                className="lg:hidden absolute left-0 top-0 z-10 h-full w-8 flex items-center pl-1 rounded-l-full bg-gradient-to-r from-[#F1F1F5] via-[#F1F1F5]/90 to-transparent text-gray-500"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            )}
+            {statusTabOverflow.right && (
+              <button
+                type="button"
+                aria-label="Scroll statuses right"
+                onClick={() => statusTabTrackRef.current?.scrollBy({ left: 120, behavior: "smooth" })}
+                className="lg:hidden absolute right-0 top-0 z-10 h-full w-8 flex items-center justify-end pr-1 rounded-r-full bg-gradient-to-l from-[#F1F1F5] via-[#F1F1F5]/90 to-transparent text-gray-500"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+            <div ref={statusTabTrackRef} className="flex items-center gap-0.5 lg:gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 w-full overflow-x-auto no-scrollbar">
               {statusTabs.map((tab) => {
                 const selected = (filterStatuses[activeTab] || "") === tab.value;
                 const count = statusCountsByType[activeTab]?.[tab.value];
@@ -2785,10 +2878,11 @@ const Accounting = ({ fixedTab = null }) => {
                   <button
                     key={tab.label}
                     type="button"
+                    data-selected={selected ? "true" : undefined}
                     onClick={() =>
                       setFilterStatuses((prev) => ({ ...prev, [activeTab]: tab.value }))
                     }
-                    className={`h-9 flex-1 lg:flex-none flex items-center justify-center whitespace-nowrap rounded-full px-2.5 lg:px-5 text-[13px] lg:text-sm font-medium transition-colors ${selected
+                    className={`h-9 flex-1 lg:flex-none flex items-center justify-center whitespace-nowrap rounded-full px-1.5 lg:px-5 text-[12px] lg:text-sm font-medium transition-colors ${selected
                       ? "bg-white text-[#0085FF] shadow-sm"
                       : "text-[#0E121B] hover:bg-white/60"
                       }`}
@@ -2796,7 +2890,7 @@ const Accounting = ({ fixedTab = null }) => {
                     {tab.label}
                     {count != null && (
                       <span
-                        className={`ml-2 inline-block rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors duration-300 ${selected
+                        className={`ml-1 lg:ml-2 ${selected ? "inline-block" : "hidden lg:inline-block"} rounded-md px-1 lg:px-1.5 py-0.5 text-[10px] lg:text-xs font-medium transition-colors duration-300 ${selected
                           ? "bg-[#E8F2FF] text-[#0085FF]"
                           : "bg-white/70 text-[#525866]"
                           }`}
@@ -2808,7 +2902,19 @@ const Accounting = ({ fixedTab = null }) => {
                 );
               })}
             </div>
+            </div>
             )}
+            {/* Phones: the date range sits beside the status pills like on desktop;
+                it opens the same centred picker the three-dot menu uses. */}
+            <button
+              type="button"
+              onClick={() => setShowMobileDateRange(true)}
+              title={invoiceDateRange?.label || "All Time"}
+              aria-label={`Date range: ${invoiceDateRange?.label || "All Time"}`}
+              className="lg:hidden flex-shrink-0 ml-1.5 w-9 h-9 flex items-center justify-center rounded-full bg-[#F1F1F5] text-[#0E121B]"
+            >
+              <CalendarIcon className="w-4 h-4" />
+            </button>
             <div className="lg:hidden">
               <DateRangeFilterButton
                 hideTrigger
@@ -2862,7 +2968,7 @@ const Accounting = ({ fixedTab = null }) => {
             region Companies.jsx uses: edge to edge under the tab bar, stopping
             above the pagination bar. */}
         <div
-          className={`fixed right-0 overflow-x-auto overflow-y-auto bg-white border-t border-[#E1E4EA] top-[calc(174px+var(--dc-offline-offset,0px))] lg:top-[calc(184px+var(--dc-offline-offset,0px))]`}
+          className={`fixed right-0 overflow-x-auto overflow-y-auto bg-white border-t border-[#E1E4EA] ${mobileInvoiceRows ? "top-[calc(222px+var(--dc-offline-offset,0px))]" : "top-[calc(174px+var(--dc-offline-offset,0px))]"} lg:top-[calc(184px+var(--dc-offline-offset,0px))]`}
           style={{ left: "var(--sidebar-width, 0px)", bottom: 64, paddingLeft: "var(--content-inset, 16px)" }}
         >
           <table

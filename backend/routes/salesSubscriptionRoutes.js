@@ -13,6 +13,7 @@ const requireAuth = [authMiddleware, userSync];
 // subscription-validity are enforced for now.
 router.post("/", requireAuth, subscriptionGate, c.createSalesSubscription);
 router.get("/pagination", requireAuth, subscriptionGate, c.getAllSalesSubscriptionsWithPagination);
+router.get("/filter-options", requireAuth, subscriptionGate, c.getSalesSubscriptionFilterOptions);
 router.get("/:id", requireAuth, subscriptionGate, c.getSalesSubscriptionById);
 router.put("/:id", requireAuth, subscriptionGate, c.updateSalesSubscription);
 router.put("/:id/status", requireAuth, subscriptionGate, c.updateSalesSubscriptionStatus);

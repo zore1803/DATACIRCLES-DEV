@@ -8,7 +8,7 @@ import Checkbox from "../components/common/Checkbox";
 import PlusIcon from "../components/common/PlusIcon";
 import MoreIcon from "../components/common/MoreIcon";
 import DownloadIcon from "../components/common/DownloadIcon";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import API from "../services/api";
 import toast from "react-hot-toast";
@@ -36,6 +36,7 @@ import SearchIcon from "../components/common/SearchIcon";
 import SettingsIcon from "../components/common/SettingsIcon";
 import FilterIcon from "../components/common/FilterIcon";
 import AdvancedFilterPanel from "../components/common/AdvancedFilterPanel";
+import { toServerDueDateFilter } from "../utils/dueDateFilter";
 import ColumnSettingsPanel from "../components/ColumnSettingsPanel";
 import { useColumnSettings } from "../hooks/useColumnSettings";
 import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
@@ -73,6 +74,11 @@ const getAncestorZoom = (el) => {
   }
   return z || 1;
 };
+
+/* Phones: title band, then row 1 = search bar + filter + three-dot menu, then
+   row 2 = status pills (same layout as the Accounting document lists). Set to
+   false to restore the previous mobile header. Desktop never changes. */
+const SUBSCRIPTIONS_MOBILE_ROWS = true;
 
 const STATUS_STYLES = {
   Draft: "bg-[#EEF2F9] text-[#56698A]",
@@ -123,7 +129,43 @@ const SalesSubscription = () => {
 
   const [statusFilter, setStatusFilter] = useState("");
   const [activeFilters, setActiveFilters] = useState([]);
+  const activeFiltersKey = JSON.stringify(activeFilters);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  // Status pills under the header; the selected one is sent to the server
+  // together with the Advanced Filter rules.
+  const statusTabRefs = useRef({});
+  const statusTabsRef = useRef(null);
+  const [statusTabThumb, setStatusTabThumb] = useState({ left: 0, width: 0, ready: false });
+  const [filterOptions, setFilterOptions] = useState(null);
+  // Record count behind each status pill (from the list response).
+  const [statusCounts, setStatusCounts] = useState({});
+  useLayoutEffect(() => {
+    const measure = () => {
+      const nav = statusTabsRef.current;
+      const button = statusTabRefs.current[statusFilter || "all"];
+      if (!nav || !button) return;
+      setStatusTabThumb({
+        left: button.offsetLeft - nav.scrollLeft,
+        width: button.offsetWidth,
+        ready: true,
+      });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const nav = statusTabsRef.current;
+    nav?.addEventListener("scroll", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      nav?.removeEventListener("scroll", measure);
+    };
+  }, [statusFilter, statusCounts]);
+  // Phones: keep the selected pill in view when the row scrolls sideways.
+  useEffect(() => {
+    const nav = statusTabsRef.current;
+    const button = statusTabRefs.current[statusFilter || "all"];
+    if (!nav || !button || nav.scrollWidth <= nav.clientWidth) return;
+    nav.scrollTo({ left: button.offsetLeft - (nav.clientWidth - button.offsetWidth) / 2, behavior: "smooth" });
+  }, [statusFilter]);
 
   const [showForm, setShowForm] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState(null);
@@ -207,7 +249,27 @@ const SalesSubscription = () => {
     exitSelectionMode();
     setPagination((prev) => ({ ...prev, currentPage: 1 }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, statusFilter]);
+  }, [debouncedSearch, statusFilter, activeFiltersKey]);
+
+  // Everything the list request needs besides paging and sorting: the status
+  // pill and the drawer's rules.
+  const appendFilterParams = (params) => {
+    if (statusFilter) params.append("status", statusFilter);
+    const rules = activeFilters
+      .map((f) =>
+        f.column === "date"
+          ? { ...toServerDueDateFilter(f.value), column: "date" }
+          : { column: f.column, operator: f.operator, value: f.value },
+      )
+      .filter((f) => f && (f.column !== "date" || f.from || f.to));
+    if (rules.length > 0) params.append("advancedFilters", JSON.stringify(rules));
+  };
+
+  useEffect(() => {
+    API.get("/sales-subscriptions/filter-options")
+      .then((res) => setFilterOptions(res.data))
+      .catch((err) => console.error("Failed to load subscription filter options", err));
+  }, []);
 
   // Latest-request guard, same as Vendors.jsx: every fetch takes an id, and a response is only
   // applied if no newer fetch has started since. Without it an older, slower response (a
@@ -230,10 +292,11 @@ const SalesSubscription = () => {
         params.append("sortOrder", "desc");
       }
       if (debouncedSearch) params.append("search", debouncedSearch);
-      if (statusFilter) params.append("status", statusFilter);
+      appendFilterParams(params);
       const res = await API.get(`/sales-subscriptions/pagination?${params.toString()}`);
       if (requestId !== fetchRequestIdRef.current) return;
       setRows(res.data.subscriptions || []);
+      if (res.data.statusCounts) setStatusCounts({ ...res.data.statusCounts, "": res.data.pagination.totalCount });
       setPagination((prev) => ({ ...prev, ...res.data.pagination }));
       hasLoadedOnceRef.current = true;
     } catch (err) {
@@ -250,7 +313,7 @@ const SalesSubscription = () => {
   useEffect(() => {
     fetchRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.currentPage, pagination.limit, sortConfig, debouncedSearch, statusFilter]);
+  }, [pagination.currentPage, pagination.limit, sortConfig, debouncedSearch, statusFilter, activeFiltersKey]);
 
   useEffect(() => {
     const onClick = (event) => {
@@ -353,7 +416,7 @@ const SalesSubscription = () => {
     try {
       const params = new URLSearchParams({ allIds: "true" });
       if (debouncedSearch) params.append("search", debouncedSearch);
-      if (statusFilter) params.append("status", statusFilter);
+      appendFilterParams(params);
       const res = await API.get(`/sales-subscriptions/pagination?${params.toString()}`);
       setSelected(res.data.ids || []);
     } catch (err) {
@@ -483,7 +546,7 @@ const SalesSubscription = () => {
       params.append("sortOrder", "desc");
     }
     if (debouncedSearch) params.append("search", debouncedSearch);
-    if (statusFilter) params.append("status", statusFilter);
+    appendFilterParams(params);
     return await fetchAllPages("/sales-subscriptions/pagination", params, "subscriptions");
   };
 
@@ -510,12 +573,42 @@ const SalesSubscription = () => {
     }
   };
 
-  const subFilterColumns = [
-    { key: "subscriptionNumber", label: "Subscription ID" },
-    { key: "status", label: "Status", options: STATUS_OPTIONS },
-    { key: "amount", label: "Amount" },
-    { key: "notes", label: "Notes" },
-  ];
+  // Advanced Filter drawer fields — the subscription's own columns. ID / deal
+  // suggestions and the amount bounds come from /sales-subscriptions/filter-options.
+  const subFilterColumns = useMemo(() => {
+    const o = filterOptions || {};
+    return [
+      {
+        key: "subscriptionNumber",
+        label: "Subscription ID",
+        type: "text",
+        combo: true,
+        operators: ["contains", "starts_with", "ends_with", "is", "is_not", "in", "not_in"],
+        options: o.numbers || [],
+        suggestionsByOperator: { starts_with: o.prefixes || [], ends_with: o.suffixes || [] },
+      },
+      {
+        key: "deal",
+        label: "Deal",
+        type: "text",
+        combo: true,
+        operators: ["contains", "is", "is_not"],
+        options: o.deals || [],
+      },
+      { key: "date", label: "Start Date", type: "dateRange" },
+      {
+        key: "amount",
+        label: "Amount",
+        type: "range",
+        min: o.amountMin ?? 0,
+        max: o.amountMax ?? 0,
+        step: Math.max(Math.round(((o.amountMax ?? 0) - (o.amountMin ?? 0)) / 200), 1),
+      },
+      { key: "status", label: "Status", type: "select", operators: ["is", "is_not"], options: STATUS_OPTIONS },
+      { key: "notes", label: "Notes", type: "text", operators: ["contains", "is", "is_not"] },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterOptions]);
 
   const handlePageChange = (page) => {
     if (page >= 1 && page <= pagination.totalPages && page !== pagination.currentPage) {
@@ -978,7 +1071,7 @@ const SalesSubscription = () => {
         setFilters={setActiveFilters}
         onApply={(nf) => setActiveFilters(nf)}
         title="Filter Subscriptions"
-        subtitle="Narrow down by ID, status, or amount"
+        subtitle="Narrow down by ID, deal, start date, amount or status"
         emptyStateText="Add a rule to filter the list."
       />
 
@@ -1051,8 +1144,33 @@ const SalesSubscription = () => {
       />
 
       <div className="bg-white overflow-visible">
+        {/* Phones (SUBSCRIPTIONS_MOBILE_ROWS): the page title band — title + subtitle on the left,
+            Create on the right — above the search row. */}
+        {SUBSCRIPTIONS_MOBILE_ROWS && (
+          <div
+            className="lg:hidden fixed right-0 h-12 px-4 bg-white flex items-center justify-between gap-3 top-[calc(54px+var(--dc-offline-offset,0px))]"
+            style={{ left: "var(--sidebar-width, 0px)", zIndex: 40 }}
+          >
+            <div className="flex flex-col justify-center gap-0.5 min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="m-0 text-base font-bold leading-tight text-gray-900 whitespace-nowrap">Subscriptions</h1>
+                <VideoIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              </div>
+              <p className="m-0 truncate leading-tight text-[10px] text-gray-500">
+                Recurring billing agreements with your customers
+              </p>
+            </div>
+            <button
+              onClick={openCreate}
+              aria-label="Create Subscription"
+              className="flex items-center justify-center w-9 h-9 rounded-full bg-[#0085FF] hover:bg-blue-600 transition-colors flex-shrink-0"
+            >
+              <PlusIcon className="w-4 h-4 text-white" />
+            </button>
+          </div>
+        )}
         <div
-          className={`fixed right-0 h-16 px-4 lg:px-6 border-b flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E1E4EA]`}
+          className={`fixed right-0 h-16 px-4 lg:px-6 flex items-center ${SUBSCRIPTIONS_MOBILE_ROWS ? "top-[calc(102px+var(--dc-offline-offset,0px))]" : "top-[calc(54px+var(--dc-offline-offset,0px))]"} lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E1E4EA]`}
           style={{
             left: "var(--sidebar-width, 0px)",
             zIndex: 40,
@@ -1117,7 +1235,7 @@ const SalesSubscription = () => {
             </div>
           ) : (
             <div className="flex items-center gap-2 lg:gap-4 w-full h-full">
-              <div className={`flex-shrink-0 flex flex-col justify-center gap-1.5 overflow-hidden transition-opacity duration-300 ease-in-out lg:!w-auto lg:!opacity-100 ${isSearchExpanded ? "w-0 opacity-0" : "w-[190px] opacity-100"}`}>
+              <div className={`${SUBSCRIPTIONS_MOBILE_ROWS ? "hidden lg:flex" : "flex"} flex-shrink-0 flex-col justify-center gap-1.5 overflow-hidden transition-opacity duration-300 ease-in-out lg:!w-auto lg:!opacity-100 ${isSearchExpanded ? "w-0 opacity-0" : "w-[190px] opacity-100"}`}>
                 {showLoadingSkeleton ? (
                   <>
                     <Skeleton width={110} height={18} />
@@ -1146,7 +1264,7 @@ const SalesSubscription = () => {
               ) : (
                 <>
                   <div className="relative flex-1 min-w-0 flex items-center justify-end">
-                    <div className={`relative h-10 flex items-center border ${searchTerm ? "border-[#0085FF]" : "border-[#E1E4EA]"} rounded-full bg-white transition-all duration-300 ease-in-out hover:bg-gray-50 focus-within:border-[#0085FF] focus-within:hover:bg-white ${isSearchExpanded ? "w-full lg:w-[416px]" : "w-10"} max-w-full`}>
+                    <div className={`relative h-10 flex items-center border ${searchTerm ? "border-[#0085FF]" : "border-[#E1E4EA]"} rounded-full bg-white transition-all duration-300 ease-in-out hover:bg-gray-50 focus-within:border-[#0085FF] focus-within:hover:bg-white ${isSearchExpanded ? "w-full lg:w-[416px]" : SUBSCRIPTIONS_MOBILE_ROWS ? "w-full lg:w-10" : "w-10"} max-w-full`}>
                       <SearchIcon
                         className="absolute left-3 cursor-pointer z-10 top-1/2 -translate-y-1/2 w-4 h-4 text-[#525866]"
                         onClick={() => { setIsSearchExpanded(true); searchInputRef.current?.focus(); }}
@@ -1158,7 +1276,7 @@ const SalesSubscription = () => {
                         onChange={(e) => setSearchTerm(e.target.value)}
                         onFocus={() => setIsSearchExpanded(true)}
                         onBlur={() => { if (!searchTerm) setIsSearchExpanded(false); }}
-                        className={`w-full h-full pl-9 pr-9 bg-transparent text-sm focus:outline-none transition-opacity duration-200 cursor-pointer ${isSearchExpanded ? "opacity-100 focus:cursor-text" : "opacity-0"}`}
+                        className={`w-full h-full pl-9 pr-9 bg-transparent text-sm focus:outline-none transition-opacity duration-200 cursor-pointer ${isSearchExpanded ? "opacity-100 focus:cursor-text" : SUBSCRIPTIONS_MOBILE_ROWS ? "opacity-100 lg:opacity-0" : "opacity-0"}`}
                         placeholder="Search subscriptions by ID, customer…"
                       />
                       {isSearchExpanded && searchTerm && (
@@ -1178,7 +1296,7 @@ const SalesSubscription = () => {
                   <div className="relative flex items-center gap-2 lg:gap-4 flex-shrink-0">
                     <button
                       onClick={() => setShowAdvancedFilters(true)}
-                      className="hidden lg:flex relative items-center justify-center w-10 h-10 rounded-full border border-[#E1E4EA] text-gray-500 hover:bg-gray-50"
+                      className={`${SUBSCRIPTIONS_MOBILE_ROWS ? "flex" : "hidden lg:flex"} relative items-center justify-center w-10 h-10 rounded-full border border-[#E1E4EA] text-gray-500 hover:bg-gray-50`}
                       title="Filters"
                     >
                       <FilterIcon size={16} />
@@ -1201,7 +1319,7 @@ const SalesSubscription = () => {
                         <div className="absolute right-0 z-50 mt-2 w-[180px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right">
                           <button
                             onClick={() => { setShowAdvancedFilters(true); setIsMoreMenuOpen(false); }}
-                            className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                            className={`${SUBSCRIPTIONS_MOBILE_ROWS ? "hidden" : "lg:hidden flex"} w-full items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap`}
                           >
                             <FilterIcon size={14} />
                             Filters
@@ -1231,7 +1349,7 @@ const SalesSubscription = () => {
 
                     <button
                       onClick={openCreate}
-                      className="inline-flex items-center justify-center gap-2 h-10 w-10 lg:w-auto px-0 lg:px-4 bg-[#0085FF] text-white text-sm font-medium rounded-full hover:bg-blue-600 flex-shrink-0"
+                      className={`${SUBSCRIPTIONS_MOBILE_ROWS ? "hidden lg:inline-flex" : "inline-flex"} items-center justify-center gap-2 h-10 w-10 lg:w-auto px-0 lg:px-4 bg-[#0085FF] text-white text-sm font-medium rounded-full hover:bg-blue-600 flex-shrink-0`}
                       title="Create Subscription"
                     >
                       <PlusIcon className="w-4 h-4" />
@@ -1244,9 +1362,56 @@ const SalesSubscription = () => {
           )}
         </div>
 
+        {/* Status pills, same strip as the Sales Returns / Purchase lists */}
+        <div
+          className={`fixed right-0 h-14 px-4 lg:px-6 bg-white flex items-center ${SUBSCRIPTIONS_MOBILE_ROWS ? "top-[calc(166px+var(--dc-offline-offset,0px))]" : "top-[calc(118px+var(--dc-offline-offset,0px))]"} lg:top-[calc(128px+var(--dc-offline-offset,0px))]`}
+          style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
+        >
+          <div ref={statusTabsRef} className="relative flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto no-scrollbar">
+            <span
+              aria-hidden="true"
+              className="absolute top-1 h-9 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
+              style={{
+                left: statusTabThumb.left,
+                width: statusTabThumb.width,
+                opacity: statusTabThumb.ready ? 1 : 0,
+              }}
+            />
+            {[{ label: "All", value: "" }, ...STATUS_OPTIONS.map((o) => ({ label: o, value: o }))].map((tab) => {
+              const selected = statusFilter === tab.value;
+              return (
+                <button
+                  key={tab.label}
+                  ref={(el) => {
+                    statusTabRefs.current[tab.value || "all"] = el;
+                  }}
+                  type="button"
+                  onClick={() => setStatusFilter(tab.value)}
+                  className={`relative z-[1] h-9 flex-shrink-0 whitespace-nowrap rounded-full text-[13px] lg:text-sm font-medium transition-colors ${selected
+                    ? "px-4 lg:px-6 text-[#0085FF]"
+                    : "px-2.5 lg:px-3.5 text-[#0E121B] hover:bg-white/60"
+                    }`}
+                >
+                  {tab.label}
+                  {statusCounts[tab.value] != null && (
+                    <span
+                      className={`ml-1.5 lg:ml-2 ${selected ? "inline-block" : "hidden lg:inline-block"} rounded-full px-1.5 lg:px-2 py-0.5 text-[10px] lg:text-xs font-medium transition-colors duration-300 ${selected
+                        ? "bg-[#E8F2FF] text-[#0085FF]"
+                        : "bg-white/70 text-[#525866]"
+                        }`}
+                    >
+                      {statusCounts[tab.value]}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div
           ref={tableScrollRef}
-          className="overflow-x-auto overflow-y-auto top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+          className={`overflow-x-auto overflow-y-auto ${SUBSCRIPTIONS_MOBILE_ROWS ? "top-[calc(222px+var(--dc-offline-offset,0px))]" : "top-[calc(174px+var(--dc-offline-offset,0px))]"} lg:top-[calc(184px+var(--dc-offline-offset,0px))]`}
           style={{
             position: "fixed",
             left: "var(--sidebar-width, 0px)",
@@ -1340,7 +1505,7 @@ const SalesSubscription = () => {
                             <EmptyState
                               icon={Repeat}
                               noun="Subscription"
-                              isFiltered={!!(debouncedSearch || activeFilters?.length)}
+                              isFiltered={!!(debouncedSearch || activeFilters?.length || statusFilter)}
                               title="Create Subscription Now"
                               description="Bill a customer automatically on a schedule — e.g. ₹5,000 every month — instead of creating an invoice by hand each time."
                               onCreate={openCreate}

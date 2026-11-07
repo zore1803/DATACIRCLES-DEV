@@ -40,7 +40,7 @@ import {
   EyeOff,
   Pin,
   PinOff,
-  User, ArrowUp, ArrowDown, Database } from "lucide-react";
+  User, ArrowUp, ArrowDown } from "lucide-react";
 import StarIcon from "../components/common/StarIcon";
 import ImportClients from "../components/company/ImportClients";
 import Hotlist, { HOTLIST_RETURN_KEY } from "../components/company/Hotlist";
@@ -113,6 +113,7 @@ import SearchIcon from "../components/common/SearchIcon";
 import SettingsIcon from "../components/common/SettingsIcon";
 import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
 import UploadIcon from "../components/common/UploadIcon";
+import CustomFieldsIcon from "../components/common/CustomFieldsIcon";
 import EyeIcon from "../components/common/EyeIcon";
 import EditIcon from "../components/common/EditIcon";
 // The app is rendered inside #root which carries a CSS `zoom` (0.75 on desktop).
@@ -351,7 +352,7 @@ function Companies() {
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
-  const effectiveLimit = isMobile ? 5 : pagination.limit;
+  const effectiveLimit = isMobile ? 10 : pagination.limit;
 
   // Define default columns - NOW UPDATES WHEN companyFieldNames CHANGES
   const defaultColumns = useMemo(() => {
@@ -2086,7 +2087,7 @@ function Companies() {
                         )}
                       </button>
                       {isMoreMenuOpen && (
-                        <div className="absolute right-0 z-50 mt-2 w-[180px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 animate-in fade-in zoom-in duration-150 origin-top-right">
+                        <div className="absolute right-0 z-50 mt-2 w-[210px] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 animate-in fade-in zoom-in duration-150 origin-top-right">
                           <div className="flex flex-col gap-0.5">
                             {/* Filters + Hotlist: mobile-only entries */}
                             <button
@@ -2142,9 +2143,9 @@ function Companies() {
                             <Link
                               to="/settings/company-fields"
                               onClick={() => setIsMoreMenuOpen(false)}
-                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                              className="w-full flex items-center gap-2 pl-2 pr-5 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
                             >
-                              <Database className="w-3.5 h-3.5 text-[#1C1B1F]" />
+                              <CustomFieldsIcon className="w-3.5 h-3.5 flex-shrink-0 text-[#1C1B1F]" />
                               Add/View Custom Fields
                             </Link>
                           </div>

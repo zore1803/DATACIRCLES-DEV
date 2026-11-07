@@ -267,7 +267,7 @@ const NotificationBell = ({ variant = "desktop" }) => {
   // buttons read as raised controls sitting on it rather than dissolving into
   // the tint.
   const buttonClass = isMobile
-    ? "relative flex items-center justify-center w-8 h-8 bg-white border border-[#E1E4EA] rounded-full flex-shrink-0"
+    ? "relative flex items-center justify-center w-10 h-10 bg-white border border-[#E1E4EA] rounded-full flex-shrink-0"
     : "relative flex items-center justify-center w-9 h-9 bg-white rounded-full border border-gray-300 hover:bg-gray-50 transition-colors";
 
   return (
@@ -285,7 +285,7 @@ const NotificationBell = ({ variant = "desktop" }) => {
           <span
             className={`absolute rounded-full bg-[#DF120B] text-white text-[9px] font-semibold flex items-center justify-center ${
               isMobile
-                ? "top-0 right-0.5 min-w-[13px] h-[13px] px-[3px]"
+                ? "top-0.5 right-1 min-w-[14px] h-[14px] px-[3px]"
                 : "-top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1"
             }`}
           >

@@ -57,6 +57,22 @@ const PURCHASE_RETURN_OPTS = {
   dateFields: { date: "returnDate" },
 };
 
+// Sales returns link a Deal like the other sales documents, but date and total
+// live under their own field names; reason/notes are free-text columns.
+const SALES_RETURN_OPTS = {
+  dateFields: { date: "returnDate" },
+  amountField: "grandTotal",
+  textFields: { reason: "reason", notes: "notes" },
+};
+
+// Sales subscriptions link a Deal like the other sales documents; the
+// per-cycle total is `amount`, and the first billing date is `startDate`.
+const SALES_SUBSCRIPTION_OPTS = {
+  dateFields: { date: "startDate" },
+  amountField: "amount",
+  textFields: { notes: "notes" },
+};
+
 // E-invoices keep the customer name and the IRP fields on the document itself,
 // so the party and a few text columns are matched by regex instead of by id.
 const E_INVOICE_OPTS = {
@@ -215,5 +231,7 @@ module.exports = {
   PURCHASE_ORDER_OPTS,
   PURCHASE_OPTS,
   PURCHASE_RETURN_OPTS,
+  SALES_SUBSCRIPTION_OPTS,
+  SALES_RETURN_OPTS,
   E_INVOICE_OPTS,
 };

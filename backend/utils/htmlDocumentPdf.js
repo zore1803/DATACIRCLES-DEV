@@ -83,6 +83,13 @@ function renderUpiQr(buildUpiUri, doc, options) {
   }
 }
 
+// Start Chromium (and import the shared templates) when the server boots, so
+// the first PDF a user opens doesn't pay the cold-start cost.
+setImmediate(() => {
+  getBrowser().catch((err) => console.error("PDF browser pre-warm failed:", err.message));
+  loadTemplates().catch(() => {});
+});
+
 module.exports = async function htmlDocumentPdf(
   doc,
   bankDetails,
@@ -134,7 +141,11 @@ module.exports = async function htmlDocumentPdf(
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    // "load" waits for images/stylesheets without networkidle0's mandatory
+    // 500ms-of-silence tail; fonts are awaited explicitly so text still lays
+    // out with the final typefaces before printing.
+    await page.setContent(html, { waitUntil: "load", timeout: 20000 });
+    await page.evaluate(() => (document.fonts ? document.fonts.ready : null));
     return await page.pdf({
       format: "A4",
       landscape: template === "Landscape",

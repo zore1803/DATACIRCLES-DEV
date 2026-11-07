@@ -744,7 +744,6 @@ import PlusIcon from "./common/PlusIcon";
 
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import dataCirclesLogo from "../assets/Datacircles logo.png";
 import {
   Search,
   X,
@@ -766,6 +765,7 @@ import {
   ShoppingBag,
   Package,
   Undo2,
+  Menu,
 } from "lucide-react";
 import SearchResults from "./SearchResults";
 import QuickCompanyForm from "./company/QuickCompanyForm";
@@ -871,6 +871,14 @@ const Header = () => {
   const mobileSearchSlotRef = useRef(null);
   const [searchOrigin, setSearchOrigin] = useState(null);
   const [searchCentered, setSearchCentered] = useState(false);
+  // Phones (<1024px): search opens inside the header row itself instead of the
+  // centred floating box the desktop uses.
+  const [isMobileView, setIsMobileView] = useState(() => typeof window !== "undefined" && window.innerWidth < 1024);
+  useEffect(() => {
+    const onResize = () => setIsMobileView(window.innerWidth < 1024);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [hoveredMeeting, setHoveredMeeting] = useState(false);
   const [showQuickCompanyForm, setShowQuickCompanyForm] = useState(false);
@@ -1289,7 +1297,8 @@ const Header = () => {
     }
     setSearchCentered(false);
     setIsSearchOpen(true);
-    dispatchDimChrome(true);
+    // Phones search inside the header with nothing dimmed behind it.
+    if (window.innerWidth >= 1024) dispatchDimChrome(true);
   };
   // Ctrl+K / Cmd+K opens global search from anywhere on the page, matching
   // the shortcut users expect from most SaaS apps (Linear, Notion, etc).
@@ -1800,44 +1809,87 @@ const Header = () => {
         style={{ background: "var(--chrome-bg, #EBEDFF)", top: "var(--dc-offline-offset, 0px)" }}
         className="lg:hidden fixed top-0 left-0 right-0 z-[9992] h-[54px] flex items-center border-b border-[#ECECEC]"
       >
-        <div className="w-full max-w-[440px] mx-auto flex items-center justify-between px-4 py-2 gap-3 h-full">
-          {/* Logo — opens the sidebar on mobile */}
+        <div className="relative w-full max-w-[440px] mx-auto flex items-center justify-between px-4 py-2 gap-3 h-full">
+          {isSearchOpen && isMobileView ? (
+            /* Search open on a phone: the field takes over the header row. */
+            <div className="flex items-center gap-2 w-full">
+              <div className="relative flex-1 min-w-0">
+                <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#525866] pointer-events-none" />
+                <input
+                  autoFocus
+                  type="text"
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  onKeyDown={(e) => e.key === "Escape" && handleSearchClose()}
+                  placeholder="Search Companies, Deals, Contacts"
+                  className="w-full h-10 pl-10 pr-10 bg-white border border-[#0085FF] rounded-full text-sm text-gray-700 placeholder:text-gray-500 outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    aria-label="Clear search"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5 rounded-full text-gray-900"
+                  >
+                    <X className="w-4 h-4" strokeWidth={2.5} />
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleSearchClose}
+                aria-label="Close search"
+                className="flex items-center justify-center w-10 h-10 rounded-full border border-[#E1E4EA] bg-white text-[#525866] flex-shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          ) : (
+          <>
+          {/* Left: menu (opens the navigation drawer) + round search button.
+              The search button is the overlay's slide-out origin. */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              type="button"
+              aria-label="Open menu"
+              onClick={() =>
+                window.dispatchEvent(new CustomEvent("toggle-mobile-sidebar"))
+              }
+              className="flex items-center justify-center w-10 h-10 rounded-full border border-[#E1E4EA] bg-white text-[#525866] active:scale-95 transition-transform"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
+              ref={mobileSearchSlotRef}
+              aria-label="Search"
+              onClick={() => handleSearchFocus(mobileSearchSlotRef)}
+              className={`flex items-center justify-center w-10 h-10 rounded-full border border-[#E1E4EA] bg-white text-[#525866] active:scale-95 transition-all duration-150 ${isSearchOpen ? "opacity-0 pointer-events-none" : "opacity-100"}`}
+            >
+              <SearchIcon className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Centre: logo, centred on the screen rather than between the two clusters */}
           <img
-            src={dataCirclesLogo}
-            alt="Logo"
-            className="w-9 h-9 rounded-md object-cover flex-shrink-0 cursor-pointer"
-            onClick={() =>
-              window.dispatchEvent(new CustomEvent("toggle-mobile-sidebar"))
-            }
+            src="/DC Logo Export.png"
+            alt="DataCircles"
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-6 w-auto object-contain pointer-events-none select-none"
           />
 
           {/* Right cluster */}
-          <div className="flex items-center gap-2 min-w-0">
-            {/* Search pill */}
-            <div
-              ref={mobileSearchSlotRef}
-              className={`flex items-center gap-2 px-2.5 h-8 border border-[#E1E4EA] bg-white rounded-full flex-1 min-w-0 max-w-[172px] transition-opacity duration-150 ${isSearchOpen ? "opacity-0 pointer-events-none" : "opacity-100"}`}
-            >
-              <SearchIcon className="text-[#525866] flex-shrink-0 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => handleSearchChange(e, mobileSearchSlotRef)}
-                onFocus={() => handleSearchFocus(mobileSearchSlotRef)}
-                className="bg-transparent outline-none text-sm text-[#525866] placeholder:text-[#525866] w-full min-w-0"
-              />
-            </div>
-
+          <div className="flex items-center gap-2 min-w-0 flex-shrink-0">
             {/* Notification bell */}
             <NotificationBell variant="mobile" />
 
             {/* Add button — floating action button, bottom right (mobile only) */}
-            <div className="fixed right-4 bottom-[calc(28px+env(safe-area-inset-bottom))] z-[9990] flex-shrink-0">
+            {/* Sits 16px above the 64px list-page pagination bar (z-[9992]) so the
+                bar never covers it; z-[9993] keeps it on top of that bar. */}
+            <div className="dc-fab fixed right-[11px] z-[9993] flex-shrink-0">
               <button
                 onClick={handleGlobalAdd}
                 title="New"
-                className="flex items-center justify-center w-14 h-14 rounded-full bg-[#0085FF] border border-[#0085FF] shadow-lg active:scale-95 transition-transform"
+                className="flex items-center justify-center w-12 h-12 rounded-full bg-[#0085FF] border border-[#0085FF] shadow-lg active:scale-95 transition-transform"
                 style={{
                   background:
                     "linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 100%), #0085FF",
@@ -1845,9 +1897,9 @@ const Header = () => {
                 }}
               >
                 {isAddMenuOpen ? (
-                  <X className="w-6 h-6 text-white" />
+                  <X className="w-5 h-5 text-white" />
                 ) : (
-                  <PlusIcon className="w-6 h-6 text-white" />
+                  <PlusIcon className="w-5 h-5 text-white" />
                 )}
               </button>
 
@@ -1980,13 +2032,41 @@ const Header = () => {
               )}
             </div>
           </div>
+          </>
+          )}
         </div>
       </header>
+
+      {/* Phones: results drop straight down from the header's search field - no
+          floating box, no dimming. A transparent layer behind it closes on outside tap. */}
+      {isSearchOpen && isMobileView && (
+        <>
+          {/* Blurred page behind the header's search field; tap it to close. */}
+          <div
+            className="fixed inset-0 z-[9991] backdrop-blur-md bg-black/10"
+            onClick={handleSearchClose}
+          />
+          {/* Nothing but the field until something is typed - no category list. */}
+          {searchQuery.trim().length > 0 && (
+            <div
+              className="fixed left-3 right-3 z-[9993] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-y-auto"
+              style={{ top: "calc(60px + var(--dc-offline-offset, 0px))", maxHeight: "calc(100vh - 76px)" }}
+            >
+              <SearchResults
+                variant="panel"
+                isOpen={isSearchOpen}
+                onClose={handleSearchClose}
+                searchQuery={debouncedQuery}
+              />
+            </div>
+          )}
+        </>
+      )}
 
       {/* Search overlay. Lives outside both headers: it used to sit inside the desktop-only
           (`hidden lg:flex`) header, so on phones tapping the search pill hid the pill
           (isSearchOpen) while the overlay itself stayed display:none. */}
-          {isSearchOpen && searchOrigin && (
+          {isSearchOpen && searchOrigin && !isMobileView && (
             <>
               {/* Plain opaque dim — no blur. Sidebar/pagination dim themselves
                   independently via DIM_CHROME_EVENT; this is just the tint,

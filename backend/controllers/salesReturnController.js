@@ -7,6 +7,16 @@ const htmlDocumentPdf = require("../utils/htmlDocumentPdf");
 const getDefaultBankDetails = require("../utils/getDefaultBankDetails");
 const { syncDocumentStock } = require("../utils/inventorySync");
 const allocationService = require("../services/paymentAllocationService");
+const { parseAdvancedFiltersParam } = require("../utils/dateRangeFilter");
+const { buildDocumentAdvancedConditions, createFilterOptionsHandler, parseIssueDateRange, SALES_RETURN_OPTS } = require("../utils/documentAdvancedFilters");
+
+// GET /api/sales-returns/filter-options — suggestions + amount bounds for Advanced Filters
+exports.getSalesReturnFilterOptions = createFilterOptionsHandler({
+  Model: SalesReturn,
+  numberField: "returnNumber",
+  settingsKey: "salesReturn",
+  amountField: "grandTotal",
+});
 
 const sumRefunds = (payments) =>
   (payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
@@ -368,6 +378,22 @@ exports.getAllSalesReturnsWithPagination = async (req, res) => {
     }
     if (status) query.status = status;
 
+    // Return-date range from the list's date button (from inclusive, to exclusive).
+    const returnDateRange = parseIssueDateRange(req.query);
+    if (returnDateRange) query.returnDate = returnDateRange;
+
+    // Advanced Filter panel rules, ANDed with everything else.
+    const advancedRules = parseAdvancedFiltersParam(req.query.advancedFilters);
+    if (advancedRules === null) {
+      return res.status(400).json({ error: "Invalid advancedFilters" });
+    }
+    if (advancedRules.length > 0) {
+      const advancedConditions = await buildDocumentAdvancedConditions(advancedRules, req.user.organization, "returnNumber", SALES_RETURN_OPTS);
+      if (advancedConditions.length > 0) {
+        query.$and = query.$and ? [...query.$and, ...advancedConditions] : advancedConditions;
+      }
+    }
+
     if (req.query.allIds === "true") {
       const all = await SalesReturn.find(query).select("_id").lean();
       return res.json({ ids: all.map((x) => x._id) });
@@ -457,9 +483,20 @@ exports.getAllSalesReturnsWithPagination = async (req, res) => {
       ]);
     }
 
+    // Per-status record counts for the pill switcher: the same filters as the
+    // list with the status filter lifted, so each pill shows how many it lists.
+    const statusCountQuery = { ...query };
+    delete statusCountQuery.status;
+    const COUNT_STATUSES = ["Draft", "Pending", "Confirmed", "Partial", "Paid", "Refunded", "Cancelled"];
+    const countValues = await Promise.all(
+      COUNT_STATUSES.map((st) => SalesReturn.countDocuments({ ...statusCountQuery, status: st }))
+    );
+    const statusCounts = Object.fromEntries(COUNT_STATUSES.map((st, i) => [st, countValues[i]]));
+
     const totalPages = Math.ceil(totalCount / limit);
     res.json({
       salesReturns,
+      statusCounts,
       pagination: {
         currentPage: page,
         totalPages,

@@ -72,6 +72,7 @@ import EyeIcon from "../components/common/EyeIcon";
 import EditIcon from "../components/common/EditIcon";
 import DocumentDetailModal from "../components/common/DocumentDetailModal";
 import DateRangeFilterButton,{ thisMonthRange } from "../components/common/DateRangeFilterButton";
+import CalendarIcon from "../components/common/CalendarIcon";
 import { toServerDueDateFilter } from "../utils/dueDateFilter";
 
 /*
@@ -134,6 +135,7 @@ const PurchaseReturn = () => {
   const statusTabsRef = useRef(null);
   const [statusTabThumb, setStatusTabThumb] = useState({ left: 0, width: 0, ready: false });
   const [dateRange, setDateRange] = useState(thisMonthRange);
+  const [showMobileDateRange, setShowMobileDateRange] = useState(false);
   const dateFromMs = dateRange.from ? dateRange.from.getTime() : 0;
   const dateToMs = dateRange.to ? dateRange.to.getTime() : 0;
   const [filterOptions, setFilterOptions] = useState(null);
@@ -159,6 +161,14 @@ const PurchaseReturn = () => {
       nav?.removeEventListener("scroll", measure);
     };
   }, [filterStatus, statusCounts]);
+  // Phones only: keep the selected pill in view when the row scrolls sideways.
+  useEffect(() => {
+    if (!window.matchMedia("(max-width: 1023px)").matches) return;
+    const nav = statusTabsRef.current;
+    const button = statusTabRefs.current[filterStatus || "all"];
+    if (!nav || !button || nav.scrollWidth <= nav.clientWidth) return;
+    nav.scrollTo({ left: button.offsetLeft - (nav.clientWidth - button.offsetWidth) / 2, behavior: "smooth" });
+  }, [filterStatus]);
   // The return whose read-only detail card is open (clicked row).
   const [detailReturnId, setDetailReturnId] = useState(null);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
@@ -2209,10 +2219,10 @@ const PurchaseReturn = () => {
 
         {/* Status pills + return-date range, same strip as the Invoices list */}
         <div
-          className="fixed right-0 h-[52px] px-4 sm:px-6 lg:pl-[var(--content-inset,16px)] lg:pr-8 bg-white flex items-start top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
+          className="fixed right-0 h-14 lg:h-[52px] px-4 sm:px-6 lg:pl-[var(--content-inset,16px)] lg:pr-8 bg-white flex items-center lg:items-start top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
           style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
         >
-          <div ref={statusTabsRef} className="relative flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto lg:ml-[36px]">
+          <div ref={statusTabsRef} className="relative flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto max-lg:[scrollbar-width:none] max-lg:[&::-webkit-scrollbar]:hidden lg:ml-[36px]">
             <span
               aria-hidden="true"
               className="absolute top-1 h-9 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
@@ -2232,15 +2242,15 @@ const PurchaseReturn = () => {
                   }}
                   type="button"
                   onClick={() => setFilterStatus(tab.value)}
-                  className={`relative z-[1] h-9 flex-shrink-0 whitespace-nowrap rounded-full text-sm font-medium transition-colors ${selected
-                    ? "px-6 text-[#0085FF]"
-                    : "px-3.5 text-[#0E121B] hover:bg-white/60"
+                  className={`relative z-[1] h-9 flex-shrink-0 whitespace-nowrap rounded-full text-[13px] lg:text-sm font-medium transition-colors ${selected
+                    ? "px-4 lg:px-6 text-[#0085FF]"
+                    : "px-2.5 lg:px-3.5 text-[#0E121B] hover:bg-white/60"
                     }`}
                 >
                   {tab.label}
                   {statusCounts[tab.value] != null && (
                     <span
-                      className={`ml-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium transition-colors duration-300 ${selected
+                      className={`ml-1.5 lg:ml-2 ${selected ? "inline-block" : "hidden lg:inline-block"} rounded-full px-1.5 lg:px-2 py-0.5 text-[10px] lg:text-xs font-medium transition-colors duration-300 ${selected
                         ? "bg-[#E8F2FF] text-[#0085FF]"
                         : "bg-white/70 text-[#525866]"
                         }`}
@@ -2252,14 +2262,34 @@ const PurchaseReturn = () => {
               );
             })}
           </div>
-          <div className="ml-3">
+          <div className="ml-3 hidden lg:block">
             <DateRangeFilterButton value={dateRange} onChange={setDateRange} />
+          </div>
+          {/* Phones: calendar icon (the full "This Month" pill wrapped and crowded
+              the status pills) opening the same picker as a centred sheet. */}
+          <button
+            type="button"
+            onClick={() => setShowMobileDateRange(true)}
+            title={dateRange?.label || "All Time"}
+            aria-label={`Return date: ${dateRange?.label || "All Time"}`}
+            className="lg:hidden flex-shrink-0 ml-2 w-11 h-11 flex items-center justify-center rounded-full bg-[#F1F1F5] text-[#0E121B]"
+          >
+            <CalendarIcon className="w-4 h-4" />
+          </button>
+          <div className="lg:hidden">
+            <DateRangeFilterButton
+              hideTrigger
+              open={showMobileDateRange}
+              onOpenChange={setShowMobileDateRange}
+              value={dateRange}
+              onChange={setDateRange}
+            />
           </div>
         </div>
 
         <div
           ref={tableScrollRef}
-          className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(170px+var(--dc-offline-offset,0px))] lg:top-[calc(180px+var(--dc-offline-offset,0px))]"
+          className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(174px+var(--dc-offline-offset,0px))] lg:top-[calc(180px+var(--dc-offline-offset,0px))]"
           style={{ position: "fixed", left: "var(--sidebar-width, 0px)", paddingLeft: "var(--content-inset, 16px)", right: 0, bottom: !showLoadingSkeleton ? 64 : 0 }}
         >
           <div className={`relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || purchaseReturns.length > 0 ? "border-b" : ""}`}>

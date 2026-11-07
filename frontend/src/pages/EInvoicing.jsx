@@ -5,6 +5,7 @@ import excelLogo from "../assets/excel-logo.png";
 import pdfLogo from "../assets/pdf-icon.png";
 import Checkbox from "../components/common/Checkbox";
 import MoreIcon from "../components/common/MoreIcon";
+import CalendarIcon from "../components/common/CalendarIcon";
 import DownloadIcon from "../components/common/DownloadIcon";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -134,6 +135,7 @@ export default function EInvoicing() {
   // to the server together with the Advanced Filter rules.
   const [filterStatus, setFilterStatus] = useState("");
   const [dateRange, setDateRange] = useState(thisMonthRange);
+  const [showMobileDateRange, setShowMobileDateRange] = useState(false);
   const dateFromMs = dateRange.from ? dateRange.from.getTime() : 0;
   const dateToMs = dateRange.to ? dateRange.to.getTime() : 0;
   const [filterOptions, setFilterOptions] = useState(null);
@@ -1018,13 +1020,14 @@ export default function EInvoicing() {
   // Pagination controls — server-driven, same shape as SalesReturn.jsx's.
   const PaginationControls = () => (
     <div className="flex items-center justify-between w-full px-4 sm:px-6 lg:px-8">
-      <div className="flex items-center space-x-2">
-        <div className="text-sm text-gray-700 font-inter">
+      <div className="flex items-center space-x-2 min-w-0">
+        {/* Phones: two lines ("Showing 1 to 10" / "of 17 results"). */}
+        <div className="text-xs lg:text-sm leading-tight text-gray-700 font-inter flex-shrink-0">
           Showing{" "}
           <span className="font-semibold text-gray-800">{pagination.totalCount === 0 ? 0 : (pagination.currentPage - 1) * pagination.limit + 1}</span>
           {" "}to{" "}
           <span className="font-semibold text-gray-800">{Math.min(pagination.currentPage * pagination.limit, pagination.totalCount)}</span>
-          {" "}of{" "}
+          {" "}<br className="lg:hidden" />of{" "}
           <span className="font-semibold text-gray-800">{pagination.totalCount}</span>
           {" "}results
         </div>
@@ -1032,7 +1035,7 @@ export default function EInvoicing() {
           <select
             value={pagination.limit}
             onChange={(e) => handleLimitChange(Number(e.target.value))}
-            className="select-chevron appearance-none border border-gray-300 rounded-full pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
+            className="select-chevron appearance-none border border-gray-300 rounded-full pl-2 lg:pl-3 pr-6 lg:pr-8 py-1.5 text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-inter"
           >
             {[10, 20, 50, 100, 150].map((n) => (
               <option key={n} value={n}>{n} per page</option>
@@ -1041,7 +1044,7 @@ export default function EInvoicing() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 lg:gap-2">
 
         <button
           onClick={() => handlePageChange(pagination.currentPage - 1)}
@@ -1136,7 +1139,7 @@ export default function EInvoicing() {
 
       {/* ── Fixed header toolbar — edge-to-edge, matches PurchasePage ──*/}
       <div
-        className={`fixed right-0 h-16 px-4 sm:px-6 lg:pl-[16px] lg:pr-[16px] border-b flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E1E4EA]`}
+        className={`fixed right-0 h-16 px-4 sm:px-6 lg:pl-[16px] lg:pr-[16px] flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white border-[#E1E4EA]`}
         style={{ left: "var(--sidebar-width, 0px)", zIndex: 40, minHeight: "64px", maxHeight: "64px", boxSizing: "border-box" }}
       >
         {showBulkStrip ? (
@@ -1380,10 +1383,10 @@ export default function EInvoicing() {
 
       {/* Status pills + invoice-date range, same strip as the Invoices list */}
       <div
-        className="fixed right-0 h-[52px] px-4 sm:px-6 lg:px-8 bg-white flex items-start top-[calc(102px+var(--dc-offline-offset,0px))] lg:top-[calc(112px+var(--dc-offline-offset,0px))]"
+        className="fixed right-0 h-14 px-4 sm:px-6 lg:pl-[16px] lg:pr-[16px] bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
         style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
       >
-        <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
+        <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto no-scrollbar">
           {STATUS_TABS.map((tab) => {
             const value = tab.key === "all" ? "" : tab.label;
             const selected = filterStatus === value;
@@ -1392,15 +1395,15 @@ export default function EInvoicing() {
                 key={tab.key}
                 type="button"
                 onClick={() => setFilterStatus(value)}
-                className={`h-9 flex-shrink-0 whitespace-nowrap rounded-full text-sm font-medium transition-all duration-300 ease-out ${selected
-                    ? "px-6 bg-white text-[#0085FF] shadow-sm"
-                    : "px-3.5 text-[#0E121B] hover:bg-white/60"
+                className={`h-9 flex-shrink-0 whitespace-nowrap rounded-full text-[13px] lg:text-sm font-medium transition-all duration-300 ease-out ${selected
+                    ? "px-4 lg:px-6 bg-white text-[#0085FF] shadow-sm"
+                    : "px-2.5 lg:px-3.5 text-[#0E121B] hover:bg-white/60"
                     }`}
               >
                 {tab.label}
                 {statusCounts[value] != null && (
                     <span
-                      className={`ml-2 inline-block rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors duration-300 ${selected
+                      className={`ml-1.5 lg:ml-2 ${selected ? "inline-block" : "hidden lg:inline-block"} rounded-md px-1.5 py-0.5 text-[10px] lg:text-xs font-medium transition-colors duration-300 ${selected
                         ? "bg-[#E8F2FF] text-[#0085FF]"
                         : "bg-white/70 text-[#525866]"
                         }`}
@@ -1412,15 +1415,35 @@ export default function EInvoicing() {
             );
           })}
         </div>
-        <div className="ml-3">
+        <div className="ml-3 hidden lg:block flex-shrink-0 [&_button]:whitespace-nowrap">
           <DateRangeFilterButton value={dateRange} onChange={setDateRange} />
+        </div>
+        {/* Phones: a calendar icon (the full "This Month ˅" pill wrapped onto two
+            lines and crowded the status pills) opening the same picker as a centred sheet. */}
+        <button
+          type="button"
+          onClick={() => setShowMobileDateRange(true)}
+          title={dateRange?.label || "All Time"}
+          aria-label={`Invoice date: ${dateRange?.label || "All Time"}`}
+          className="lg:hidden flex-shrink-0 ml-2 w-11 h-11 flex items-center justify-center rounded-full bg-[#F1F1F5] text-[#0E121B]"
+        >
+          <CalendarIcon className="w-4 h-4" />
+        </button>
+        <div className="lg:hidden">
+          <DateRangeFilterButton
+            hideTrigger
+            open={showMobileDateRange}
+            onOpenChange={setShowMobileDateRange}
+            value={dateRange}
+            onChange={setDateRange}
+          />
         </div>
       </div>
 
       {/* ── Edge-to-edge scrollable table area ─────────────────────── */}
       <div
         ref={tableScrollRef}
-        className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(154px+var(--dc-offline-offset,0px))] lg:top-[calc(164px+var(--dc-offline-offset,0px))]"
+        className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(174px+var(--dc-offline-offset,0px))] lg:top-[calc(184px+var(--dc-offline-offset,0px))]"
         style={{
           position: "fixed",
           left: "var(--sidebar-width, 0px)",

@@ -1327,24 +1327,25 @@ export default function Journals() {
 
       {/* ── Pagination bar — edge-to-edge, same shape as PaymentsTimeline.jsx ── */}
       <div
-        className="fixed bottom-0 right-0 h-16 bg-white border-t border-[#E1E4EA] flex items-center justify-between px-6 z-40"
+        className="fixed bottom-0 right-0 h-16 bg-white border-t border-[#E1E4EA] flex items-center justify-between px-4 lg:px-6 z-40"
         style={{ left: "var(--sidebar-width, 0px)" }}
       >
-        <div className="flex items-center gap-3">
-          <p className="text-sm text-gray-700">
+        <div className="flex items-center gap-2 lg:gap-3 min-w-0">
+          {/* Phones: two lines ("Showing 1 to 50" / "of 60 journals"). */}
+          <p className="text-xs lg:text-sm leading-tight text-gray-700 flex-shrink-0">
             Showing{" "}
             <span className="font-semibold">
               {journalsTotalCount === 0 ? 0 : (journalsPagination.currentPage - 1) * journalsPagination.limit + 1}
             </span>{" "}to{" "}
             <span className="font-semibold">
               {Math.min(journalsPagination.currentPage * journalsPagination.limit, journalsTotalCount)}
-            </span>{" "}of{" "}
+            </span>{" "}<br className="lg:hidden" />of{" "}
             <span className="font-semibold">{journalsTotalCount}</span> journals
           </p>
           <select
             value={journalsPagination.limit}
             onChange={(e) => handleJournalsLimitChange(parseInt(e.target.value))}
-            className="select-chevron border border-gray-300 rounded-full text-sm py-1 pl-2 pr-6 focus:outline-none focus:border-[#0085FF] focus:ring-1 focus:ring-[#0085FF]"
+            className="select-chevron border border-gray-300 rounded-full text-xs lg:text-sm py-1 pl-2 pr-6 focus:outline-none focus:border-[#0085FF] focus:ring-1 focus:ring-[#0085FF]"
           >
             {[10, 20, 50, 100].map((val) => (
               <option key={val} value={val}>{val} per page</option>
@@ -1352,7 +1353,7 @@ export default function Journals() {
           </select>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 lg:gap-2">
           <button
             onClick={() => handleJournalsPageChange(journalsPagination.currentPage - 1)}
             disabled={journalsPagination.currentPage <= 1}

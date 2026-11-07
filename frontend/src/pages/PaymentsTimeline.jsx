@@ -8,7 +8,7 @@ import Checkbox from "../components/common/Checkbox";
 import PlusIcon from "../components/common/PlusIcon";
 import MoreIcon from "../components/common/MoreIcon";
 import DownloadIcon from "../components/common/DownloadIcon";
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   X, ChevronDown, ChevronUp, EyeOff,
@@ -70,6 +70,9 @@ const TOOLBAR_BOTTOM = 64 + HEADER_HEIGHT;
 // top bar is 54px tall rather than 64px. Everything below hangs off these instead.
 const PHONE_HEADER_HEIGHT = 64;
 const PHONE_TOP_BAR = 54;
+// Phones: the Total Funds / Unapplied / Wallet / Cash / bank cards sit in their own
+// scrolling row under the header, with shorter cards than desktop's 96px ones.
+const PHONE_CARDS_STRIP_HEIGHT = 81;
 // The bulk-action strip gets its own band so it doesn't hide the account
 // cards — those balances are context you want while acting on rows.
 const BULK_STRIP_HEIGHT = 64;
@@ -110,6 +113,51 @@ const cellTextFor = (colId, doc) => {
   }
 };
 
+/* Card headings on phones: a heading wider than its card scrolls back and forth
+   inside the box (keyframes: dc-marquee in index.css) instead of spilling out of
+   it. Only used for the heading - amounts and account numbers stay put.
+   `active` is false on desktop, where it renders as plain text. */
+const MarqueeText = ({ children, active, className = "" }) => {
+  const boxRef = useRef(null);
+  const textRef = useRef(null);
+  const [dist, setDist] = useState(0);
+  useLayoutEffect(() => {
+    if (!active) {
+      setDist(0);
+      return undefined;
+    }
+    const measure = () => {
+      const box = boxRef.current;
+      const text = textRef.current;
+      if (!box || !text) return;
+      setDist(Math.max(0, Math.ceil(text.scrollWidth - box.clientWidth)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (boxRef.current) ro.observe(boxRef.current);
+    if (textRef.current) ro.observe(textRef.current);
+    return () => ro.disconnect();
+  }, [active, children]);
+  return (
+    <span ref={boxRef} className={`block min-w-0 overflow-hidden ${className}`}>
+      <span
+        ref={textRef}
+        className="inline-block whitespace-nowrap"
+        style={
+          active && dist > 0
+            ? {
+                "--dc-marquee-dist": `-${dist}px`,
+                animation: `dc-marquee ${Math.max(5, dist / 18 + 4)}s ease-in-out infinite alternate`,
+              }
+            : undefined
+        }
+      >
+        {children}
+      </span>
+    </span>
+  );
+};
+
 /* ─── Component ─────────────────────────────────────────────────────── */
 export default function PaymentsTimeline() {
   const [isPhone, setIsPhone] = useState(() => typeof window !== "undefined" && window.innerWidth < 1024);
@@ -119,7 +167,8 @@ export default function PaymentsTimeline() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
   const headerHeight = isPhone ? PHONE_HEADER_HEIGHT : HEADER_HEIGHT;
-  const toolbarBottom = (isPhone ? PHONE_TOP_BAR : 64) + headerHeight;
+  const cardsStripHeight = isPhone ? PHONE_CARDS_STRIP_HEIGHT : 0;
+  const toolbarBottom = (isPhone ? PHONE_TOP_BAR : 64) + headerHeight + cardsStripHeight;
   const [documents, setDocuments] = useState([]);
   const [accountsSummary, setAccountsSummary] = useState([]);
   // Unapplied credit — money received (or advanced) that hasn't been settled
@@ -1186,22 +1235,38 @@ export default function PaymentsTimeline() {
           boxSizing: "border-box",
         }}
       >
-        <div className={`flex items-center gap-4 min-w-0 overflow-hidden transition-opacity duration-300 ease-in-out flex-shrink-0 sm:flex-shrink sm:flex-1 sm:w-auto sm:opacity-100 sm:pr-4 sm:overflow-visible ${isSearchExpanded ? "w-0 opacity-0" : "w-[110px] opacity-100"}`}>
+        <div className={`flex items-center gap-4 min-w-0 overflow-hidden transition-opacity duration-300 ease-in-out flex-shrink-0 sm:flex-shrink sm:flex-1 sm:w-auto sm:opacity-100 sm:pr-4 sm:overflow-visible ${isSearchExpanded ? "w-0" : "w-[110px]"}`}>
+          <h1 className={`m-0 lg:hidden text-base font-bold text-gray-900 truncate transition-opacity duration-300 ${isSearchExpanded ? "opacity-0" : "opacity-100"}`}>Payments</h1>
           {/* Scrollable Container for all Individual Cards — Total Funds + Wallet/Cash/Bank,
               ported from the signatures branch (cards now open the Account Detail ledger
               instead of navigating to Settings). */}
           <div
             ref={cardsScrollRef}
-            className="hover-scrollbar flex-1 flex items-center gap-4 overflow-x-auto h-full pt-[10px] pb-1 min-w-0"
+            className="hover-scrollbar flex-1 flex items-center gap-3 lg:gap-4 overflow-x-auto h-full pt-[10px] pb-1 min-w-0 dc-cards-strip"
+            style={
+              isPhone
+                ? {
+                    position: "fixed",
+                    left: "var(--sidebar-width, 0px)",
+                    right: 0,
+                    top: PHONE_TOP_BAR + headerHeight,
+                    height: PHONE_CARDS_STRIP_HEIGHT,
+                    zIndex: 39,
+                    padding: "8px 16px",
+                    background: "#fff",
+                    borderBottom: "1px solid #E1E4EA",
+                    boxSizing: "border-box",
+                  }
+                : undefined
+            }
           >
-            <h1 className="m-0 sm:hidden text-base font-bold text-gray-900 truncate">Payments</h1>
             {/* ── CARD: Total Available Funds ──────────────────────────────── */}
             {(() => {
               const isNegative = filteredTotal < 0;
               const activeCount = selectedAccountIds.length;
               const totalCount = (walletSummary ? 1 : 0) + (cashSummary ? 1 : 0) + bankSummaries.length;
               return (
-                <div className="relative hidden sm:flex flex-col justify-between w-[220px] h-24 flex-shrink-0 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 hover:border-blue-400 hover:shadow-sm transition-all">
+                <div className="relative flex flex-col justify-between w-[172px] lg:w-[220px] h-16 lg:h-24 flex-shrink-0 max-lg:overflow-hidden bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 lg:px-4 py-2 lg:py-3 hover:border-blue-400 hover:shadow-sm transition-all">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-500 font-semibold uppercase tracking-wide leading-none">Total Funds</span>
                     <button
@@ -1224,7 +1289,7 @@ export default function PaymentsTimeline() {
                       <FilterIcon size={16} />
                     </button>
                   </div>
-                  <span className={`text-xl font-semibold tracking-tight leading-none ${isNegative ? "text-red-600" : "text-emerald-600"}`}>
+                  <span className={`text-base lg:text-xl font-semibold tracking-tight leading-none ${isNegative ? "text-red-600" : "text-emerald-600"}`}>
                     ₹{filteredTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                   {activeCount < totalCount && (
@@ -1291,21 +1356,21 @@ export default function PaymentsTimeline() {
               <div
                 ref={creditCardRef}
                 onClick={() => setShowCreditPanel((v) => !v)}
-                className="group relative hidden sm:flex flex-col justify-between w-[220px] h-24 flex-shrink-0 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 hover:border-amber-400 hover:bg-amber-50/10 hover:shadow-sm cursor-pointer transition-all"
+                className="group relative flex flex-col justify-between w-[172px] lg:w-[220px] h-16 lg:h-24 flex-shrink-0 max-lg:overflow-hidden bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 lg:px-4 py-2 lg:py-3 hover:border-amber-400 hover:bg-amber-50/10 hover:shadow-sm cursor-pointer transition-all"
                 title="Payments not yet applied to a document"
               >
                 <div className="flex items-center gap-2">
-                  <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center">
+                  <div className="flex-shrink-0 w-6 h-6 lg:w-7 lg:h-7 rounded-lg bg-amber-100 flex items-center justify-center">
                     <ListChecks className="w-3.5 h-3.5 text-amber-600" />
                   </div>
                   <div className="flex flex-col min-w-0">
-                    <span className="text-sm font-bold text-gray-900 leading-tight">Unapplied</span>
+                    <MarqueeText active={isPhone} className="text-sm font-bold text-gray-900 leading-tight">Unapplied</MarqueeText>
                     <span className="text-[11px] text-gray-400 leading-tight">
                       {creditBalances.length} {creditBalances.length === 1 ? "party" : "parties"}
                     </span>
                   </div>
                 </div>
-                <span className="text-xl font-semibold tracking-tight leading-none text-amber-600">
+                <span className="text-base lg:text-xl font-semibold tracking-tight leading-none text-amber-600">
                   ₹{Number(creditTotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
 
@@ -1365,19 +1430,19 @@ export default function PaymentsTimeline() {
               return (
                 <div
                   onClick={() => handleCardClick(walletSummary)}
-                  className="group relative hidden sm:flex flex-col justify-between w-[220px] h-24 flex-shrink-0 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 hover:border-violet-400 hover:bg-violet-50/10 hover:shadow-sm cursor-pointer transition-all"
+                  className="group relative flex flex-col justify-between w-[172px] lg:w-[220px] h-16 lg:h-24 flex-shrink-0 max-lg:overflow-hidden bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 lg:px-4 py-2 lg:py-3 hover:border-violet-400 hover:bg-violet-50/10 hover:shadow-sm cursor-pointer transition-all"
                   title="View Wallet Transactions"
                 >
                   <div className="flex items-center gap-2">
-                    <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center">
+                    <div className="flex-shrink-0 w-6 h-6 lg:w-7 lg:h-7 rounded-lg bg-gray-100 flex items-center justify-center">
                       <Wallet className="w-3.5 h-3.5 text-gray-500" />
                     </div>
                     <div className="flex flex-col min-w-0">
-                      <span className="text-sm font-bold text-gray-900 leading-tight">Wallet</span>
+                      <MarqueeText active={isPhone} className="text-sm font-bold text-gray-900 leading-tight">Wallet</MarqueeText>
                       <span className="text-[11px] text-gray-400 leading-tight">Prepaid Credits</span>
                     </div>
                   </div>
-                  <span className={`text-xl font-semibold tracking-tight leading-none ${isNegative ? "text-red-600" : "text-emerald-600"}`}>
+                  <span className={`text-base lg:text-xl font-semibold tracking-tight leading-none ${isNegative ? "text-red-600" : "text-emerald-600"}`}>
                     {balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} credits
                   </span>
                 </div>
@@ -1391,19 +1456,19 @@ export default function PaymentsTimeline() {
               return (
                 <div
                   onClick={() => handleCardClick(cashSummary)}
-                  className="group relative hidden sm:flex flex-col justify-between w-[220px] h-24 flex-shrink-0 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 hover:border-green-400 hover:bg-green-50/10 hover:shadow-sm cursor-pointer transition-all"
+                  className="group relative flex flex-col justify-between w-[172px] lg:w-[220px] h-16 lg:h-24 flex-shrink-0 max-lg:overflow-hidden bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 lg:px-4 py-2 lg:py-3 hover:border-green-400 hover:bg-green-50/10 hover:shadow-sm cursor-pointer transition-all"
                   title="Cash Transactions"
                 >
                   <div className="flex items-center gap-2">
-                    <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center">
+                    <div className="flex-shrink-0 w-6 h-6 lg:w-7 lg:h-7 rounded-lg bg-green-100 flex items-center justify-center">
                       <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
                     </div>
                     <div className="flex flex-col min-w-0">
-                      <span className="text-sm font-bold text-gray-900 leading-tight">Cash</span>
+                      <MarqueeText active={isPhone} className="text-sm font-bold text-gray-900 leading-tight">Cash</MarqueeText>
                       <span className="text-[11px] text-gray-400 leading-tight">Physical Cash</span>
                     </div>
                   </div>
-                  <span className={`text-xl font-semibold tracking-tight leading-none ${isNegative ? "text-red-600" : "text-emerald-600"}`}>
+                  <span className={`text-base lg:text-xl font-semibold tracking-tight leading-none ${isNegative ? "text-red-600" : "text-emerald-600"}`}>
                     ₹{balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -1419,26 +1484,26 @@ export default function PaymentsTimeline() {
                   <div
                     key={bank.id}
                     onClick={() => handleCardClick(bank)}
-                    className="group relative hidden sm:flex flex-col justify-between w-[220px] h-24 flex-shrink-0 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 hover:border-blue-400 hover:bg-blue-50/10 hover:shadow-sm cursor-pointer transition-all"
+                    className="group relative flex flex-col justify-between w-[172px] lg:w-[220px] h-16 lg:h-24 flex-shrink-0 max-lg:overflow-hidden bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 lg:px-4 py-2 lg:py-3 hover:border-blue-400 hover:bg-blue-50/10 hover:shadow-sm cursor-pointer transition-all"
                     title={bank.type === "card" ? "View Credit Card Transactions" : "View Bank Transactions"}
                   >
                     <div className="flex items-center gap-2">
                       <BankLogo bankName={bank.title} size={28} className="flex-shrink-0 rounded-lg overflow-hidden" />
                       <div className="flex flex-col min-w-0">
-                        <span className="text-sm font-bold text-gray-900 leading-tight whitespace-nowrap">{bank.title}</span>
-                        <span className="text-[11px] text-gray-400 leading-tight">
+                        <MarqueeText active={isPhone} className="text-sm font-bold text-gray-900 leading-tight">{bank.title}</MarqueeText>
+                        <span className="text-[11px] text-gray-400 leading-tight whitespace-nowrap truncate">
                           {bank.type === "card" ? `Credit Card ${bank.accountNumber}` : bank.accountNumber ? maskAccountNumber(bank.accountNumber) : "Bank Account"}
                         </span>
                       </div>
                     </div>
-                    <span className={`text-xl font-semibold tracking-tight leading-none ${isNegative ? "text-red-600" : "text-emerald-600"}`}>
+                    <span className={`text-base lg:text-xl font-semibold tracking-tight leading-none ${isNegative ? "text-red-600" : "text-emerald-600"}`}>
                       ₹{balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                 );
               })
             ) : (
-              <div className="hidden sm:flex flex-col justify-center w-[220px] h-24 flex-shrink-0 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3">
+              <div className="flex flex-col justify-center w-[172px] lg:w-[220px] h-16 lg:h-24 flex-shrink-0 max-lg:overflow-hidden bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 lg:px-4 py-2 lg:py-3">
                 <span className="text-sm font-medium text-[#94A3B8]">No active banks</span>
               </div>
             )}
@@ -1834,30 +1899,31 @@ export default function PaymentsTimeline() {
 
       {/* ── Pagination bar ────────────────────────────────────────── */}
       <div
-        className="fixed bottom-0 right-0 h-16 bg-white border-t border-[#E1E4EA] flex items-center justify-between px-6 z-40"
+        className="fixed bottom-0 right-0 h-16 bg-white border-t border-[#E1E4EA] flex items-center justify-between px-4 lg:px-6 z-40"
         style={{ left: "var(--sidebar-width, 0px)" }}
       >
-        <div className="flex items-center gap-3">
-          <p className="text-sm text-gray-700">
+        <div className="flex items-center gap-2 lg:gap-3 min-w-0">
+          {/* Phones: two lines ("Showing 1 to 10" / "of 17 transactions"). */}
+          <p className="text-xs lg:text-sm leading-tight text-gray-700 flex-shrink-0">
             Showing{" "}
             <span className="font-semibold">
               {pagination.totalCount === 0 ? 0 : (pagination.currentPage - 1) * pagination.limit + 1}
             </span>{" "}to{" "}
             <span className="font-semibold">
               {Math.min(pagination.currentPage * pagination.limit, pagination.totalCount)}
-            </span>{" "}of{" "}
+            </span>{" "}<br className="lg:hidden" />of{" "}
             <span className="font-semibold">{pagination.totalCount}</span> transactions
           </p>
           <select
             value={pagination.limit}
             onChange={e => handleLimitChange(parseInt(e.target.value))}
-            className="select-chevron border border-gray-300 rounded-full text-sm py-1 pl-2 pr-6 focus:outline-none focus:border-[#0085FF] focus:ring-1 focus:ring-[#0085FF]"
+            className="select-chevron border border-gray-300 rounded-full text-xs lg:text-sm py-1 pl-2 pr-6 focus:outline-none focus:border-[#0085FF] focus:ring-1 focus:ring-[#0085FF]"
           >
             {[10, 20, 50, 100].map(val => <option key={val} value={val}>{val} per page</option>)}
           </select>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 lg:gap-2">
           <button
             onClick={() => handlePageChange(pagination.currentPage - 1)}
             disabled={!pagination.hasPrevPage}

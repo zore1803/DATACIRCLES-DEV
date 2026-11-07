@@ -1076,3 +1076,41 @@ body.success-modal-open > #success-modal-portal {
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
+
+/* Mobile floating "+" button (Header.jsx). Sits near the bottom edge; when a
+   list page's fixed 64px pagination bar is on screen it lifts to clear it.
+   Intercom.jsx stacks the chat launcher above it using the same rule. */
+.dc-fab { bottom: calc(20px + env(safe-area-inset-bottom)); }
+body:has(div.fixed.bottom-0.right-0.border-t) .dc-fab {
+  bottom: calc(76px + env(safe-area-inset-bottom));
+}
+
+/* Phones: Intercom's launcher ignores the padding settings in some mobile
+   layouts and lands on top of the floating "+" button (.dc-fab). Pin it just
+   above that button, same offsets Intercom.jsx requests. Desktop untouched. */
+@media (max-width: 1023px) {
+  .intercom-lightweight-app-launcher,
+  .intercom-launcher-frame {
+    right: 12px !important;
+    bottom: calc(84px + env(safe-area-inset-bottom)) !important;
+  }
+  body:has(div.fixed.bottom-0.right-0.border-t) .intercom-lightweight-app-launcher,
+  body:has(div.fixed.bottom-0.right-0.border-t) .intercom-launcher-frame {
+    bottom: calc(140px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
+/* Payments (phones): the cards strip's scrollbar track would take 6px off the
+   bottom gap, so it's hidden there; headings wider than their card scroll
+   back and forth inside it (MarqueeText in PaymentsTimeline.jsx). */
+@media (max-width: 1023px) {
+  .hover-scrollbar.dc-cards-strip { scrollbar-width: none; }
+  .hover-scrollbar.dc-cards-strip::-webkit-scrollbar { display: none; }
+}
+@keyframes dc-marquee {
+  0%, 18% { transform: translateX(0); }
+  82%, 100% { transform: translateX(var(--dc-marquee-dist, 0)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*="dc-marquee"] { animation: none !important; }
+}

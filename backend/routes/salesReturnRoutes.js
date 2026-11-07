@@ -14,6 +14,7 @@ const requireAuth = [authMiddleware, userSync];
 router.post("/", requireAuth, subscriptionGate, c.createSalesReturn);
 router.get("/", requireAuth, subscriptionGate, c.getAllSalesReturns);
 router.get("/pagination", requireAuth, subscriptionGate, c.getAllSalesReturnsWithPagination);
+router.get("/filter-options", requireAuth, subscriptionGate, c.getSalesReturnFilterOptions);
 router.get("/download/:id", requireAuth, subscriptionGate, c.downloadSalesReturn);
 router.post("/bulk-import", requireAuth, subscriptionGate, c.bulkImportSalesReturns);
 // Before /:id so "invoice" isn't swallowed as a return id.

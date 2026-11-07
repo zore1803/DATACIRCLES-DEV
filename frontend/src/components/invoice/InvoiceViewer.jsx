@@ -57,17 +57,35 @@ const InvoiceViewer = ({
     });
   };
 
+  // Whenever the viewer closes or switches document, drop the previous PDF
+  // straight away — otherwise the last-opened document stays on screen until
+  // the new one finishes downloading, then visibly swaps ("opens the wrong
+  // doc, then reloads to the right one").
   useEffect(() => {
-    if (isOpen && id && type) {
-      fetchPdf();
-    }
+    setPdfUrl(null);
+    setCopyTypes(["original"]);
+  }, [isOpen, id, type]);
+
+  useEffect(() => {
+    if (!(isOpen && id && type)) return undefined;
+    let cancelled = false;
+    let createdUrl = null;
+    fetchPdf((url) => {
+      if (cancelled) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      createdUrl = url;
+      setPdfUrl(url);
+    }, () => cancelled);
     return () => {
-      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+      cancelled = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, id, type, copyTypesKey]);
 
-  const fetchPdf = async () => {
+  const fetchPdf = async (onReady, isCancelled) => {
     try {
       const orderedTypes = COPY_TYPE_ORDER.filter((k) => copyTypes.includes(k));
       let fileBytes;
@@ -102,8 +120,9 @@ const InvoiceViewer = ({
       // blob URL's (nonexistent) location for its title/tab label.
       const filename = `${apiPathFor(type)}-${doc?.[numberKeyFor(type)] || id}-${orderedTypes.join("+") || "original"}.pdf`;
       const file = new File([fileBytes], filename, { type: "application/pdf" });
-      setPdfUrl(URL.createObjectURL(file));
+      onReady(URL.createObjectURL(file));
     } catch (error) {
+      if (isCancelled()) return;
       toast.error("Failed to load PDF");
       console.error("PDF fetch error:", error);
       onClose();

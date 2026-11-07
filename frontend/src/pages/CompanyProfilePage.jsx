@@ -238,6 +238,41 @@ const CompanyProfilePage = () => {
     };
   }, [activeTab]);
 
+  // Phones: the tab pill is wider than the screen and scrolls sideways. Track
+  // whether there are tabs hidden past either edge (drives the edge fades +
+  // arrows) and keep the active tab in view.
+  const [tabOverflow, setTabOverflow] = useState({ left: false, right: false });
+  useEffect(() => {
+    const track = tabTrackRef.current;
+    if (!track) return undefined;
+    const update = () =>
+      setTabOverflow({
+        left: track.scrollLeft > 4,
+        right: track.scrollLeft + track.clientWidth < track.scrollWidth - 4,
+      });
+    update();
+    track.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(track);
+    window.addEventListener("resize", update);
+    return () => {
+      track.removeEventListener("scroll", update);
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+  useEffect(() => {
+    const track = tabTrackRef.current;
+    const el = tabRefs.current[activeTab];
+    if (!track || !el || track.scrollWidth <= track.clientWidth) return;
+    track.scrollTo({
+      left: el.offsetLeft - (track.clientWidth - el.offsetWidth) / 2,
+      behavior: "smooth",
+    });
+  }, [activeTab]);
+  const scrollTabs = (dir) =>
+    tabTrackRef.current?.scrollBy({ left: dir * 140, behavior: "smooth" });
+
   const [invoices, setInvoices] = useState([]);
   const [invoiceSummary, setInvoiceSummary] = useState(null);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
@@ -846,6 +881,16 @@ const CompanyProfilePage = () => {
         <div className="flex items-center justify-between gap-2 mb-2">
           {/* LEFT: Logo + Name + Address */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            {/* Phones: plain back arrow beside the avatar, no padding or border
+                so it takes only its own 20px. */}
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              aria-label="Back"
+              className="lg:hidden flex-shrink-0 -mr-1 p-0 text-gray-700"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
             {/* Prev/next through whatever company list (search/filter results)
                 the user arrived from — absent on a direct link, so nothing
                 renders and there's no "browse everything" fallback. */}
@@ -856,7 +901,7 @@ const CompanyProfilePage = () => {
                 disabled={!prevCompanyId}
                 title="Previous company"
                 aria-label="Previous company"
-                className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="hidden lg:flex flex-shrink-0 w-7 h-7 items-center justify-center rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -909,6 +954,20 @@ const CompanyProfilePage = () => {
                 <Skeleton width={100} height={11} />
               )}
             </div>
+            {/* Phones: prev moves here beside next, freeing the left edge so the
+                avatar + name start flush left and show more of the title. */}
+            {companyIds && (
+              <button
+                type="button"
+                onClick={() => goToCompany(prevCompanyId)}
+                disabled={!prevCompanyId}
+                title="Previous company"
+                aria-label="Previous company"
+                className="lg:hidden flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            )}
             {companyIds && (
               <button
                 type="button"
@@ -1173,7 +1232,7 @@ const CompanyProfilePage = () => {
 
         {/* Social Icons — mobile only, shown below the name/address instead of beside it,
             left-aligned under the name text (past the avatar), not the avatar itself */}
-        <div className="flex lg:hidden items-center gap-1.5 mb-3 ml-12">
+        <div className="flex lg:hidden items-center gap-1.5 mb-3 ml-11">
           <button
             disabled={!hasSocialLink("twitter")}
             className={`w-6 h-6 flex items-center justify-center rounded-full overflow-hidden transition-opacity ${hasSocialLink("twitter")
@@ -1249,7 +1308,29 @@ const CompanyProfilePage = () => {
 
         {/* Tab Row: pill tab selector */}
         <div className="flex items-center justify-between mb-4 gap-3">
-          <div ref={tabTrackRef} className="relative inline-flex items-center gap-1.5 h-10 p-1 bg-[#F1F1F5] rounded-full overflow-x-auto overflow-y-hidden no-scrollbar">
+          <div className="relative min-w-0 max-w-full">
+          {/* Phones only: arrows + edge fades flag the tabs hidden past either edge */}
+          {tabOverflow.left && (
+            <button
+              type="button"
+              aria-label="Scroll tabs left"
+              onClick={() => scrollTabs(-1)}
+              className="lg:hidden absolute left-0 top-0 z-20 h-10 w-9 flex items-center pl-1.5 rounded-l-full bg-gradient-to-r from-[#F1F1F5] via-[#F1F1F5]/90 to-transparent text-gray-500"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          )}
+          {tabOverflow.right && (
+            <button
+              type="button"
+              aria-label="Scroll tabs right"
+              onClick={() => scrollTabs(1)}
+              className="lg:hidden absolute right-0 top-0 z-20 h-10 w-9 flex items-center justify-end pr-1.5 rounded-r-full bg-gradient-to-l from-[#F1F1F5] via-[#F1F1F5]/90 to-transparent text-gray-500"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+          <div ref={tabTrackRef} className="relative inline-flex max-w-full items-center gap-1.5 h-10 p-1 bg-[#F1F1F5] rounded-full overflow-x-auto overflow-y-hidden no-scrollbar">
             <span
               className="absolute top-1 bottom-1 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
               style={{ left: tabIndicator.left, width: tabIndicator.width }}
@@ -1267,6 +1348,7 @@ const CompanyProfilePage = () => {
                 {tab}
               </button>
             ))}
+          </div>
           </div>
         </div>
 
@@ -1327,11 +1409,11 @@ const CompanyProfilePage = () => {
                         ))}
                       </div>
                     ) : (
-                      <div className="flex h-[88px]">
+                      <div className="flex h-[88px] -mx-3 sm:mx-0">
                         {pipelineData.map((stage, idx) => (
                           <div
                             key={stage.key}
-                            className={`flex-1 min-w-0 flex flex-col justify-center ${stage.color} ${idx > 0 ? "-ml-2 sm:-ml-3 pl-6 pr-2 sm:pl-8 sm:pr-5" : "pl-6 pr-2 sm:pl-8 sm:pr-5"}`}
+                            className={`flex-1 min-w-0 flex flex-col justify-center items-center text-center sm:items-stretch sm:text-left ${stage.color} ${idx > 0 ? "-ml-2 sm:-ml-3 pl-5 pr-5 sm:pl-8 sm:pr-5" : "pl-5 pr-5 sm:pl-8 sm:pr-5"}`}
                             style={{
                               clipPath:
                                 idx === pipelineData.length - 1
@@ -1339,11 +1421,11 @@ const CompanyProfilePage = () => {
                                   : "polygon(0 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 0 100%, 20px 50%)",
                             }}
                           >
-                            <p className="truncate w-full text-[10px] sm:text-xs font-medium">{stage.label}</p>
-                            <p className="truncate w-full text-[9px] sm:text-[11px] opacity-70">
+                            <p className="truncate w-full text-[11px] sm:text-xs font-medium">{stage.label}</p>
+                            <p className="truncate w-full text-[10px] sm:text-[11px] opacity-70">
                               {stage.count} Deal{stage.count !== 1 ? "s" : ""}
                             </p>
-                            <p className="truncate w-full text-[11px] sm:text-sm font-semibold">
+                            <p className="truncate w-full text-xs sm:text-sm font-semibold">
                               ₹{stage.amount.toLocaleString("en-IN")}
                             </p>
                           </div>

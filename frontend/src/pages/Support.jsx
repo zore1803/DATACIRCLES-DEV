@@ -843,12 +843,12 @@ const Support = () => {
         {/* Pagination */}
         <div className="bg-gray-50 px-6 py-4 flex items-center justify-between border-t border-gray-200">
           <div className="flex items-center space-x-4">
-            <p className="text-sm text-gray-700">
+            <p className="text-xs lg:text-sm leading-tight text-gray-700 flex-shrink-0">
               Showing <span className="font-medium">{startIndex + 1}</span> to{" "}
               <span className="font-medium">
                 {Math.min(endIndex, pagination.totalCount)}
               </span>{" "}
-              of <span className="font-medium">{pagination.totalCount}</span>{" "}
+              <br className="lg:hidden" />of <span className="font-medium">{pagination.totalCount}</span>{" "}
               results
             </p>
             <select
