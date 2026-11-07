@@ -231,6 +231,19 @@ const Navbar = () => {
   const [profile, setProfile] = useState("");
   const [kanbanName, setKanbanName] = useState("");
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  // Below lg the sidebar is an off-canvas drawer. Its contents must use the
+  // expanded layout the whole time (not only once it's open), otherwise the
+  // icon-only layout snaps to the full one mid-slide and the animation glitches.
+  const [isMobileViewport, setIsMobileViewport] = useState(
+    () => window.innerWidth < 1024
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023.98px)");
+    const update = () => setIsMobileViewport(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
   const [isPinned, setIsPinned] = useState(
     () => localStorage.getItem("sidebarPinned") === "true"
   );
@@ -681,7 +694,7 @@ const getInitials = (name) => {
   const navRowBase =
     "flex items-center text-sm rounded-full transition-all duration-300 overflow-y-hidden";
   const navRowLayout =
-    isHovered || isMobileOpen
+    isHovered || isMobileViewport
       ? "w-full gap-2 pl-4 pr-3 py-2.5"
       : "w-10 h-10 justify-center mx-auto";
 
@@ -724,10 +737,10 @@ const getInitials = (name) => {
           className={`w-5 h-5 flex-shrink-0 ${isChildActive(children) ? "text-[#0085FF]" : "text-gray-900"
             }`}
         />
-        {(isHovered || isMobileOpen) && (
+        {(isHovered || isMobileViewport) && (
           <span className="whitespace-nowrap">{item.name}</span>
         )}
-        {(isHovered || isMobileOpen) && (
+        {(isHovered || isMobileViewport) && (
           <ChevronRight
             size={16}
             className="ml-auto transition-transform duration-300 ease-in-out"
@@ -742,10 +755,10 @@ const getInitials = (name) => {
         className="overflow-hidden transition-all duration-300 ease-in-out"
         style={{
           maxHeight:
-            isOpen && (isHovered || isMobileOpen)
+            isOpen && (isHovered || isMobileViewport)
               ? `${children.length * 40 + 4}px`
               : "0px",
-          opacity: isOpen && (isHovered || isMobileOpen) ? 1 : 0,
+          opacity: isOpen && (isHovered || isMobileViewport) ? 1 : 0,
         }}
       >
         <div className="relative ml-8 mt-1">
@@ -844,16 +857,14 @@ const getInitials = (name) => {
   return (
     <>
       {/* Mobile overlay: tap outside the sidebar to close it */}
-      {isMobileOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black/40 z-[9994]"
-          onClick={() => setIsMobileOpen(false)}
-        />
-      )}
+      <div
+        className={`lg:hidden fixed inset-0 bg-black/40 z-[9994] transition-opacity duration-300 ease-in-out ${isMobileOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        onClick={() => setIsMobileOpen(false)}
+      />
 
       {/* Sidebar */}
       <div
-        className={`fixed top-0 left-0 bottom-0 overflow-y-auto overflow-x-hidden border-r border-[#E1E4EA] z-[9995] flex flex-col transition-all duration-300 ease-in-out lg:w-auto ${isMobileOpen
+        className={`fixed top-0 left-0 bottom-0 overflow-y-auto overflow-x-hidden border-r border-[#E1E4EA] z-[9995] flex flex-col duration-300 ease-in-out will-change-transform lg:will-change-auto lg:w-auto ${isMobileOpen
           ? "w-72 translate-x-0"
           : "w-72 -translate-x-full lg:translate-x-0"
           } ${isSearchOverlayOpen ? "pointer-events-none" : ""}`}
@@ -877,7 +888,7 @@ const getInitials = (name) => {
           // need animating excludes filter, which then has no transition at
           // all and changes instantly.
           filter: isSearchOverlayOpen ? "brightness(0.6)" : "none",
-          transition: "width 300ms ease-in-out, transform 300ms ease-in-out",
+          transition: "width 300ms ease-in-out, transform 300ms ease-in-out, translate 300ms ease-in-out",
           width:
             window.innerWidth >= 1024
               ? (isHovered || isPinned ? "240px" : "64px")
@@ -902,7 +913,7 @@ const getInitials = (name) => {
           }
         }}
       >
-        <div style={{ background: CHROME_BG }} className={`relative -mr-px h-16 flex-shrink-0 flex items-center justify-between gap-2 ${isHovered || isMobileOpen ? "px-4" : "px-2"}`}>
+        <div style={{ background: CHROME_BG }} className={`relative -mr-px h-16 flex-shrink-0 flex items-center justify-between gap-2 ${isHovered || isMobileViewport ? "px-4" : "px-2"}`}>
           {/* Company switcher — moved here in place of the old logo mark.
               id is a measurement anchor: pages with a `position: fixed`
               header strip (e.g. VendorDetailsPageNew.jsx) read this
@@ -923,7 +934,7 @@ const getInitials = (name) => {
                 onClick={() => navigate("/super-admin-overview")}
                 title="Data Circles Admin"
                 className={`box-border flex flex-row items-center min-w-0 rounded-md hover:opacity-80 transition-opacity ${
-                  isHovered || isMobileOpen
+                  isHovered || isMobileViewport
                     ? "h-10 self-stretch gap-2 px-1.5 py-1.5 flex-1"
                     : "w-10 h-10 justify-center p-0 mx-auto"
                 }`}
@@ -937,7 +948,7 @@ const getInitials = (name) => {
                   className="w-8 h-8 rounded-md object-contain flex-shrink-0"
                   style={{ filter: "invert(100%)" }}
                 />
-                {(isHovered || isMobileOpen) && (
+                {(isHovered || isMobileViewport) && (
                   <span className="text-[14px] font-semibold leading-[120%] text-[#0A0A0A] truncate">
                     Data Circles Admin
                   </span>
@@ -953,7 +964,7 @@ const getInitials = (name) => {
               // min-w-0 so the company name truncates instead of pushing the pin
               // and collapse buttons out past the panel's right edge - at
               // 280px the natural width happened to fit, at 240px it doesn't.
-              className={`box-border flex flex-row items-center min-w-0 bg-white border border-[#E5E5E5] rounded-md hover:bg-gray-50 transition-colors ${isHovered || isMobileOpen
+              className={`box-border flex flex-row items-center min-w-0 bg-white border border-[#E5E5E5] rounded-md hover:bg-gray-50 transition-colors ${isHovered || isMobileViewport
                 ? "h-10 self-stretch gap-2.5 pl-1.5 pr-2.5 py-1.5 flex-1"
                 // Collapsed: a 40px square framing a 32px avatar, per the
                 // design. No padding, so justify-center splits the 38px of
@@ -963,20 +974,20 @@ const getInitials = (name) => {
                 }`}
             >
               <span
-                className={`flex flex-row items-center gap-1.5 min-w-0 ${isHovered || isMobileOpen ? "flex-1" : "w-8 h-8"
+                className={`flex flex-row items-center gap-1.5 min-w-0 ${isHovered || isMobileViewport ? "flex-1" : "w-8 h-8"
                   }`}
               >
                 <OrgMark
                   branding={branding}
-                  className={isHovered || isMobileOpen ? "w-7 h-7" : "w-8 h-8"}
+                  className={isHovered || isMobileViewport ? "w-7 h-7" : "w-8 h-8"}
                 />
-                {(isHovered || isMobileOpen) && (
+                {(isHovered || isMobileViewport) && (
                   <span className="text-[14px] font-medium leading-[120%] text-[#0A0A0A] truncate">
                     {branding?.companyName || "Company"}
                   </span>
                 )}
               </span>
-              {(isHovered || isMobileOpen) && (
+              {(isHovered || isMobileViewport) && (
                 <ChevronDown className="w-4 h-4 flex-shrink-0 text-[#0A0A0A]" />
               )}
             </button>
@@ -986,7 +997,7 @@ const getInitials = (name) => {
                 app to it (utils/organizations.js). Anchored to the switcher button itself (top-full),
                 not the strip around it, so it always opens flush below the button regardless of the
                 strip's height. */}
-            {!isSuperAdmin && isCompanyMenuOpen && (isHovered || isMobileOpen) && (
+            {!isSuperAdmin && isCompanyMenuOpen && (isHovered || isMobileViewport) && (
               <>
                 <div
                   className="fixed inset-0 z-[9996]"
@@ -1058,7 +1069,7 @@ const getInitials = (name) => {
             )}
           </div>
 
-          {(isHovered || isMobileOpen) && (
+          {(isHovered || isMobileViewport) && (
             <div className="flex items-center gap-1 flex-shrink-0">
               {/* Pins the panel open so it no longer collapses on mouse-leave.
                   Desktop-only — mobile already opens/closes via the hamburger. */}
@@ -1088,7 +1099,7 @@ const getInitials = (name) => {
               the items were squeezed together to fit the viewport. They now
               keep a consistent gap and the nav scrolls when they don't fit. */}
           <ul
-            className={`flex flex-col px-2 text-black ${isHovered || isMobileOpen ? "gap-1" : "gap-2.5"
+            className={`flex flex-col px-2 text-black ${isHovered || isMobileViewport ? "gap-1" : "gap-2.5"
               }`}
           >
             {(isSuperAdmin ? superAdminNavigation : navigation).map(
@@ -1103,7 +1114,7 @@ const getInitials = (name) => {
                 ) : item.isHeader ? (
                   <li
                     key={item.name}
-                    className={`flex-shrink-0 transition-all duration-300 cursor-pointer ${isHovered || isMobileOpen
+                    className={`flex-shrink-0 transition-all duration-300 cursor-pointer ${isHovered || isMobileViewport
                       // Sits a touch left of the item rows below it (which are
                       // indented with pl-4) so the label reads as the section's
                       // outer edge and the rows read as nested inside it,
@@ -1126,7 +1137,7 @@ const getInitials = (name) => {
                       }
                     }}
                   >
-                    {(isHovered || isMobileOpen) && (
+                    {(isHovered || isMobileViewport) && (
                       <span className="block text-sm text-left text-[#5B5A64] font-bold uppercase tracking-wider">
                         {item.name}
                       </span>
@@ -1204,7 +1215,7 @@ const getInitials = (name) => {
                           }`}
                       />
                       <span
-                        className={`whitespace-nowrap transition-opacity duration-300 ${isHovered || isMobileOpen
+                        className={`whitespace-nowrap transition-opacity duration-300 ${isHovered || isMobileViewport
                           ? "opacity-100"
                           : "opacity-0 lg:hidden"
                           }`}
@@ -1224,7 +1235,7 @@ const getInitials = (name) => {
               Gated on the same trial/unpaid condition as the header's
               countdown pill — a paying, non-trial account no longer sees
               "unlock all benefits" it already has. */}
-          {(isHovered || isMobileOpen) && shouldShowUpgradeCard && (
+          {(isHovered || isMobileViewport) && shouldShowUpgradeCard && (
             <div className="flex-shrink-0 flex flex-col items-start gap-3.5 px-2 pt-8 pb-2">
               <div className="box-border flex flex-col items-start p-4 gap-3.5 w-full bg-[#F2F5F8] border border-[#E1E4EA] rounded-[14px]">
                 <div className="flex flex-col items-start gap-1.5 self-stretch">
@@ -1273,7 +1284,7 @@ const getInitials = (name) => {
           className="h-16 flex-shrink-0 flex items-center px-4 border-t border-[#E1E4EA]"
         >
           <div
-            className={`flex items-center gap-3 cursor-pointer p-2 rounded transition-all duration-300 w-full ${isHovered || isMobileOpen ? "" : "lg:justify-center"
+            className={`flex items-center gap-3 cursor-pointer p-2 rounded transition-all duration-300 w-full ${isHovered || isMobileViewport ? "" : "lg:justify-center"
               }`}
             onClick={() => {
               navigate(isSuperAdmin ? "/super-admin-overview" : "/profile");
@@ -1283,7 +1294,7 @@ const getInitials = (name) => {
             {renderProfileImage()}
 
             <div
-              className={`flex flex-col transition-opacity duration-300 ${isHovered || isMobileOpen
+              className={`flex flex-col transition-opacity duration-300 ${isHovered || isMobileViewport
                 ? "opacity-100"
                 : "opacity-0 lg:hidden"
                 }`}
@@ -1301,7 +1312,7 @@ const getInitials = (name) => {
                 e.stopPropagation();
                 handleLogout();
               }}
-              className={`transition-all duration-300 p-2 rounded-lg flex-shrink-0 hover:bg-gray-200 ${isHovered || isMobileOpen
+              className={`transition-all duration-300 p-2 rounded-lg flex-shrink-0 hover:bg-gray-200 ${isHovered || isMobileViewport
                 ? "ml-auto opacity-100"
                 : "opacity-0 lg:hidden"
                 }`}
