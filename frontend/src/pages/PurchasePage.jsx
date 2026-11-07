@@ -1945,12 +1945,6 @@ const PurchasePage = () => {
 
         {/* Status pills + purchase-date range, same strip as the Invoices list */}
         <div
-<<<<<<< HEAD
-          className="fixed right-0 h-14 px-4 sm:px-6 lg:pl-[36px] lg:pr-[36px] bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
-          style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
-        >
-          <div className="flex items-center gap-2 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
-=======
           className="fixed right-0 h-[52px] px-4 sm:px-6 lg:pl-[var(--content-inset,16px)] lg:pr-8 bg-white flex items-start top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
           style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
         >
@@ -1964,7 +1958,6 @@ const PurchasePage = () => {
                 opacity: statusTabThumb.ready ? 1 : 0,
               }}
             />
->>>>>>> 2b9555dd49f823fdbafa2b0bf55308c7a35a604e
             {[{ label: "All", value: "" }, ...statusOptions.map((o) => ({ label: getStatusLabel(o), value: o }))].map((tab) => {
               const selected = filterStatus === tab.value;
               return (
@@ -2002,11 +1995,7 @@ const PurchasePage = () => {
 
         <div
           ref={tableScrollRef}
-<<<<<<< HEAD
-          className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(174px+var(--dc-offline-offset,0px))] lg:top-[calc(184px+var(--dc-offline-offset,0px))]"
-=======
           className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(170px+var(--dc-offline-offset,0px))] lg:top-[calc(180px+var(--dc-offline-offset,0px))]"
->>>>>>> 2b9555dd49f823fdbafa2b0bf55308c7a35a604e
           style={{
             position: "fixed",
             left: "var(--sidebar-width, 0px)",

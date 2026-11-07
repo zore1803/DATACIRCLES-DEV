@@ -1992,11 +1992,7 @@ const PurchaseOrderPage = () => {
 
         <div
           ref={tableScrollRef}
-<<<<<<< HEAD
-          className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(174px+var(--dc-offline-offset,0px))] lg:top-[calc(184px+var(--dc-offline-offset,0px))]"
-=======
           className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(170px+var(--dc-offline-offset,0px))] lg:top-[calc(180px+var(--dc-offline-offset,0px))]"
->>>>>>> 2b9555dd49f823fdbafa2b0bf55308c7a35a604e
           style={{
             position: "fixed",
             left: "var(--sidebar-width, 0px)",
