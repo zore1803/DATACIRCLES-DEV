@@ -1922,10 +1922,10 @@ const PurchasePage = () => {
 
         {/* Status pills + purchase-date range, same strip as the Invoices list */}
         <div
-          className="fixed right-0 h-[52px] px-4 sm:px-6 lg:px-8 bg-white flex items-start top-[calc(102px+var(--dc-offline-offset,0px))] lg:top-[calc(112px+var(--dc-offline-offset,0px))]"
+          className="fixed right-0 h-14 px-4 sm:px-6 lg:pl-[36px] lg:pr-[36px] bg-white flex items-center top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
           style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
         >
-          <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
+          <div className="flex items-center gap-2 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
             {[{ label: "All", value: "" }, ...statusOptions.map((o) => ({ label: getStatusLabel(o), value: o }))].map((tab) => {
               const selected = filterStatus === tab.value;
               return (
@@ -1960,7 +1960,7 @@ const PurchasePage = () => {
 
         <div
           ref={tableScrollRef}
-          className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(154px+var(--dc-offline-offset,0px))] lg:top-[calc(164px+var(--dc-offline-offset,0px))]"
+          className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(174px+var(--dc-offline-offset,0px))] lg:top-[calc(184px+var(--dc-offline-offset,0px))]"
           style={{
             position: "fixed",
             left: "var(--sidebar-width, 0px)",

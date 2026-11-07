@@ -1956,7 +1956,7 @@ const PurchaseOrderPage = () => {
 
         <div
           ref={tableScrollRef}
-          className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(154px+var(--dc-offline-offset,0px))] lg:top-[calc(164px+var(--dc-offline-offset,0px))]"
+          className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(174px+var(--dc-offline-offset,0px))] lg:top-[calc(184px+var(--dc-offline-offset,0px))]"
           style={{
             position: "fixed",
             left: "var(--sidebar-width, 0px)",

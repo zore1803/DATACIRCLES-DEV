@@ -54,6 +54,7 @@ import { getPinnedBoundaryOverlayStyle } from "../utils/pinnedColumnShadow";
 import useSearchOverlayOpen from "../hooks/useSearchOverlayOpen";
 import UploadIcon from "../components/common/UploadIcon";
 import EyeIcon from "../components/common/EyeIcon";
+import InvoiceViewer from "../components/invoice/InvoiceViewer";
 import BulkDeleteModal from "../components/common/BulkDeleteModal";
 import EInvoiceConnectionDrawer from "../components/einvoice/EInvoiceConnectionDrawer";
 
@@ -157,6 +158,7 @@ export default function EInvoicing() {
   const [editingPage, setEditingPage] = useState(false);
   const [pageInput, setPageInput] = useState("");
 
+  const [viewerInvoice, setViewerInvoice] = useState(null);
   const [openRowActionsId, setOpenRowActionsId] = useState(null);
   const [rowActionsPos, setRowActionsPos] = useState(null);
 
@@ -790,9 +792,23 @@ export default function EInvoicing() {
     forceCloseShareFlyout();
   };
 
-  const handleView = (r) => {
-    toast(`Viewing ${r.invoiceNumber} — detail view coming soon.`, { icon: "👀" });
+  const handleView = async (r) => {
     closeRowActions();
+    // Opens the invoice PDF in the same in-page viewer Accounting uses. Some
+    // e-invoice rows were created without an invoice link, so fall back to
+    // finding the invoice by its number.
+    let inv = r.invoice && typeof r.invoice === "object" ? r.invoice : r.invoice ? { _id: r.invoice } : null;
+    if (!inv?._id && r.invoiceNumber) {
+      try {
+        const res = await API.get(`/invoices/pagination?page=1&limit=20&search=${encodeURIComponent(r.invoiceNumber)}`);
+        inv = (res.data?.invoices || []).find((i) => i.invoiceNumber === r.invoiceNumber) || null;
+      } catch (e) { /* handled below */ }
+    }
+    if (!inv?._id) {
+      toast.error("Couldn't find the invoice for this e-invoice.");
+      return;
+    }
+    setViewerInvoice({ ...inv, invoiceNumber: inv.invoiceNumber || r.invoiceNumber });
   };
 
   const handleDownload = (r) => {
@@ -1790,6 +1806,13 @@ export default function EInvoicing() {
         onConfirm={executeBulkDelete}
       />
 
+      <InvoiceViewer
+        isOpen={!!viewerInvoice}
+        id={viewerInvoice?._id}
+        type="tax"
+        doc={viewerInvoice}
+        onClose={() => setViewerInvoice(null)}
+      />
       <EInvoiceConnectionDrawer
         isOpen={showConnectDrawer}
         onClose={() => setShowConnectDrawer(false)}

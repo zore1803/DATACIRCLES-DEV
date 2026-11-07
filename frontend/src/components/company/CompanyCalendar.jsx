@@ -26,7 +26,7 @@ const CompactEventCard = ({ item, type, onClick, searchTerm }) => {
   return (
     <div
       className={`
-        flex items-center justify-between gap-1 text-[10px] px-1.5 py-0.5 rounded cursor-pointer mb-0.5 transition-all
+        flex items-center justify-between gap-1 text-[10px] px-1.5 py-2 min-h-[32px] rounded cursor-pointer mb-1 transition-all
         ${type === "meeting"
           ? "bg-blue-50 text-blue-700 hover:bg-blue-100 border-l-2 border-blue-500"
           : type === "note"

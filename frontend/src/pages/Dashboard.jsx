@@ -14,6 +14,7 @@ import VideoIcon from "../components/common/VideoIcon";
 import FilterIcon from "../components/common/FilterIcon";
 import DataTable from "../components/common/DataTable";
 import InvoiceQuickView from "../components/invoice/InvoiceQuickView";
+import InvoiceViewer from "../components/invoice/InvoiceViewer";
 import Skeleton from "../components/common/Skeleton";
 import StatTile from "../components/common/StatTile";
 import StatTileSkeleton from "../components/common/StatTileSkeleton";
@@ -2020,7 +2021,17 @@ function Dashboard() {
 
         </div>
 
-        {invoiceQuickView && (
+        {invoiceQuickView && invoiceQuickView.mode === "view" && (
+          <InvoiceViewer
+            isOpen
+            id={invoiceQuickView.invoice?._id}
+            type="tax"
+            doc={invoiceQuickView.invoice}
+            onClose={() => setInvoiceQuickView(null)}
+            onEdit={() => setInvoiceQuickView((prev) => (prev ? { ...prev, mode: "edit" } : prev))}
+          />
+        )}
+        {invoiceQuickView && invoiceQuickView.mode !== "view" && (
           <InvoiceQuickView
             invoice={invoiceQuickView.invoice}
             mode={invoiceQuickView.mode}
