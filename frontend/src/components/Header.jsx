@@ -1816,7 +1816,7 @@ const Header = () => {
             {/* Search pill */}
             <div
               ref={mobileSearchSlotRef}
-              className={`flex items-center gap-2 px-2.5 h-8 border border-[#E1E4EA] rounded-full flex-1 min-w-0 max-w-[172px] transition-opacity duration-150 ${isSearchOpen ? "opacity-0 pointer-events-none" : "opacity-100"}`}
+              className={`flex items-center gap-2 px-2.5 h-8 border border-[#E1E4EA] bg-white rounded-full flex-1 min-w-0 max-w-[172px] transition-opacity duration-150 ${isSearchOpen ? "opacity-0 pointer-events-none" : "opacity-100"}`}
             >
               <SearchIcon className="text-[#525866] flex-shrink-0 w-4 h-4" />
               <input
@@ -1832,22 +1832,22 @@ const Header = () => {
             {/* Notification bell */}
             <NotificationBell variant="mobile" />
 
-            {/* Add button */}
-            <div className="relative flex-shrink-0">
+            {/* Add button — floating action button, bottom right (mobile only) */}
+            <div className="fixed right-4 bottom-[calc(28px+env(safe-area-inset-bottom))] z-[9990] flex-shrink-0">
               <button
                 onClick={handleGlobalAdd}
                 title="New"
-                className="flex items-center justify-center w-8 h-8 rounded-full bg-[#0085FF] border border-[#0085FF]"
+                className="flex items-center justify-center w-14 h-14 rounded-full bg-[#0085FF] border border-[#0085FF] shadow-lg active:scale-95 transition-transform"
                 style={{
                   background:
                     "linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 100%), #0085FF",
-                  boxShadow: "inset 0px 0px 0px 1.8px rgba(255,255,255,0.25)",
+                  boxShadow: "inset 0px 0px 0px 1.8px rgba(255,255,255,0.25), 0 6px 16px rgba(0,133,255,0.35)",
                 }}
               >
                 {isAddMenuOpen ? (
-                  <X className="w-4 h-4 text-white" />
+                  <X className="w-6 h-6 text-white" />
                 ) : (
-                  <PlusIcon className="w-4 h-4 text-white" />
+                  <PlusIcon className="w-6 h-6 text-white" />
                 )}
               </button>
 
@@ -1857,7 +1857,7 @@ const Header = () => {
                     className="fixed inset-0 z-[9999] cursor-default"
                     onClick={handleAddMenuClose}
                   />
-                  <div className="absolute right-0 top-10 w-[min(150px,calc(100vw-32px))] max-h-[70vh] overflow-y-auto bg-white rounded-xl shadow-2xl border border-gray-100 z-[10000] py-2.5 flex flex-col transition-all duration-300 ease-in-out">
+                  <div className="absolute right-0 bottom-full mb-3 w-[min(150px,calc(100vw-32px))] max-h-[70vh] overflow-y-auto bg-white rounded-xl shadow-2xl border border-gray-100 z-[10000] py-2.5 flex flex-col transition-all duration-300 ease-in-out">
                     <div className="flex-1 px-2.5">
                       <div className="mb-1.5">
                         <h3 className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1 px-1.5">

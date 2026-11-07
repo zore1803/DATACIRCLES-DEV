@@ -2079,7 +2079,7 @@ function Contacts() {
               </button>
               <button
                 onClick={() => setShowBulkActions(true)}
-                className="h-10 px-4 -ml-px bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap"
+                className="max-lg:hidden h-10 px-4 -ml-px bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap"
               >
                 <EditIcon className="w-4 h-4 text-blue-600" />
                 Bulk Update
@@ -2124,7 +2124,7 @@ function Contacts() {
         ) : (
           <>
             <div
-              className={`lg:!w-auto lg:!opacity-100 flex flex-col justify-center gap-1.5 overflow-hidden flex-shrink-0 transition-all duration-300 ease-in-out ${isSearchExpanded ? "w-0 opacity-0" : "w-[160px] opacity-100"}`}
+              className={`lg:hidden flex flex-col justify-center gap-1.5 overflow-hidden flex-shrink-0 transition-all duration-300 ease-in-out ${isSearchExpanded ? "w-0 opacity-0" : "w-[160px] opacity-100"}`}
             >
               <div className="flex items-center gap-2">
                 <h1 className="m-0 leading-tight font-bold text-base sm:text-lg text-gray-900 truncate">Contacts</h1>
@@ -2461,7 +2461,7 @@ function Contacts() {
             {/* ✅ Bulk Update Button (Text Changed) */}
             <button
               onClick={() => setShowBulkActions(true)}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 focus:outline-none transition-colors flex items-center gap-2"
+              className="max-lg:hidden px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 focus:outline-none transition-colors flex items-center gap-2"
             >
               <EditIcon className="w-4 h-4" />
               Bulk Update

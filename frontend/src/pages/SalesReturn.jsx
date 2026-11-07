@@ -1738,7 +1738,7 @@ const SalesReturn = () => {
                 </button>
                 <button
                   onClick={() => setShowBulkActions(true)}
-                  className="h-10 px-4 -ml-px bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 flex items-center gap-2 whitespace-nowrap"
+                  className="max-lg:hidden h-10 px-4 -ml-px bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 flex items-center gap-2 whitespace-nowrap"
                 >
                   <EditIcon className="w-4 h-4 text-blue-600" />
                   Bulk Update

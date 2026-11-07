@@ -2437,7 +2437,7 @@ const Accounting = ({ fixedTab = null }) => {
                     setBulkUpdateStatus("");
                     setShowBulkUpdateModal(true);
                   }}
-                  className="h-10 px-4 -ml-px bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap"
+                  className="max-lg:hidden h-10 px-4 -ml-px bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap"
                 >
                   <EditIcon className="w-4 h-4 text-blue-600" />
                   Bulk Update
@@ -2862,7 +2862,7 @@ const Accounting = ({ fixedTab = null }) => {
             region Companies.jsx uses: edge to edge under the tab bar, stopping
             above the pagination bar. */}
         <div
-          className={`fixed right-0 overflow-x-auto overflow-y-auto bg-white border-t border-[#E1E4EA] top-[calc(154px+var(--dc-offline-offset,0px))] lg:top-[calc(164px+var(--dc-offline-offset,0px))]`}
+          className={`fixed right-0 overflow-x-auto overflow-y-auto bg-white border-t border-[#E1E4EA] top-[calc(174px+var(--dc-offline-offset,0px))] lg:top-[calc(184px+var(--dc-offline-offset,0px))]`}
           style={{ left: "var(--sidebar-width, 0px)", bottom: 64, paddingLeft: "var(--content-inset, 16px)" }}
         >
           <table

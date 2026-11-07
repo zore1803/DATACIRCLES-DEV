@@ -7,7 +7,7 @@ import Checkbox from "../components/common/Checkbox";
 import PlusIcon from "../components/common/PlusIcon";
 import MoreIcon from "../components/common/MoreIcon";
 import DownloadIcon from "../components/common/DownloadIcon";
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useLayoutEffect, useState, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import API from "../services/api";
 import PurchaseReturnForm from "../components/purchase/PurchaseReturnForm";
@@ -130,12 +130,35 @@ const PurchaseReturn = () => {
   // Status pills and the return-date range sit under the header; both are sent
   // to the server together with the Advanced Filter rules.
   const [filterStatus, setFilterStatus] = useState("");
+  const statusTabRefs = useRef({});
+  const statusTabsRef = useRef(null);
+  const [statusTabThumb, setStatusTabThumb] = useState({ left: 0, width: 0, ready: false });
   const [dateRange, setDateRange] = useState(thisMonthRange);
   const dateFromMs = dateRange.from ? dateRange.from.getTime() : 0;
   const dateToMs = dateRange.to ? dateRange.to.getTime() : 0;
   const [filterOptions, setFilterOptions] = useState(null);
   // Record count behind each status pill (from the list response).
   const [statusCounts, setStatusCounts] = useState({});
+  useLayoutEffect(() => {
+    const measure = () => {
+      const nav = statusTabsRef.current;
+      const button = statusTabRefs.current[filterStatus || "all"];
+      if (!nav || !button) return;
+      setStatusTabThumb({
+        left: button.offsetLeft - nav.scrollLeft,
+        width: button.offsetWidth,
+        ready: true,
+      });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const nav = statusTabsRef.current;
+    nav?.addEventListener("scroll", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      nav?.removeEventListener("scroll", measure);
+    };
+  }, [filterStatus, statusCounts]);
   // The return whose read-only detail card is open (clicked row).
   const [detailReturnId, setDetailReturnId] = useState(null);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
@@ -1988,8 +2011,8 @@ const PurchaseReturn = () => {
 
       <div className="bg-white overflow-visible">
         <div
-          className={`fixed right-0 h-12 px-4 sm:px-6 lg:px-8 flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white`}
-          style={{ left: "var(--sidebar-width, 0px)", zIndex: 40, minHeight: "48px", maxHeight: "48px", boxSizing: "border-box" }}
+          className={`fixed right-0 h-16 px-4 sm:px-6 lg:pl-0 lg:pr-8 flex items-center top-[calc(54px+var(--dc-offline-offset,0px))] lg:top-[calc(64px+var(--dc-offline-offset,0px))] bg-white`}
+          style={{ left: "var(--sidebar-width, 0px)", zIndex: 40, minHeight: "64px", maxHeight: "64px", boxSizing: "border-box" }}
         >
           {showBulkStrip ? (
             <div className={`${bulkStripClosing ? "animate-slideOutRight" : "animate-slideInLeft"} flex flex-nowrap items-center justify-between gap-4 w-full h-full overflow-x-auto`}>
@@ -2003,7 +2026,7 @@ const PurchaseReturn = () => {
                 </button>
                 <button
                   onClick={() => setShowBulkActions(true)}
-                  className="h-10 px-4 -ml-px bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap"
+                  className="max-lg:hidden h-10 px-4 -ml-px bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap"
                 >
                   <EditIcon className="w-4 h-4 text-blue-600" />
                   Bulk Update
@@ -2048,7 +2071,7 @@ const PurchaseReturn = () => {
           ) : (
             <div className="flex items-center gap-2 lg:gap-4 w-full h-full">
               <div
-                className={`flex-shrink-0 flex flex-col justify-center gap-1.5 overflow-hidden transition-opacity duration-300 ease-in-out lg:!w-auto lg:!opacity-100 ${isSearchExpanded ? "w-0 opacity-0" : "w-[190px] opacity-100"}`}
+                className={`flex-shrink-0 flex flex-col justify-center gap-1.5 overflow-hidden transition-opacity duration-300 ease-in-out lg:ml-[36px] ${isSearchExpanded ? "w-0 opacity-0" : "w-[190px] opacity-100"}`}
               >
                 {showLoadingSkeleton ? (
                   <>
@@ -2186,26 +2209,38 @@ const PurchaseReturn = () => {
 
         {/* Status pills + return-date range, same strip as the Invoices list */}
         <div
-          className="fixed right-0 h-[52px] px-4 sm:px-6 lg:px-8 bg-white flex items-start top-[calc(102px+var(--dc-offline-offset,0px))] lg:top-[calc(112px+var(--dc-offline-offset,0px))]"
+          className="fixed right-0 h-[52px] px-4 sm:px-6 lg:pl-[var(--content-inset,16px)] lg:pr-8 bg-white flex items-start top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
           style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
         >
-          <div className="flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
+          <div ref={statusTabsRef} className="relative flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto lg:ml-[36px]">
+            <span
+              aria-hidden="true"
+              className="absolute top-1 h-9 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
+              style={{
+                left: statusTabThumb.left,
+                width: statusTabThumb.width,
+                opacity: statusTabThumb.ready ? 1 : 0,
+              }}
+            />
             {[{ label: "All", value: "" }, ...statusOptions.map((o) => ({ label: o, value: o }))].map((tab) => {
               const selected = filterStatus === tab.value;
               return (
                 <button
                   key={tab.label}
+                  ref={(el) => {
+                    statusTabRefs.current[tab.value || "all"] = el;
+                  }}
                   type="button"
                   onClick={() => setFilterStatus(tab.value)}
-                  className={`h-9 flex-shrink-0 whitespace-nowrap rounded-full text-sm font-medium transition-all duration-300 ease-out ${selected
-                    ? "px-6 bg-white text-[#0085FF] shadow-sm"
+                  className={`relative z-[1] h-9 flex-shrink-0 whitespace-nowrap rounded-full text-sm font-medium transition-colors ${selected
+                    ? "px-6 text-[#0085FF]"
                     : "px-3.5 text-[#0E121B] hover:bg-white/60"
                     }`}
                 >
                   {tab.label}
                   {statusCounts[tab.value] != null && (
                     <span
-                      className={`ml-2 inline-block rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors duration-300 ${selected
+                      className={`ml-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium transition-colors duration-300 ${selected
                         ? "bg-[#E8F2FF] text-[#0085FF]"
                         : "bg-white/70 text-[#525866]"
                         }`}
@@ -2224,7 +2259,7 @@ const PurchaseReturn = () => {
 
         <div
           ref={tableScrollRef}
-          className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(154px+var(--dc-offline-offset,0px))] lg:top-[calc(164px+var(--dc-offline-offset,0px))]"
+          className="overflow-x-auto overflow-y-auto border-t border-[#E1E4EA] top-[calc(170px+var(--dc-offline-offset,0px))] lg:top-[calc(180px+var(--dc-offline-offset,0px))]"
           style={{ position: "fixed", left: "var(--sidebar-width, 0px)", paddingLeft: "var(--content-inset, 16px)", right: 0, bottom: !showLoadingSkeleton ? 64 : 0 }}
         >
           <div className={`relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || purchaseReturns.length > 0 ? "border-b" : ""}`}>

@@ -341,6 +341,18 @@ function Companies() {
     setCurrentCompanyIds,
   } = useCompanyStore();
 
+  // Phones get a card list with 5 companies per page; desktop keeps the table
+  // and the user's chosen page size.
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 1024);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023.98px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  const effectiveLimit = isMobile ? 5 : pagination.limit;
+
   // Define default columns - NOW UPDATES WHEN companyFieldNames CHANGES
   const defaultColumns = useMemo(() => {
     const baseColumns = [
@@ -1128,7 +1140,7 @@ function Companies() {
       return;
     }
     fetchCompanies();
-  }, [pagination.currentPage, pagination.limit, sortConfig]);
+  }, [pagination.currentPage, effectiveLimit, sortConfig]);
 
   const fetchAllContacts = async () => {
     try {
@@ -1225,7 +1237,7 @@ function Companies() {
       setLoading(true);
       const params = new URLSearchParams({
         page: pagination.currentPage.toString(),
-        limit: pagination.limit.toString(),
+        limit: effectiveLimit.toString(),
       });
       if (sortConfig.key) {
         params.append("sortBy", sortConfig.key);
@@ -1604,10 +1616,10 @@ function Companies() {
       currentPage,
       totalPages,
       totalCount,
-      limit,
       hasNextPage,
       hasPrevPage,
     } = pagination;
+    const limit = effectiveLimit;
 
     if (totalCount === 0) return null;
 
@@ -1906,7 +1918,7 @@ function Companies() {
                 </button>
                 <button
                   onClick={() => setShowBulkActions(true)}
-                  className="h-10 px-4 -ml-px bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap"
+                  className="max-lg:hidden h-10 px-4 -ml-px bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap"
                 >
                   <EditIcon className="w-4 h-4 text-blue-600" />
                   Bulk Update
@@ -2190,7 +2202,54 @@ function Companies() {
           // the header + the "No companies found" row, so that border would
           // sit right under it as a second stray line with an odd gap instead
           // of closing off a real table body.
-          <div className={`relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || companies.length > 0 ? "border-b" : ""}`} style={{ paddingLeft: "var(--content-inset, 16px)" }}>
+          <>
+          {/* Mobile: one card per company (name, state, industry + actions) */}
+          <div className="lg:hidden bg-white px-4 py-3 flex flex-col gap-3">
+            {showLoadingSkeleton ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-[92px] rounded-xl border border-[#E1E4EA] bg-gray-50 animate-pulse" />
+              ))
+            ) : companies.length === 0 ? (
+              <EmptyState
+                icon={Building2}
+                noun="Company"
+                isFiltered={!!(searchTerm || filterIndustry || activeFilters?.length)}
+                onCreate={() => {
+                  setEditCompany(null);
+                  setShowQuickAdd(true);
+                }}
+              />
+            ) : (
+              companies.map((company) => {
+                const location = company.state || company.address || "—";
+                const industry = company.industry || "—";
+                return (
+                  <div
+                    key={company._id}
+                    className="flex items-start gap-3 p-4 rounded-xl border border-[#E1E4EA] bg-white shadow-sm"
+                  >
+                    <Link
+                      to={`/companies/${company._id}`}
+                      state={{ companyIds: sortedCompanies.map((c) => c._id) }}
+                      className="flex-1 min-w-0 flex flex-col gap-1.5"
+                    >
+                      <span className="text-sm font-semibold text-[#161618] truncate">
+                        <HighlightText text={company.name || "—"} query={searchTerm} />
+                      </span>
+                      <span className="text-xs text-[#525866] truncate">
+                        <span className="text-[#868C98]">Location: </span>{location}
+                      </span>
+                      <span className="text-xs text-[#525866] truncate">
+                        <span className="text-[#868C98]">Industry: </span>{industry}
+                      </span>
+                    </Link>
+                    {renderRowActionsMenu(company)}
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <div className={`hidden lg:block relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || companies.length > 0 ? "border-b" : ""}`} style={{ paddingLeft: "var(--content-inset, 16px)" }}>
             <table
               className="w-full border-separate border-spacing-0 text-left"
               style={{
@@ -2371,6 +2430,7 @@ function Companies() {
                 })()}
               </table>
             </div>
+          </>
           )}
         </div>
 

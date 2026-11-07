@@ -110,7 +110,7 @@ const DealsTable = ({ deals = [], contact, company, onDealCreated, title = "Asso
             there are ~4+ deals the body scrolls vertically while the header
             stays pinned, so the section never grows unbounded. */}
         <div className="border border-[#E1E4EA] rounded-lg overflow-hidden">
-          <div className="overflow-x-auto overflow-y-auto max-h-[248px]">
+          <div className={`overflow-x-auto overflow-y-auto ${(deals?.length || 0) === 0 ? "" : "max-h-[248px]"}`}>
             <table className="w-full min-w-full text-sm text-left border-separate border-spacing-0">
               <thead className={`sticky top-0 z-20 ${(deals?.length || 0) === 0 ? "max-lg:hidden" : ""}`}>
                 <tr>

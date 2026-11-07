@@ -92,7 +92,7 @@ const BulkActionBar = ({
             disabled={btn.disabled}
             className={`h-10 px-4 bg-white border border-gray-300 text-gray-900 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:z-10 transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap disabled:opacity-50 ${
               i === 0 ? '' : '-ml-px'
-            } ${i === leftButtons.length - 1 ? 'rounded-r-[25px]' : ''}`}
+            } ${i === leftButtons.length - 1 ? 'rounded-r-[25px]' : ''} ${btn.key === 'update' ? 'max-lg:hidden' : ''}`}
             style={{
               // 25px on the group's outer corners only — the joins between
               // segments stay square so the buttons still read as one strip.
