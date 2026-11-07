@@ -2212,7 +2212,7 @@ const PurchaseReturn = () => {
           className="fixed right-0 h-[52px] px-4 sm:px-6 lg:pl-[var(--content-inset,16px)] lg:pr-8 bg-white flex items-start top-[calc(118px+var(--dc-offline-offset,0px))] lg:top-[calc(128px+var(--dc-offline-offset,0px))]"
           style={{ left: "var(--sidebar-width, 0px)", zIndex: 38 }}
         >
-          <div ref={statusTabsRef} className="relative flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto">
+          <div ref={statusTabsRef} className="relative flex items-center gap-1 rounded-full bg-[#F1F1F5] p-1 min-w-0 overflow-x-auto lg:ml-[36px]">
             <span
               aria-hidden="true"
               className="absolute top-1 h-9 rounded-full bg-white shadow-sm transition-all duration-300 ease-out pointer-events-none"
@@ -2240,7 +2240,7 @@ const PurchaseReturn = () => {
                   {tab.label}
                   {statusCounts[tab.value] != null && (
                     <span
-                      className={`ml-2 inline-block rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors duration-300 ${selected
+                      className={`ml-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium transition-colors duration-300 ${selected
                         ? "bg-[#E8F2FF] text-[#0085FF]"
                         : "bg-white/70 text-[#525866]"
                         }`}
