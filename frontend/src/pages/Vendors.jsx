@@ -33,7 +33,7 @@ import {
   Pin,
   PinOff,
   EyeOff,
-  ArrowUp, ArrowDown } from "lucide-react";
+  ArrowUp, ArrowDown, Mail, Phone, MapPin, Building2 } from "lucide-react";
 import VideoTutorialModal from "../components/VideoTutorialModal";
 import BulkActions from "../components/BulkActions";
 import { formatNumberFixed } from "../utils/numberFormatter";
@@ -62,6 +62,7 @@ import { hasMinPlan } from "../utils/subscriptionHelpers";
 import UpgradeRequiredModal from "../components/subscription/UpgradeRequiredModal";
 import UploadIcon from "../components/common/UploadIcon";
 import EditIcon from "../components/common/EditIcon";
+import { isNativeApp } from "../utils/isNativeApp";
 function useOutsideClick(ref, callback) {
   useEffect(() => {
     function handleClickOutside(event) {
@@ -128,6 +129,16 @@ function Vendors() {
   const [showForm, setShowForm] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [editVendor, setEditVendor] = useState(null);
+
+  // Only the mobile app (WebView) gets the card list; the website keeps the table.
+  const [isMobileCards, setIsMobileCards] = useState(() => isNativeApp && window.innerWidth < 1024);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023.98px)");
+    const update = () => setIsMobileCards(isNativeApp && mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
   const [selectedVendors, setSelectedVendors] = useState([]);
   const [showBulkActions, setShowBulkActions] = useState(false);
   // Bulk row selection requires Growth+
@@ -807,7 +818,7 @@ function Vendors() {
     }
     fetchVendors();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.currentPage, pagination.limit, sortConfig]);
+  }, [pagination.currentPage, pagination.limit, sortConfig, isMobileCards]);
 
   // Search/filter fetch. Skips the initial mount — the effect above already
   // fires the first fetch, and running both sent two identical requests on
@@ -854,7 +865,7 @@ function Vendors() {
 
       const params = new URLSearchParams({
         page: pagination.currentPage.toString(),
-        limit: pagination.limit.toString(),
+        limit: (isMobileCards ? 15 : pagination.limit).toString(),
       });
       if (sortConfig.key) {
         params.append("sortBy", sortConfig.key);
@@ -1572,7 +1583,88 @@ function Vendors() {
             the header + the "No vendors yet" row, so that border would sit
             right under it as a second stray line with an odd gap instead of
             closing off a real table body. Same fix as Companies.jsx. */}
-        <div className={`bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || vendors.length > 0 ? "border-b" : ""}`} style={{ paddingLeft: "var(--content-inset, 16px)" }}>
+        {isMobileCards && (
+          <div className="bg-white px-4 pt-3 pb-[120px] flex flex-col gap-2">
+            {showLoadingSkeleton ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-[150px] rounded-2xl border border-[#E1E4EA] bg-gray-50 animate-pulse" />
+              ))
+            ) : vendors.length === 0 ? (
+              <EmptyState
+                icon={Truck}
+                noun="Vendor"
+                isFiltered={!!(debouncedSearchTerm || activeFilters?.length)}
+                onCreate={() => {
+                  setEditVendor(null);
+                  setShowQuickAdd(true);
+                }}
+              />
+            ) : (
+              vendors.map((vendor) => (
+                <div key={vendor._id} className="px-3 py-2.5 rounded-2xl border border-[#E1E4EA] bg-white">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        to={`/vendors/${vendor._id}`}
+                        className="block truncate text-[15px] font-medium text-[#0085FF]"
+                      >
+                        <HighlightText text={vendor.name || "—"} query={searchTerm} />
+                      </Link>
+                      <div className="flex items-center gap-1.5 text-xs text-[#525866] mt-0.5 min-w-0">
+                        <Building2 className="w-3.5 h-3.5 text-[#868C98] flex-shrink-0" />
+                        <span className="truncate capitalize">
+                          {vendor.company ? <HighlightText text={vendor.company} query={searchTerm} /> : "—"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 text-right">
+                      <div className="text-[11px] text-[#868C98] leading-none">Closing balance</div>
+                      <div className="text-[19px] leading-tight font-semibold text-[#0E121B] whitespace-nowrap">
+                        ₹{Number(vendor.balance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 pt-2 border-t border-[#E1E4EA] flex items-center justify-between gap-2">
+                    <div className="flex flex-col gap-1 min-w-0 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Mail className="w-3.5 h-3.5 text-[#868C98] flex-shrink-0" />
+                        {vendor.email ? (
+                          <a href={`mailto:${vendor.email}`} className="truncate font-medium text-[#0E121B]">{vendor.email}</a>
+                        ) : <span className="text-[#868C98]">—</span>}
+                      </div>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Phone className="w-3.5 h-3.5 text-[#868C98] flex-shrink-0" />
+                        {vendor.phone ? (
+                          <a href={`tel:${vendor.phone}`} className="truncate font-medium text-[#0E121B]">{vendor.phone}</a>
+                        ) : <span className="text-[#868C98]">—</span>}
+                      </div>
+                      <div className="flex items-start gap-2 min-w-0">
+                        <MapPin className="w-3.5 h-3.5 text-[#868C98] flex-shrink-0 mt-0.5" />
+                        <span className="line-clamp-2 text-[#525866]">{truncateText(getFieldValue(vendor, "address"), 60)}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 self-end">
+                      <button
+                        type="button"
+                        title="Edit"
+                        aria-label="Edit"
+                        onClick={() => handleEditVendor(vendor)}
+                        className="w-8 h-8 flex items-center justify-center rounded-full border border-[#E1E4EA] text-[#0085FF] hover:bg-blue-50"
+                      >
+                        <EditIcon className="w-4 h-4" />
+                      </button>
+                      <div className="[&>div>button]:w-8 [&>div>button]:h-8 [&>div>button]:flex [&>div>button]:items-center [&>div>button]:justify-center [&>div>button]:rounded-full [&>div>button]:border [&>div>button]:border-[#E1E4EA] [&>div>button]:p-0 [&>div>button]:text-[#0E121B]">
+                        {renderRowActionsMenu(vendor)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+        <div className={`${isMobileCards ? "hidden" : ""} bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || vendors.length > 0 ? "border-b" : ""}`} style={{ paddingLeft: "var(--content-inset, 16px)" }}>
           <table
             className="border-separate border-spacing-0 text-left"
             style={{ minWidth: "100%", width: tableWidth, tableLayout: "fixed" }}
@@ -1758,7 +1850,7 @@ function Vendors() {
               currentPage={pagination.currentPage}
               totalPages={pagination.totalPages}
               totalCount={pagination.totalCount}
-              limit={pagination.limit}
+              limit={isMobileCards ? 15 : pagination.limit}
               onPageChange={handlePageChange}
               onLimitChange={handleLimitChange}
               className="w-full px-4 py-3 flex items-center justify-between sm:px-6"

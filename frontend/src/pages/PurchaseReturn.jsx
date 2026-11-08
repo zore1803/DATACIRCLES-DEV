@@ -1,3 +1,5 @@
+import MobileListCard, { MobileCardList, CardSkeletons, cardMoney, cardDate, CalendarPlus, CalendarClock } from "../components/common/MobileListCard";
+import useMobileCards, { MOBILE_CARD_PAGE_SIZE } from "../utils/useMobileCards";
 import ExportSubmenu from "../components/common/ExportSubmenu";
 import { FaWhatsapp } from "react-icons/fa";
 import emailLogo from "../assets/email-logo.svg";
@@ -201,6 +203,7 @@ const PurchaseReturn = () => {
 
   const hasLoadedOnceRef = useRef(false);
   const showLoadingSkeleton = loading && purchaseReturns.length === 0 && !hasLoadedOnceRef.current;
+  const isMobileCards = useMobileCards();
   useTopLoadingSignal(loading);
 
   // Bulk Selection
@@ -431,7 +434,7 @@ const PurchaseReturn = () => {
   useEffect(() => {
     fetchReturns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.currentPage, pagination.limit, sortConfig, debouncedSearchTerm, filterStatus, dateFromMs, dateToMs, activeFiltersKey]);
+  }, [pagination.currentPage, pagination.limit, isMobileCards, sortConfig, debouncedSearchTerm, filterStatus, dateFromMs, dateToMs, activeFiltersKey]);
 
   useEffect(() => {
   }, []);
@@ -447,7 +450,7 @@ const PurchaseReturn = () => {
       setLoading(true);
       const params = new URLSearchParams({
         page: pagination.currentPage,
-        limit: pagination.limit,
+        limit: isMobileCards ? MOBILE_CARD_PAGE_SIZE : pagination.limit,
       });
       if (sortConfig.key) {
         params.append("sortBy", sortConfig.key);
@@ -2293,8 +2296,30 @@ const PurchaseReturn = () => {
           style={{ position: "fixed", left: "var(--sidebar-width, 0px)", paddingLeft: "var(--content-inset, 16px)", right: 0, bottom: !showLoadingSkeleton ? 64 : 0 }}
         >
           <div className={`relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || purchaseReturns.length > 0 ? "border-b" : ""}`}>
+            {isMobileCards && (
+              <MobileCardList>
+                {showLoadingSkeleton ? (
+                  <CardSkeletons />
+                ) : purchaseReturns.length === 0 ? (
+                  <EmptyState icon={RotateCcw} noun="Return" isFiltered={!!(debouncedSearchTerm || activeFilters?.length || filterStatus)} onCreate={() => { setEditingReturn(null); setShowForm(true); }} />
+                ) : (
+                  purchaseReturns.map((it) => (
+                    <MobileListCard
+                      key={it._id}
+                      number={<HighlightText text={it.returnNumber || "—"} query={searchTerm} />}
+                      status={it.status}
+                      title={it.vendor?.name || "—"}
+                      amount={cardMoney(it.grandTotal)}
+                      lines={[{ icon: CalendarPlus, label: "Date", value: cardDate(it.returnDate || it.createdAt) }]}
+                      onEdit={() => handleEdit(it)}
+                      menu={renderRowActionsMenu(it)}
+                    />
+                  ))
+                )}
+              </MobileCardList>
+            )}
             <table
-              className="w-full border-separate border-spacing-0 text-left"
+              className={`${isMobileCards ? "hidden " : ""}w-full border-separate border-spacing-0 text-left`}
               style={{ minWidth: `${table.getTotalSize()}px`, tableLayout: "fixed" }}
             >
               {(() => {

@@ -1,3 +1,5 @@
+import MobileListCard, { MobileCardList, CardSkeletons, cardMoney, cardDate, CalendarPlus, CalendarClock } from "../components/common/MobileListCard";
+import useMobileCards, { MOBILE_CARD_PAGE_SIZE } from "../utils/useMobileCards";
 import { exportClientSide, confirmExport, fetchAllPages, formatINR, formatExportDate } from "../utils/clientExport";
 import { FaWhatsapp } from "react-icons/fa";
 import emailLogo from "../assets/email-logo.svg";
@@ -208,6 +210,7 @@ const PurchasePage = () => {
   // NOT re-skeleton the toolbar.
   const hasLoadedOnceRef = useRef(false);
   const showLoadingSkeleton = loading && purchases.length === 0 && !hasLoadedOnceRef.current;
+  const isMobileCards = useMobileCards();
   // Signal the top progress bar on EVERY fetch, not just the skeleton case —
   // same as Companies.jsx.
   useTopLoadingSignal(loading);
@@ -511,6 +514,7 @@ const PurchasePage = () => {
   }, [
     pagination.currentPage,
     pagination.limit,
+    isMobileCards,
     sortConfig,
     debouncedSearchTerm,
     filterStatus,
@@ -564,7 +568,7 @@ const PurchasePage = () => {
       setLoading(true);
       const params = new URLSearchParams({
         page: pagination.currentPage,
-        limit: pagination.limit,
+        limit: isMobileCards ? MOBILE_CARD_PAGE_SIZE : pagination.limit,
       });
       if (sortConfig.key) {
         params.append("sortBy", sortConfig.key);
@@ -2035,8 +2039,30 @@ const PurchasePage = () => {
           }}
         >
           <div className={`relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || purchases.length > 0 ? "border-b" : ""}`}>
+            {isMobileCards && (
+              <MobileCardList>
+                {showLoadingSkeleton ? (
+                  <CardSkeletons />
+                ) : purchases.length === 0 ? (
+                  <EmptyState icon={ShoppingCart} noun="Purchase" isFiltered={!!(debouncedSearchTerm || activeFilters?.length || filterStatus)} onCreate={() => { setEditingPurchase(null); setShowForm(true); }} />
+                ) : (
+                  purchases.map((it) => (
+                    <MobileListCard
+                      key={it._id}
+                      number={<HighlightText text={it.purchaseNumber || "—"} query={searchTerm} />}
+                      status={it.status}
+                      title={it.vendor?.name || "—"}
+                      amount={cardMoney(it.grandTotal)}
+                      lines={[{ icon: CalendarPlus, label: "Date", value: cardDate(it.purchaseDate || it.createdAt) }]}
+                      onEdit={() => handleEdit(it)}
+                      menu={renderRowActionsMenu(it)}
+                    />
+                  ))
+                )}
+              </MobileCardList>
+            )}
             <table
-              className="w-full border-separate border-spacing-0 text-left"
+              className={`${isMobileCards ? "hidden " : ""}w-full border-separate border-spacing-0 text-left`}
               style={{
                 minWidth: `${table.getTotalSize()}px`,
                 tableLayout: "fixed",

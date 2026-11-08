@@ -354,7 +354,7 @@ function Companies() {
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
-  const effectiveLimit = isMobile ? 10 : pagination.limit;
+  const effectiveLimit = isMobile ? 15 : pagination.limit;
 
   // Define default columns - NOW UPDATES WHEN companyFieldNames CHANGES
   const defaultColumns = useMemo(() => {

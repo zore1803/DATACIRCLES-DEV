@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { X, ChevronDown, Info } from "lucide-react";
+import { X, ChevronLeft, ChevronDown, Info } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import SearchableDropdown from "../contact/SearchableDropdown";
@@ -307,6 +307,7 @@ const PurchaseReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError 
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-3">
           <div className="flex items-center gap-3 min-w-0">
+            <button type="button" onClick={handleClose} aria-label="Back" className="lg:hidden -ml-4 -mr-2 inline-flex items-center justify-center h-8 w-7 flex-shrink-0 text-[#0E121B]"><ChevronLeft className="w-6 h-6" /></button>
             <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide truncate">
               {isEditing ? `Edit Return ${editingReturn.returnNumber}` : "New Purchase Return"}
             </h2>

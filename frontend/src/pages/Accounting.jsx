@@ -3,6 +3,7 @@ import DateRangeFilterButton, { thisMonthRange } from "../components/common/Date
 import AdvancedFilterPanel from "../components/common/AdvancedFilterPanel";
 import DocumentDetailModal from "../components/common/DocumentDetailModal";
 import { toServerDueDateFilter } from "../utils/dueDateFilter";
+import { isNativeApp } from "../utils/isNativeApp";
 import { FaWhatsapp } from "react-icons/fa";
 import emailLogo from "../assets/email-logo.svg";
 import EmptyState from "../components/common/EmptyState";
@@ -59,7 +60,7 @@ import {
   ListOrdered,
   List as ListIcon,
   Link as LinkIcon,
-  ArrowUp, ArrowDown, CalendarDays } from "lucide-react";
+  ArrowUp, ArrowDown, CalendarDays, CalendarPlus, CalendarClock } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { PDFDocument } from "pdf-lib";
@@ -144,7 +145,7 @@ const TABS = [
 /* Phones, every Accounting document tab (invoices, pro forma, quotations, challans…): title band, then row 1 = search bar + filter + three-dot menu,
    row 2 = status pills + calendar filter. Set to false to restore the previous
    mobile header (title + icon-only search + Add button). Desktop never changes. */
-const INVOICES_MOBILE_ROWS = true;
+const INVOICES_MOBILE_ROWS = false;
 
 /* Status tabs shown under the header on the Invoices list. "Overdue" is not a
    stored status: the server treats it as unpaid invoices past their due date. */
@@ -1054,6 +1055,15 @@ const Accounting = ({ fixedTab = null }) => {
   const [conversionData, setConversionData] = useState(null);
   const [showQuickDealForm, setShowQuickDealForm] = useState(false);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  // Only the mobile app (WebView) gets the card list; the website keeps the table.
+  const [isMobileCards, setIsMobileCards] = useState(() => isNativeApp && window.innerWidth < 1024);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023.98px)");
+    const update = () => setIsMobileCards(isNativeApp && mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
   const searchInputRef = useRef(null);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   // Every document type opens in the shared split view (form + live preview)
@@ -1348,7 +1358,8 @@ const Accounting = ({ fixedTab = null }) => {
     setLoading((prev) => ({ ...prev, [type]: true }));
     const params = new URLSearchParams({
       page: paginations[type].currentPage.toString(),
-      limit: paginations[type].limit.toString(),
+      // Mobile app: fixed 15 per page; the website keeps the chosen page size.
+      limit: (isMobileCards ? 15 : paginations[type].limit).toString(),
     });
     if (sortConfigs[type].key) {
       params.append("sortBy", sortConfigs[type].key);
@@ -2309,6 +2320,27 @@ const Accounting = ({ fixedTab = null }) => {
     );
   };
 
+  // Mobile-app card helpers (layout only — same data as the table cells).
+  const cardDate = (d) =>
+    d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "N/A";
+  const cardAmount = (n) =>
+    `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const cardStatusStyle = (status) => {
+    const k = String(status || "").toLowerCase().trim();
+    const has = (words) => words.some((w) => k.includes(w));
+    // Red: something negative happened (check first so "unpaid" isn't read as "paid").
+    if (has(["reject", "unpaid", "cancel", "declin", "overdue", "fail", "expired", "void", "return", "refund", "lost"]))
+      return { pill: "bg-red-50 text-red-700", dot: "bg-red-500" };
+    // Yellow: waiting / in progress.
+    if (has(["pending", "progress", "partial", "sent", "processing", "awaiting", "review", "hold", "transit"]))
+      return { pill: "bg-amber-50 text-amber-700", dot: "bg-amber-500" };
+    // Green: positive / completed.
+    if (has(["paid", "accept", "approv", "deliver", "complete", "confirm", "success", "convert", "won", "active", "signed"]))
+      return { pill: "bg-green-50 text-green-700", dot: "bg-green-500" };
+    // Blue: draft and everything else.
+    return { pill: "bg-blue-50 text-blue-700", dot: "bg-blue-500" };
+  };
+
   const renderCell = (colId, doc) => {
     const searchQuery = searchTerms[activeTab];
     if (colId.startsWith("cf:")) {
@@ -2615,7 +2647,7 @@ const Accounting = ({ fixedTab = null }) => {
               Companies.jsx's title, so the search field gets the freed
               width instead of staying pinned to a small fixed size. */}
           <div
-            className={`${mobileInvoiceRows ? "hidden" : "lg:hidden flex"} flex-col justify-center gap-0.5 overflow-hidden transition-all duration-300 ease-in-out ${isSearchExpanded ? "w-0 opacity-0" : "w-auto opacity-100 flex-shrink min-w-0"}`}
+            className={`${mobileInvoiceRows ? "hidden" : "lg:hidden flex"} flex-col justify-center gap-0.5 overflow-hidden transition-all duration-300 ease-in-out ${isSearchExpanded ? "w-0 opacity-0" : "w-auto opacity-100 flex-shrink-0"}`}
           >
             <div className="flex items-center gap-2">
               <h1 className="m-0 text-base font-bold leading-tight text-[#0E121B] whitespace-nowrap">
@@ -2623,8 +2655,8 @@ const Accounting = ({ fixedTab = null }) => {
               </h1>
               <VideoIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
             </div>
-            <p className="m-0 max-w-[44vw] truncate leading-tight text-[10px] text-gray-500 font-inter">
-              {`Manage your ${(TABS.find((t) => t.key === activeTab)?.label || "documents").toLowerCase()} and their status`}
+            <p className="m-0 leading-tight text-[10px] whitespace-nowrap text-gray-500 font-inter">
+              {`Manage ${(TABS.find((t) => t.key === activeTab)?.label || "documents").toLowerCase()}`}
             </p>
           </div>
 
@@ -2747,18 +2779,6 @@ const Accounting = ({ fixedTab = null }) => {
                       onExport={handleExportAll}
                       onDone={() => setShowMoreMenu(false)}
                     />
-
-                    {/* Date range — folded in here on mobile; the pill beside the status tabs is
-                        hidden below lg. */}
-                    <button
-                      onClick={() => {
-                        setShowMoreMenu(false);
-                        setShowMobileDateRange(true);
-                      }}
-                      className="lg:hidden w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-[#161618] hover:bg-gray-50 whitespace-nowrap"
-                    >
-                      <CalendarDays className="w-3.5 h-3.5 flex-shrink-0" /> {invoiceDateRange?.label || "All Time"}
-                    </button>
 
                     {/* Filter by status — folded in here on mobile since the
                         standalone filter button is hidden below lg. */}
@@ -2971,8 +2991,101 @@ const Accounting = ({ fixedTab = null }) => {
           className={`fixed right-0 overflow-x-auto overflow-y-auto bg-white border-t border-[#E1E4EA] ${mobileInvoiceRows ? "top-[calc(222px+var(--dc-offline-offset,0px))]" : "top-[calc(174px+var(--dc-offline-offset,0px))]"} lg:top-[calc(184px+var(--dc-offline-offset,0px))]`}
           style={{ left: "var(--sidebar-width, 0px)", bottom: 64, paddingLeft: "var(--content-inset, 16px)" }}
         >
+          {isMobileCards && (
+            <div className="bg-white pt-3 pr-4 pb-[120px] flex flex-col gap-2" style={{ marginLeft: "calc(-1 * var(--content-inset, 16px))", paddingLeft: 16 }}>
+              {showLoadingSkeleton || currentLoading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="h-[190px] rounded-2xl border border-[#E1E4EA] bg-gray-50 animate-pulse" />
+                ))
+              ) : currentDocuments.length === 0 ? (
+                <EmptyState
+                  icon={PdfIcon}
+                  noun={docNameFor(activeTab)}
+                  isFiltered={!!(searchTerms[activeTab] || filterStatuses[activeTab])}
+                  onCreate={handleAddDocument}
+                />
+              ) : (
+                currentDocuments.map((doc) => {
+                  const st = cardStatusStyle(doc.status);
+                  const paidSoFar = (doc.payments || []).reduce((sum, pay) => sum + pay.amount, 0);
+                  const dueAmount = doc.amount - paidSoFar;
+                  const showDue = activeTab === "tax" && paidSoFar > 0 && dueAmount > 0.01;
+                  return (
+                    <div
+                      key={doc?._id}
+                      onClick={(e) => {
+                        if (e.target.closest("button, a, input, label, [data-no-row-click]")) return;
+                        setDetailDocId(doc._id);
+                      }}
+                      className="px-3 py-2 rounded-2xl border border-[#E1E4EA] bg-white"
+                    >
+                      {/* Row 1 — number + status */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 text-[15px] font-medium [&_span]:!text-[15px] [&_span]:!font-medium">
+                          {renderCell("number", doc)}
+                        </div>
+                        <span className={`inline-flex items-center gap-1.5 flex-shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${st.pill}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+                          {doc.status}
+                        </span>
+                      </div>
+
+                      {/* Row 2 — title + amount */}
+                      <div className="mt-0.5 flex items-start justify-between gap-2">
+                        <div className="min-w-0 pt-1 text-xs leading-tight text-[#525866] truncate">
+                          {doc.deal?.title || doc.company?.name || doc.contact?.name || "N/A"}
+                        </div>
+                        <div className="flex-shrink-0 text-right">
+                          <div className="text-[19px] leading-tight font-semibold text-[#0E121B] tracking-tight whitespace-nowrap">
+                            {cardAmount(doc.amount)}
+                          </div>
+                          {showDue && (
+                            <div className="text-[11px] font-medium text-orange-600 leading-none">
+                              {cardAmount(dueAmount)} due
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Row 3 — dates + actions */}
+                      <div className="mt-1 pt-1 border-t border-[#E1E4EA] flex items-center justify-between gap-2">
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <div className="flex items-center gap-2 text-xs">
+                            <CalendarPlus className="w-3.5 h-3.5 text-[#868C98] flex-shrink-0" />
+                            <span className="w-11 text-[#868C98] flex-shrink-0">Issued</span>
+                            <span className="font-medium text-[#0E121B] whitespace-nowrap">{cardDate(doc.date)}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs">
+                            <CalendarClock className="w-3.5 h-3.5 text-[#868C98] flex-shrink-0" />
+                            <span className="w-11 text-[#868C98] flex-shrink-0">Due</span>
+                            <span className="font-medium text-[#0E121B] whitespace-nowrap">{cardDate(doc.dueDate)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0" data-no-row-click>
+                          {!isSettledInvoice(doc, activeTab) && (
+                            <button
+                              type="button"
+                              title="Edit"
+                              aria-label="Edit"
+                              onClick={(e) => { e.stopPropagation(); handleEdit(doc, activeTab); }}
+                              className="w-8 h-8 flex items-center justify-center rounded-full border border-[#E1E4EA] text-[#0085FF] hover:bg-blue-50"
+                            >
+                              <EditIcon className="w-4 h-4" />
+                            </button>
+                          )}
+                          <div className="[&>div>button]:w-8 [&>div>button]:h-8 [&>div>button]:flex [&>div>button]:items-center [&>div>button]:justify-center [&>div>button]:rounded-full [&>div>button]:border [&>div>button]:border-[#E1E4EA] [&>div>button]:p-0 [&>div>button]:text-[#0E121B]">
+                            {renderRowActions(doc)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
           <table
-            className="border-separate border-spacing-0 text-left"
+            className={`${isMobileCards ? "hidden" : ""} border-separate border-spacing-0 text-left`}
             style={{ minWidth: "100%", width: tableWidth, tableLayout: "fixed" }}
           >
             <thead className="bg-[#F5F7FA] sticky top-0 z-20 select-none">
@@ -3374,10 +3487,13 @@ const Accounting = ({ fixedTab = null }) => {
               >
                 Previous
               </button>
+              <span className="self-center text-xs text-gray-500">
+                Page {pagination.currentPage} of {pagination.totalPages || 1}
+              </span>
               <button
                 onClick={() => handlePageChange(activeTab, pagination.currentPage + 1)}
                 disabled={!pagination.hasNextPage}
-                className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
               </button>

@@ -1,3 +1,5 @@
+import MobileListCard, { MobileCardList, CardSkeletons, cardMoney, cardDate, CalendarPlus, CalendarClock } from "../components/common/MobileListCard";
+import useMobileCards, { MOBILE_CARD_PAGE_SIZE } from "../utils/useMobileCards";
 import { exportClientSide, confirmExport, fetchAllPages, formatINR, withCustomFieldColumns } from "../utils/clientExport";
 import ExportSubmenu from "../components/common/ExportSubmenu";
 import DeleteIcon from "../components/common/DeleteIcon";
@@ -407,6 +409,7 @@ function ProductsServices() {
   const [selectionMode, setSelectionMode] = useState(true);
   const hasLoadedOnceRef = useRef(false);
   const showLoadingSkeleton = loading && items.length === 0 && !hasLoadedOnceRef.current;
+  const isMobileCards = useMobileCards();
   // Signal the top progress bar on EVERY fetch, not just the skeleton case —
   // same as Companies.jsx.
   useTopLoadingSignal(loading);
@@ -634,6 +637,7 @@ function ProductsServices() {
   }, [
     pagination.currentPage,
     pagination.limit,
+    isMobileCards,
     sortConfig,
     debouncedSearchTerm,
   ]);
@@ -644,7 +648,7 @@ function ProductsServices() {
 
       const params = new URLSearchParams({
         page: pagination.currentPage.toString(),
-        limit: pagination.limit.toString(),
+        limit: (isMobileCards ? MOBILE_CARD_PAGE_SIZE : pagination.limit).toString(),
       });
       if (sortConfig.key) {
         params.append("sortBy", sortConfig.key);
@@ -1984,8 +1988,33 @@ function ProductsServices() {
           }}
         >
           <div className={`relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || items.length > 0 ? "border-b" : ""}`} style={{ paddingLeft: "var(--content-inset, 16px)" }}>
+            {isMobileCards && (
+              <MobileCardList>
+                {showLoadingSkeleton ? (
+                  <CardSkeletons />
+                ) : items.length === 0 ? (
+                  <EmptyState icon={Package} noun="Item" isFiltered={!!(searchTerm || activeFilters?.length)} onCreate={() => setShowQuickCreate(true)} buttonLabel="Add Item" />
+                ) : (
+                  items.map((it) => (
+                    <MobileListCard
+                      key={it._id}
+                      number={<HighlightText text={it.name || "—"} query={searchTerm} />}
+                      statusNode={<span className={`flex-shrink-0 px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${it.type === "product" ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"}`}>{it.type}</span>}
+                      title={it.category || "—"}
+                      amount={getVariantPriceDisplay(it, "sellingPrice") || `₹${formatNumberFixed(it.sellingPrice ?? 0)}`}
+                      lines={[
+                        { label: "Cost", value: getVariantPriceDisplay(it, "purchasePrice") || `₹${formatNumberFixed(it.purchasePrice ?? 0)}` },
+                        { label: "HSN", value: it.hsnSac || "—" },
+                      ]}
+                      onEdit={() => handleEditItem(it)}
+                      menu={renderRowActionsMenu(it)}
+                    />
+                  ))
+                )}
+              </MobileCardList>
+            )}
             <table
-              className="w-full border-separate border-spacing-0 text-left"
+              className={`${isMobileCards ? "hidden " : ""}w-full border-separate border-spacing-0 text-left`}
               style={{
                 minWidth: `${table.getTotalSize()}px`,
                 tableLayout: "fixed",

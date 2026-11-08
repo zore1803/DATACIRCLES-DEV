@@ -2,7 +2,7 @@ import DeleteIcon from "../common/DeleteIcon";
 import Checkbox from "../common/Checkbox";
 import PlusIcon from "../common/PlusIcon";
 import React, { useEffect, useState, useRef } from "react";
-import {  X,
+import {  X, ChevronLeft,
   ChevronDown,
   GripVertical,
   Clock,
@@ -517,6 +517,7 @@ const PurchaseOrderForm = ({
         {/* Header */}
         <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center flex-shrink-0 gap-3">
           <div className="flex items-center gap-3 min-w-0">
+            <button type="button" onClick={handleClose} aria-label="Back" className="lg:hidden -ml-4 -mr-2 inline-flex items-center justify-center h-8 w-7 flex-shrink-0 text-[#0E121B]"><ChevronLeft className="w-6 h-6" /></button>
             <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide truncate">
               {editingPO ? "EDIT PURCHASE ORDER" : "CREATE NEW PURCHASE ORDER"}
             </h2>

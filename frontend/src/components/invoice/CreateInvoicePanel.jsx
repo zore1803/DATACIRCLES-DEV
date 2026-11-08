@@ -17,6 +17,7 @@ import {
   X,
   Check,
   ChevronDown,
+  ChevronLeft,
   PenLine,
   Printer,
   ChevronUp,
@@ -1314,6 +1315,12 @@ const CreateInvoicePanel = ({
   // none of that. Falls back to the HTML print below only while the
   // document hasn't been saved yet (no id to fetch a PDF for).
   const handlePrint = async () => {
+    // Phones / the mobile app: a new window has no way back (the WebView
+    // loads it over the app), so show the in-page preview with a Back bar.
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      setShowFullView(true);
+      return;
+    }
     if (isEditing && initialDoc?._id) {
       try {
         const res = await API.get(`/${apiPathFor(type)}/download/${initialDoc._id}`, {
@@ -1688,14 +1695,24 @@ const CreateInvoicePanel = ({
           two segments stay visually separate and the resizer gap between them
           casts nothing. `relative z-10` matters: without it the panels below
           paint their white background over the shadows and they vanish. */}
-      <div className="relative z-10 flex-shrink-0 h-16 flex items-stretch bg-white px-2 border-b border-[#E1E4EA] lg:border-b-0">
+      <div className="relative z-10 flex-shrink-0 h-16 flex items-stretch bg-white px-0 lg:px-2 border-b border-[#E1E4EA] lg:border-b-0">
         {/* Left: form header */}
         <div
           style={{ width: formWidth }}
-          className="flex items-stretch px-3 lg:px-4 lg:pr-6 min-w-0 self-stretch max-lg:!w-full"
+          className="flex items-stretch pl-0 pr-3 lg:px-4 lg:pr-6 min-w-0 self-stretch max-lg:!w-full"
         >
           <div className="w-full flex items-center justify-between gap-2 lg:border-b lg:border-[#E1E4EA] lg:shadow-[0_4px_5px_-3px_rgba(0,0,0,0.16)]">
-            <div className="min-w-0">
+            {/* Phones: back to the previous page. Goes through history so the
+                popstate handler above applies (unsaved-changes confirmation). */}
+            <button
+              type="button"
+              onClick={() => window.history.back()}
+              aria-label="Back"
+              className="lg:hidden -mr-1 inline-flex items-center justify-center h-8 w-7 flex-shrink-0 text-[#0E121B]"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            <div className="min-w-0 flex-1 lg:flex-none">
               {isEditing && docNumber ? (
                 <>
                   {!renamingNumber ? (
@@ -3039,9 +3056,24 @@ const CreateInvoicePanel = ({
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100002] flex flex-col"
             onClick={() => setShowFullView(false)}
           >
+            {/* Phones: Back bar so the preview is never a dead end. */}
+            <div
+              className="lg:hidden flex-shrink-0 h-12 bg-white flex items-center gap-1 px-2 border-b border-[#E1E4EA]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setShowFullView(false)}
+                aria-label="Back"
+                className="inline-flex items-center justify-center h-8 w-8 text-[#0E121B]"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+              <span className="text-base font-bold text-[#0E121B] truncate">{previewDocNumber || docName} Preview</span>
+            </div>
             {/* No chrome around the sheet — just the page and a close
                 control above its corner. */}
-            <div className="flex-1 min-h-0 overflow-auto p-6">
+            <div className="flex-1 min-h-0 overflow-auto p-6 max-lg:p-2">
               <div className="relative mx-auto" style={{ width: PREVIEW_BASE_W }}>
                 {/* Centred on the sheet's top-right corner, so it overlaps
                     the page diagonally without covering the header block. */}

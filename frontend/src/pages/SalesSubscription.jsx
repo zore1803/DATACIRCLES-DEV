@@ -1,3 +1,5 @@
+import MobileListCard, { MobileCardList, CardSkeletons, cardMoney, cardDate, CalendarPlus, CalendarClock } from "../components/common/MobileListCard";
+import useMobileCards, { MOBILE_CARD_PAGE_SIZE } from "../utils/useMobileCards";
 import ExportSubmenu from "../components/common/ExportSubmenu";
 import DeleteIcon from "../components/common/DeleteIcon";
 import EmptyState from "../components/common/EmptyState";
@@ -78,7 +80,7 @@ const getAncestorZoom = (el) => {
 /* Phones: title band, then row 1 = search bar + filter + three-dot menu, then
    row 2 = status pills (same layout as the Accounting document lists). Set to
    false to restore the previous mobile header. Desktop never changes. */
-const SUBSCRIPTIONS_MOBILE_ROWS = true;
+const SUBSCRIPTIONS_MOBILE_ROWS = false;
 
 const STATUS_STYLES = {
   Draft: "bg-[#EEF2F9] text-[#56698A]",
@@ -120,6 +122,7 @@ const SalesSubscription = () => {
   const [loading, setLoading] = useState(false);
   const hasLoadedOnceRef = useRef(false);
   const showLoadingSkeleton = loading && rows.length === 0 && !hasLoadedOnceRef.current;
+  const isMobileCards = useMobileCards();
   useTopLoadingSignal(loading);
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -282,7 +285,7 @@ const SalesSubscription = () => {
     try {
       const params = new URLSearchParams({
         page: pagination.currentPage,
-        limit: pagination.limit,
+        limit: isMobileCards ? MOBILE_CARD_PAGE_SIZE : pagination.limit,
       });
       if (sortConfig.key) {
         params.append("sortBy", sortConfig.key);
@@ -313,7 +316,7 @@ const SalesSubscription = () => {
   useEffect(() => {
     fetchRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.currentPage, pagination.limit, sortConfig, debouncedSearch, statusFilter, activeFiltersKey]);
+  }, [pagination.currentPage, pagination.limit, isMobileCards, sortConfig, debouncedSearch, statusFilter, activeFiltersKey]);
 
   useEffect(() => {
     const onClick = (event) => {
@@ -1420,8 +1423,30 @@ const SalesSubscription = () => {
           }}
         >
           <div className={`relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || rows.length > 0 ? "border-b" : ""}`}>
+            {isMobileCards && (
+              <MobileCardList>
+                {showLoadingSkeleton ? (
+                  <CardSkeletons />
+                ) : rows.length === 0 ? (
+                  <EmptyState icon={Repeat} noun="Subscription" isFiltered={!!(debouncedSearch || activeFilters?.length || statusFilter)} title="Create Subscription Now" description="Bill a customer automatically on a schedule — e.g. ₹5,000 every month — instead of creating an invoice by hand each time." onCreate={openCreate} />
+                ) : (
+                  rows.map((it) => (
+                    <MobileListCard
+                      key={it._id}
+                      number={<HighlightText text={it.subscriptionNumber || "—"} query={searchTerm} />}
+                      status={it.status}
+                      title={customerOf(it)}
+                      amount={cardMoney(it.amount)}
+                      lines={[{ icon: CalendarPlus, label: "Start", value: cardDate(it.startDate) }, { icon: CalendarClock, label: "Next", value: cardDate(it.nextInvoiceDate) }]}
+                      onEdit={() => openEdit(it)}
+                      menu={renderRowActionsMenu(it)}
+                    />
+                  ))
+                )}
+              </MobileCardList>
+            )}
             <table
-              className="w-full border-separate border-spacing-0 text-left"
+              className={`${isMobileCards ? "hidden " : ""}w-full border-separate border-spacing-0 text-left`}
               style={{ minWidth: `${table.getTotalSize()}px`, tableLayout: "fixed" }}
             >
               {(() => {
@@ -1591,6 +1616,23 @@ const SalesSubscription = () => {
             }}
           >
             <div className="w-full bg-white px-4 py-3 flex items-center justify-between sm:px-6">
+              <div className="flex-1 flex justify-between items-center sm:hidden">
+                <button
+                  onClick={() => handlePageChange(pagination.currentPage - 1)}
+                  disabled={!pagination.hasPrevPage}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-gray-500">Page {pagination.currentPage} of {pagination.totalPages || 1}</span>
+                <button
+                  onClick={() => handlePageChange(pagination.currentPage + 1)}
+                  disabled={!pagination.hasNextPage}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
               <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                 <div className="flex items-center space-x-2">
                   <p className="text-sm text-gray-700">

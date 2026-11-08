@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { X, ChevronDown } from "lucide-react";
+import { X, ChevronLeft, ChevronDown } from "lucide-react";
 import API from "../../services/api";
 import toast from "react-hot-toast";
 import SearchableDropdown from "../contact/SearchableDropdown";
@@ -247,7 +247,8 @@ const SalesReturnForm = ({ editingReturn, onRequestClose, onSuccess, onError }) 
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#D9D9D9] flex-shrink-0 bg-white gap-1">
-          <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
+          <button type="button" onClick={handleClose} aria-label="Back" className="lg:hidden -ml-4 -mr-2 inline-flex items-center justify-center h-8 w-7 flex-shrink-0 text-[#0E121B]"><ChevronLeft className="w-6 h-6" /></button>
+            <h2 className="text-[15px] font-normal leading-6 text-[#78788D] uppercase tracking-wide">
             {isEditing ? `Edit Return ${editingReturn.returnNumber}` : "New Sales Return"}
           </h2>
           <button

@@ -1,3 +1,5 @@
+import MobileListCard, { MobileCardList, CardSkeletons, cardMoney, cardDate, CalendarPlus, CalendarClock } from "../components/common/MobileListCard";
+import useMobileCards, { MOBILE_CARD_PAGE_SIZE } from "../utils/useMobileCards";
 import ExportSubmenu from "../components/common/ExportSubmenu";
 import { FaWhatsapp } from "react-icons/fa";
 import emailLogo from "../assets/email-logo.svg";
@@ -153,6 +155,7 @@ const SalesReturn = () => {
   const [loading, setLoading] = useState(false);
   const hasLoadedOnceRef = useRef(false);
   const showLoadingSkeleton = loading && rows.length === 0 && !hasLoadedOnceRef.current;
+  const isMobileCards = useMobileCards();
   useTopLoadingSignal(loading);
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -368,7 +371,7 @@ const SalesReturn = () => {
     try {
       const params = new URLSearchParams({
         page: pagination.currentPage,
-        limit: pagination.limit,
+        limit: isMobileCards ? MOBILE_CARD_PAGE_SIZE : pagination.limit,
       });
       if (sortConfig.key) {
         params.append("sortBy", sortConfig.key);
@@ -399,7 +402,7 @@ const SalesReturn = () => {
   useEffect(() => {
     fetchRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.currentPage, pagination.limit, sortConfig, debouncedSearch, statusFilter, dateFromMs, dateToMs, activeFiltersKey]);
+  }, [pagination.currentPage, pagination.limit, isMobileCards, sortConfig, debouncedSearch, statusFilter, dateFromMs, dateToMs, activeFiltersKey]);
 
   useEffect(() => {
     const onClick = (event) => {
@@ -2094,8 +2097,30 @@ const SalesReturn = () => {
           }}
         >
           <div className={`relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || rows.length > 0 ? "border-b" : ""}`}>
+            {isMobileCards && (
+              <MobileCardList>
+                {showLoadingSkeleton ? (
+                  <CardSkeletons />
+                ) : rows.length === 0 ? (
+                  <EmptyState icon={ClipboardList} noun="Return" isFiltered={!!(debouncedSearch || activeFilters?.length || statusFilter)} onCreate={openCreate} buttonLabel="Create your first return" />
+                ) : (
+                  rows.map((it) => (
+                    <MobileListCard
+                      key={it._id}
+                      number={<HighlightText text={it.returnNumber || "—"} query={searchTerm} />}
+                      status={it.status}
+                      title={`${customerOf(it)} · ${invoiceOf(it)}`}
+                      amount={cardMoney(it.grandTotal)}
+                      lines={[{ icon: CalendarPlus, label: "Date", value: cardDate(it.returnDate) }]}
+                      onEdit={() => openEdit(it)}
+                      menu={renderRowActionsMenu(it)}
+                    />
+                  ))
+                )}
+              </MobileCardList>
+            )}
             <table
-              className="w-full border-separate border-spacing-0 text-left"
+              className={`${isMobileCards ? "hidden " : ""}w-full border-separate border-spacing-0 text-left`}
               style={{ minWidth: `${table.getTotalSize()}px`, tableLayout: "fixed" }}
             >
               {(() => {
@@ -2266,6 +2291,23 @@ const SalesReturn = () => {
             }}
           >
             <div className="w-full bg-white px-4 py-3 flex items-center justify-between sm:px-6">
+              <div className="flex-1 flex justify-between items-center sm:hidden">
+                <button
+                  onClick={() => handlePageChange(pagination.currentPage - 1)}
+                  disabled={!pagination.hasPrevPage}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-gray-500">Page {pagination.currentPage} of {pagination.totalPages || 1}</span>
+                <button
+                  onClick={() => handlePageChange(pagination.currentPage + 1)}
+                  disabled={!pagination.hasNextPage}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
               <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                 <div className="flex items-center space-x-2">
                   <p className="text-sm text-gray-700">
