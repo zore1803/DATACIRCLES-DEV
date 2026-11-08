@@ -342,7 +342,7 @@ function Companies() {
     setCurrentCompanyIds,
   } = useCompanyStore();
 
-  // Phones get a card list with 5 companies per page; desktop keeps the table
+  // Phones get a card list with 10 companies per page; desktop keeps the table
   // and the user's chosen page size.
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 1024);
   useEffect(() => {
@@ -2207,7 +2207,7 @@ function Companies() {
           {/* Mobile: one card per company (name, state, industry + actions) */}
           <div className="lg:hidden bg-white px-4 py-3 flex flex-col gap-3">
             {showLoadingSkeleton ? (
-              Array.from({ length: 5 }).map((_, i) => (
+              Array.from({ length: 10 }).map((_, i) => (
                 <div key={i} className="h-[92px] rounded-xl border border-[#E1E4EA] bg-gray-50 animate-pulse" />
               ))
             ) : companies.length === 0 ? (
@@ -2227,24 +2227,50 @@ function Companies() {
                 return (
                   <div
                     key={company._id}
-                    className="flex items-start gap-3 p-4 rounded-xl border border-[#E1E4EA] bg-white shadow-sm"
+                    className="flex flex-col gap-3 p-4 rounded-xl border border-[#E1E4EA] bg-white shadow-sm"
                   >
-                    <Link
-                      to={`/companies/${company._id}`}
-                      state={{ companyIds: sortedCompanies.map((c) => c._id) }}
-                      className="flex-1 min-w-0 flex flex-col gap-1.5"
-                    >
-                      <span className="text-sm font-semibold text-[#161618] truncate">
-                        <HighlightText text={company.name || "—"} query={searchTerm} />
-                      </span>
-                      <span className="text-xs text-[#525866] truncate">
-                        <span className="text-[#868C98]">Location: </span>{location}
-                      </span>
-                      <span className="text-xs text-[#525866] truncate">
-                        <span className="text-[#868C98]">Industry: </span>{industry}
-                      </span>
-                    </Link>
-                    {renderRowActionsMenu(company)}
+                    <div className="flex items-start gap-3">
+                      <Link
+                        to={`/companies/${company._id}`}
+                        state={{ companyIds: sortedCompanies.map((c) => c._id) }}
+                        className="flex-shrink-0"
+                        tabIndex={-1}
+                        aria-hidden="true"
+                      >
+                        <ProfilePicture
+                          contact={{ name: company.name, avatar: company.profilePicture }}
+                          size="w-11 h-11"
+                          textSize="text-sm"
+                        />
+                      </Link>
+                      <Link
+                        to={`/companies/${company._id}`}
+                        state={{ companyIds: sortedCompanies.map((c) => c._id) }}
+                        className="flex-1 min-w-0 flex flex-col gap-1.5"
+                      >
+                        <span className="text-sm font-semibold text-[#161618] truncate">
+                          <HighlightText text={company.name || "—"} query={searchTerm} />
+                        </span>
+                        <span className="text-xs text-[#525866] truncate">
+                          <span className="text-[#868C98]">Location: </span>{location}
+                        </span>
+                        <span className="text-xs text-[#525866] truncate">
+                          <span className="text-[#868C98]">Industry: </span>{industry}
+                        </span>
+                      </Link>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`/companies/${company._id}`}
+                        state={{ companyIds: sortedCompanies.map((c) => c._id) }}
+                        className="flex-1 h-10 flex items-center justify-center rounded-full border border-[#0C4FCD] text-[#0C4FCD] text-sm font-medium hover:bg-blue-50 transition-colors"
+                      >
+                        View Details
+                      </Link>
+                      <div className="flex-shrink-0 [&>div>button]:w-10 [&>div>button]:h-10 [&>div>button]:flex [&>div>button]:items-center [&>div>button]:justify-center [&>div>button]:rounded-full [&>div>button]:border [&>div>button]:border-[#E1E4EA] [&>div>button]:p-0 [&>div>button]:text-[#525866]">
+                        {renderRowActionsMenu(company)}
+                      </div>
+                    </div>
                   </div>
                 );
               })

@@ -14,7 +14,7 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import { Auth0Provider, useAuth0 } from "@auth0/auth0-react";
+import { Auth0Provider, Auth0Context, useAuth0 } from "@auth0/auth0-react";
 import API, { configureAxios } from "./services/api";
 import Intercom from "./components/common/Intercom";
 import AppToaster from "./components/AppToaster";
@@ -933,7 +933,39 @@ function App() {
   );
 }
 
+// LOCAL DEV ONLY. Auth0 needs a secure context (https or localhost); opening the
+// dev server from a phone over http://<LAN-ip> makes Auth0Provider throw and the
+// page renders blank. In that case (dev build + insecure origin) hand the app an
+// inert Auth0 context so it loads, and sign in with email/phone-password instead.
+// `import.meta.env.DEV` is false in production builds, so this never ships.
+const AUTH0_DISABLED_VALUE = {
+  isAuthenticated: false,
+  isLoading: false,
+  user: undefined,
+  error: undefined,
+  getAccessTokenSilently: async () => {
+    throw new Error("Auth0 is disabled on insecure dev origins");
+  },
+  getAccessTokenWithPopup: async () => undefined,
+  getIdTokenClaims: async () => undefined,
+  loginWithRedirect: async () => {},
+  loginWithPopup: async () => {},
+  logout: () => {},
+  handleRedirectCallback: async () => ({}),
+};
+
 function AppWrapper() {
+  if (import.meta.env.DEV && !window.isSecureContext) {
+    return (
+      <Auth0Context.Provider value={AUTH0_DISABLED_VALUE}>
+        <SubscriptionProvider>
+          <ErrorBoundary>
+            <App />
+          </ErrorBoundary>
+        </SubscriptionProvider>
+      </Auth0Context.Provider>
+    );
+  }
   return (
     <Auth0Provider
       domain={import.meta.env.VITE_APP_AUTH0_DOMAIN}
