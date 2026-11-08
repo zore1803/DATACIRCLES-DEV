@@ -30,6 +30,7 @@ export default function Home() {
       <WebView
         ref={ref}
         source={{ uri: WEB_URL }}
+        applicationNameForUserAgent="DataCirclesApp"
         style={styles.web}
         onNavigationStateChange={(s: { canGoBack: boolean }) => setCanGoBack(s.canGoBack)}
         startInLoadingState

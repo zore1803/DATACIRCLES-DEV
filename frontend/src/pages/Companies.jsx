@@ -47,6 +47,7 @@ import Hotlist, { HOTLIST_RETURN_KEY } from "../components/company/Hotlist";
 import BulkActions from "../components/BulkActions";
 import QuickCompanyForm from "../components/company/QuickCompanyForm";
 import ProfilePicture from "../components/contact/ProfilePicture";
+import { isNativeApp } from "../utils/isNativeApp";
 import VideoTutorialModal from "../components/VideoTutorialModal";
 import ColumnSettingsPanel from "../components/ColumnSettingsPanel";
 import { useColumnSettings } from "../hooks/useColumnSettings";
@@ -342,12 +343,13 @@ function Companies() {
     setCurrentCompanyIds,
   } = useCompanyStore();
 
-  // Phones get a card list with 10 companies per page; desktop keeps the table
-  // and the user's chosen page size.
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 1024);
+  // Only the mobile app (WebView) gets the card list with 10 companies per page.
+  // The website - desktop or a narrow browser window - keeps the table and the
+  // user's chosen page size.
+  const [isMobile, setIsMobile] = useState(() => isNativeApp && window.innerWidth < 1024);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 1023.98px)");
-    const update = () => setIsMobile(mq.matches);
+    const update = () => setIsMobile(isNativeApp && mq.matches);
     update();
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
@@ -2205,7 +2207,8 @@ function Companies() {
           // of closing off a real table body.
           <>
           {/* Mobile: one card per company (name, state, industry + actions) */}
-          <div className="lg:hidden bg-white px-4 py-3 flex flex-col gap-3">
+          {isMobile && (
+          <div className="bg-white px-4 py-3 flex flex-col gap-3">
             {showLoadingSkeleton ? (
               Array.from({ length: 10 }).map((_, i) => (
                 <div key={i} className="h-[92px] rounded-xl border border-[#E1E4EA] bg-gray-50 animate-pulse" />
@@ -2276,7 +2279,8 @@ function Companies() {
               })
             )}
           </div>
-          <div className={`hidden lg:block relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || companies.length > 0 ? "border-b" : ""}`} style={{ paddingLeft: "var(--content-inset, 16px)" }}>
+          )}
+          <div className={`${isMobile ? "hidden" : ""} relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || companies.length > 0 ? "border-b" : ""}`} style={{ paddingLeft: "var(--content-inset, 16px)" }}>
             <table
               className="w-full border-separate border-spacing-0 text-left"
               style={{
