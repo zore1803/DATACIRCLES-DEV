@@ -1,3 +1,4 @@
+import { isNativeApp } from "../../utils/isNativeApp";
 import DeleteIcon from "../common/DeleteIcon";
 import PlusIcon from "../common/PlusIcon";
 import React, { useEffect, useState, useMemo, useCallback } from "react";
@@ -396,34 +397,66 @@ const NoteSection = ({ contactId: propContactId, isQuickView }) => {
     });
   }, [notes, searchTerm]);
 
+  const inlineSearch = isQuickView && isNativeApp;
+
   return (
     <div className="h-full">
       <AppToaster />
 
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <StickyNote className="w-4 h-4" />
-          <span>{filteredNotes.length} notes</span>
+      {/* Mobile app Quick View: note count, search and New Note all in one row. */}
+      {inlineSearch && (
+        <div className="flex items-center gap-2 mb-4">
+          <div className="flex-shrink-0 flex items-center gap-1 text-xs text-gray-600 whitespace-nowrap">
+            <StickyNote className="w-4 h-4" />
+            <span>{filteredNotes.length} notes</span>
+          </div>
+          <div className="relative flex-1 min-w-0">
+            <SearchIcon className="absolute left-2.5 -translate-y-1/2 top-1/2 w-3.5 h-3.5 text-[#525866]" />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-8 pr-2 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-gray-400"
+            />
+          </div>
+          <button
+            onClick={() => setIsEditorOpen(true)}
+            className="flex-shrink-0 flex items-center gap-1 px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 text-xs font-medium whitespace-nowrap transition-colors rounded-full"
+          >
+            <PlusIcon className="w-3.5 h-3.5" />
+            New Note
+          </button>
         </div>
-        <button
-          onClick={() => setIsEditorOpen(true)}
-          className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-800 text-sm transition-colors"
-        >
-          <PlusIcon className="w-4 h-4" />
-          New Note
-        </button>
-      </div>
+      )}
+      {!inlineSearch && (
+        <>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <StickyNote className="w-4 h-4" />
+            <span>{filteredNotes.length} notes</span>
+          </div>
+          <button
+            onClick={() => setIsEditorOpen(true)}
+            className={`flex items-center gap-1 px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 text-sm transition-colors ${isQuickView ? "rounded-full px-4" : "rounded-lg"}`}
+          >
+            <PlusIcon className="w-4 h-4" />
+            New Note
+          </button>
+        </div>
 
-      <div className="relative mb-4">
-        <SearchIcon className="absolute left-3 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
-        <input
-          type="text"
-          placeholder="Search notes..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-11 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-gray-400"
-        />
-      </div>
+        <div className="relative mb-4">
+          <SearchIcon className="absolute left-3 -translate-y-1/2 top-1/2 w-4 h-4 text-[#525866]" />
+          <input
+            type="text"
+            placeholder="Search notes..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-11 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-gray-400"
+          />
+        </div>
+        </>
+      )}
 
       {filteredNotes.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
@@ -434,7 +467,7 @@ const NoteSection = ({ contactId: propContactId, isQuickView }) => {
           {!searchTerm && (
             <button
               onClick={() => setIsEditorOpen(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-800 text-sm transition-colors"
+              className={`px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 text-sm transition-colors ${isQuickView ? "rounded-full" : "rounded-lg"}`}
             >
               Create Note
             </button>

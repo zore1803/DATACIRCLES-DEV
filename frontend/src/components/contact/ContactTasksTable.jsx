@@ -1,3 +1,4 @@
+import { isNativeApp } from "../../utils/isNativeApp";
 import CalendarIcon from "../common/CalendarIcon";
 import PlusIcon from "../common/PlusIcon";
 import React, { useState, useEffect } from "react";
@@ -177,7 +178,7 @@ const ContactTasksTable = ({ contactId }) => {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="appearance-none bg-white border border-gray-300 rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:border-gray-400"
+              className={`appearance-none bg-white border border-gray-300 ${isNativeApp ? "rounded-full" : "rounded-lg"} pl-3 pr-8 py-2 text-sm focus:outline-none focus:border-gray-400`}
             >
               <option value="">All Status</option>
               <option value="Pending">Pending</option>
@@ -188,7 +189,7 @@ const ContactTasksTable = ({ contactId }) => {
           </div>
           <button
             onClick={() => setShowTaskForm(true)}
-            className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-800 text-sm transition-colors"
+            className={`flex items-center gap-1 px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 text-sm transition-colors ${isNativeApp ? "rounded-full px-4" : "rounded-lg"}`}
           >
             <PlusIcon className="w-4 h-4" />
             New Task

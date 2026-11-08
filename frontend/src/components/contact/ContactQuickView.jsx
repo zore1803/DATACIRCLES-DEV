@@ -1,3 +1,4 @@
+import { isNativeApp } from "../../utils/isNativeApp";
 import CalendarIcon from "../common/CalendarIcon";
 import CellphoneIcon from "../common/CellphoneIcon";
 // src/components/contact/ContactQuickView.jsx
@@ -129,7 +130,7 @@ const ContactQuickView = ({ contactId, onClose, onEdit }) => {
           ContactForm.jsx). */}
       <div
         className={`
-          fixed dc-panel-card dc-panel-w
+          fixed dc-panel-card dc-panel-w dc-quick-view-blue
           bg-white shadow-2xl z-[9999]
           transform transition-transform duration-300 ease-out
           overflow-hidden
@@ -191,7 +192,7 @@ const ContactQuickView = ({ contactId, onClose, onEdit }) => {
 
             <button
               onClick={() => onEdit(contact)}
-              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 whitespace-nowrap"
+              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 whitespace-nowrap"
             >
               <EditIcon size={16} />
               <span className="hidden sm:inline">Edit</span>
@@ -201,7 +202,7 @@ const ContactQuickView = ({ contactId, onClose, onEdit }) => {
 
         {/* Scrollable Content Area — flex-1 fills whatever space the header
             (above) didn't take, instead of a fixed height guess. */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        <div className={`flex-1 min-h-0 overflow-y-auto overscroll-contain ${isNativeApp ? "overflow-x-hidden" : ""}`}>
           {loading ? (
             <div className="flex flex-col items-center justify-center h-full">
               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
@@ -300,7 +301,7 @@ const ContactQuickView = ({ contactId, onClose, onEdit }) => {
 
                   <div className="overflow-x-hidden">
                     {activeTabLeft === "Details" && (
-                      <div className="overflow-x-auto">
+                      <div className={isNativeApp ? "overflow-x-hidden" : "overflow-x-auto"}>
                         <BasicDetails
                           contact={contact}
                           company={company}
@@ -312,7 +313,7 @@ const ContactQuickView = ({ contactId, onClose, onEdit }) => {
                     )}
 
                     {activeTabLeft === "Call Logs" && (
-                      <div className="overflow-x-auto">
+                      <div className={isNativeApp ? "overflow-x-hidden" : "overflow-x-auto"}>
                         <CallLogs contactId={contactId} />
                       </div>
                     )}
@@ -322,7 +323,7 @@ const ContactQuickView = ({ contactId, onClose, onEdit }) => {
                 {/* Right Column */}
                 <div className="min-w-0">
                   <nav className="flex flex-wrap gap-2 mb-5 border-b border-gray-200 pb-3">
-                    {tabsRight.map((tab) => (
+                    {(isNativeApp ? tabsRight.filter((t) => t !== "Calendar") : tabsRight).map((tab) => (
                       <button
                         key={tab}
                         onClick={() => setActiveTabRight(tab)}
@@ -342,17 +343,17 @@ const ContactQuickView = ({ contactId, onClose, onEdit }) => {
                       <NoteSection contactId={contactId} isQuickView={true} />
                     )}
                     {activeTabRight === "Tasks" && (
-                      <div className="overflow-x-auto">
+                      <div className={isNativeApp ? "overflow-x-hidden" : "overflow-x-auto"}>
                         <ContactTasksTable contactId={contactId} />
                       </div>
                     )}
                     {activeTabRight === "Meetings" && (
-                      <div className="overflow-x-auto">
+                      <div className={isNativeApp ? "overflow-x-hidden" : "overflow-x-auto"}>
                         <MeetingsTable contactId={contactId} />
                       </div>
                     )}
                     {activeTabRight === "Calendar" && (
-                      <div className="overflow-x-auto">
+                      <div className={isNativeApp ? "overflow-x-hidden" : "overflow-x-auto"}>
                         <CalendarIcon contactId={contactId} />
                       </div>
                     )}

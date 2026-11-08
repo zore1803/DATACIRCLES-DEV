@@ -1807,7 +1807,9 @@ const Header = () => {
       {/* Mobile Header */}
       <header
         style={{ background: "var(--chrome-bg, #EBEDFF)", top: "var(--dc-offline-offset, 0px)" }}
-        className="lg:hidden fixed top-0 left-0 right-0 z-[9992] h-[54px] flex items-center border-b border-[#ECECEC]"
+        // While the add menu is open the header (and its dimming backdrop) must sit above
+        // the page's fixed footer/pagination bar (z-[9992]) so the footer dims too.
+        className={`lg:hidden fixed top-0 left-0 right-0 ${isAddMenuOpen ? "z-[9994]" : "z-[9992]"} h-[54px] flex items-center border-b border-[#ECECEC]`}
       >
         <div className="relative w-full max-w-[440px] mx-auto flex items-center justify-between px-4 py-2 gap-3 h-full">
           {isSearchOpen && isMobileView ? (
@@ -1896,33 +1898,36 @@ const Header = () => {
                   boxShadow: "inset 0px 0px 0px 1.8px rgba(255,255,255,0.25), 0 6px 16px rgba(0,133,255,0.35)",
                 }}
               >
-                {isAddMenuOpen ? (
-                  <X className="w-5 h-5 text-white" />
-                ) : (
-                  <PlusIcon className="w-5 h-5 text-white" />
-                )}
+                <PlusIcon
+                  className={`w-5 h-5 text-white transition-transform duration-300 ease-out ${isAddMenuOpen ? "rotate-[135deg]" : ""}`}
+                />
               </button>
 
               {isAddMenuOpen && (
                 <>
                   <div
-                    className="fixed inset-0 z-[9999] cursor-default"
+                    className="dc-fab-backdrop fixed inset-0 z-[9999] cursor-default bg-black/25"
                     onClick={handleAddMenuClose}
                   />
-                  <div className="absolute right-0 bottom-full mb-3 w-[min(150px,calc(100vw-32px))] max-h-[70vh] overflow-y-auto bg-white rounded-xl shadow-2xl border border-gray-100 z-[10000] py-2.5 flex flex-col transition-all duration-300 ease-in-out">
+                  {/* Speech-bubble card: the wrapper carries position/animation and the
+                      tail (it can't live on the scrolling panel - overflow would clip it);
+                      the beak points right, at the "+" button. */}
+                  <div className="absolute right-full mr-5 bottom-0 z-[10000] dc-fab-menu">
+                  <div className="dc-fab-panel w-[min(150px,calc(100vw-32px))] max-h-[70vh] overflow-y-auto bg-white rounded-xl shadow-2xl border border-gray-100 py-2.5 flex flex-col">
                     <div className="flex-1 px-2.5">
                       <div className="mb-1.5">
                         <h3 className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1 px-1.5">
                           Add Records
                         </h3>
                         <div className="space-y-0">
-                          {addRecords.map((item) => {
+                          {addRecords.map((item, idx) => {
                             const active = isSelected(item.id);
                             return (
                               <button
                                 key={item.id}
                                 onClick={() => handleAddItem(item.id)}
-                                className={`w-full flex items-center p-1.5 rounded-lg transition-all group ${active
+                                style={{ animationDelay: `${80 + (addRecords.length + addActivities.length - 1 - idx) * 35}ms` }}
+                                className={`dc-fab-item w-full flex items-center p-1.5 rounded-lg transition-all group ${active
                                   ? "bg-gradient-to-r from-[#D0E0FF] to-white"
                                   : "hover:bg-[#F2F2F7]"
                                   }`}
@@ -1946,13 +1951,14 @@ const Header = () => {
                           Add Activities
                         </h3>
                         <div className="space-y-0">
-                          {addActivities.map((item) => {
+                          {addActivities.map((item, idx) => {
                             const active = isSelected(item.id);
                             return (
                               <button
                                 key={item.id}
                                 onClick={() => handleAddItem(item.id)}
-                                className={`w-full flex items-center p-1.5 rounded-lg transition-all group ${active
+                                style={{ animationDelay: `${80 + (addActivities.length - 1 - idx) * 35}ms` }}
+                                className={`dc-fab-item w-full flex items-center p-1.5 rounded-lg transition-all group ${active
                                   ? "bg-gradient-to-r from-[#D0E0FF] to-white"
                                   : "hover:bg-[#F2F2F7]"
                                   }`}
@@ -1969,6 +1975,12 @@ const Header = () => {
                         </div>
                       </div>
                     </div>
+                  </div>
+                  {/* Beak: a rotated square on the right edge, level with the button's centre */}
+                  <span
+                    aria-hidden="true"
+                    className="absolute -right-[7px] bottom-[17px] w-3.5 h-3.5 bg-white border-t border-r border-gray-100 rotate-45 rounded-[2px]"
+                  />
                   </div>
                 </>
               )}

@@ -48,6 +48,7 @@ import API from "../services/api";
 import { showApiError } from "../utils/apiError";
 import ContactFolder from "../components/contact/ContactFolder";
 import ProfilePicture from "../components/contact/ProfilePicture";
+import { isNativeApp } from "../utils/isNativeApp";
 import BulkActions from "../components/BulkActions";
 import { Link, useNavigate } from "react-router-dom";
 import QuickContactForm from "../components/contact/QuickContactForm";
@@ -436,6 +437,18 @@ function Contacts() {
     setCurrentContactIds,
   } = useContactStore();
 
+  // Only the mobile app (WebView) gets the card list with 10 contacts per page.
+  // The website keeps the table and the user's chosen page size.
+  const [isMobile, setIsMobile] = useState(() => isNativeApp && window.innerWidth < 1024);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023.98px)");
+    const update = () => setIsMobile(isNativeApp && mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  const effectiveLimit = isMobile ? 10 : pagination.limit;
+
   useLayoutEffect(() => {
     const measure = () => {
       const nav = tabNavRef.current;
@@ -705,28 +718,32 @@ function Contacts() {
               onMouseDown={(e) => e.stopPropagation()}
               className="w-[150px] z-[9999] bg-white border border-[#E5E5EC] rounded-lg shadow-[7px_24px_24px_-7px_rgba(0,0,0,0.25)] p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in duration-150 origin-top-right"
             >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeMenu();
-                  setQuickViewContactId(contact._id);
-                }}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
-              >
-                <EyeIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
-                Quick View
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeMenu();
-                  handleEditContact(contact);
-                }}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
-              >
-                <EditIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
-                Edit
-              </button>
+              {!isNativeApp && (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeMenu();
+                      setQuickViewContactId(contact._id);
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    <EyeIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
+                    Quick View
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeMenu();
+                      handleEditContact(contact);
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-normal text-[#161618] hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    <EditIcon className="w-3.5 h-3.5 text-[#1C1B1F]" />
+                    Edit
+                  </button>
+                </>
+              )}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1355,7 +1372,7 @@ function Contacts() {
       return;
     }
     fetchData();
-  }, [pagination.currentPage, pagination.limit, sortConfig]);
+  }, [pagination.currentPage, effectiveLimit, sortConfig]);
 
   // Separate effect for search/filter to trigger reset + fetch.
   // Skips the initial mount — the [pagination.currentPage, ...] effect above
@@ -1462,10 +1479,10 @@ function Contacts() {
       currentPage,
       totalPages,
       totalCount,
-      limit,
       hasNextPage,
       hasPrevPage,
     } = pagination;
+    const limit = effectiveLimit;
 
     if (totalCount === 0) return null;
 
@@ -1821,7 +1838,7 @@ function Contacts() {
       setLoading(true);
       const params = new URLSearchParams({
         page: pagination.currentPage.toString(),
-        limit: pagination.limit.toString(),
+        limit: effectiveLimit.toString(),
       });
       if (sortConfig.key) {
         params.append("sortBy", sortConfig.key);
@@ -2629,7 +2646,91 @@ function Contacts() {
             // No loading dim here: paging is server-side and rows never leave
             // (skeleton is gated on empty), so old data stays legible while the
             // next page loads — the top bar reports the fetch. No border-t (toolbar has border-b).
-            <div className={`relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || sortedContacts.length > 0 ? "border-b" : ""}`} style={{ paddingLeft: "var(--content-inset, 16px)" }}>
+            <>
+            {/* Mobile app: one card per contact (name, company, email, phone + actions) */}
+            {isMobile && (
+            <div className="bg-white px-4 py-3 flex flex-col gap-3">
+              {showLoadingSkeleton ? (
+                Array.from({ length: 10 }).map((_, i) => (
+                  <div key={i} className="h-[92px] rounded-xl border border-[#E1E4EA] bg-gray-50 animate-pulse" />
+                ))
+              ) : sortedContacts.length === 0 ? (
+                <EmptyState
+                  icon={User}
+                  noun="Contact"
+                  isFiltered={!!(searchTerm || activeFilters?.length)}
+                  onCreate={() => {
+                    setEditContact(null);
+                    setShowQuickAdd(true);
+                  }}
+                />
+              ) : (
+                sortedContacts.map((contact) => (
+                  <div
+                    key={contact._id}
+                    className="flex flex-col gap-3 p-4 rounded-xl border border-[#E1E4EA] bg-white shadow-sm"
+                  >
+                    <div className="flex items-start gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setQuickViewContactId(contact._id)}
+                        className="flex-shrink-0"
+                        tabIndex={-1}
+                        aria-hidden="true"
+                      >
+                        <ProfilePicture contact={contact} size="w-11 h-11" textSize="text-sm" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQuickViewContactId(contact._id)}
+                        className="flex-1 min-w-0 flex flex-col gap-1.5 text-left"
+                      >
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-base font-semibold text-[#161618] truncate">
+                            <HighlightText text={contact.name || "—"} query={searchTerm} />
+                          </span>
+                          {contact.isStarred && (
+                            <StarIcon className="flex-shrink-0 w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
+                          )}
+                        </span>
+                        <span className="text-xs text-[#525866] truncate">
+                          <span className="text-[#868C98]">Company: </span>{contact.company?.name || "—"}
+                        </span>
+                        <span className="text-xs text-[#525866] truncate">
+                          <span className="text-[#868C98]">Email: </span>{contact.email || "—"}
+                        </span>
+                        <span className="text-xs text-[#525866] truncate">
+                          <span className="text-[#868C98]">Phone: </span>{contact.phone || "—"}
+                        </span>
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setQuickViewContactId(contact._id)}
+                        className="flex-1 h-10 flex items-center justify-center rounded-full border border-[#0C4FCD] text-[#0C4FCD] text-sm font-medium hover:bg-blue-50 transition-colors"
+                      >
+                        View Details
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleEditContact(contact)}
+                        title="Edit"
+                        aria-label="Edit contact"
+                        className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full border border-[#E1E4EA] text-[#525866] hover:bg-gray-50 transition-colors"
+                      >
+                        <EditIcon className="w-4 h-4" />
+                      </button>
+                      <div className="flex-shrink-0 [&>div>button]:w-10 [&>div>button]:h-10 [&>div>button]:flex [&>div>button]:items-center [&>div>button]:justify-center [&>div>button]:rounded-full [&>div>button]:border [&>div>button]:border-[#E1E4EA] [&>div>button]:p-0 [&>div>button]:text-[#525866]">
+                        {renderRowActionsMenu(contact)}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            )}
+            <div className={`${isMobile ? "hidden" : ""} relative bg-white border-r border-[#E1E4EA] ${showLoadingSkeleton || sortedContacts.length > 0 ? "border-b" : ""}`} style={{ paddingLeft: "var(--content-inset, 16px)" }}>
               <table
                 className="w-full border-separate border-spacing-0 text-left"
                 style={{
@@ -2806,6 +2907,7 @@ function Contacts() {
                 })()}
               </table>
             </div>
+            </>
           )}
         </div>
 

@@ -1,4 +1,5 @@
 
+import { isNativeApp } from "../../utils/isNativeApp";
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import DealsTable from "./DealsTable";
 import API from "../../services/api";
@@ -1555,9 +1556,12 @@ const BasicDetails = ({
              than stretching the page. */}
       <div className="flex flex-col lg:flex-row gap-4 lg:h-[620px]">
         {/* Left ~60%: the one large graph. */}
-        <div className="flex-1 min-w-0 w-full h-full">
-          <RelationshipPulse activity={activity} loading={activityLoading} />
-        </div>
+        {/* Not shown in the mobile app. */}
+        {!isNativeApp && (
+          <div className="flex-1 min-w-0 w-full h-full">
+            <RelationshipPulse activity={activity} loading={activityLoading} />
+          </div>
+        )}
         {/* Right rail: the timeline takes the leftover height and scrolls, the
             calendar stays compact underneath it. */}
         <div className="w-full lg:w-[340px] flex-shrink-0 flex flex-col gap-4 h-full min-h-0">
@@ -1573,7 +1577,8 @@ const BasicDetails = ({
       {/* 4. The three supporting graphs, full width beneath the row above. */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-stretch">
         <CallEffectiveness activity={activity} loading={activityLoading} />
-        <FollowUpLoad activity={activity} loading={activityLoading} />
+        {/* Not shown in the mobile app. */}
+        {!isNativeApp && <FollowUpLoad activity={activity} loading={activityLoading} />}
         <EngagementBalance activity={activity} loading={activityLoading} />
       </div>
     </div>

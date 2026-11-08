@@ -13,11 +13,13 @@ import {
   Link,
   useLocation,
   useNavigate,
+  Navigate,
 } from "react-router-dom";
 import { Auth0Provider, Auth0Context, useAuth0 } from "@auth0/auth0-react";
 import API, { configureAxios } from "./services/api";
 import Intercom from "./components/common/Intercom";
 import AppToaster from "./components/AppToaster";
+import { isNativeApp } from "./utils/isNativeApp";
 import { APP_NAVIGATE_EVENT, createAppNavigateListener } from "./utils/appNavigation";
 import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
@@ -594,7 +596,8 @@ function AppInner() {
               path="/companies/:id"
               element={
                 <PrivateRoute>
-                  <CompanyProfilePage />
+                  {/* The mobile app has no full company page - Quick View only. */}
+                  {isNativeApp ? <Navigate to="/companies" replace /> : <CompanyProfilePage />}
                 </PrivateRoute>
               }
             />

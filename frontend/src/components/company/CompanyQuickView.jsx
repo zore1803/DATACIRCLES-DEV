@@ -153,27 +153,27 @@ const CompanyQuickView = ({ companyId, onClose, onEdit }) => {
           see the matching comment in ContactQuickView.jsx. */}
       <div
         className={`
-          fixed dc-panel-card dc-panel-w
+          fixed dc-panel-card dc-panel-w dc-quick-view-blue
           bg-white shadow-2xl z-[9999] transform transition-transform duration-300 ease-out
-          overflow-y-auto
+          overflow-y-auto overflow-x-hidden
           ${isOpen ? "translate-x-0" : "translate-x-[calc(100%+2rem)]"}
         `}
       >
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 z-10 px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="sticky top-0 bg-white border-b border-gray-200 z-30 px-3 py-3 lg:px-6 lg:py-4 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1 lg:gap-4 min-w-0 flex-1">
             <button
               onClick={handleClose}
               className="p-2 rounded-full hover:bg-gray-100 text-gray-600"
             >
               <X size={20} />
             </button>
-            <h2 className="text-xl font-bold text-gray-900 truncate max-w-[280px]">
+            <h2 className="text-base lg:text-xl font-bold text-gray-900 truncate min-w-0 lg:max-w-[280px]">
               {company?.name || "Company Details"}
             </h2>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 lg:gap-3 flex-shrink-0">
             {currentCompanyIds.length > 1 && (
               <>
                 <button
@@ -195,7 +195,7 @@ const CompanyQuickView = ({ companyId, onClose, onEdit }) => {
 
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 lg:hidden"
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hidden"
               title={isExpanded ? "Collapse" : "Expand"}
             >
               {isExpanded ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
@@ -203,7 +203,7 @@ const CompanyQuickView = ({ companyId, onClose, onEdit }) => {
 
             <button
               onClick={() => onEdit(company)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 text-sm font-medium"
             >
               <EditIcon size={16} />
               Edit
@@ -218,17 +218,17 @@ const CompanyQuickView = ({ companyId, onClose, onEdit }) => {
             <p className="text-gray-600">Loading company details...</p>
           </div>
         ) : (
-          <div className="p-6">
+          <div className="p-4 lg:p-6">
             {/* Profile Header */}
-            <div className="flex items-start gap-5 mb-8">
+            <div className="flex items-start gap-3 lg:gap-5 mb-6 lg:mb-8">
               <ProfilePicture
                 contact={{ name: company.name, avatar: company.profilePicture }}
-                size="w-16 h-16"
-                textSize="text-2xl"
+                size="w-14 h-14 lg:w-16 lg:h-16"
+                textSize="text-xl lg:text-2xl"
               />
 
-              <div className="flex-1">
-                <h1 className="text-2xl font-bold text-gray-900 mb-1">
+              <div className="flex-1 min-w-0">
+                <h1 className="text-xl lg:text-2xl font-bold text-gray-900 mb-1 break-words">
                   {company.name}
                 </h1>
                 {company.industry && (
@@ -237,8 +237,8 @@ const CompanyQuickView = ({ companyId, onClose, onEdit }) => {
                   </p>
                 )}
                 {company.address && (
-                  <p className="text-sm text-gray-500 flex items-center gap-1.5">
-                    <MapPin size={14} className="text-gray-400" />
+                  <p className="text-sm text-gray-500 flex items-start gap-1.5 break-words">
+                    <MapPin size={14} className="text-gray-400 flex-shrink-0 mt-0.5" />
                     {company.address}
                   </p>
                 )}

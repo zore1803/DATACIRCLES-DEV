@@ -1114,3 +1114,35 @@ body:has(div.fixed.bottom-0.right-0.border-t) .dc-fab {
 @media (prefers-reduced-motion: reduce) {
   [style*="dc-marquee"] { animation: none !important; }
 }
+
+/* Mobile global-add menu: the card spreads open from the "+" button upward
+   (clip reveal, bottom -> top) while its items rise in from the bottom item up. */
+@keyframes dc-fab-menu-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes dc-fab-panel-in {
+  from { clip-path: inset(100% 0 0 0 round 12px); }
+  to   { clip-path: inset(0 0 0 0 round 12px); }
+}
+@keyframes dc-fab-item-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes dc-fab-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+.dc-fab-menu { transform-origin: bottom right; animation: dc-fab-menu-in 200ms ease-out both; }
+.dc-fab-panel { animation: dc-fab-panel-in 340ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dc-fab-item { animation: dc-fab-item-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dc-fab-backdrop { animation: dc-fab-backdrop-in 200ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .dc-fab-menu, .dc-fab-panel, .dc-fab-item, .dc-fab-backdrop { animation: none; }
+}
+
+/* Company Quick View: its primary buttons (Edit, active tab, New Note, Create Note)
+   are pinned to #0085FF, not the org's Brand Settings colour that the blanket
+   .bg-blue-600 re-theme above applies elsewhere. Higher specificity wins that
+   !important contest. */
+.dc-quick-view-blue .bg-blue-600 { background-color: #0085FF !important; }
+.dc-quick-view-blue .hover\:bg-blue-700:hover { background-color: #006FD6 !important; }
+.dc-quick-view-blue .text-blue-600 { color: #0085FF !important; }
+.dc-quick-view-blue .border-blue-600 { border-color: #0085FF !important; }
